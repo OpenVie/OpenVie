@@ -3,38 +3,42 @@ package com.cacanode.api.auth.service;
 import java.util.UUID;
 import java.util.function.Function;
 
+/**
+ * Access tokens carry an organization, an ACTIVE workspace, and the caller's
+ * role inside that workspace. The active workspace is revalidated against
+ * membership on every request; tokens are reissued (not mutated) when the
+ * caller switches workspaces.
+ */
 public interface JwtService {
 
-    public String generateAccessToken(UUID userId, UUID tenantId, String email, String role);
+    String generateAccessToken(
+            UUID userId,
+            UUID orgId,
+            UUID activeWorkspaceId,
+            String email,
+            String orgRole,
+            String workspaceRole);
 
-    public String generateRefreshToken();
+    String generateRefreshToken();
 
-    public String hashToken(String token);
+    String hashToken(String token);
 
-    public long getAccessTokenExpirySeconds();
+    long getAccessTokenExpirySeconds();
 
-    public String extractEmail(String token);
+    String extractEmail(String token);
 
-    public String extractTenantId(String token);
+    String extractOrgId(String token);
 
-    public String extractUserId(String token);
+    /** The workspace the token is scoped to; null for pre-workspace tokens. */
+    String extractActiveWorkspaceId(String token);
 
-    public String extractRole(String token);
+    String extractUserId(String token);
 
-    public <T> T extractClaim(String token, Function<io.jsonwebtoken.Claims, T> claimsResolver);
+    /** Role inside the active workspace (WORKSPACE_ADMIN|MEMBER). */
+    String extractRole(String token);
 
-    /**
-     * Generates a short-lived verification token for email activation.
-     * 
-     * @return JWT token valid for 24 hours
-     */
-    public String generateVerificationToken(UUID userId, String email);
+    /** Organization-level role (ORG_OWNER|MEMBER). */
+    String extractOrgRole(String token);
 
-    /**
-     * Validates a verification token and returns its claims.
-     * 
-     * @throws UnauthorizedException if token is invalid or expired
-     */
-    public io.jsonwebtoken.Claims validateVerificationToken(String token);
-
+    <T> T extractClaim(String token, Function<io.jsonwebtoken.Claims, T> claimsResolver);
 }

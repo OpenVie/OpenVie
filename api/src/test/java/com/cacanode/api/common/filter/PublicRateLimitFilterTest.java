@@ -13,6 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
@@ -104,13 +105,33 @@ class PublicRateLimitFilterTest {
     }
 
     @Test
-    void retainedAuthRoutesGetIndependentBuckets() {
+    void retainedPublicRoutesGetIndependentBuckets() {
         String login = ReflectionTestUtils.invokeMethod(filter, "routeGroup", "/api/v1/auth/login");
         String refresh = ReflectionTestUtils.invokeMethod(filter, "routeGroup", "/api/v1/auth/refresh");
+        String setup = ReflectionTestUtils.invokeMethod(filter, "routeGroup", "/api/v1/setup");
 
         assertEquals("auth:login", login);
         assertEquals("auth:refresh", refresh);
         assertNotEquals(login, refresh);
+        // The install claim is throttled under its own bucket, separate from login.
+        assertTrue(setup.startsWith("setup:"));
+        assertNotEquals(login, setup);
+    }
+
+    @Test
+    void setupClaimIsRateLimited() throws Exception {
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(
+                request("POST", "/api/v1/setup"),
+                new MockHttpServletResponse(),
+                chain
+        );
+
+        assertNotNull(chain.getRequest());
+        verify(redisTemplate).execute(
+                any(RedisScript.class), anyList(), any(Object[].class)
+        );
     }
 
     private MockHttpServletRequest request(String method, String path) {

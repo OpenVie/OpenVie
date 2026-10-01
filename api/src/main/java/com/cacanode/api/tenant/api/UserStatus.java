@@ -1,4 +1,4 @@
-package com.cacanode.api.tenant.enums;
+package com.cacanode.api.tenant.api;
 
 public enum UserStatus {
     ACTIVE, INACTIVE, INVITED, SUSPENDED, PENDING

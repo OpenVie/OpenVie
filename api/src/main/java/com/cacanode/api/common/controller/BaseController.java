@@ -13,9 +13,16 @@ public abstract class BaseController {
   protected UUID getUserId(HttpServletRequest request) {
     return UUID.fromString((String) request.getAttribute("userId"));
   }
-
   protected String getRole(HttpServletRequest request) {
     return (String) request.getAttribute("role");
+  }
+
+  protected UUID getOrgId(HttpServletRequest request) {
+    return UUID.fromString((String) request.getAttribute("orgId"));
+  }
+
+  protected String getOrgRole(HttpServletRequest request) {
+    return (String) request.getAttribute("orgRole");
   }
 
 }

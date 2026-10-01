@@ -22,13 +22,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Creates and reads the knowledge base plus assistant that every workspace
+ * needs before it can ingest or answer.
+ */
 @Service
 @RequiredArgsConstructor
 public class TenantWorkspaceService {
     private static final String DEFAULT_KNOWLEDGE_BASE_SLUG = "default";
     private static final String DEFAULT_LOCALE = "vi-VN";
     private static final String DEFAULT_KNOWLEDGE_BASE_NAME = "Default Knowledge Base";
-    private static final String DEFAULT_CHATBOT_NAME = "CacaNode Assistant";
+    private static final String DEFAULT_CHATBOT_NAME = "OpenVie Assistant";
     private static final String DEFAULT_WELCOME_MESSAGE = "Xin chao! Toi co the giup gi cho ban?";
 
     private final TenantRepository tenantRepository;
@@ -55,7 +59,7 @@ public class TenantWorkspaceService {
 
     private TenantWorkspaceResponse loadOrProvisionAuthoritative(UUID tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tenant workspace was not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Workspace was not found"));
 
         KnowledgeBase knowledgeBase = getOrCreateKnowledgeBase(tenant);
         Chatbot chatbot = getOrCreateChatbot(tenant, knowledgeBase);
@@ -63,8 +67,9 @@ public class TenantWorkspaceService {
         return toResponse(tenant.getId(), knowledgeBase, chatbot);
     }
 
+    /** Idempotently creates the KB + assistant rows for a new workspace. */
     @Transactional
-    public void provisionDefaultWorkspace(Tenant tenant) {
+    public void provisionWorkspaceAssets(Tenant tenant) {
         KnowledgeBase knowledgeBase = getOrCreateKnowledgeBase(tenant);
         getOrCreateChatbot(tenant, knowledgeBase);
     }
@@ -82,7 +87,7 @@ public class TenantWorkspaceService {
                     knowledgeBase.setTenant(tenant);
                     knowledgeBase.setName(DEFAULT_KNOWLEDGE_BASE_NAME);
                     knowledgeBase.setSlug(DEFAULT_KNOWLEDGE_BASE_SLUG);
-                    knowledgeBase.setDescription("Default tenant-scoped knowledge base.");
+                    knowledgeBase.setDescription("Default workspace-scoped knowledge base.");
                     knowledgeBase.setDefaultLocale(DEFAULT_LOCALE);
                     knowledgeBase.setStatus(KnowledgeBaseStatus.ACTIVE);
                     return knowledgeBaseRepository.save(knowledgeBase);
@@ -105,7 +110,7 @@ public class TenantWorkspaceService {
                     chatbot.setDefaultLocale(knowledgeBase.getDefaultLocale());
                     chatbot.setWelcomeMessage(DEFAULT_WELCOME_MESSAGE);
                     chatbot.setSafeInstructions(
-                            "Answer only from the workspace's uploaded documents, cite every "
+                            "Answer only from this workspace's uploaded documents, cite every "
                             + "factual claim with its source ID, and say when the documents do not "
                             + "contain the answer. Never present another workspace's data as your own.");
                     chatbot.setRetrievalSettings(Map.of(

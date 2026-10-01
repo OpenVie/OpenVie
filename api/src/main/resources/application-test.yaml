@@ -19,9 +19,7 @@ app:
     region: us-east-1
   email:
     from-email: test@test.com
-    from-name: CacaNode Test
-    verification-link: http://localhost:3000/verify
-    login-2fa-link: http://localhost:3000/verify-login
+    from-name: OpenVie Test
     invitation-link: http://localhost:3000/accept-invitation
 
 spring:
@@ -45,9 +43,6 @@ spring:
   sendgrid:
     api-key: test-key
     from-email: test@test.com
-    verification-link: http://localhost:3000/verify
-    login-2fa-link: http://localhost:3000/verify-login
-    mobile-login-2fa-expiry-minutes: 10
   brevo:
     api-key: test-brevo-key
   rabbitmq:

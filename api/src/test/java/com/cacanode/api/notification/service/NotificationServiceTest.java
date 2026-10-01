@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -37,17 +38,11 @@ class NotificationServiceTest {
 
     @Test
     void emailServiceSuccessMarksNotificationSent() {
-        notificationService.sendAndRecordWelcomeEmail(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                "user@example.com",
-                "Ada Lovelace",
-                "Example Co",
-                "verify-token"
-        );
+        sendInvitation();
 
         Notification saved = lastSavedNotification();
         assertEquals(NotificationStatus.SENT, saved.getStatus());
+        assertEquals(NotificationType.USER_INVITED, saved.getType());
         assertNotNull(saved.getSentAt());
     }
 
@@ -55,19 +50,17 @@ class NotificationServiceTest {
     void emailServiceFailureMarksNotificationFailedAndRethrows() {
         doThrow(new EmailDeliveryException("all providers failed"))
                 .when(emailService)
-                .sendWelcomeEmail(any(), any(), any(), any());
+                .sendInvitationEmail(any(), any(), any(), any(), any(), any());
 
-        assertThrows(EmailDeliveryException.class, () -> notificationService.sendAndRecordWelcomeEmail(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                "user@example.com",
-                "Ada Lovelace",
-                "Example Co",
-                "verify-token"
-        ));
+        assertThrows(EmailDeliveryException.class, this::sendInvitation);
 
-        Notification saved = lastSavedNotification();
-        assertEquals(NotificationStatus.FAILED, saved.getStatus());
+        assertEquals(NotificationStatus.FAILED, lastSavedNotification().getStatus());
+    }
+
+    private void sendInvitation() {
+        notificationService.sendAndRecordInvitationEmail(
+                UUID.randomUUID(), "user@example.com", "Acme", "Finance", "MEMBER",
+                "invite-token", LocalDateTime.now().plusHours(72));
     }
 
     private Notification lastSavedNotification() {

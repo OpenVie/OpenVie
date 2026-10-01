@@ -2,45 +2,46 @@ package com.cacanode.api.tenant.model;
 
 import com.cacanode.api.common.model.BaseEntity;
 import com.cacanode.api.tenant.api.TenantStatus;
+import com.cacanode.api.tenant.enums.WorkspaceVisibility;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
-
+/**
+ * A workspace: a department, team, or office whose documents and chats are
+ * isolated from every other workspace.
+ *
+ * <p>The table keeps its historical name {@code tenants} and the isolation
+ * column keeps {@code tenant_id}; that is the scoping invariant shared with the
+ * hosted product and with the retrieval/gRPC contracts. UI copy says
+ * "workspace".
+ */
 @Getter
 @Setter
 @Entity
-@Table(name="tenants")
+@Table(name = "tenants")
 public class Tenant extends BaseEntity {
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "org_id", nullable = false)
+    private Organization organization;
 
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
-    @Column(name = "slug", unique = true, nullable = false, length = 100)
+    @Column(name = "slug", nullable = false, length = 100)
     private String slug;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
-    private TenantStatus status = TenantStatus.PENDING;
+    private TenantStatus status = TenantStatus.ACTIVE;
 
-    @Column(name = "suspended_at")
-    private LocalDateTime suspendedAt;
+    /** PUBLIC workspaces are joined automatically by self-registered members. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", nullable = false, length = 16)
+    private WorkspaceVisibility visibility = WorkspaceVisibility.PUBLIC;
 
-    @Column(name = "suspended_reason")
-    private String suspendedReason;
-
-    // Usage quota
-    @Column(name = "max_documents")
-    private Integer maxDocuments = 50;
-
-    @Column(name = "max_messages")
-    private Integer maxMessages = 10_000;
-
-    @Column(name = "max_storage_mb")
-    private Integer maxStorageMb = 10_240;
-
-    @Column(name = "max_team_members")
-    private Integer maxTeamMembers = 5;
-
+    /** The workspace every account lands in; exactly one per organization. */
+    @Column(name = "is_default", nullable = false)
+    private boolean defaultWorkspace = false;
 }

@@ -1,8 +1,8 @@
 package com.cacanode.api.tenant.dto;
 
-import com.cacanode.api.tenant.enums.InvitationStatus;
-import com.cacanode.api.tenant.enums.UserRole;
-import com.cacanode.api.tenant.enums.UserStatus;
+import com.cacanode.api.tenant.api.InvitationStatus;
+import com.cacanode.api.tenant.api.UserStatus;
+import com.cacanode.api.tenant.api.WorkspaceRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 
@@ -19,7 +19,7 @@ public final class UserManagementDtos {
             UUID id,
             String email,
             String fullName,
-            UserRole role,
+            WorkspaceRole workspaceRole,
             UserStatus status,
             LocalDateTime joinedAt,
             LocalDateTime lastLoginAt,
@@ -28,13 +28,13 @@ public final class UserManagementDtos {
     public record InvitationResponse(
             UUID id,
             String email,
-            UserRole role,
+            WorkspaceRole role,
             InvitationStatus status,
             LocalDateTime invitedAt,
             LocalDateTime expiresAt,
             LocalDateTime lastSentAt) {}
 
-    public record InviteRequest(@NotNull @Email String email, @NotNull UserRole role) {}
-    public record RoleUpdateRequest(@NotNull UserRole role) {}
+    public record InviteRequest(@NotNull @Email String email, @NotNull WorkspaceRole role) {}
+    public record RoleUpdateRequest(@NotNull WorkspaceRole role) {}
     public record StatusUpdateRequest(@NotNull UserStatus status) {}
 }

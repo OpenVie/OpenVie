@@ -7,7 +7,6 @@ app:
       - ${ALLOWED_ORIGIN_PATTERN_2:http://127.0.0.1:*}
   security:
     cookie-secure: ${COOKIE_SECURE:false}
-    login-2fa-bypass-emails: ${LOGIN_2FA_BYPASS_EMAILS:admin@cacanode.local}
   seaweedfs:
     s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT:http://localhost:18333}
     bucket: ${SEAWEEDFS_BUCKET:cacanode}
@@ -20,9 +19,7 @@ app:
     provider: ${MAIL_PROVIDER:smtp}
     fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
     from-email: ${FROM_EMAIL:}
-    from-name: ${FROM_NAME:CacaNode}
-    verification-link: ${VERIFICATION_LINK:}
-    login-2fa-link: ${LOGIN_2FA_LINK:http://localhost:3000/verify-login}
+    from-name: ${FROM_NAME:OpenVie}
     invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
   ai:
     grpc:
@@ -77,11 +74,6 @@ spring:
             enable: ${MAIL_SMTP_STARTTLS:false}
   sendgrid:
     api-key: ${SENDGRID_API_KEY:}
-    support-email: ${SUPPORT_EMAIL:}
-    verification-resend-cooldown-seconds: ${VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
-    max-verification-resend-attempts: ${MAX_VERIFICATION_RESEND_ATTEMPTS:5}
-    login-2fa-expiry-minutes: ${LOGIN_2FA_EXPIRY_MINUTES:15}
-    mobile-login-2fa-expiry-minutes: ${MOBILE_LOGIN_2FA_EXPIRY_MINUTES:10}
   brevo:
     api-key: ${BREVO_API_KEY:}
 

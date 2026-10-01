@@ -61,7 +61,7 @@ class DurableEventPublisherTransactionTest {
         assertThrows(IllegalStateException.class, () -> transaction.executeWithoutResult(status -> {
             publisher.publish("tenant.user.invited.v1", 1,
                     new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), "member@example.com",
-                            "Acme", "USER", "token", java.time.LocalDateTime.now()));
+                            "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now()));
             throw new IllegalStateException("roll back producer");
         }));
 
@@ -76,13 +76,13 @@ class DurableEventPublisherTransactionTest {
         UUID eventId = transaction.execute(status -> publisher.publish(
                 "tenant.user.invited.v1", 1,
                 new UserInvitedEvent(tenantId, UUID.randomUUID(), "member@example.com",
-                        "Acme", "USER", "token", java.time.LocalDateTime.now())));
+                        "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now())));
 
         assertNotNull(eventId);
         ModuleEventOutbox event = repository.findById(eventId).orElseThrow();
         assertEquals(tenantId.toString(), event.getPayload().get("tenantId"));
         assertEquals("member@example.com", event.getPayload().get("email"));
-        assertEquals("USER", event.getPayload().get("role"));
+        assertEquals("MEMBER", event.getPayload().get("role"));
     }
 
     @TestConfiguration

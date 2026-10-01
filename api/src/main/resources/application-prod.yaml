@@ -4,7 +4,6 @@ app:
   security:
     cookie-secure: ${COOKIE_SECURE:true}
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS}
-    login-2fa-bypass-emails: ${LOGIN_2FA_BYPASS_EMAILS:}
   seaweedfs:
     s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT}
     bucket: ${SEAWEEDFS_BUCKET:cacanode}
@@ -15,12 +14,11 @@ app:
     # Production must be configured explicitly: MAIL_PROVIDER plus the matching
     # credential (SENDGRID_API_KEY / BREVO_API_KEY / MAIL_HOST) and FROM_EMAIL.
     # Startup fails with the missing variable name when it is not set.
+    # v0.2 W3 makes this optional (provider "none"); until then a provider is required.
     provider: ${MAIL_PROVIDER:sendgrid}
     fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
     from-email: ${FROM_EMAIL:}
-    from-name: ${FROM_NAME:CacaNode}
-    verification-link: ${VERIFICATION_LINK:}
-    login-2fa-link: ${LOGIN_2FA_LINK}
+    from-name: ${FROM_NAME:OpenVie}
     invitation-link: ${INVITATION_LINK}
   ai:
     grpc:
@@ -81,11 +79,6 @@ spring:
             enable: ${MAIL_SMTP_STARTTLS:true}
   sendgrid:
     api-key: ${SENDGRID_API_KEY:}
-    support-email: ${SUPPORT_EMAIL:}
-    verification-resend-cooldown-seconds: ${VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
-    max-verification-resend-attempts: ${MAX_VERIFICATION_RESEND_ATTEMPTS:5}
-    login-2fa-expiry-minutes: ${LOGIN_2FA_EXPIRY_MINUTES:15}
-    mobile-login-2fa-expiry-minutes: ${MOBILE_LOGIN_2FA_EXPIRY_MINUTES:10}
   brevo:
     api-key: ${BREVO_API_KEY:}
 

@@ -1,13 +1,17 @@
 package com.cacanode.api.notification.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,14 +34,14 @@ class EmailServiceTest {
         emailService = new EmailService(
                 sendGridProvider,
                 brevoProvider,
-                "http://localhost:3000/verify-email",
-                "http://localhost:3000/verify-login"
+                "http://localhost:3000/accept-invitation"
         );
     }
 
     @Test
     void sendGridSuccessDoesNotCallBrevo() {
-        emailService.sendWelcomeEmail("user@example.com", "Ada Lovelace", "Example Co", "verify-token");
+        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
+                "invite-token", LocalDateTime.now().plusHours(72));
 
         ArgumentCaptor<EmailMessage> messageCaptor = ArgumentCaptor.forClass(EmailMessage.class);
         verify(sendGridProvider).send(messageCaptor.capture());
@@ -45,8 +49,29 @@ class EmailServiceTest {
 
         EmailMessage message = messageCaptor.getValue();
         assertEquals("user@example.com", message.toEmail());
-        assertEquals("Ada Lovelace", message.toName());
-        assertEquals("Welcome to CacaNode - Confirm your email", message.subject());
+        assertEquals("You're invited to join Finance on OpenVie", message.subject());
+    }
+
+    @Test
+    void invitationLinksToAcceptanceWithTokenAndNamesBothLevels() {
+        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "WORKSPACE_ADMIN",
+                "invite-token", LocalDateTime.of(2026, 10, 4, 12, 0));
+
+        EmailMessage message = captured();
+        assertTrue(message.htmlContent().contains(
+                "http://localhost:3000/accept-invitation?token=invite-token"));
+        // The invitee needs to see which organization and which workspace.
+        assertTrue(message.htmlContent().contains("Acme"));
+        assertTrue(message.htmlContent().contains("Finance"));
+        assertTrue(message.htmlContent().contains("workspace admin"));
+    }
+
+    @Test
+    void memberRoleIsNotLabeledAsAdmin() {
+        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
+                "t", LocalDateTime.now().plusHours(72));
+
+        assertTrue(captured().htmlContent().contains("as a <strong>member</strong>"));
     }
 
     @Test
@@ -55,22 +80,11 @@ class EmailServiceTest {
                 .when(sendGridProvider)
                 .send(any(EmailMessage.class));
 
-        emailService.sendLogin2FAEmail("user@example.com", "Ada Lovelace", "login-token");
+        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
+                "t", LocalDateTime.now().plusHours(72));
 
         verify(sendGridProvider).send(any(EmailMessage.class));
         verify(brevoProvider).send(any(EmailMessage.class));
-    }
-
-    @Test
-    void mobileCodeEmailContainsCodeAndNoBrowserLink() {
-        emailService.sendLogin2FACodeEmail("user@example.com", "Ada Lovelace", "123456");
-
-        ArgumentCaptor<EmailMessage> messageCaptor = ArgumentCaptor.forClass(EmailMessage.class);
-        verify(sendGridProvider).send(messageCaptor.capture());
-        EmailMessage message = messageCaptor.getValue();
-        assertEquals("Your CacaNode confirmation code", message.subject());
-        org.junit.jupiter.api.Assertions.assertTrue(message.htmlContent().contains("123456"));
-        org.junit.jupiter.api.Assertions.assertFalse(message.htmlContent().contains("verify-login?token="));
     }
 
     @Test
@@ -82,9 +96,28 @@ class EmailServiceTest {
                 .when(brevoProvider)
                 .send(any(EmailMessage.class));
 
-        assertThrows(
-                EmailDeliveryException.class,
-                () -> emailService.sendWelcomeEmail("user@example.com", "Ada Lovelace", "Example Co", "verify-token")
-        );
+        assertThrows(EmailDeliveryException.class,
+                () -> emailService.sendInvitationEmail("user@example.com", "Acme", "Finance",
+                        "MEMBER", "t", LocalDateTime.now().plusHours(72)));
+    }
+
+    @Test
+    void noLoginOrWelcomeTemplateRemains() {
+        // Email is optional and login is password-only: only the invitation
+        // template may exist.
+        assertFalse(hasMethod("sendWelcomeEmail"));
+        assertFalse(hasMethod("sendLogin2FAEmail"));
+        assertFalse(hasMethod("sendLogin2FACodeEmail"));
+    }
+
+    private EmailMessage captured() {
+        ArgumentCaptor<EmailMessage> captor = ArgumentCaptor.forClass(EmailMessage.class);
+        verify(sendGridProvider).send(captor.capture());
+        return captor.getValue();
+    }
+
+    private boolean hasMethod(String name) {
+        return java.util.Arrays.stream(EmailService.class.getDeclaredMethods())
+                .anyMatch(method -> method.getName().equals(name));
     }
 }

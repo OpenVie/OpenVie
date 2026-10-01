@@ -16,14 +16,16 @@ class NotificationListenerTest {
     void invitationEventSendsMemberInvitationEmail() {
         NotificationService notificationService = mock(NotificationService.class);
         NotificationListener listener = new NotificationListener(notificationService);
-        UUID tenantId = UUID.randomUUID();
-        LocalDateTime expiresAt = LocalDateTime.now().plusDays(7);
+        UUID workspaceId = UUID.randomUUID();
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(3);
         UserInvitedEvent event = new UserInvitedEvent(
-                tenantId, UUID.randomUUID(), "member@example.com", "Acme", "USER", "invite-token", expiresAt);
+                workspaceId, UUID.randomUUID(), "member@example.com", "Acme Corp", "Finance",
+                "MEMBER", "invite-token", expiresAt);
 
         listener.handleUserInvited(event);
 
         verify(notificationService).sendAndRecordInvitationEmail(
-                tenantId, "member@example.com", "Acme", "USER", "invite-token", expiresAt);
+                workspaceId, "member@example.com", "Acme Corp", "Finance", "MEMBER",
+                "invite-token", expiresAt);
     }
 }

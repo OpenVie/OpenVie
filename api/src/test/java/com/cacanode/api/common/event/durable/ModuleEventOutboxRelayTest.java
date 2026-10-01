@@ -60,7 +60,7 @@ class ModuleEventOutboxRelayTest {
         event.setEventVersion(1);
         event.setPayload(objectMapper.convertValue(
                 new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), "member@example.com",
-                            "Acme", "USER", "token", java.time.LocalDateTime.now()),
+                            "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now()),
                 new TypeReference<>() { }));
         event.setStatus(ModuleEventStatus.PENDING);
         event.setCreatedAt(now);

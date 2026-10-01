@@ -10,7 +10,6 @@ PROFILE ?= dev
 ENV_FILE ?= .env
 TEST_ENV_FILE ?=
 ROOT_COMPOSE_FILE ?= ../docker-compose.yml
-DEV_SEED_FILE ?= src/main/resources/db/seed/dev/default_tenant_account.sql
 
 ifneq (,$(wildcard $(ENV_FILE)))
 include $(ENV_FILE)
@@ -38,7 +37,7 @@ endif
 
 FLYWAY_PROPS = -Dflyway.url="$(POSTGRES_URL)" -Dflyway.user="$(POSTGRES_USER)" -Dflyway.password="$(POSTGRES_PASSWORD)" -Dflyway.locations=filesystem:src/main/resources/db/migration
 
-.PHONY: help deps run dev run-dev run-prod bootstrap-tenant test verify package clean migrate migrate-info migrate-validate migrate-repair db-reset db-seed db-reset-seed
+.PHONY: help deps run dev run-dev run-prod test verify package clean migrate migrate-info migrate-validate migrate-repair db-reset
 
 help:
 	$(info Available targets:)
@@ -47,7 +46,6 @@ help:
 	$(info   make dev        Run Spring Boot with the dev profile)
 	$(info   make run-dev    Run Spring Boot with the dev profile)
 	$(info   make run-prod   Run Spring Boot with the prod profile)
-	$(info   make bootstrap-tenant  One-time operator bootstrap of the first tenant and its admin)
 	$(info   make test       Run tests with the test profile)
 	$(info   make verify     Run the full Maven verification lifecycle)
 	$(info   make package    Build the production JAR)
@@ -57,9 +55,11 @@ help:
 	$(info   make migrate-validate Validate applied Flyway migrations)
 	$(info   make migrate-repair   Repair Flyway metadata)
 	$(info   make db-reset         Reset local Postgres, Qdrant, Kuzu, and SeaweedFS data, restart them, then migrate)
-	$(info   make db-seed          Seed local dev tenant and admin account)
-	$(info   make db-reset-seed    Reset local persisted application data, migrate, then seed)
 	$(info Optional variables: PROFILE=dev ENV_FILE=.env MAVEN_ARGS=...)
+	$(info)
+	$(info The first account is created in the browser at /setup once the stack is)
+	$(info running. There is no seed file and no CLI provisioning step; a fresh)
+	$(info database has no users, and setup closes permanently after it is claimed.)
 
 deps:
 	$(ENV_RUN) $(MVNW) dependency:go-offline $(MAVEN_ARGS)
@@ -74,10 +74,6 @@ run-dev:
 
 run-prod:
 	$(ENV_RUN) $(MVNW) -Pprod spring-boot:run $(MAVEN_ARGS)
-
-bootstrap-tenant:
-	$(ENV_RUN) $(MVNW) -P$(PROFILE) package -DskipTests $(MAVEN_ARGS)
-	$(ENV_RUN) java -jar target/cacanode-api.jar --app.command.mode=bootstrap-tenant --server.port=0 --spring.task.scheduling.enabled=false
 
 test:
 	$(TEST_ENV_RUN) $(MVNW) -Ptest -Dspring.profiles.active=test test $(MAVEN_ARGS)
@@ -110,8 +106,3 @@ db-reset:
 	$(ENV_RUN) docker compose --env-file $(ENV_FILE) -f $(ROOT_COMPOSE_FILE) up -d --wait --wait-timeout 120 \
 		postgres qdrant graph-service seaweedfs-master seaweedfs-volume seaweedfs-filer seaweedfs-s3
 	$(MAKE) migrate ENV_FILE=$(ENV_FILE)
-
-db-seed:
-	$(ENV_RUN) docker compose --env-file $(ENV_FILE) -f $(ROOT_COMPOSE_FILE) exec -T postgres psql -v ON_ERROR_STOP=1 -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" < $(DEV_SEED_FILE)
-
-db-reset-seed: db-reset db-seed

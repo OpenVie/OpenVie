@@ -1,7 +1,7 @@
 package com.cacanode.api.tenant.repository;
 
 import com.cacanode.api.tenant.model.Invitation;
-import com.cacanode.api.tenant.enums.InvitationStatus;
+import com.cacanode.api.tenant.api.InvitationStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;

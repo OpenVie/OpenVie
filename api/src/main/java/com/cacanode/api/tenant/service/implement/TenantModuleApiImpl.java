@@ -1,251 +1,179 @@
 package com.cacanode.api.tenant.service.implement;
 
-import com.cacanode.api.tenant.api.event.TenantCreatedEvent;
-import com.cacanode.api.common.cache.BusinessCacheInvalidationPublisher;
-import com.cacanode.api.common.exception.custom.ResourceNotFoundException;
-import com.cacanode.api.common.event.durable.DurableEventPublisher;
-import com.cacanode.api.tenant.api.RegisterTenantCommand;
+import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.TenantIdentityApi;
-import com.cacanode.api.tenant.api.TenantUserResult;
-import com.cacanode.api.tenant.api.UserAuthDto;
-import com.cacanode.api.tenant.api.TenantStatus;
-import com.cacanode.api.tenant.enums.UserRole;
-import com.cacanode.api.tenant.enums.UserStatus;
+import com.cacanode.api.tenant.api.OrgRole;
+import com.cacanode.api.tenant.api.UserStatus;
+import com.cacanode.api.tenant.api.WorkspaceRole;
 import com.cacanode.api.tenant.model.Tenant;
 import com.cacanode.api.tenant.model.User;
+import com.cacanode.api.tenant.model.WorkspaceMember;
 import com.cacanode.api.tenant.repository.TenantRepository;
 import com.cacanode.api.tenant.repository.UserRepository;
-import com.cacanode.api.tenant.service.TenantWorkspaceService;
+import com.cacanode.api.tenant.repository.WorkspaceMemberRepository;
+import com.cacanode.api.tenant.service.TenantUserManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.text.Normalizer;
-import java.time.LocalDateTime;
-import java.util.Locale;
+import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
+/**
+ * Identity and membership contract implementation.
+ *
+ * <p>Account creation (self-registration and invitation acceptance) is
+ * delegated to {@link TenantUserManagementService}, which owns the users and
+ * membership writes. That service reads membership straight from the
+ * repositories, so the two collaborators stay acyclic.
+ */
 @Service
 @Slf4j(topic = "TENANT-API")
 @RequiredArgsConstructor
 public class TenantModuleApiImpl implements TenantIdentityApi {
 
-        private final PasswordEncoder passwordEncoder;
-        private final TenantRepository tenantRepository;
-        private final UserRepository userRepository;
-        private final com.cacanode.api.tenant.repository.InvitationRepository invitationRepository;
-        private final com.cacanode.api.tenant.service.TenantUserManagementService userManagementService;
-        private final TenantWorkspaceService tenantWorkspaceService;
-        private final ApplicationEventPublisher eventPublisher;
-        @Autowired(required = false)
-        private BusinessCacheInvalidationPublisher businessInvalidationPublisher;
-        @Autowired(required = false)
-        private DurableEventPublisher durableEventPublisher;
+    private final PasswordEncoder passwordEncoder;
+    private final UserRepository userRepository;
+    private final TenantRepository tenantRepository;
+    private final WorkspaceMemberRepository memberRepository;
+    private final TenantUserManagementService userManagementService;
 
-        @Override
-        @Transactional
-        public TenantUserResult registerTenantWithAdmin(RegisterTenantCommand command) {
-
-                // 1. Create tenant
-                Tenant tenant = new Tenant();
-                tenant.setName(command.getCompanyName());
-                tenant.setSlug(generateSlug(command.getCompanyName()));
-                tenant.setStatus(TenantStatus.ACTIVE);
-                tenant.setMaxDocuments(50);
-                tenant.setMaxMessages(10_000);
-                tenant.setMaxTeamMembers(5);
-                tenant.setMaxStorageMb(10_240);
-                tenantRepository.save(tenant);
-                tenantWorkspaceService.provisionDefaultWorkspace(tenant);
-
-                // 2. Create admin user - tenant module owns users table
-                User user = new User();
-                user.setTenant(tenant);
-                user.setEmail(command.getEmail());
-                user.setPasswordHash(command.getPasswordHash());
-                user.setFullName(command.getFullName());
-                user.setRole(UserRole.TENANT_ADMIN);
-                user.setStatus(UserStatus.PENDING);
-                userRepository.save(user);
-                publishBusinessEvent("tenant.created.v1", new TenantCreatedEvent(
-                                tenant.getId(), user.getId(), tenant.getName(),
-                                tenant.getStatus().name(), tenant.getCreatedAt()));
-
-                log.info("Tenant and admin user created: tenantId={}, userId={}", tenant.getId(), user.getId());
-
-                // 3. Return result - no entity crosses the boundary
-                return TenantUserResult.builder()
-                                .tenantId(tenant.getId())
-                                .userId(user.getId())
-                                .email(user.getEmail())
-                                .role(user.getRole().name())
-                                .status(tenant.getStatus().name())
-                                .build();
+    @Override
+    @Transactional(readOnly = true)
+    public AuthenticatedIdentity authenticate(String email, String password) {
+        String normalized = email == null ? "" : email.trim();
+        var found = userRepository.findByEmailIgnoreCase(normalized);
+        if (found.isEmpty()) {
+            // Spend a hash so a missing account and a wrong password cost the
+            // same, which keeps login from enumerating accounts.
+            passwordEncoder.matches(password, DUMMY_HASH);
+            return null;
+        }
+        User user = found.get();
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            return null;
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException(statusMessage(user.getStatus()));
         }
 
-        @Override
-        @Transactional
-        public TenantUserResult authenticateUser(String email, String password) {
-                return userRepository.findByEmail(email)
-                                .filter(user -> passwordEncoder.matches(password, user.getPasswordHash()))
-                                .map(user -> TenantUserResult.builder()
-                                                .tenantId(user.getTenant().getId())
-                                                .userId(user.getId())
-                                                .email(user.getEmail())
-                                                .fullName(user.getFullName())
-                                                .role(user.getRole().name())
-                                                .status(user.getStatus().name())
-                                                .build())
-                                .orElse(null);
+        List<WorkspaceMember> memberships = memberRepository.findVisibleByUserId(user.getId());
+        if (memberships.isEmpty()) {
+            // Without a workspace there is nothing to scope a token to.
+            throw new UnauthorizedException("This account has no workspace access");
         }
+        WorkspaceMember landing = memberships.stream()
+                .filter(member -> member.getWorkspace().isDefaultWorkspace())
+                .findFirst()
+                .orElse(memberships.get(0));
 
-        @Override
-        public UserAuthDto findUserByEmail(String email) {
-                return userRepository.findByEmail(email)
-                                .map(user -> UserAuthDto.builder()
-                                                .userId(user.getId())
-                                                .tenantId(user.getTenant().getId())
-                                                .email(user.getEmail())
-                                                .fullName(user.getFullName())
-                                                .passwordHash(user.getPasswordHash())
-                                                .role(user.getRole().name())
-                                                .status(user.getStatus().name())
-                                                .tenantStatus(user.getTenant().getStatus().name())
-                                                .build())
-                                .orElse(null);
+        return new AuthenticatedIdentity(identity(user), landing.getWorkspace().getId(), landing.getRole());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean accountExists() {
+        return userRepository.count() > 0;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegistrationStatus registrationStatus() {
+        if (userRepository.count() == 0) {
+            return new RegistrationStatus(true, false);
         }
+        boolean allowed = tenantRepository.findAll().stream()
+                .anyMatch(workspace -> workspace.getOrganization().isAllowSelfRegistration());
+        return new RegistrationStatus(false, allowed);
+    }
 
-        @Override
-        public UserAuthDto findUserById(UUID userId) {
-                return userRepository.findById(userId)
-                                .map(user -> UserAuthDto.builder()
-                                                .userId(user.getId())
-                                                .tenantId(user.getTenant().getId())
-                                                .email(user.getEmail())
-                                                .fullName(user.getFullName())
-                                                .passwordHash(user.getPasswordHash())
-                                                .role(user.getRole().name())
-                                                .status(user.getStatus().name())
-                                                .tenantStatus(user.getTenant().getStatus().name())
-                                                .build())
-                                .orElse(null);
+    @Override
+    @Transactional(readOnly = true)
+    public IdentitySnapshot findUserById(UUID userId) {
+        return userRepository.findById(userId).map(this::identity).orElse(null);
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public MembershipSnapshot requireMembership(UUID userId, UUID workspaceId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Session is no longer valid"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException(statusMessage(user.getStatus()));
         }
-
-        @Override
-        public boolean existsByEmail(String email) {
-                return userRepository.existsByEmail(email);
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_Id(userId, workspaceId)
+                .orElseThrow(() -> new UnauthorizedException("You are not a member of this workspace"));
+        Tenant workspace = membership.getWorkspace();
+        if (!workspace.getOrganization().getId().equals(user.getOrganization().getId())) {
+            throw new UnauthorizedException("Workspace does not belong to your organization");
         }
-
-        @Override
-        @Transactional
-        public UserAuthDto activateUser(UUID userId) {
-                User user = userRepository.findById(userId)
-                                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-
-                user.setStatus(UserStatus.ACTIVE);
-                userRepository.save(user);
-
-                log.info("User activated: userId={}, email={}", userId, user.getEmail());
-
-                return UserAuthDto.builder()
-                                .userId(user.getId())
-                                .tenantId(user.getTenant().getId())
-                                .email(user.getEmail())
-                                .fullName(user.getFullName())
-                                .passwordHash(user.getPasswordHash())
-                                .role(user.getRole().name())
-                                .status(user.getStatus().name())
-                                .tenantStatus(user.getTenant().getStatus().name())
-                                .build();
+        if (workspace.getStatus() == com.cacanode.api.tenant.api.TenantStatus.ARCHIVED) {
+            throw new UnauthorizedException("This workspace is archived");
         }
+        return new MembershipSnapshot(
+                userId,
+                user.getOrganization().getId(),
+                workspaceId,
+                user.getRole(),
+                membership.getRole(),
+                user.getStatus().name());
+    }
 
-        @Override
-        @Transactional
-        public void suspendUser(UUID userId) {
-                User user = userRepository.findById(userId)
-                                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+    @Override
+    @Transactional(readOnly = true)
+    public List<WorkspaceSummary> listMemberships(UUID userId) {
+        return memberRepository.findVisibleByUserId(userId).stream()
+                .map(member -> new WorkspaceSummary(
+                        member.getWorkspace().getId(),
+                        member.getWorkspace().getName(),
+                        member.getWorkspace().getSlug(),
+                        member.getRole(),
+                        member.getWorkspace().isDefaultWorkspace()))
+                .toList();
+    }
 
-                user.setStatus(UserStatus.SUSPENDED);
-                userRepository.save(user);
+    @Override
+    @Transactional
+    public AcceptedAccount register(String email, String fullName, String passwordHash) {
+        return userManagementService.register(email, fullName, passwordHash);
+    }
 
-                log.info("User suspended due to verification abuse: userId={}, email={}", userId, user.getEmail());
-        }
+    @Override
+    @Transactional(readOnly = true)
+    public InvitationSnapshot validateInvitation(String rawToken) {
+        return userManagementService.validateInvitationToken(rawToken);
+    }
 
-        @Override
-        @Transactional(readOnly = true)
-        public TenantSnapshot getTenant(UUID tenantId) {
-                Tenant tenant = tenantRepository.findById(tenantId)
-                                .orElseThrow(() -> new ResourceNotFoundException("Tenant was not found"));
-                return new TenantSnapshot(tenant.getId(), tenant.getName());
-        }
+    @Override
+    @Transactional
+    public AcceptedAccount acceptInvitation(String rawToken, String fullName, String passwordHash) {
+        return userManagementService.acceptInvitationToken(rawToken, fullName, passwordHash);
+    }
 
-        @Override
-        @Transactional(readOnly = true)
-        public UserSnapshot requireUser(UUID tenantId, UUID userId) {
-                return userRepository.findByIdAndTenant_Id(userId, tenantId)
-                                .map(this::userSnapshot)
-                                .orElseThrow(() -> new ResourceNotFoundException("User was not found"));
-        }
+    private IdentitySnapshot identity(User user) {
+        return new IdentitySnapshot(
+                user.getId(),
+                user.getOrganization().getId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus().name(),
+                user.isMustChangePassword());
+    }
 
-        @Override
-        @Transactional(readOnly = true)
-        public java.util.List<UserSnapshot> listUsers(UUID tenantId) {
-                return userRepository.findByTenant_IdOrderByFullNameAsc(tenantId).stream()
-                                .map(this::userSnapshot).toList();
-        }
+    private String statusMessage(UserStatus status) {
+        return switch (status) {
+            case SUSPENDED -> "Account suspended.";
+            case PENDING, INVITED -> "This account has not been activated yet.";
+            default -> "User account is disabled";
+        };
+    }
 
-        @Override
-        public InvitationSnapshot validateInvitation(String rawToken) {
-                return userManagementService.validateInvitationToken(rawToken);
-        }
-
-        @Override
-        public AcceptedUserSnapshot acceptInvitation(String rawToken, String fullName, String passwordHash) {
-                return userManagementService.acceptInvitationToken(rawToken, fullName, passwordHash);
-        }
-
-        @Override
-        @Transactional(readOnly = true)
-        public long memberUsage(UUID tenantId, LocalDateTime now) {
-                return userRepository.countByTenant_IdAndStatus(tenantId, UserStatus.ACTIVE)
-                                + invitationRepository.countByTenant_IdAndStatusAndExpiresAtAfter(
-                                tenantId, com.cacanode.api.tenant.enums.InvitationStatus.PENDING, now);
-        }
-
-        private UserSnapshot userSnapshot(User user) {
-                return new UserSnapshot(user.getId(), user.getTenant().getId(), user.getFullName(),
-                                user.getEmail(), user.getRole().name(), user.getStatus().name());
-        }
-
-        private String generateSlug(String companyName) {
-                String normalized = Normalizer.normalize(companyName, Normalizer.Form.NFD);
-                Pattern pattern = Pattern.compile("\\p{InCOMBINING_DIACRITICAL_MARKS}+");
-                String slug = pattern.matcher(normalized)
-                                .replaceAll("")
-                                .toLowerCase(Locale.ROOT)
-                                .replaceAll("[^a-z0-9\\s-]", "")
-                                .replaceAll("[\\s]+", "-")
-                                .trim();
-
-                // Ensure uniqueness by appending random suffix if slug exists
-                if (tenantRepository.existsBySlug(slug)) {
-                        slug = slug + "-" + java.util.UUID.randomUUID().toString().substring(0, 6);
-                }
-
-                return slug;
-        }
-
-        private void publishBusinessEvent(String stableType, Object event) {
-                if (durableEventPublisher != null) {
-                        durableEventPublisher.publish(stableType, 1, event);
-                } else {
-                        eventPublisher.publishEvent(event);
-                }
-        }
-
+    /** Valid bcrypt digest of a random value; never matches a real password. */
+    private static final String DUMMY_HASH =
+            "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 }

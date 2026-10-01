@@ -1,26 +1,19 @@
 package com.cacanode.api.tenant.api;
 
+/**
+ * Lifecycle state of a workspace (the table keeps its historical name
+ * {@code tenants}).
+ */
 public enum TenantStatus {
-    /**
-     * paying, everything works normally
-     * */
+    /** Normal operation: documents, chat, and indexing all work. */
     ACTIVE,
 
-    /**
-     * account exists but chatbot is disabled
-     * (admin deactivated it, or tenant paused subscription)
-     * */
+    /** Administrator paused the workspace; data is retained. */
     INACTIVE,
 
     /**
-     * violated terms or failed payment
-     * chatbot stopped, admin dashboard still accessible
-     * to resolve the issue
-     * */
-    SUSPENDED,
-
-    /**
-     * just registered, email not verified yet
-     * */
-    PENDING
+     * Soft-deleted by the organization owner. Rows stay so audit history
+     * remains attributable; the workspace is unreachable from every API.
+     */
+    ARCHIVED
 }

@@ -1,26 +1,36 @@
 package com.cacanode.api.tenant.model;
 
 import com.cacanode.api.common.model.BaseImmutableEntity;
-import com.cacanode.api.tenant.enums.InvitationStatus;
-import com.cacanode.api.tenant.enums.UserRole;
+import com.cacanode.api.tenant.api.InvitationStatus;
+import com.cacanode.api.tenant.api.WorkspaceRole;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * An invitation targets one workspace with one workspace role. Delivery
+ * requires an enabled notification channel; without one the API refuses to
+ * create invitations rather than minting an undeliverable token.
+ */
 @Getter
 @Setter
 @Entity
 @Table(
         name = "invitations",
         indexes = {
-                @Index(name = "idx_invitation_tenant_id", columnList = "tenant_id"),
-                @Index(name = "idx_invitation_token_hash", columnList = "token_hash")
+                @Index(name = "idx_invitations_tenant_id", columnList = "tenant_id"),
+                @Index(name = "idx_invitations_tenant_email", columnList = "tenant_id"),
+                @Index(name = "idx_invitations_token_hash", columnList = "token_hash")
+        },
+        uniqueConstraints = {
+                @UniqueConstraint(name = "invitations_token_key", columnNames = "token_hash")
         }
 )
 public class Invitation extends BaseImmutableEntity {
 
+    /** The workspace the invitee joins (historically named tenant). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
@@ -34,7 +44,7 @@ public class Invitation extends BaseImmutableEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 50)
-    private UserRole role = UserRole.USER;
+    private WorkspaceRole role = WorkspaceRole.MEMBER;
 
     @Column(name = "token_hash", unique = true, nullable = false)
     private String tokenHash;

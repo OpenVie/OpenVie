@@ -15,10 +15,12 @@ public class AuthResponse {
     @Builder
     public static class UserInfo {
         private String userId;
-        private String tenantId;
+        private String orgId;
+        private String activeWorkspaceId;
         private String fullName;
         private String email;
-        private String role;
-        private String plan;
+        private String orgRole;
+        private String workspaceRole;
+        private boolean mustChangePassword;
     }
 }

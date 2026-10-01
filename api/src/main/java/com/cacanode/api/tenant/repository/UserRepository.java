@@ -8,27 +8,24 @@ import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 
-import com.cacanode.api.tenant.enums.UserRole;
-import com.cacanode.api.tenant.enums.UserStatus;
+import com.cacanode.api.tenant.api.OrgRole;
+import com.cacanode.api.tenant.api.UserStatus;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    @EntityGraph(attributePaths = "tenant")
+    @EntityGraph(attributePaths = "organization")
     Optional<User> findByEmail(String email);
 
-    @EntityGraph(attributePaths = "tenant")
+    @EntityGraph(attributePaths = "organization")
     Optional<User> findByEmailIgnoreCase(String email);
 
     boolean existsByEmail(String email);
 
     boolean existsByEmailIgnoreCase(String email);
 
-    Optional<User> findByIdAndTenant_Id(UUID id, UUID tenantId);
+    Optional<User> findByIdAndOrganization_Id(UUID id, UUID orgId);
 
-    List<User> findByTenant_IdOrderByFullNameAsc(UUID tenantId);
+    List<User> findByOrganization_IdOrderByFullNameAsc(UUID orgId);
 
-    long countByTenant_IdAndRoleAndStatus(UUID tenantId, UserRole role, UserStatus status);
-
-    long countByTenant_IdAndStatus(UUID tenantId, UserStatus status);
-
+    long countByOrganization_IdAndRoleAndStatus(UUID orgId, OrgRole role, UserStatus status);
 }

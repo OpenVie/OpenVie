@@ -1,8 +1,8 @@
 package com.cacanode.api.tenant.model;
 
 import com.cacanode.api.common.model.BaseEntity;
-import com.cacanode.api.tenant.enums.UserRole;
-import com.cacanode.api.tenant.enums.UserStatus;
+import com.cacanode.api.tenant.api.OrgRole;
+import com.cacanode.api.tenant.api.UserStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,17 +15,27 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+/**
+ * Organization-level identity. Workspace authority is NOT stored here; it
+ * lives on the {@link WorkspaceMember} row for the active workspace. The
+ * request-scoped authority is re-resolved per request from membership, so a
+ * stale JWT role can never outlive the membership that granted it.
+ */
 @Getter
 @Setter
 @Entity
 @Table(
         name = "users",
         indexes = {
-                @Index(name = "idx_user_tenant_id", columnList = "tenant_id"),
-                @Index(name = "idx_user_email", columnList = "email")
+                @Index(name = "idx_users_org_id", columnList = "org_id"),
+                @Index(name = "idx_users_email", columnList = "email")
         }
 )
 public class User extends BaseEntity implements UserDetails {
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "org_id", nullable = false)
+    private Organization organization;
 
     @Column(name = "email", unique = true, nullable = false)
     private String email;
@@ -38,19 +48,19 @@ public class User extends BaseEntity implements UserDetails {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 50)
-    private UserRole role;
+    private OrgRole role = OrgRole.MEMBER;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
     private UserStatus status;
 
+    /** Set when an administrator created the account with an initial password. */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "invited_by")
     private User invitedBy;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
-    private Tenant tenant;
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
@@ -84,7 +94,7 @@ public class User extends BaseEntity implements UserDetails {
 
     @Override
     public boolean isCredentialsNonExpired() {
-        return true;
+        return !mustChangePassword;
     }
 
     @Override

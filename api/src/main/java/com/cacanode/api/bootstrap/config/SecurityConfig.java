@@ -40,13 +40,18 @@ public class SecurityConfig {
     private final CorsProperties corsProperties;
 
     private static final String[] PUBLIC_ENDPOINTS = {
+            // Login is password-only; email is optional, so no 2FA routes remain.
             "/api/v1/auth/login",
-            "/api/v1/auth/verify-login-2fa",
-            "/api/v1/auth/resend-login-2fa",
             "/api/v1/auth/refresh",
             "/api/v1/auth/logout",
+            "/api/v1/auth/registration-status",
+            "/api/v1/auth/register",
             "/api/v1/auth/invitations/validate",
             "/api/v1/auth/invitations/accept",
+            // One-time claim: the service refuses every call once an account
+            // exists, so the route table does not have to close itself.
+            "/api/v1/setup",
+            "/api/v1/setup/status",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",

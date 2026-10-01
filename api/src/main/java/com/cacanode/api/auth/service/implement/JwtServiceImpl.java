@@ -1,11 +1,8 @@
 package com.cacanode.api.auth.service.implement;
 
 import com.cacanode.api.auth.service.JwtService;
-import com.cacanode.api.common.exception.custom.UnauthorizedException;
 
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
@@ -33,15 +30,23 @@ public class JwtServiceImpl implements JwtService {
     private int expiryMins;
 
     @Override
-    public String generateAccessToken(UUID userId, UUID tenantId, String email, String role) {
+    public String generateAccessToken(
+            UUID userId,
+            UUID orgId,
+            UUID activeWorkspaceId,
+            String email,
+            String orgRole,
+            String workspaceRole) {
         SecretKey key = Keys.hmacShaKeyFor(
                 tokenKey.getBytes(StandardCharsets.UTF_8));
 
         return Jwts.builder()
                 .subject(email)
                 .claim("userId", userId.toString())
-                .claim("tenantId", tenantId.toString())
-                .claim("role", role)
+                .claim("orgId", orgId.toString())
+                .claim("activeWorkspaceId", activeWorkspaceId.toString())
+                .claim("orgRole", orgRole)
+                .claim("role", workspaceRole)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + (long) expiryMins * 60 * 1000))
                 .signWith(key)
@@ -77,8 +82,13 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
-    public String extractTenantId(String token) {
-        return extractClaim(token, claims -> claims.get("tenantId", String.class));
+    public String extractOrgId(String token) {
+        return extractClaim(token, claims -> claims.get("orgId", String.class));
+    }
+
+    @Override
+    public String extractActiveWorkspaceId(String token) {
+        return extractClaim(token, claims -> claims.get("activeWorkspaceId", String.class));
     }
 
     @Override
@@ -89,6 +99,11 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String extractRole(String token) {
         return extractClaim(token, claims -> claims.get("role", String.class));
+    }
+
+    @Override
+    public String extractOrgRole(String token) {
+        return extractClaim(token, claims -> claims.get("orgRole", String.class));
     }
 
     @Override
@@ -103,49 +118,5 @@ public class JwtServiceImpl implements JwtService {
                 .getPayload();
 
         return claimsResolver.apply(claims);
-    }
-
-    @Override
-    public String generateVerificationToken(UUID userId, String email) {
-        SecretKey key = Keys.hmacShaKeyFor(
-                tokenKey.getBytes(StandardCharsets.UTF_8));
-
-        // 24 hours expiry for verification tokens
-        long verificationExpiryMillis = 24 * 60 * 60 * 1000;
-
-        return Jwts.builder()
-                .subject(email)
-                .claim("userId", userId.toString())
-                .claim("type", "verification")
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + verificationExpiryMillis))
-                .signWith(key)
-                .compact();
-    }
-
-    @Override
-    public Claims validateVerificationToken(String token) {
-        try {
-            SecretKey key = Keys.hmacShaKeyFor(
-                    tokenKey.getBytes(StandardCharsets.UTF_8));
-
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
-
-            // Verify this is a verification token
-            String type = claims.get("type", String.class);
-            if (!"verification".equals(type)) {
-                throw new UnauthorizedException("Invalid verification token");
-            }
-
-            return claims;
-        } catch (ExpiredJwtException e) {
-            throw new UnauthorizedException("Verification token has expired");
-        } catch (JwtException e) {
-            throw new UnauthorizedException("Invalid verification token");
-        }
     }
 }

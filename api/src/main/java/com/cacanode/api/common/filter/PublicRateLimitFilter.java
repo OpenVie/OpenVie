@@ -51,14 +51,29 @@ public class PublicRateLimitFilter extends OncePerRequestFilter {
     @Value("${app.rate-limit.public-requests-per-minute:120}")
     private long requestsPerMinute;
 
+    /** Public paths that must be throttled: auth, invitations, and the install claim. */
+    private static final String[] PUBLIC_PREFIXES = {"/api/v1/auth/", "/api/v1/setup"};
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (!enabled || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
-        // Only the retained public auth + invitation routes are rate limited here.
         // SecurityConfig decides what is public; everything else is authenticated.
-        return !request.getRequestURI().startsWith("/api/v1/auth/");
+        // Setup is included because claiming an installation is the highest-value
+        // unauthenticated write the product exposes.
+        String path = request.getRequestURI();
+        return java.util.Arrays.stream(PUBLIC_PREFIXES).noneMatch(path::startsWith);
+    }
+
+    private String routeGroup(String path) {
+        if (path.startsWith("/api/v1/auth/")) {
+            return "auth:" + path.substring("/api/v1/auth/".length());
+        }
+        if (path.startsWith("/api/v1/setup")) {
+            return "setup:" + path.substring("/api/v1/setup".length()).replace('/', ':');
+        }
+        return "other";
     }
 
     @Override
@@ -88,10 +103,6 @@ public class PublicRateLimitFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private String routeGroup(String path) {
-        return "auth:" + path.substring("/api/v1/auth/".length());
     }
 
     private String clientIdentity(HttpServletRequest request) {

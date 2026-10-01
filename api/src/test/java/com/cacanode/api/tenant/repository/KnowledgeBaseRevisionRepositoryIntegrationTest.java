@@ -15,14 +15,23 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.cacanode.api.tenant.enums.KnowledgeBaseStatus;
 import com.cacanode.api.tenant.api.TenantStatus;
+import com.cacanode.api.tenant.enums.WorkspaceVisibility;
 import com.cacanode.api.tenant.model.KnowledgeBase;
+import com.cacanode.api.tenant.model.Organization;
 import com.cacanode.api.tenant.model.Tenant;
 
+/**
+ * Proves the search-revision increment is atomic and workspace-scoped: a
+ * revision bump for one workspace must never touch another workspace's
+ * knowledge base, and a rolled-back bump must disappear.
+ */
 @DataJpaTest(properties = "spring.jpa.show-sql=false")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
 class KnowledgeBaseRevisionRepositoryIntegrationTest {
 
+    @Autowired
+    private OrganizationRepository organizationRepository;
     @Autowired
     private TenantRepository tenantRepository;
     @Autowired
@@ -33,8 +42,9 @@ class KnowledgeBaseRevisionRepositoryIntegrationTest {
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void incrementIsAtomicTenantScopedAndRollsBackWithTransaction() {
-        Tenant tenant = tenant("revision-main");
-        Tenant otherTenant = tenant("revision-other");
+        Organization organization = organization("revision-org");
+        Tenant tenant = tenant(organization, "revision-main");
+        Tenant otherTenant = tenant(organization, "revision-other");
         KnowledgeBase knowledgeBase = knowledgeBase(tenant, "revision-kb");
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
@@ -57,11 +67,20 @@ class KnowledgeBaseRevisionRepositoryIntegrationTest {
                 .orElseThrow().getSearchRevision());
     }
 
-    private Tenant tenant(String slug) {
+    private Organization organization(String slug) {
+        Organization value = new Organization();
+        value.setName(slug);
+        value.setSlug(slug);
+        return organizationRepository.save(value);
+    }
+
+    private Tenant tenant(Organization organization, String slug) {
         Tenant value = new Tenant();
+        value.setOrganization(organization);
         value.setName(slug);
         value.setSlug(slug);
         value.setStatus(TenantStatus.ACTIVE);
+        value.setVisibility(WorkspaceVisibility.PUBLIC);
         return tenantRepository.save(value);
     }
 

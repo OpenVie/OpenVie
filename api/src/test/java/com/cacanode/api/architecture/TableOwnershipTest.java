@@ -16,12 +16,13 @@ class TableOwnershipTest {
     void runtimeSqlTouchesOnlyOwnedTables() throws IOException {
         Map<String, String> owners = new LinkedHashMap<>();
         own(owners, "ai", "model_config_versions");
-        own(owners, "auth", "refresh_tokens", "login_2fa_state");
+        own(owners, "auth", "refresh_tokens");
         own(owners, "chat", "chat_sessions", "chat_messages", "chat_turns");
         own(owners, "common", "audit_logs", "module_event_outbox", "module_event_inbox");
         own(owners, "document", "documents", "internal_event_outbox", "internal_event_inbox");
-        own(owners, "notification", "notifications");
-        own(owners, "tenant", "tenants", "users", "invitations", "knowledge_bases", "chatbots");
+        own(owners, "notification", "notifications", "notification_channels");
+        own(owners, "tenant", "organizations", "tenants", "users", "workspace_members",
+                "invitations", "knowledge_bases", "chatbots");
 
         Path root = Path.of("src/main/java/com/cacanode/api");
         try (var files = Files.walk(root)) {

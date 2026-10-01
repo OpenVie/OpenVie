@@ -1,41 +1,46 @@
 package com.cacanode.api.auth.service;
 
-import com.cacanode.api.auth.dto.request.LoginRequest;
-import com.cacanode.api.auth.dto.response.AuthResponse;
-import com.cacanode.api.auth.dto.response.ResendVerificationResponse;
-import com.cacanode.api.auth.dto.response.InvitationValidationResponse;
 import com.cacanode.api.auth.dto.request.AcceptInvitationRequest;
-import com.cacanode.api.tenant.api.UserAuthDto;
+import com.cacanode.api.auth.dto.request.LoginRequest;
+import com.cacanode.api.auth.dto.request.RegisterRequest;
+import com.cacanode.api.auth.dto.response.AuthResponse;
+import com.cacanode.api.auth.dto.response.InvitationValidationResponse;
+import com.cacanode.api.auth.dto.response.WorkspaceSummaryResponse;
 
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Authentication for a single-organization installation.
+ *
+ * <p>Login is email + password only: email is never required to authenticate,
+ * because a notification channel is optional. A token is scoped to one active
+ * workspace; switching workspaces reissues the token pair.
+ */
 public interface AuthService {
 
-    boolean isEmailExist(String email);
+    AuthResponse login(LoginRequest request, HttpServletResponse response);
 
-    void setRefreshTokenCookie(HttpServletResponse response, String refreshToken, boolean persistent);
+    AuthResponse refreshToken(String refreshToken, HttpServletResponse response);
 
-    void clearRefreshTokenCookie(HttpServletResponse response);
-
-
-
-    Object login(LoginRequest req, HttpServletResponse res);
-
-
-    AuthResponse verifyLogin2FA(String token, HttpServletResponse res);
-
-
-    ResendVerificationResponse resendLogin2FA(String email);
+    AuthResponse switchWorkspace(
+            UUID workspaceId, String refreshToken, HttpServletResponse response);
 
     void logout(String refreshToken);
 
-    AuthResponse refreshToken(String refreshToken, HttpServletResponse res);
+    void clearRefreshTokenCookie(HttpServletResponse response);
 
+    List<WorkspaceSummaryResponse> listWorkspaces(UUID userId);
 
+    void changePassword(UUID userId, String currentPassword, String newPassword);
 
-    AuthResponse issueAuthTokens(UserAuthDto user, HttpServletResponse response, boolean persistent);
+    /** Public self-registration; returns credentials for the new account. */
+    AuthResponse register(RegisterRequest request, HttpServletResponse response);
 
     InvitationValidationResponse validateInvitation(String token);
 
+    /** Consumes an invitation and returns credentials for the new account. */
     AuthResponse acceptInvitation(AcceptInvitationRequest request, HttpServletResponse response);
 }
