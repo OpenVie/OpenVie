@@ -17,8 +17,7 @@ app:
     # Local development sends through a mail catcher (Mailpit/MailHog on
     # MAIL_HOST:MAIL_PORT) so no external provider credential is needed.
     provider: ${MAIL_PROVIDER:smtp}
-    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
-    from-email: ${FROM_EMAIL:}
+    from-email: ${FROM_EMAIL:no-reply@cacanode.local}
     from-name: ${FROM_NAME:OpenVie}
     invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
   ai:

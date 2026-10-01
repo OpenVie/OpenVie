@@ -16,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Delivers the only email this product sends: a workspace invitation. Login
  * verification and welcome mail are gone because email is optional and login
  * no longer issues a challenge.
+ *
+ * <p>The outbox relay already gated this event on an enabled channel, so a
+ * delivery failure here is a real transport error and dead-letters normally.
  */
 @Slf4j(topic = "NOTIFICATION-LISTENER")
 @Component
@@ -33,7 +36,7 @@ public class NotificationListener {
         log.info("Sending invitation email to: {}", event.email());
         try {
             notificationService.sendAndRecordInvitationEmail(
-                    event.tenantId(), event.email(), event.organizationName(),
+                    event.orgId(), event.tenantId(), event.email(), event.organizationName(),
                     event.workspaceName(), event.role(), event.token(), event.expiresAt());
         } catch (Exception e) {
             log.error("Failed to send invitation email to {}: {}", event.email(), e.getMessage());

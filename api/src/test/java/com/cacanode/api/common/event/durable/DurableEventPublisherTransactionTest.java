@@ -60,7 +60,7 @@ class DurableEventPublisherTransactionTest {
 
         assertThrows(IllegalStateException.class, () -> transaction.executeWithoutResult(status -> {
             publisher.publish("tenant.user.invited.v1", 1,
-                    new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), "member@example.com",
+                    new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "member@example.com",
                             "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now()));
             throw new IllegalStateException("roll back producer");
         }));
@@ -75,7 +75,7 @@ class DurableEventPublisherTransactionTest {
 
         UUID eventId = transaction.execute(status -> publisher.publish(
                 "tenant.user.invited.v1", 1,
-                new UserInvitedEvent(tenantId, UUID.randomUUID(), "member@example.com",
+                new UserInvitedEvent(UUID.randomUUID(), tenantId, UUID.randomUUID(), "member@example.com",
                         "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now())));
 
         assertNotNull(eventId);

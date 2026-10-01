@@ -22,7 +22,8 @@ public class NotificationService {
   private final EmailService emailService;
 
   public void sendAndRecordInvitationEmail(
-      UUID tenantId,
+      UUID orgId,
+      UUID workspaceId,
       String email,
       String organizationName,
       String workspaceName,
@@ -30,7 +31,7 @@ public class NotificationService {
       String token,
       LocalDateTime expiresAt) {
     Notification notification = new Notification();
-    notification.setTenantId(tenantId);
+    notification.setTenantId(workspaceId);
     notification.setType(NotificationType.USER_INVITED);
     notification.setTitle("You're invited to " + workspaceName);
     notification.setMessage("Team invitation sent to " + email);
@@ -38,7 +39,8 @@ public class NotificationService {
     notificationRepository.save(notification);
 
     try {
-      emailService.sendInvitationEmail(email, organizationName, workspaceName, role, token, expiresAt);
+      emailService.sendInvitationEmail(
+              orgId, email, organizationName, workspaceName, role, token, expiresAt);
       notification.setStatus(NotificationStatus.SENT);
       notification.setSentAt(LocalDateTime.now());
     } catch (Exception e) {

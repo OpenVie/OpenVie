@@ -29,6 +29,7 @@ public class ModularReadinessHealthIndicator implements HealthIndicator {
             boolean migrationComplete = migrationComplete();
             long dead = outboxRepository.countByStatus(ModuleEventStatus.DEAD);
             long pending = outboxRepository.countByStatus(ModuleEventStatus.PENDING);
+            long held = outboxRepository.countByStatus(ModuleEventStatus.NO_CHANNEL);
             long oldestPendingAgeSeconds = outboxRepository
                     .findTopByStatusOrderByCreatedAtAsc(ModuleEventStatus.PENDING)
                     .map(event -> Math.max(0, Duration.between(
@@ -38,6 +39,7 @@ public class ModularReadinessHealthIndicator implements HealthIndicator {
             Health.Builder builder = ready ? Health.up() : Health.down();
             return builder.withDetail("baselineMigrationsComplete", migrationComplete)
                     .withDetail("pendingModuleEvents", pending)
+                    .withDetail("heldModuleEventsNoChannel", held)
                     .withDetail("deadModuleEvents", dead)
                     .withDetail("moduleEventOperationalState", dead == 0 ? "HEALTHY" : "DEGRADED")
                     .withDetail("oldestPendingEventAgeSeconds", oldestPendingAgeSeconds)

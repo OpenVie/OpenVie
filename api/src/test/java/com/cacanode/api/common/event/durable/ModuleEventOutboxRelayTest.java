@@ -7,10 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -19,6 +22,7 @@ import static org.mockito.Mockito.verify;
 class ModuleEventOutboxRelayTest {
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
+
     @Test
     void marksPublishedOnlyAfterSynchronousListenersReturn() throws Exception {
         ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
@@ -26,7 +30,7 @@ class ModuleEventOutboxRelayTest {
         ModuleEventOutboxRelay relay = new ModuleEventOutboxRelay(
                 mock(ModuleEventOutboxRepository.class),
                 (type, version) -> UserInvitedEvent.class,
-                objectMapper, publisher);
+                objectMapper, publisher, List.of(), 60);
 
         relay.deliver(event);
 
@@ -43,13 +47,49 @@ class ModuleEventOutboxRelayTest {
         ModuleEventOutboxRelay relay = new ModuleEventOutboxRelay(
                 mock(ModuleEventOutboxRepository.class),
                 (type, version) -> UserInvitedEvent.class,
-                objectMapper, publisher);
+                objectMapper, publisher, List.of(), 60);
         event.setAttempts(9);
         relay.deliver(event);
 
         assertEquals(10, event.getAttempts());
         assertEquals(ModuleEventStatus.DEAD, event.getStatus());
         assertEquals("consumer failed", event.getLastError());
+    }
+
+    @Test
+    void heldWhenGateReportsNotReadyAndAttemptsDoNotAdvance() throws Exception {
+        ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
+        ModuleEventOutbox event = event();
+        LocalDateTime beforeHold = event.getNextAttemptAt();
+        ModuleEventOutboxRelay relay = new ModuleEventOutboxRelay(
+                mock(ModuleEventOutboxRepository.class),
+                (type, version) -> UserInvitedEvent.class,
+                objectMapper, publisher,
+                List.<ModuleEventGate>of(payload -> false), 60);
+
+        relay.deliver(event);
+
+        assertEquals(ModuleEventStatus.NO_CHANNEL, event.getStatus());
+        assertEquals(0, event.getAttempts());
+        assertTrue(event.getNextAttemptAt().isAfter(beforeHold),
+                "held events must carry a replay delay");
+        assertNotNull(event.getLastError());
+    }
+
+    @Test
+    void gateAllowsThroughAndPublishes() throws Exception {
+        ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
+        ModuleEventOutbox event = event();
+        ModuleEventOutboxRelay relay = new ModuleEventOutboxRelay(
+                mock(ModuleEventOutboxRepository.class),
+                (type, version) -> UserInvitedEvent.class,
+                objectMapper, publisher,
+                List.<ModuleEventGate>of(payload -> true), 60);
+
+        relay.deliver(event);
+
+        assertEquals(ModuleEventStatus.PUBLISHED, event.getStatus());
+        assertNull(event.getLastError());
     }
 
     private ModuleEventOutbox event() throws Exception {
@@ -59,8 +99,9 @@ class ModuleEventOutboxRelayTest {
         event.setEventType("tenant.user.invited.v1");
         event.setEventVersion(1);
         event.setPayload(objectMapper.convertValue(
-                new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), "member@example.com",
-                            "Acme", "General", "MEMBER", "token", java.time.LocalDateTime.now()),
+                new UserInvitedEvent(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                            "member@example.com", "Acme", "General", "MEMBER", "token",
+                            java.time.LocalDateTime.now()),
                 new TypeReference<>() { }));
         event.setStatus(ModuleEventStatus.PENDING);
         event.setCreatedAt(now);

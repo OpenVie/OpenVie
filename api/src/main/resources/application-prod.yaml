@@ -11,15 +11,14 @@ app:
     secret-key: ${SEAWEEDFS_SECRET_KEY:}
     region: ${SEAWEEDFS_REGION:us-east-1}
   email:
-    # Production must be configured explicitly: MAIL_PROVIDER plus the matching
-    # credential (SENDGRID_API_KEY / BREVO_API_KEY / MAIL_HOST) and FROM_EMAIL.
-    # Startup fails with the missing variable name when it is not set.
-    # v0.2 W3 makes this optional (provider "none"); until then a provider is required.
-    provider: ${MAIL_PROVIDER:sendgrid}
-    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
+    # Mail is optional: "none" boots without a provider. Set MAIL_PROVIDER to
+    # smtp|sendgrid|brevo plus its credential (MAIL_HOST / SENDGRID_API_KEY /
+    # BREVO_API_KEY) and FROM_EMAIL for the env bootstrap default, or store
+    # per-organization channels in settings (needs NOTIFICATION_ENC_KEY).
+    provider: ${MAIL_PROVIDER:none}
     from-email: ${FROM_EMAIL:}
     from-name: ${FROM_NAME:OpenVie}
-    invitation-link: ${INVITATION_LINK}
+    invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
   ai:
     grpc:
       target: ${AI_GRPC_TARGET:ai-api:50051}

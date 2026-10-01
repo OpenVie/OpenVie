@@ -1,15 +1,13 @@
 package com.cacanode.api.notification.service;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 /**
  * Renders and sends the one email this product delivers: a workspace
@@ -17,54 +15,27 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Login verification and welcome mail are gone — login is password-only and
  * email is optional, so an installation with no channel never blocks a human.
- * Callers reach delivery through invitation creation, which refuses to mint a
- * token when no channel is available.
+ * The transport and credentials are resolved per organization by
+ * {@link NotificationChannelResolver}: a stored enabled channel wins, the
+ * process environment is the bootstrap default.
  */
 @Slf4j(topic = "EMAIL-SERVICE")
 @Service
 public class EmailService {
 
-    private final EmailProvider primaryProvider;
-    private final EmailProvider fallbackProvider;
+    private final NotificationChannelResolver resolver;
     private final String invitationLink;
 
-    /**
-     * The active provider comes from configuration ({@code app.email.provider},
-     * env {@code MAIL_PROVIDER}). An optional secondary provider
-     * ({@code app.email.fallback-provider}) is only used when configured;
-     * without one a delivery failure propagates instead of being skipped.
-     */
-    @Autowired
     public EmailService(
-            List<EmailProvider> providers,
-            @Value("${app.email.provider:sendgrid}") String providerName,
-            @Value("${app.email.fallback-provider:}") String fallbackProviderName,
-            @Value("${app.email.invitation-link:http://localhost:3000/accept-invitation}") String invitationLink) {
-        this(selectProvider(providers, providerName, "app.email.provider"),
-                fallbackProviderName.isBlank()
-                        ? null
-                        : selectProvider(providers, fallbackProviderName, "app.email.fallback-provider"),
-                invitationLink);
-    }
-
-    EmailService(EmailProvider primaryProvider, EmailProvider fallbackProvider, String invitationLink) {
-        this.primaryProvider = primaryProvider;
-        this.fallbackProvider = fallbackProvider;
+            NotificationChannelResolver resolver,
+            @Value("${app.email.invitation-link:http://localhost:3000/accept-invitation}")
+            String invitationLink) {
+        this.resolver = resolver;
         this.invitationLink = invitationLink;
     }
 
-    private static EmailProvider selectProvider(
-            List<EmailProvider> providers, String providerName, String property) {
-        String wanted = providerName.trim().toLowerCase(Locale.ROOT);
-        return providers.stream()
-                .filter(provider -> provider.providerName().toLowerCase(Locale.ROOT).equals(wanted))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        property + "='" + providerName + "' is not a known email provider; configured providers are "
-                                + providers.stream().map(EmailProvider::providerName).sorted().toList()));
-    }
-
     public void sendInvitationEmail(
+            UUID orgId,
             String toEmail,
             String organizationName,
             String workspaceName,
@@ -99,7 +70,18 @@ public class EmailService {
                 """.formatted(workspaceName, organizationName, workspaceName, roleLabel, inviteUrl,
                         expiresAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
         );
-        sendWithFallback(message);
+
+        NotificationChannelResolver.ResolvedChannel resolved = resolver.resolve(orgId)
+                .orElseThrow(() -> new EmailDeliveryException(
+                        "Organization %s has no enabled notification channel; the invitation is"
+                        + " held until one is configured".formatted(orgId)));
+        if (!resolved.provider().available(resolved.config())) {
+            throw new EmailDeliveryException("%s is selected for organization %s but is not"
+                    + " usable with the current settings".formatted(
+                            resolved.provider().providerName(), orgId));
+        }
+        resolved.provider().send(message, resolved.config());
+        log.info("Email sent to {} via {}", message.toEmail(), resolved.provider().providerName());
     }
 
     private static String roleLabel(String role) {
@@ -107,44 +89,5 @@ public class EmailService {
             case "WORKSPACE_ADMIN" -> "workspace admin";
             default -> "member";
         };
-    }
-
-    private void sendWithFallback(EmailMessage message) {
-        try {
-            primaryProvider.send(message);
-            log.info("Email sent to {} via {}", message.toEmail(), primaryProvider.providerName());
-            return;
-        } catch (EmailDeliveryException primaryFailure) {
-            if (fallbackProvider == null) {
-                log.error(
-                        "{} failed to send email to {} and no fallback provider is configured. Reason: {}",
-                        primaryProvider.providerName(),
-                        message.toEmail(),
-                        primaryFailure.getMessage()
-                );
-                throw primaryFailure;
-            }
-            log.warn(
-                    "{} failed to send email to {}. Trying {}. Reason: {}",
-                    primaryProvider.providerName(),
-                    message.toEmail(),
-                    fallbackProvider.providerName(),
-                    primaryFailure.getMessage()
-            );
-            try {
-                fallbackProvider.send(message);
-                log.info("Email sent to {} via {}", message.toEmail(), fallbackProvider.providerName());
-            } catch (EmailDeliveryException fallbackFailure) {
-                EmailDeliveryException deliveryFailure = new EmailDeliveryException(
-                        "Email delivery failed with %s and %s".formatted(
-                                primaryProvider.providerName(),
-                                fallbackProvider.providerName()
-                        ),
-                        fallbackFailure
-                );
-                deliveryFailure.addSuppressed(primaryFailure);
-                throw deliveryFailure;
-            }
-        }
     }
 }

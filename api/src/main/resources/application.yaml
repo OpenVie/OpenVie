@@ -64,10 +64,16 @@ app:
     document-list-ttl-seconds: ${DOCUMENT_LIST_CACHE_TTL_SECONDS:15}
     embedding-enabled: ${EMBEDDING_CACHE_ENABLED:false}
     retrieval-enabled: ${RETRIEVAL_CACHE_ENABLED:false}
-  # Mail is mandatory for login verification and invitations: the selected
-  # provider must be configured or the application refuses to start
-  # (see notification/service/MailConfigurationValidator).
+  # Mail is optional: "none" boots without any provider. Set MAIL_PROVIDER to
+  # smtp|sendgrid|brevo plus its credentials as the bootstrap default, or
+  # configure per-organization channels in settings (requires
+  # NOTIFICATION_ENC_KEY). Invitations minted without an active channel are
+  # held in the outbox and replay when one is enabled.
   email:
-    provider: ${MAIL_PROVIDER:sendgrid}
-    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
+    provider: ${MAIL_PROVIDER:none}
+    from-email: ${FROM_EMAIL:}
+    from-name: ${FROM_NAME:OpenVie}
+    invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
+  notifications:
+    encryption-key: ${NOTIFICATION_ENC_KEY:}
 

@@ -1,17 +1,17 @@
 package com.cacanode.api.notification.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,34 +19,31 @@ import org.mockito.ArgumentCaptor;
 
 class EmailServiceTest {
 
-    private EmailProvider sendGridProvider;
-    private EmailProvider brevoProvider;
+    private EmailProvider provider;
+    private NotificationChannelResolver resolver;
+    private UUID orgId;
     private EmailService emailService;
 
     @BeforeEach
     void setUp() {
-        sendGridProvider = mock(EmailProvider.class);
-        brevoProvider = mock(EmailProvider.class);
-
-        when(sendGridProvider.providerName()).thenReturn("SendGrid");
-        when(brevoProvider.providerName()).thenReturn("Brevo");
-
-        emailService = new EmailService(
-                sendGridProvider,
-                brevoProvider,
-                "http://localhost:3000/accept-invitation"
-        );
+        provider = mock(EmailProvider.class);
+        when(provider.type()).thenReturn("sendgrid");
+        when(provider.providerName()).thenReturn("SendGrid");
+        when(provider.available(any())).thenReturn(true);
+        resolver = mock(NotificationChannelResolver.class);
+        orgId = UUID.randomUUID();
+        emailService = new EmailService(resolver, "http://localhost:3000/accept-invitation");
     }
 
     @Test
-    void sendGridSuccessDoesNotCallBrevo() {
-        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
+    void sendsThroughTheResolvedChannel() {
+        givenResolved(provider, config());
+
+        emailService.sendInvitationEmail(orgId, "user@example.com", "Acme", "Finance", "MEMBER",
                 "invite-token", LocalDateTime.now().plusHours(72));
 
         ArgumentCaptor<EmailMessage> messageCaptor = ArgumentCaptor.forClass(EmailMessage.class);
-        verify(sendGridProvider).send(messageCaptor.capture());
-        verify(brevoProvider, never()).send(any());
-
+        verify(provider).send(messageCaptor.capture(), any());
         EmailMessage message = messageCaptor.getValue();
         assertEquals("user@example.com", message.toEmail());
         assertEquals("You're invited to join Finance on OpenVie", message.subject());
@@ -54,8 +51,10 @@ class EmailServiceTest {
 
     @Test
     void invitationLinksToAcceptanceWithTokenAndNamesBothLevels() {
-        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "WORKSPACE_ADMIN",
-                "invite-token", LocalDateTime.of(2026, 10, 4, 12, 0));
+        givenResolved(provider, config());
+
+        emailService.sendInvitationEmail(orgId, "user@example.com", "Acme", "Finance",
+                "WORKSPACE_ADMIN", "invite-token", LocalDateTime.of(2026, 10, 4, 12, 0));
 
         EmailMessage message = captured();
         assertTrue(message.htmlContent().contains(
@@ -68,56 +67,52 @@ class EmailServiceTest {
 
     @Test
     void memberRoleIsNotLabeledAsAdmin() {
-        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
+        givenResolved(provider, config());
+
+        emailService.sendInvitationEmail(orgId, "user@example.com", "Acme", "Finance", "MEMBER",
                 "t", LocalDateTime.now().plusHours(72));
 
         assertTrue(captured().htmlContent().contains("as a <strong>member</strong>"));
     }
 
     @Test
-    void sendGridFailureThenBrevoSuccessDoesNotThrow() {
-        doThrow(new EmailDeliveryException("sendgrid down"))
-                .when(sendGridProvider)
-                .send(any(EmailMessage.class));
+    void missingChannelFailsLoudly() {
+        when(resolver.resolve(orgId)).thenReturn(Optional.empty());
 
-        emailService.sendInvitationEmail("user@example.com", "Acme", "Finance", "MEMBER",
-                "t", LocalDateTime.now().plusHours(72));
-
-        verify(sendGridProvider).send(any(EmailMessage.class));
-        verify(brevoProvider).send(any(EmailMessage.class));
+        EmailDeliveryException exception = assertThrows(EmailDeliveryException.class,
+                () -> emailService.sendInvitationEmail(orgId, "user@example.com", "Acme",
+                        "Finance", "MEMBER", "t", LocalDateTime.now().plusHours(72)));
+        assertTrue(exception.getMessage().contains("no enabled notification channel"),
+                "the failure must name the missing precondition: " + exception.getMessage());
     }
 
     @Test
-    void bothProvidersFailThrowsDeliveryException() {
-        doThrow(new EmailDeliveryException("sendgrid down"))
-                .when(sendGridProvider)
-                .send(any(EmailMessage.class));
-        doThrow(new EmailDeliveryException("brevo down"))
-                .when(brevoProvider)
-                .send(any(EmailMessage.class));
+    void unusableProviderFailsBeforeSend() {
+        EmailProvider broken = mock(EmailProvider.class);
+        when(broken.providerName()).thenReturn("SMTP");
+        when(broken.available(any())).thenReturn(false);
+        givenResolved(broken, config());
 
         assertThrows(EmailDeliveryException.class,
-                () -> emailService.sendInvitationEmail("user@example.com", "Acme", "Finance",
-                        "MEMBER", "t", LocalDateTime.now().plusHours(72)));
+                () -> emailService.sendInvitationEmail(orgId, "user@example.com", "Acme",
+                        "Finance", "MEMBER", "t", LocalDateTime.now().plusHours(72)));
+        verify(provider, never()).send(any(), any());
     }
 
-    @Test
-    void noLoginOrWelcomeTemplateRemains() {
-        // Email is optional and login is password-only: only the invitation
-        // template may exist.
-        assertFalse(hasMethod("sendWelcomeEmail"));
-        assertFalse(hasMethod("sendLogin2FAEmail"));
-        assertFalse(hasMethod("sendLogin2FACodeEmail"));
+    private void givenResolved(EmailProvider target, NotificationChannelConfig settings) {
+        when(resolver.resolve(orgId)).thenReturn(Optional.of(
+                new NotificationChannelResolver.ResolvedChannel(target, settings)));
+    }
+
+    private NotificationChannelConfig config() {
+        return new NotificationChannelConfig(
+                "sendgrid", "from@example.com", "OpenVie", "", 587, "", "",
+                false, false, "key");
     }
 
     private EmailMessage captured() {
         ArgumentCaptor<EmailMessage> captor = ArgumentCaptor.forClass(EmailMessage.class);
-        verify(sendGridProvider).send(captor.capture());
+        verify(provider).send(captor.capture(), any());
         return captor.getValue();
-    }
-
-    private boolean hasMethod(String name) {
-        return java.util.Arrays.stream(EmailService.class.getDeclaredMethods())
-                .anyMatch(method -> method.getName().equals(name));
     }
 }

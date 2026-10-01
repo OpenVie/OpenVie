@@ -97,7 +97,7 @@ class TenantUserManagementServiceTest {
         givenMembership(admin, WorkspaceRole.WORKSPACE_ADMIN);
         givenMembership(member, WorkspaceRole.MEMBER);
         when(workspaces.findById(workspaceId)).thenReturn(Optional.of(workspace));
-        when(channels.enabledFor(organization.getId())).thenReturn(true);
+        when(channels.configuredFor(organization.getId())).thenReturn(true);
 
         when(invitations.save(any())).thenAnswer(call -> {
             Invitation value = call.getArgument(0);
@@ -116,7 +116,7 @@ class TenantUserManagementServiceTest {
 
     @Test
     void invitationIsRefusedWithoutAnEnabledChannel() {
-        when(channels.enabledFor(organization.getId())).thenReturn(false);
+        when(channels.configuredFor(organization.getId())).thenReturn(false);
 
         ConflictException exception = assertThrows(ConflictException.class,
                 () -> service.invite(workspaceId, admin.getId(), "new@example.com", WorkspaceRole.MEMBER));

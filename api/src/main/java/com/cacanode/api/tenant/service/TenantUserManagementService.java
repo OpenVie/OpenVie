@@ -443,10 +443,10 @@ public class TenantUserManagementService {
     }
 
     private void requireChannel(UUID orgId) {
-        if (!channels.enabledFor(orgId)) {
+        if (!channels.configuredFor(orgId)) {
             throw new ConflictException(
                     "No notification channel is configured, so invitations cannot be delivered. "
-                            + "Enable one in organization settings.");
+                            + "Configure one in organization settings.");
         }
     }
 
@@ -544,6 +544,7 @@ public class TenantUserManagementService {
 
     private void publishInvitationEmail(Invitation invitation, String token) {
         publishBusinessEvent("tenant.user.invited.v1", new UserInvitedEvent(
+                invitation.getTenant().getOrganization().getId(),
                 invitation.getTenant().getId(),
                 invitation.getInvitedBy().getId(),
                 invitation.getEmail(),

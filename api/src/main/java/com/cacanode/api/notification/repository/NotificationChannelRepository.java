@@ -14,4 +14,6 @@ public interface NotificationChannelRepository extends JpaRepository<Notificatio
     Optional<NotificationChannel> findByOrgIdAndType(UUID orgId, String type);
 
     boolean existsByOrgIdAndEnabledTrue(UUID orgId);
+
+    boolean existsByOrgId(UUID orgId);
 }

@@ -48,9 +48,9 @@ class NotificationServiceTest {
 
     @Test
     void emailServiceFailureMarksNotificationFailedAndRethrows() {
-        doThrow(new EmailDeliveryException("all providers failed"))
+        doThrow(new EmailDeliveryException("provider down"))
                 .when(emailService)
-                .sendInvitationEmail(any(), any(), any(), any(), any(), any());
+                .sendInvitationEmail(any(), any(), any(), any(), any(), any(), any());
 
         assertThrows(EmailDeliveryException.class, this::sendInvitation);
 
@@ -59,7 +59,7 @@ class NotificationServiceTest {
 
     private void sendInvitation() {
         notificationService.sendAndRecordInvitationEmail(
-                UUID.randomUUID(), "user@example.com", "Acme", "Finance", "MEMBER",
+                UUID.randomUUID(), UUID.randomUUID(), "user@example.com", "Acme", "Finance", "MEMBER",
                 "invite-token", LocalDateTime.now().plusHours(72));
     }
 
