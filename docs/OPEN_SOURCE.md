@@ -24,7 +24,7 @@ weights.
 ## Self-hosting boundary
 
 Start with [local development](DEVELOPMENT.md) for a non-production stack. Spring Boot owns
-authoritative tenant identity, authorization, chat, and PostgreSQL state. FastAPI owns
+authoritative organization and workspace identity, authorization, chat, and PostgreSQL state. FastAPI owns
 retrieval and derived indexes; RabbitMQ, SeaweedFS, Qdrant, Kuzu, Redis, and configured model
 services supply the other runtime dependencies. [Deployment](DEPLOYMENT.md) describes a
 single-host self-installation; it is operator guidance, not a certification of any kind.
@@ -53,7 +53,7 @@ holder and security owner must:
    and repository ownership; see [SECURITY.md](../SECURITY.md).
 4. Verify from a fresh clone that the sample stack installs, ingests an authorized document,
    enforces tenant isolation, shows citations, and abstains without evidence. The development
-   seed has a known login and must never be applied to production. Validate production
+   configuration has known defaults and must never be applied to production. Validate production
    exposure, provider egress, and backups separately.
 
 No GitHub repository has been published by these file changes; this checklist does not assert

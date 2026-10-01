@@ -96,9 +96,8 @@ consumer's service.
 Business event contracts live under the producer's `<module>.api.event` package. They are
 immutable and carry enough data for consumers without exposing the producer's entities.
 
-Business events that drive notification emails, invitation and verification emails, login 2FA
-emails, or refresh-token revocation must use the durable module-event outbox. Do not implement a
-new durable consumer with `@TransactionalEventListener(AFTER_COMMIT)` or `@Async`; the relay must
+Business events that drive invitation delivery or refresh-token revocation must use the durable
+module-event outbox. Do not implement a new durable consumer with `@TransactionalEventListener(AFTER_COMMIT)` or `@Async`; the relay must
 invoke consumers synchronously so it can detect failure and retry safely.
 
 Direct Spring application events remain appropriate for technical, in-process concerns such as
@@ -162,19 +161,18 @@ projection.
 | Module | Responsibility | Supported synchronous boundaries | Owned tables / database objects |
 | --- | --- | --- | --- |
 | `ai` | Model configuration and the gRPC inference/index boundary | `AiInferenceApi` (`generate`, `listDocumentUnits`, `deleteDocumentIndex`), `ModelConfigurationApi`; API-owned AI requests, results, citations, units, and `AiInferenceException` | `model_config_versions` |
-| `auth` | Registration/login flows, JWTs, refresh tokens, verification, login 2FA, and authentication abuse controls | No general business API; REST-facing, calls `tenant.api` for identity changes and publishes `auth.api.event` facts | `refresh_tokens`, `login_2fa_state` |
+| `auth` | Registration and login flows, JWTs, refresh tokens, workspace switching, and password management | No general business API; REST-facing, calls `tenant.api` for identity changes | `refresh_tokens` |
 | `chat` | Employee playground conversations, messages, turns, idempotency, and inference orchestration | No exported business API; `ChatControlPlaneService` is chat-internal and consumes `ai`, `document`, and `tenant` APIs | `chat_sessions`, `chat_messages`, `chat_turns` |
 | `document` | Document metadata, object storage, ingestion transport, index cleanup, citations, and the reindex command | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
-| `notification` | In-app notifications and transactional email reactions | No general synchronous business API; consumes producer events | `notifications` |
-| `tenant` | Tenants, users, invitations, knowledge bases, and chatbots | `TenantIdentityApi`, `TenantWorkspaceApi`; API-owned snapshots, `RegisterTenantCommand`, `TenantUserResult` | `tenants`, `users`, `invitations`, `knowledge_bases`, `chatbots` |
-| `common` | Shared technical infrastructure only | Not a business API | `audit_logs`, `module_event_outbox`, `module_event_inbox` |
+| `notification` | In-app notifications, notification channels, and transactional email reactions | `DeliveryAvailability` (outbound mail readiness port) | `notifications`, `notification_channels` |
+| `tenant` | Organizations, workspaces, memberships, users, invitations, knowledge bases, and chatbots | `TenantIdentityApi`, `TenantWorkspaceApi`, `WorkspaceService` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
 | `bootstrap` | Application composition, security wiring, event registry, startup commands, and readiness | Not a business API | No business tables |
 
 The document ingestion outbox/inbox is owned by `document` and handles its RabbitMQ ingestion
 transport. The module event outbox/inbox is shared technical infrastructure owned by `common` and
 handles durable reactions inside the modular monolith.
 
-These eighteen tables are the complete persistence surface of the API. `TableOwnershipTest`
+These twenty tables are the complete persistence surface of the API. `TableOwnershipTest`
 encodes exactly this ownership map.
 
 ## Choosing an API or an event
@@ -189,8 +187,7 @@ Use a synchronous API when the caller needs the answer before it can continue:
 Use a durable event when the producer is announcing a completed fact and consumers can react
 independently:
 
-- a tenant was created, a user was invited, or a user was deactivated;
-- a user registered or a login 2FA challenge was requested;
+- a user was invited or a user was deactivated;
 - a document state changed or a document was deleted;
 - a refresh token should be revoked after user deactivation.
 

@@ -92,29 +92,24 @@ These names match the checked-in configuration; availability and hardware capaci
 checked on the machine running Ollama. A running Ollama container does not imply the models
 have been downloaded. Keep the embedding model and vector dimension consistent with indexed data.
 
-### Migrate and seed local accounts
+### Migrate the database
 
 ```bash
 make -C api migrate
-make -C api db-seed
 ```
 
 `migrate` uses `POSTGRES_URL`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from `api/.env`.
 The development Spring profile also runs Flyway at startup and validates the schema.
 
-`db-seed` is for a **disposable local database only**. It runs the
-[synthetic tenant seed](../api/src/main/resources/db/seed/dev/default_tenant_account.sql), which
-creates the demo tenant (`openvie-demo`) and its tenant administrator with the fixed local login
-`admin@cacanode.local` / `Cacanode@123`. The seed data is explicitly synthetic and must never
-reach a deployed database. Seeding updates existing matching development records; it is not a
-harmless read-only operation against an existing environment.
+The first account is created through the browser: once the applications are started below,
+visiting `http://localhost:3000` detects the unclaimed installation and redirects to `/setup`.
+Completing that form creates the organization, the owner account (`ORG_OWNER`), and the
+default workspace. Subsequent logins use password-only authentication (`POST /api/v1/auth/login`).
+If an owner password is ever lost in a headless environment, reset it with:
 
-Local sign-in completes a login 2FA step: the dev profile bypasses 2FA for that seeded address
-by default (`LOGIN_2FA_BYPASS_EMAILS`), and any other account receives its code from the local
-mail catcher configured in `api/.env` (`MAIL_PROVIDER=smtp`, `MAIL_HOST=localhost`,
-`MAIL_PORT=1025`). Do not copy this bypass or these credentials into a deployed environment;
-a real install provisions its first tenant with `make -C api bootstrap-tenant`
-(see [DEPLOYMENT.md](DEPLOYMENT.md#operator-bootstrap)).
+```bash
+make -C api recover-owner RECOVER_ARGS="--recover-owner-email=owner@example.com --recover-owner-password=a-long-password"
+```
 
 ### Start the applications
 
@@ -154,8 +149,8 @@ configuration plus bounded worker/connectivity diagnostics; a ready HTTP respons
 that generation succeeds or that every diagnostic is healthy. Inspect the body, then exercise
 an actual workflow:
 
-1. Open `http://localhost:3000` and sign in with your local account.
-2. Upload a small supported text document to the tenant knowledge base.
+1. Open `http://localhost:3000` and complete setup (or sign in with your account).
+2. Upload a small supported text document to the workspace knowledge base.
 3. Observe its status reach `COMPLETED`; inspect a reported failure rather than assuming the
    upload response means indexing has finished.
 4. Ask a question answered by that document and verify the answer's citations.
@@ -312,7 +307,7 @@ the [deployment guide](DEPLOYMENT.md) for install verification and rollback cons
 | AI ready but answers fail | Check model availability, credentials, embeddings, index/graph access, worker diagnostics, and request logs |
 | Document remains pending/failed | Check RabbitMQ, embedded worker mode, object storage, and model/index dependencies; the upload request only accepts the job |
 | Python HTTP port confusion | Host Make target uses 18000; container app settings use 8000; internal gRPC uses 50051 |
-| Email login cannot complete | Verify `MAIL_*` sender/provider configuration and the mail catcher; the dev bypass does not prove email delivery |
+| Invitations cannot be sent | Verify an email channel is configured in Settings or set `MAIL_PROVIDER`; invitations are refused without an enabled channel |
 | A cache behaves inconsistently | Check the flag is on in the owning service's env file; see [caches](ARCHITECTURE.md#caches) before flushing Redis |
 | Setup fails after moving the checkout | Check virtual-environment entry points and native build caches for old absolute paths |
 

@@ -16,10 +16,10 @@ For the current code, start with [local development](docs/DEVELOPMENT.md), then 
 
 | Area | Current implementation boundary |
 | --- | --- |
-| Document-grounded chat | Tenant-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and completed JSON answers through the Spring API |
+| Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and completed JSON answers through the Spring API |
 | Bounded sensitive route | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment |
 | Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection |
-| Identity and administration | Tenant registration, invitations, users and roles, login 2FA by email, notifications, and audit records |
+| Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
 | Offline evaluation | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model |
 | Optional caches | Implemented but disabled by default; enable only after the applicable correctness and performance gates |
 | Not delivered | OCR/image/audio/video ingestion, a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and production ingress; model adaptation remains research work |
@@ -29,6 +29,14 @@ integrations and deployment hardening must be verified in their own environment.
 
 See the [ingestion and retrieval guide](docs/RETRIEVAL.md) for detailed boundaries.
 
+### Role model
+
+| Role | Scope | Authority |
+| --- | --- | --- |
+| `ORG_OWNER` | Organization | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, offline password reset via `make recover-owner` |
+| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, sets initial passwords, deletes any document in the workspace |
+| `MEMBER` | Active workspace | Queries chat, uploads documents, deletes own uploaded documents |
+
 The supplied four-plane architecture is a target: today's control, async data, and retrieval
 planes run as described below; sensitive-question routing and offline trace evaluation add
 bounded policy checks, not a trained legal or safety model. See [architecture status](docs/ARCHITECTURE.md#four-plane-target-and-delivered-boundary).
@@ -37,7 +45,7 @@ bounded policy checks, not a trained legal or safety model. See [architecture st
 
 | Path | Responsibility | Start reading |
 | --- | --- | --- |
-| [`api/`](api/) | Java 21 / Spring Boot business API; PostgreSQL and tenant authorization | [Module guide](api/GUIDE.md) |
+| [`api/`](api/) | Java 21 / Spring Boot business API; PostgreSQL, workspace authorization, and notification channels | [Module guide](api/GUIDE.md) |
 | [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Python inference, document workers, retrieval, and graph service | [Module guide](rag-chatbot-fastapi/GUIDE.md) |
 | [`frontend/`](frontend/) | Next.js web client | [Web development](docs/DEVELOPMENT.md#start-the-applications) |
 | [`contracts/`](contracts/) | Shared JSON event schemas and fixtures used across Java and Python | [Architecture and boundaries](docs/ARCHITECTURE.md) |

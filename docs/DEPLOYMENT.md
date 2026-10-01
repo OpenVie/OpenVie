@@ -8,7 +8,7 @@ configuration this repository actually delivers and the checks to run after inst
 **On this page:** [what is delivered](#1-what-this-release-delivers),
 [prerequisites](#2-prerequisites), [configuration](#3-prepare-configuration),
 [infrastructure](#4-start-the-infrastructure), [applications](#5-install-and-run-the-applications),
-[bootstrap](#operator-bootstrap), [verification](#6-verification),
+[first-run setup](#first-run-web-setup-and-owner-recovery), [verification](#6-verification),
 [operations](#7-operating-the-stack), [rollback](#8-migrations-and-rollback),
 [gRPC](#9-internal-grpc-transport).
 
@@ -62,20 +62,21 @@ openssl rand -hex 32
 
 At minimum review:
 
-- **Public URLs:** `CORS_ORIGINS`, `VERIFICATION_LINK`, `LOGIN_2FA_LINK`, `INVITATION_LINK`, and
-  the `NEXT_PUBLIC_*` block. Client-facing URLs must match the origin your users actually reach.
-- **Secrets:** `TOKEN_KEY`, `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`.
-  Keep them consistent with `RABBITMQ_URL`, which embeds the broker credentials.
+- **Public URLs:** `CORS_ORIGINS`, `INVITATION_LINK`, and the `NEXT_PUBLIC_*` block.
+  Client-facing URLs must match the origin your users actually reach.
+- **Secrets:** `TOKEN_KEY`, `NOTIFICATION_ENC_KEY`, `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`,
+  `RABBITMQ_DEFAULT_PASS`. Keep them consistent with `RABBITMQ_URL`, which embeds the broker credentials.
+  `NOTIFICATION_ENC_KEY` (32 random bytes, base64: `openssl rand -base64 32`) is required if you store
+  notification channels in the database via the settings console.
 - **Storage:** `SEAWEEDFS_*` access/secret keys when the S3 endpoint is reachable by others.
-- **Email:** `MAIL_PROVIDER` plus the matching credential (`SENDGRID_API_KEY`, `BREVO_API_KEY`,
-  or `MAIL_HOST`/`MAIL_PORT`/`MAIL_USERNAME`/`MAIL_PASSWORD`) and `FROM_EMAIL`. Startup fails
-  with the missing variable name when the selected provider is not configured; login 2FA and
-  invitations depend on it.
+- **Email (optional):** `MAIL_PROVIDER` defaults to `none`. The application boots and operates
+  fully without email: chat, ingestion, and search do not require it. If you want outbound invitations
+  immediately, configure `MAIL_PROVIDER` (`smtp`, `sendgrid`, or `brevo`), credentials, and `FROM_EMAIL`
+  as the environment bootstrap default, or configure channels later in the web console under `/settings`.
 - **Model path:** the delivered defaults are local Ollama (`LLM_PROVIDER=ollama`) with
   `LLM_MODEL_ID` matching a model you pull in the next step. Model endpoints
   (`LLM_BASE_URL`, `TEXT_EMBEDDING_BASE_URL`, `RERANKER_URL`) intentionally live in
   `docker-compose.yml` (container) and `rag-chatbot-fastapi/.env` (host); set them there.
-- **2FA:** `LOGIN_2FA_BYPASS_EMAILS` must be empty for normal operation.
 - **Worker mode:** `WORKER_MODE=embedded` runs the document consumer inside the Python process.
   If you start a separate consumer, set `WORKER_MODE=disabled` for the main process and never
   run both consumers at once.
@@ -155,25 +156,31 @@ The `prod` Spring profile runs Flyway with `validate-on-migrate` and Hibernate
 `ddl-auto=validate`; a schema/code mismatch stops startup instead of silently altering the
 schema.
 
-## Operator bootstrap
+## First-run web setup and owner recovery
 
-A fresh install has no tenant or user. Create the first one explicitly:
+A fresh install has no organization or users. Open the web console in your browser
+(e.g. `http://localhost:3000` or your configured domain).
+
+1. The web application checks `GET /api/v1/auth/registration-status`, detects an unclaimed installation,
+   and redirects to `/setup`.
+2. Enter the organization name, your full name, owner email, and a password (minimum 12 characters).
+   Optionally enable self-registration if you want members to sign up without an explicit invitation.
+3. Submitting claims the installation, creates the organization, the owner account (`ORG_OWNER`), and
+   the default workspace.
+
+Setup is one-time and permanent: the `/setup` endpoint is disabled and returns 404 once any account exists.
+
+### Offline owner password reset
+
+If an organization owner password is ever lost in a headless environment, reset it using the
+`recover-owner` command without direct SQL intervention:
 
 ```bash
-BOOTSTRAP_TENANT_NAME="Example Organization" \
-BOOTSTRAP_ADMIN_EMAIL="admin@example.com" \
-BOOTSTRAP_ADMIN_PASSWORD="a-long-unique-passphrase" \
-make -C api bootstrap-tenant ENV_FILE=../.env.production
+make -C api recover-owner ENV_FILE=../.env.production RECOVER_ARGS="--recover-owner-email=owner@example.com --recover-owner-password=a-long-unique-passphrase"
 ```
 
-The command packages the API and runs it once in `bootstrap-tenant` mode. It refuses to run
-when any tenant or user already exists, refuses a missing value, refuses the known development
-password (`Cacanode@123`), and requires at least 12 characters, so it can never silently
-overwrite an existing installation. The environment must include working mail configuration
-because the command boots the same application context as a normal start.
-
-Never reuse the development seed account or its password outside a local stack.
-
+The command verifies that the email belongs to an active `ORG_OWNER` account, enforces password strength
+rules, and updates the credential. It refuses to create accounts or escalate privileges.
 ## 6. Verification
 
 Infrastructure and application health:
@@ -189,7 +196,7 @@ curl --fail http://localhost:8010/health/ready
 A ready response reports model configuration and bounded diagnostics; it is not proof that
 generation works. Exercise the real paths through the console:
 
-1. Sign in with the bootstrapped administrator and complete login 2FA using the configured mail.
+1. Complete setup at `/setup` (or sign in with the owner account; authentication is password-only).
 2. Upload a small supported document and observe its status reach `COMPLETED`.
 3. Ask a question that document answers and verify the citations resolve to it.
 4. Ask something the knowledge base cannot answer and confirm the answer abstains.
