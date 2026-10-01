@@ -1,5 +1,6 @@
 package com.cacanode.api.auth.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -12,5 +13,6 @@ public class WorkspaceSummaryResponse {
     private String name;
     private String slug;
     private String role;
+    @JsonProperty("isDefault")
     private boolean isDefault;
 }

@@ -71,7 +71,7 @@ export function useApiClient() {
       if (!refreshResponse.ok) throw new Error('Refresh failed')
 
       const { accessToken: newToken, user } = await refreshResponse.json()
-      setAuth(user, newToken, user.tenantId)
+      setAuth(user, newToken)
       processQueue(null, newToken)
 
       response = await makeRequest(newToken)

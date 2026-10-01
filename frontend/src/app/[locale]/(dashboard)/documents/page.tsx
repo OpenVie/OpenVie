@@ -415,7 +415,7 @@ export default function DocumentsPage() {
                 <TableHead>{t("table.size")}</TableHead>
                 <TableHead>{t("table.uploaded")}</TableHead>
                 <TableHead>{t("table.details")}</TableHead>
-                {user?.role === "TENANT_ADMIN" && <TableHead className="w-16">{t("table.actions")}</TableHead>}
+                <TableHead className="w-16">{t("table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -457,7 +457,7 @@ export default function DocumentsPage() {
                         ? doc.errorMessage ?? t("indexingFailed")
                         : t("waitingForIndexing")}
                   </TableCell>
-                  {user?.role === "TENANT_ADMIN" && (
+                  {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
                     <TableCell>
                       <Button
                         variant="ghost"

@@ -20,17 +20,23 @@
     "logout": "Log out",
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
-    "user": "User"
+    "user": "User",
+    "workspaces": "Workspaces",
+    "settings": "Settings",
+    "changePassword": "Change password"
   },
   "PageTitles": {
+    "setup": "Set Up OpenVie",
     "chat": "Chat",
     "login": "Log In",
-    "checkLoginEmail": "Check Your Login Email",
-    "verifyLogin": "Verify Login",
     "acceptInvitation": "Accept Invitation",
     "documents": "Documents",
     "documentDetails": "Document Details",
-    "users": "Team Members"
+    "users": "Team Members",
+    "workspaces": "Workspaces",
+    "settings": "Settings",
+    "changePassword": "Change Password",
+    "register": "Create Account"
   },
   "DocumentationShell": {
     "docs": "Docs",
@@ -157,29 +163,20 @@
     "password": "Password",
     "confirmPassword": "Confirm password",
     "fullName": "Full name",
-    "yourEmail": "your email",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "dismissError": "Dismiss error",
-    "backToLogin": "Back to login",
-    "verificationFailed": "Verification failed",
     "loading": "Loading…",
-    "sending": "Sending…",
-    "resendIn": "Resend email ({seconds}s)",
-    "resendVerification": "Resend verification email",
     "validation": {
       "emailRequired": "Email is required",
       "invalidEmail": "Invalid email address",
       "passwordRequired": "Password is required",
       "enterFullName": "Enter your full name",
-      "passwordLength": "Password must be at least 8 characters",
+      "passwordLength": "Password must be at least 12 characters",
       "passwordsMismatch": "Passwords do not match"
     },
     "fallback": {
-      "invalidCredentials": "Invalid email or password",
-      "resendFailed": "Failed to resend verification email",
-      "verificationFailed": "Verification failed. Please try again.",
-      "loginVerificationFailed": "Failed to verify login"
+      "invalidCredentials": "Invalid email or password"
     },
     "login": {
       "title": "Welcome back",
@@ -189,27 +186,6 @@
       "signIn": "Sign in",
       "provisioned": "Accounts are provisioned by your workspace administrator."
     },
-    "suspended": {
-      "title": "Account suspended",
-      "description": "Your account has been suspended due to verification abuse",
-      "contactSupport": "Please contact your workspace administrator."
-    },
-    "checkEmail": {
-      "spam": "If you don't see the email, check your spam folder and use the button below to resend it."
-    },
-    "checkLogin": {
-      "title": "Verify your login",
-      "sentTo": "We've sent a verification link to",
-      "instructions": "Click the link in the email to complete your login. The link will expire in 15 minutes."
-    },
-    "verifyLogin": {
-      "verifying": "Verifying your login…",
-      "identity": "Please wait while we verify your identity",
-      "success": "Login verified!",
-      "redirecting": "Redirecting you now…",
-      "expired": "The verification link is invalid or has expired",
-      "invalidToken": "This verification link is invalid or has expired."
-    },
     "invitation": {
       "missingToken": "This invitation link is missing its token.",
       "invalid": "This invitation is invalid or expired.",
@@ -218,12 +194,12 @@
       "joinTeam": "Join your team",
       "validating": "Validating invitation…",
       "ready": "Your account is ready. Taking you to the workspace…",
-      "invitedAs": "You were invited as <role></role> to <tenant></tenant>.",
+      "invitedAs": "You were invited as <role></role> to <workspace></workspace> in <organization></organization>.",
       "accept": "Accept invitation",
       "creating": "Setting up your account…"
     },
     "roles": {
-      "admin": "Tenant Admin",
+      "admin": "Workspace Admin",
       "user": "User"
     }
   },
@@ -336,7 +312,7 @@
     "sendInvitation": "Send invitation",
     "roles": {
       "admin": "Tenant Admin",
-      "user": "User"
+      "user": "Member"
     },
     "statuses": {
       "active": "Active",
@@ -356,8 +332,18 @@
       "role": "Unable to update role",
       "status": "Unable to update status",
       "resend": "Unable to resend invitation",
-      "cancel": "Unable to cancel invitation"
-    }
+      "cancel": "Unable to cancel invitation",
+      "password": "Unable to set the password"
+    },
+    "setPassword": "Set password",
+    "setPasswordHint": "Set an initial password; the member must change it on next login",
+    "setPasswordTitle": "Set password for {name}",
+    "setPasswordNote": "The member will be required to choose a new password on their next sign-in.",
+    "passwordSet": "Password set for {name}",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "passwordTooShort": "Password must be at least 12 characters",
+    "passwordsMismatch": "Passwords do not match"
   },
   "Documents": {
     "title": "Documents",
@@ -456,5 +442,168 @@
       "download": "Unable to download document"
     },
     "citationOf": "Citation {current} of {total}"
+  },
+  "Setup": {
+    "tagline": "Document-grounded AI for your team",
+    "title": "Set up OpenVie",
+    "description": "Create the organization and the owner account. The first person to complete this owns the installation.",
+    "organizationName": "Organization name",
+    "ownerName": "Your name",
+    "ownerEmail": "Owner email",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "allowSelfRegistration": "Allow self-registration for this organization",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "submit": "Claim installation",
+    "submitting": "Setting up...",
+    "done": "Installation ready. Signing in...",
+    "irreversible": "Setup is one-time and cannot be undone from here.",
+    "fallback": "Setup failed. Please try again.",
+    "validation": {
+      "required": "This field is required",
+      "email": "Enter a valid email address",
+      "passwordLength": "Password must be at least 12 characters",
+      "mismatch": "Passwords do not match"
+    }
+  },
+  "Register": {
+    "title": "Create your account",
+    "description": "Join the organization and start asking questions.",
+    "submitting": "Creating account...",
+    "submit": "Create account",
+    "haveAccount": "Already have an account?",
+    "fallback": "Registration failed. Please try again."
+  },
+  "ChangePassword": {
+    "title": "Change password",
+    "description": "Choose a new password for your account.",
+    "forcedDescription": "An administrator set your initial password. Choose your own before continuing.",
+    "current": "Current password",
+    "new": "New password",
+    "submit": "Change password",
+    "submitting": "Saving...",
+    "cancel": "Cancel",
+    "fallback": "Unable to change the password.",
+    "validation": {
+      "length": "Password must be at least 12 characters",
+      "sameAsCurrent": "Choose a password different from the current one"
+    }
+  },
+  "WorkspaceSwitcher": {
+    "label": "Switch workspace",
+    "workspaces": "Workspaces",
+    "admin": "Admin",
+    "member": "Member"
+  },
+  "Workspaces": {
+    "title": "Workspaces",
+    "description": "Create, rename, and archive the workspaces in this organization.",
+    "create": "New workspace",
+    "createTitle": "Create workspace",
+    "name": "Name",
+    "namePlaceholder": "e.g. Finance",
+    "visibility": "Visibility",
+    "visibilityHint": "Public workspaces are joined automatically by self-registered members.",
+    "public": "Public",
+    "private": "Private",
+    "makePublic": "Make public",
+    "makePrivate": "Make private",
+    "rename": "Rename",
+    "renamePrompt": "New name for {name}",
+    "archive": "Archive",
+    "confirmArchive": "Archive {name}? Members keep their other workspaces.",
+    "archived": "{name} archived",
+    "archivedBadge": "Archived",
+    "default": "Default",
+    "created": "{name} created",
+    "renamed": "Workspace renamed",
+    "visibilityUpdated": "Visibility set to {visibility}",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "creating": "Creating...",
+    "empty": "No workspaces yet",
+    "table": {
+      "name": "Name",
+      "slug": "Slug",
+      "visibility": "Visibility",
+      "members": "Members",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "validation": {
+      "nameRequired": "Workspace name is required"
+    },
+    "fallback": {
+      "load": "Unable to load workspaces",
+      "create": "Unable to create the workspace",
+      "rename": "Unable to rename the workspace",
+      "visibility": "Unable to change visibility",
+      "archive": "Unable to archive the workspace"
+    }
+  },
+  "Settings": {
+    "title": "Organization settings",
+    "description": "Registration and notification channels for this organization.",
+    "ownerOnly": "Only the organization owner can open settings.",
+    "save": "Save",
+    "saved": "Saved",
+    "retry": "Retry",
+    "fallback": {
+      "load": "Unable to load settings",
+      "save": "Unable to save settings"
+    },
+    "organization": {
+      "title": "Registration",
+      "description": "Organization {name}. Control who may create accounts without an invitation.",
+      "selfRegistration": "Allow self-registration",
+      "selfRegistrationHint": "When on, anyone with access to this deployment can create a MEMBER account and joins public workspaces.",
+      "current": "Organization {name}. Control who may create accounts without an invitation."
+    },
+    "channels": {
+      "title": "Email channels",
+      "description": "Invitations are the only email OpenVie sends. Without an enabled channel, invitations are refused; events minted while a stored channel is disabled replay when it is enabled.",
+      "add": "Add channel",
+      "addTitle": "Add notification channel",
+      "editTitle": "Edit {type} channel",
+      "type": "Provider",
+      "fromEmail": "From email",
+      "fromName": "From name",
+      "host": "SMTP host",
+      "port": "Port",
+      "username": "Username",
+      "password": "Password",
+      "passwordKeep": "Password (leave blank to keep)",
+      "apiKey": "API key",
+      "apiKeyHint": "Stored encrypted; it is never shown again.",
+      "apiKeyKeepHint": "Leave blank to keep the stored key.",
+      "smtpAuth": "Use SMTP AUTH",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "credentialsStored": "Credentials stored",
+      "enable": "Enable",
+      "disable": "Disable",
+      "edit": "Edit",
+      "enableAfterSave": "Enable this channel immediately",
+      "enableHint": "Enabling replays any held invitation emails.",
+      "saved": "Channel saved",
+      "deleted": "Channel deleted",
+      "confirmDelete": "Delete the {type} channel?",
+      "test": "Send test",
+      "testTitle": "Send a test email",
+      "testEmail": "Recipient email",
+      "testSent": "Test email sent",
+      "testFailed": "Test delivery failed",
+      "empty": "No channels configured. Mail settings can also come from environment variables.",
+      "validEmail": "Enter a valid email address",
+      "nameRequired": "From name is required",
+      "hostRequired": "SMTP host is required",
+      "keyRequired": "API key is required",
+      "fallback": {
+        "save": "Unable to save the channel",
+        "toggle": "Unable to change the channel state",
+        "delete": "Unable to delete the channel"
+      }
+    }
   }
 }

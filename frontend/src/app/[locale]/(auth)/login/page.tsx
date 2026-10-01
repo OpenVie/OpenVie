@@ -1,7 +1,7 @@
 "use client";
 
-
 import { Suspense, useEffect, useState } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,7 +26,6 @@ import {
   consumeAuthDestination,
   rememberAuthDestination,
   safeInternalPath,
-  withNext,
 } from "@/lib/auth-redirect";
 
 type LoginForm = { email: string; password: string; rememberMe: boolean };
@@ -71,31 +70,16 @@ function LoginContent() {
         password: data.password,
         rememberMe: data.rememberMe,
       });
-
-      // Check if 2FA is required
-      if ("requires2FA" in res && res.requires2FA) {
-        // Redirect to check-login-email page for 2FA
-        router.push(
-          withNext(
-            `/check-login-email?email=${encodeURIComponent(res.email)}`,
-            next,
-          ),
-        );
+      setAuth(res.user, res.accessToken);
+      // An administrator-set initial password must be replaced before the
+      // member reaches the product.
+      if (res.user.mustChangePassword) {
+        router.push("/change-password");
         return;
       }
-
-      // Direct login (AuthResponse)
-      if ("accessToken" in res && "user" in res) {
-        setAuth(res.user, res.accessToken, res.user.tenantId);
-        router.push(consumeAuthDestination());
-      }
+      router.push(consumeAuthDestination());
     } catch (e) {
-      const msg = authApiErrorMessage(e, t("fallback.invalidCredentials"));
-      if (msg.includes("suspended")) {
-        setApiError(msg);
-      } else {
-        setApiError(msg);
-      }
+      setApiError(authApiErrorMessage(e, t("fallback.invalidCredentials")));
     }
   };
 
@@ -104,8 +88,7 @@ function LoginContent() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img
-              src="/logo.png"
+            <Image src="/logo.png"
               alt=""
               className="w-8 h-8"
               width={32}

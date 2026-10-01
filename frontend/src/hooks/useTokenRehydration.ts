@@ -27,7 +27,7 @@ export function useTokenRehydration(): TokenRehydrationStatus {
     refreshApi()
       .then((data) => {
         if (cancelled) return
-        setAuth(data.user, data.accessToken, data.user.tenantId)
+        setAuth(data.user, data.accessToken)
         setStatus('authenticated')
       })
       .catch(() => {

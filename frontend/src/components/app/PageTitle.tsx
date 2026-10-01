@@ -9,11 +9,14 @@ import { documentationPage } from "@/lib/documentation";
 const PAGE_TITLE_KEYS = {
   "/": "chat",
   "/login": "login",
-  "/check-login-email": "checkLoginEmail",
-  "/verify-login": "verifyLogin",
+  "/register": "register",
+  "/setup": "setup",
+  "/change-password": "changePassword",
   "/accept-invitation": "acceptInvitation",
   "/documents": "documents",
   "/users": "users",
+  "/workspaces": "workspaces",
+  "/settings": "settings",
 } as const;
 
 export function PageTitle() {

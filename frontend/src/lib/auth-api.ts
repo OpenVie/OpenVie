@@ -1,7 +1,8 @@
 import type {
   AuthResponse,
   InvitationValidation,
-  LoginResponse,
+  RegistrationStatus,
+  WorkspaceSummary,
 } from "@/types";
 
 export function getApiBase(): string {
@@ -78,11 +79,12 @@ export async function refreshApi(): Promise<AuthResponse> {
   return refreshInFlight;
 }
 
+/** Password-only login; the response is a complete session or an error. */
 export async function loginApi(payload: {
   email: string;
   password: string;
   rememberMe: boolean;
-}): Promise<LoginResponse> {
+}): Promise<AuthResponse> {
   const res = await fetch(`${getApiBase()}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -93,37 +95,7 @@ export async function loginApi(payload: {
   if (!res.ok) {
     throw authApiError(body);
   }
-  return body as LoginResponse;
-}
-
-export async function verifyLogin2FAApi(token: string): Promise<AuthResponse> {
-  const res = await fetch(`${getApiBase()}/auth/verify-login-2fa`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ token }),
-  });
-  const body = await parseJsonSafe(res);
-  if (!res.ok) {
-    throw authApiError(body);
-  }
   return body as AuthResponse;
-}
-
-export async function resendLogin2FAApi(
-  email: string,
-): Promise<{ message: string; canRetryAfterSeconds?: number }> {
-  const res = await fetch(`${getApiBase()}/auth/resend-login-2fa`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email }),
-  });
-  const body = await parseJsonSafe(res);
-  if (!res.ok) {
-    throw authApiError(body);
-  }
-  return body as { message: string; canRetryAfterSeconds?: number };
 }
 
 export async function logoutApi(): Promise<void> {
@@ -132,6 +104,95 @@ export async function logoutApi(): Promise<void> {
     credentials: "include",
   });
   if (!res.ok && res.status !== 204) {
+    const body = await parseJsonSafe(res);
+    throw authApiError(body);
+  }
+}
+
+/** Workspaces the signed-in user belongs to. */
+export async function listWorkspacesApi(
+  accessToken: string,
+): Promise<WorkspaceSummary[]> {
+  const res = await fetch(`${getApiBase()}/auth/workspaces`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    credentials: "include",
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
+  return body as WorkspaceSummary[];
+}
+
+/** Re-issues the session scoped to another workspace the caller belongs to. */
+export async function switchWorkspaceApi(workspaceId: string): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/workspaces/switch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ workspaceId }),
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
+  return body as AuthResponse;
+}
+
+export async function changePasswordApi(
+  accessToken: string,
+  payload: { currentPassword: string; newPassword: string },
+): Promise<void> {
+  const res = await fetch(`${getApiBase()}/auth/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await parseJsonSafe(res);
+    throw authApiError(body);
+  }
+}
+
+/** Self-service signup while the organization allows it. */
+export async function registerApi(payload: {
+  email: string;
+  fullName: string;
+  password: string;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
+  return body as AuthResponse;
+}
+
+export async function registrationStatusApi(): Promise<RegistrationStatus> {
+  const res = await fetch(`${getApiBase()}/auth/registration-status`, {
+    credentials: "include",
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
+  return body as RegistrationStatus;
+}
+
+/** One-time web setup: claims the installation and creates the owner. */
+export async function setupApi(payload: {
+  organizationName: string;
+  fullName: string;
+  email: string;
+  password: string;
+  allowSelfRegistration: boolean;
+}): Promise<void> {
+  const res = await fetch(`${getApiBase()}/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
     const body = await parseJsonSafe(res);
     throw authApiError(body);
   }

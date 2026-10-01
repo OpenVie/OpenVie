@@ -340,6 +340,7 @@ public class WorkspaceService {
         private String slug;
         private String status;
         private String visibility;
+        @com.fasterxml.jackson.annotation.JsonProperty("isDefault")
         private boolean isDefault;
         private int memberCount;
         private java.time.LocalDateTime createdAt;

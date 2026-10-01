@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, Mail, RefreshCw, UserPlus, Users } from "lucide-react";
+import { AlertCircle, KeyRound, Mail, RefreshCw, UserPlus, Users } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -15,10 +15,11 @@ import {
   getTeamDirectory,
   inviteTeamMember,
   resendTeamInvitation,
+  setTeamMemberPassword,
   updateTeamMemberRole,
   updateTeamMemberStatus,
 } from "@/lib/users-api";
-import type { TeamDirectory, TeamMember, UserRole, UserStatus } from "@/types";
+import type { TeamDirectory, TeamMember, UserStatus, WorkspaceRole } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +30,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 
-type InviteForm = { email: string; role: UserRole };
+type InviteForm = { email: string; role: WorkspaceRole };
+type PasswordForm = { password: string; confirmPassword: string };
 const initials = (name: string) => name.split(" ").filter(Boolean).map(part => part[0]).join("").toUpperCase().slice(0, 2) || "?";
 
 function StatusBadge({ status }: { status: string }) {
@@ -56,11 +58,12 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [passwordTarget, setPasswordTarget] = useState<TeamMember | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const isAdmin = authUser?.role === "TENANT_ADMIN";
-  const activeAdminCount = useMemo(() => directory.members.filter(member => member.role === "TENANT_ADMIN" && member.status === "ACTIVE").length, [directory.members]);
-  const inviteSchema = z.object({ email: z.string().email(t("validEmail")), role: z.enum(["TENANT_ADMIN", "USER"]) });
-  const roleLabel = (role: UserRole) => role === "TENANT_ADMIN" ? t("roles.admin") : t("roles.user");
+  const isAdmin = authUser?.workspaceRole === "WORKSPACE_ADMIN";
+  const activeAdminCount = useMemo(() => directory.members.filter(member => member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE").length, [directory.members]);
+  const inviteSchema = z.object({ email: z.string().email(t("validEmail")), role: z.enum(["WORKSPACE_ADMIN", "MEMBER"]) });
+  const roleLabel = (role: WorkspaceRole) => role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user");
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
   const loadDirectory = useCallback(async () => {
@@ -81,8 +84,16 @@ export default function UsersPage() {
   }, [loadDirectory]);
 
   const { register, handleSubmit, setValue, reset, formState: { errors, isSubmitting } } = useForm<InviteForm>({
-    resolver: zodResolver(inviteSchema), defaultValues: { role: "USER" },
+    resolver: zodResolver(inviteSchema), defaultValues: { role: "MEMBER" },
   });
+
+  const passwordSchema = z.object({
+    password: z.string().min(12, t("passwordTooShort")),
+    confirmPassword: z.string(),
+  }).refine(values => values.password === values.confirmPassword, {
+    path: ["confirmPassword"], message: t("passwordsMismatch"),
+  });
+  const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) });
 
   const onInvite = async (values: InviteForm) => {
     try {
@@ -92,11 +103,22 @@ export default function UsersPage() {
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.invite")); }
   };
 
+  const onSetPassword = async (values: PasswordForm) => {
+    if (!passwordTarget) return;
+    setBusyId(passwordTarget.id);
+    try {
+      await setTeamMemberPassword(request, passwordTarget.id, values.password);
+      toast.success(t("passwordSet", { name: passwordTarget.fullName || passwordTarget.email }));
+      setPasswordTarget(null);
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.password")); }
+    finally { setBusyId(null); }
+  };
+
   const updateMember = (updated: TeamMember) => setDirectory(current => ({
     ...current, members: current.members.map(member => member.id === updated.id ? updated : member),
   }));
 
-  const changeRole = async (member: TeamMember, role: UserRole) => {
+  const changeRole = async (member: TeamMember, role: WorkspaceRole) => {
     setBusyId(member.id);
     try { updateMember(await updateTeamMemberRole(request, member.id, role)); toast.success(t("roleUpdated")); }
     catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.role")); }
@@ -139,13 +161,13 @@ export default function UsersPage() {
       <TableHeader><TableRow><TableHead>{t("table.member")}</TableHead><TableHead>{t("table.role")}</TableHead><TableHead>{t("table.status")}</TableHead><TableHead>{t("table.joinedExpires")}</TableHead>{isAdmin && <TableHead className="text-right">{t("table.actions")}</TableHead>}</TableRow></TableHeader>
       <TableBody>
         {directory.members.map(member => {
-          const finalAdmin = member.role === "TENANT_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
+          const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
           const protectedAction = member.currentUser || finalAdmin;
           return <TableRow key={`member-${member.id}`}>
             <TableCell><div className="flex items-center gap-3"><Avatar className="size-9"><AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">{initials(member.fullName || member.email)}</AvatarFallback></Avatar><div><p className="font-medium text-slate-800">{member.fullName || t("unnamed")}{member.currentUser && <span className="ml-2 text-xs font-normal text-slate-400">{t("you")}</span>}</p><p className="text-sm text-slate-500">{member.email}</p></div></div></TableCell>
-            <TableCell>{isAdmin ? <Select value={member.role} disabled={busyId === member.id || protectedAction} onValueChange={value => void changeRole(member, value as UserRole)}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TENANT_ADMIN">{t("roles.admin")}</SelectItem><SelectItem value="USER">{t("roles.user")}</SelectItem></SelectContent></Select> : <span className="text-sm">{roleLabel(member.role)}</span>}</TableCell>
+            <TableCell>{isAdmin ? <Select value={member.workspaceRole} disabled={busyId === member.id || protectedAction} onValueChange={value => void changeRole(member, value as WorkspaceRole)}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem><SelectItem value="MEMBER">{t("roles.user")}</SelectItem></SelectContent></Select> : <span className="text-sm">{roleLabel(member.workspaceRole)}</span>}</TableCell>
             <TableCell><StatusBadge status={member.status} /></TableCell><TableCell className="text-sm text-slate-500">{formatDate(member.joinedAt)}</TableCell>
-            {isAdmin && <TableCell className="text-right"><Button size="sm" variant="outline" disabled={busyId === member.id || (member.status === "ACTIVE" && protectedAction)} onClick={() => void changeStatus(member)}>{member.status === "ACTIVE" ? t("deactivate") : t("reactivate")}</Button></TableCell>}
+            {isAdmin && <TableCell className="space-x-2 text-right"><Button size="sm" variant="outline" disabled={busyId === member.id || member.currentUser} title={t("setPasswordHint")} onClick={() => { setPasswordTarget(member); passwordForm.reset(); }}><KeyRound className="mr-1 size-3.5" />{t("setPassword")}</Button><Button size="sm" variant="outline" disabled={busyId === member.id || (member.status === "ACTIVE" && protectedAction)} onClick={() => void changeStatus(member)}>{member.status === "ACTIVE" ? t("deactivate") : t("reactivate")}</Button></TableCell>}
           </TableRow>;
         })}
         {directory.invitations.map(invitation => <TableRow key={`invite-${invitation.id}`}>
@@ -156,6 +178,8 @@ export default function UsersPage() {
       </TableBody>
     </Table>}</Card>
 
-    <Dialog open={showInvite} onOpenChange={setShowInvite}><DialogContent><DialogHeader><DialogTitle>{t("inviteMember")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onInvite)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="inviteEmail">{t("emailAddress")}</Label><Input id="inviteEmail" type="email" placeholder="colleague@company.com" {...register("email")} />{errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}</div><div className="space-y-1.5"><Label>{t("role")}</Label><Select defaultValue="USER" onValueChange={value => setValue("role", value as UserRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TENANT_ADMIN">{t("roles.admin")}</SelectItem><SelectItem value="USER">{t("roles.user")}</SelectItem></SelectContent></Select></div><DialogFooter><Button variant="outline" type="button" onClick={() => setShowInvite(false)}>{t("cancel")}</Button><Button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">{isSubmitting ? t("sending") : t("sendInvitation")}</Button></DialogFooter></form></DialogContent></Dialog>
+    <Dialog open={showInvite} onOpenChange={setShowInvite}><DialogContent><DialogHeader><DialogTitle>{t("inviteMember")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onInvite)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="inviteEmail">{t("emailAddress")}</Label><Input id="inviteEmail" type="email" placeholder="colleague@company.com" {...register("email")} />{errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}</div><div className="space-y-1.5"><Label>{t("role")}</Label><Select defaultValue="MEMBER" onValueChange={value => setValue("role", value as WorkspaceRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem><SelectItem value="MEMBER">{t("roles.user")}</SelectItem></SelectContent></Select></div><DialogFooter><Button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">{isSubmitting ? t("sending") : t("sendInvitation")}</Button></DialogFooter></form></DialogContent></Dialog>
+
+    <Dialog open={passwordTarget !== null} onOpenChange={open => { if (!open) setPasswordTarget(null); }}><DialogContent><DialogHeader><DialogTitle>{t("setPasswordTitle", { name: passwordTarget?.fullName || passwordTarget?.email || "" })}</DialogTitle></DialogHeader><p className="text-sm text-slate-500">{t("setPasswordNote")}</p><form onSubmit={passwordForm.handleSubmit(onSetPassword)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="memberPassword">{t("newPassword")}</Label><Input id="memberPassword" type="password" autoComplete="new-password" {...passwordForm.register("password")} />{passwordForm.formState.errors.password && <p className="text-xs text-red-600">{passwordForm.formState.errors.password.message}</p>}</div><div className="space-y-1.5"><Label htmlFor="memberPasswordConfirm">{t("confirmPassword")}</Label><Input id="memberPasswordConfirm" type="password" autoComplete="new-password" {...passwordForm.register("confirmPassword")} />{passwordForm.formState.errors.confirmPassword && <p className="text-xs text-red-600">{passwordForm.formState.errors.confirmPassword.message}</p>}</div><DialogFooter><Button type="submit" disabled={passwordForm.formState.isSubmitting || busyId !== null} className="bg-indigo-600 text-white hover:bg-indigo-700">{t("setPassword")}</Button></DialogFooter></form></DialogContent></Dialog>
   </div>;
 }

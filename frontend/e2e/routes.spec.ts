@@ -1,16 +1,16 @@
 import { expect, test } from "@playwright/test";
 
 const REMOVED_ROUTES = [
-  "/register",
   "/check-email",
   "/verify-email",
+  "/check-login-email",
+  "/verify-login",
   "/pricing",
   "/widget/preview",
   "/evidence/some-token",
   "/conversations",
   "/tickets",
   "/analytics",
-  "/settings",
   "/dashboard",
   "/platform",
   "/recruitment",
@@ -29,8 +29,10 @@ const REMOVED_ROUTES = [
 
 test("logged-out visitors are sent to login instead of the chat", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveURL(/\/login(\?|$)/);
-  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page).toHaveURL(/\/(login|setup)(\?|$)/);
+  if ((await page.url()).includes("/login")) {
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+  }
 });
 
 test("logged-out visitors cannot open documents", async ({ page }) => {
@@ -53,11 +55,17 @@ test("removed routes have no handler", async ({ page }) => {
 test("retained routes resolve for both locales", async ({ page }) => {
   for (const route of [
     "/login",
+    "/setup",
+    "/register",
+    "/change-password",
+    "/workspaces",
+    "/settings",
     "/documentation",
     "/documentation/getting-started",
     "/documentation/documents",
     "/documentation/playground",
     "/vi/login",
+    "/vi/setup",
     "/vi/documentation",
     "/vi/documentation/playground",
   ]) {

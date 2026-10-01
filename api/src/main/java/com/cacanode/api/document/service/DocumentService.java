@@ -572,7 +572,8 @@ public class DocumentService {
                 document.getKnowledgeBaseId(),
                 document.getStatus(),
                 document.getChunkCount(),
-                document.getErrorMessage()
+                document.getErrorMessage(),
+                document.getUploadedBy()
         );
     }
 
@@ -587,7 +588,8 @@ public class DocumentService {
                 document.getStatus(),
                 document.getChunkCount(),
                 document.getErrorMessage(),
-                document.getCreatedAt()
+                document.getCreatedAt(),
+                document.getUploadedBy()
         );
     }
 }

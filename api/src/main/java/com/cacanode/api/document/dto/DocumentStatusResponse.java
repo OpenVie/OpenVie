@@ -16,6 +16,7 @@ public record DocumentStatusResponse(
         UUID knowledgeBaseId,
         DocumentStatus status,
         Integer chunkCount,
-        String errorMessage
+        String errorMessage,
+        UUID uploadedBy
 ) {
 }

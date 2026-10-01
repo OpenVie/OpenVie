@@ -9,6 +9,7 @@ export interface Document {
   chunkCount?: number | null;
   errorMessage?: string | null;
   uploadedAt: string;
+  uploadedBy?: string | null;
 }
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -27,6 +28,7 @@ export interface DocumentStatusResponse {
   fileType: string;
   fileSizeBytes: number;
   uploadedAt: string;
+  uploadedBy?: string | null;
   knowledgeBaseId: string;
   status: DocumentStatus;
   chunkCount?: number | null;
@@ -50,21 +52,21 @@ export interface DocumentUnit {
   source_end: number | null;
 }
 
-export interface User {
+/** Organization-level role carried by the account. */
+export type OrgRole = "ORG_OWNER" | "MEMBER";
+/** Per-workspace authority on the membership row. */
+export type WorkspaceRole = "WORKSPACE_ADMIN" | "MEMBER";
+export type UserStatus = "ACTIVE" | "INACTIVE";
+export type InvitationStatus = "PENDING" | "EXPIRED" | "CANCELLED" | "ACCEPTED";
+export type WorkspaceVisibility = "PUBLIC" | "PRIVATE";
+
+export interface TeamMember {
   id: string;
   email: string;
   fullName: string;
-  role: UserRole;
+  workspaceRole: WorkspaceRole;
   status: UserStatus;
   joinedAt: string;
-}
-
-export type AuthRole = "TENANT_ADMIN" | "USER";
-export type UserRole = "TENANT_ADMIN" | "USER";
-export type UserStatus = "ACTIVE" | "INACTIVE";
-export type InvitationStatus = "PENDING" | "EXPIRED" | "CANCELLED" | "ACCEPTED";
-
-export interface TeamMember extends User {
   lastLoginAt: string | null;
   currentUser: boolean;
 }
@@ -72,7 +74,7 @@ export interface TeamMember extends User {
 export interface TeamInvitation {
   id: string;
   email: string;
-  role: UserRole;
+  role: WorkspaceRole;
   status: InvitationStatus;
   invitedAt: string;
   expiresAt: string;
@@ -86,18 +88,22 @@ export interface TeamDirectory {
 
 export interface InvitationValidation {
   email: string;
-  tenantName: string;
-  role: AuthRole;
+  organizationName: string;
+  workspaceName: string;
+  role: WorkspaceRole;
   expiresAt: string;
 }
 
-/** Matches Spring Boot `AuthResponse.user` (JWT login/refresh). */
+/** Matches Spring Boot `AuthResponse.user` (JWT login/refresh/switch). */
 export interface AuthUser {
   userId: string;
-  tenantId: string;
-  email: string;
+  orgId: string;
+  activeWorkspaceId: string;
   fullName: string;
-  role: AuthRole;
+  email: string;
+  orgRole: OrgRole;
+  workspaceRole: WorkspaceRole;
+  mustChangePassword: boolean;
 }
 
 export interface AuthResponse {
@@ -105,6 +111,62 @@ export interface AuthResponse {
   tokenType: string;
   expiresIn: number;
   user: AuthUser;
+}
+
+/** One workspace the caller belongs to (`GET /auth/workspaces`). */
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  slug: string;
+  role: WorkspaceRole;
+  isDefault: boolean;
+}
+
+/** Admin view of a workspace (`GET /workspaces`). */
+export interface WorkspaceView {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  visibility: WorkspaceVisibility;
+  isDefault: boolean;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface WorkspaceMemberView {
+  userId: string;
+  email: string;
+  fullName: string;
+  status: UserStatus;
+  workspaceRole: WorkspaceRole;
+  joinedAt: string;
+}
+
+export interface OrganizationSnapshot {
+  id: string;
+  name: string;
+  slug: string;
+  allowSelfRegistration: boolean;
+}
+
+/** Notification channel as reported by the API (secrets are write-only). */
+export interface NotificationChannelView {
+  id: string;
+  type: string;
+  enabled: boolean;
+  credentialsStored: boolean;
+  lastDeliveryError: string | null;
+  lastDeliveryAt: string | null;
+}
+
+export interface SetupStatus {
+  required: boolean;
+}
+
+export interface RegistrationStatus {
+  setupRequired: boolean;
+  selfRegistrationAllowed: boolean;
 }
 
 export interface TenantWorkspace {
@@ -122,14 +184,6 @@ export interface TenantWorkspace {
     welcomeMessage: string;
   };
 }
-
-export interface LoginStep1Response {
-  message: string;
-  email: string;
-  requires2FA: boolean;
-}
-
-export type LoginResponse = AuthResponse | LoginStep1Response;
 
 export interface ChatSessionResponse {
   id: string;
@@ -178,4 +232,3 @@ export interface PlaygroundSession {
   created_at: string;
   last_activity_at: string;
 }
-

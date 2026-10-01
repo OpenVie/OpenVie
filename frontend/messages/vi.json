@@ -20,17 +20,23 @@
     "logout": "Đăng xuất",
     "openNavigation": "Mở điều hướng",
     "closeNavigation": "Đóng điều hướng",
-    "user": "Người dùng"
+    "user": "Người dùng",
+    "workspaces": "Không gian làm việc",
+    "settings": "Cài đặt",
+    "changePassword": "Đổi mật khẩu"
   },
   "PageTitles": {
+    "setup": "Thiết lập OpenVie",
     "chat": "Trò chuyện",
     "login": "Đăng nhập",
-    "checkLoginEmail": "Kiểm tra email đăng nhập",
-    "verifyLogin": "Xác minh đăng nhập",
     "acceptInvitation": "Chấp nhận lời mời",
     "documents": "Tài liệu",
     "documentDetails": "Chi tiết tài liệu",
-    "users": "Thành viên"
+    "users": "Thành viên",
+    "workspaces": "Không gian làm việc",
+    "settings": "Cài đặt",
+    "changePassword": "Đổi mật khẩu",
+    "register": "Tạo tài khoản"
   },
   "DocumentationShell": {
     "docs": "Tài liệu",
@@ -157,29 +163,20 @@
     "password": "Mật khẩu",
     "confirmPassword": "Xác nhận mật khẩu",
     "fullName": "Họ và tên",
-    "yourEmail": "email của bạn",
     "showPassword": "Hiện mật khẩu",
     "hidePassword": "Ẩn mật khẩu",
     "dismissError": "Đóng lỗi",
-    "backToLogin": "Quay lại đăng nhập",
-    "verificationFailed": "Xác minh thất bại",
     "loading": "Đang tải…",
-    "sending": "Đang gửi…",
-    "resendIn": "Gửi lại email ({seconds} giây)",
-    "resendVerification": "Gửi lại email xác minh",
     "validation": {
       "emailRequired": "Email là bắt buộc",
       "invalidEmail": "Địa chỉ email không hợp lệ",
       "passwordRequired": "Mật khẩu là bắt buộc",
       "enterFullName": "Nhập họ và tên của bạn",
-      "passwordLength": "Mật khẩu phải có ít nhất 8 ký tự",
+      "passwordLength": "Mật khẩu phải có ít nhất 12 ký tự",
       "passwordsMismatch": "Mật khẩu không khớp"
     },
     "fallback": {
-      "invalidCredentials": "Email hoặc mật khẩu không đúng",
-      "resendFailed": "Không thể gửi lại email xác minh",
-      "verificationFailed": "Xác minh thất bại. Vui lòng thử lại.",
-      "loginVerificationFailed": "Không thể xác minh đăng nhập"
+      "invalidCredentials": "Email hoặc mật khẩu không đúng"
     },
     "login": {
       "title": "Chào mừng trở lại",
@@ -189,27 +186,6 @@
       "signIn": "Đăng nhập",
       "provisioned": "Tài khoản do quản trị viên không gian làm việc cấp phát."
     },
-    "suspended": {
-      "title": "Tài khoản bị đình chỉ",
-      "description": "Tài khoản đã bị đình chỉ do lạm dụng quy trình xác minh",
-      "contactSupport": "Vui lòng liên hệ quản trị viên không gian làm việc của bạn."
-    },
-    "checkEmail": {
-      "spam": "Nếu không thấy email, hãy kiểm tra thư rác và dùng nút bên dưới để gửi lại."
-    },
-    "checkLogin": {
-      "title": "Xác minh đăng nhập",
-      "sentTo": "Chúng tôi đã gửi liên kết xác minh đến",
-      "instructions": "Nhấp vào liên kết trong email để hoàn tất đăng nhập. Liên kết sẽ hết hạn sau 15 phút."
-    },
-    "verifyLogin": {
-      "verifying": "Đang xác minh đăng nhập…",
-      "identity": "Vui lòng chờ trong khi chúng tôi xác minh danh tính của bạn",
-      "success": "Đã xác minh đăng nhập!",
-      "redirecting": "Đang chuyển hướng…",
-      "expired": "Liên kết xác minh không hợp lệ hoặc đã hết hạn",
-      "invalidToken": "Liên kết xác minh không hợp lệ hoặc đã hết hạn."
-    },
     "invitation": {
       "missingToken": "Liên kết lời mời này thiếu token.",
       "invalid": "Lời mời không hợp lệ hoặc đã hết hạn.",
@@ -218,12 +194,12 @@
       "joinTeam": "Tham gia đội ngũ",
       "validating": "Đang xác thực lời mời…",
       "ready": "Tài khoản đã sẵn sàng. Đang chuyển đến không gian làm việc…",
-      "invitedAs": "Bạn được mời với vai trò <role></role> vào <tenant></tenant>.",
+      "invitedAs": "Bạn được mời với vai trò <role></role> vào <workspace></workspace> thuộc <organization></organization>.",
       "accept": "Chấp nhận lời mời",
       "creating": "Đang thiết lập tài khoản của bạn…"
     },
     "roles": {
-      "admin": "Quản trị viên",
+      "admin": "Quản trị viên không gian làm việc",
       "user": "Người dùng"
     }
   },
@@ -336,7 +312,7 @@
     "sendInvitation": "Gửi lời mời",
     "roles": {
       "admin": "Quản trị viên",
-      "user": "Người dùng"
+      "user": "Thành viên"
     },
     "statuses": {
       "active": "Hoạt động",
@@ -356,8 +332,18 @@
       "role": "Không thể cập nhật vai trò",
       "status": "Không thể cập nhật trạng thái",
       "resend": "Không thể gửi lại lời mời",
-      "cancel": "Không thể hủy lời mời"
-    }
+      "cancel": "Không thể hủy lời mời",
+      "password": "Không thể đặt mật khẩu"
+    },
+    "setPassword": "Đặt mật khẩu",
+    "setPasswordHint": "Đặt mật khẩu ban đầu; thành viên phải đổi ở lần đăng nhập kế tiếp",
+    "setPasswordTitle": "Đặt mật khẩu cho {name}",
+    "setPasswordNote": "Thành viên sẽ phải chọn mật khẩu mới ở lần đăng nhập kế tiếp.",
+    "passwordSet": "Đã đặt mật khẩu cho {name}",
+    "newPassword": "Mật khẩu mới",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "passwordTooShort": "Mật khẩu phải có ít nhất 12 ký tự",
+    "passwordsMismatch": "Mật khẩu không khớp"
   },
   "Documents": {
     "title": "Tài liệu",
@@ -456,5 +442,168 @@
       "download": "Không thể tải tài liệu xuống"
     },
     "citationOf": "Bằng chứng {current} / {total}"
+  },
+  "Setup": {
+    "tagline": "AI dựa trên tài liệu cho đội ngũ của bạn",
+    "title": "Thiết lập OpenVie",
+    "description": "Tạo tổ chức và tài khoản chủ sở hữu. Người hoàn tất đầu tiên sẽ sở hữu bản cài đặt.",
+    "organizationName": "Tên tổ chức",
+    "ownerName": "Họ tên của bạn",
+    "ownerEmail": "Email chủ sở hữu",
+    "password": "Mật khẩu",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "allowSelfRegistration": "Cho phép tự đăng ký trong tổ chức này",
+    "showPassword": "Hiện mật khẩu",
+    "hidePassword": "Ẩn mật khẩu",
+    "submit": "Kích hoạt bản cài đặt",
+    "submitting": "Đang thiết lập...",
+    "done": "Sẵn sàng. Đang đăng nhập...",
+    "irreversible": "Thiết lập chỉ thực hiện một lần và không thể hoàn tác tại đây.",
+    "fallback": "Thiết lập thất bại. Vui lòng thử lại.",
+    "validation": {
+      "required": "Vui lòng điền trường này",
+      "email": "Địa chỉ email không hợp lệ",
+      "passwordLength": "Mật khẩu phải có ít nhất 12 ký tự",
+      "mismatch": "Mật khẩu không khớp"
+    }
+  },
+  "Register": {
+    "title": "Tạo tài khoản của bạn",
+    "description": "Tham gia tổ chức và bắt đầu đặt câu hỏi.",
+    "submitting": "Đang tạo tài khoản...",
+    "submit": "Tạo tài khoản",
+    "haveAccount": "Đã có tài khoản?",
+    "fallback": "Đăng ký thất bại. Vui lòng thử lại."
+  },
+  "ChangePassword": {
+    "title": "Đổi mật khẩu",
+    "description": "Chọn mật khẩu mới cho tài khoản của bạn.",
+    "forcedDescription": "Quản trị viên đã đặt mật khẩu ban đầu. Hãy chọn mật khẩu của bạn trước khi tiếp tục.",
+    "current": "Mật khẩu hiện tại",
+    "new": "Mật khẩu mới",
+    "submit": "Đổi mật khẩu",
+    "submitting": "Đang lưu...",
+    "cancel": "Hủy",
+    "fallback": "Không thể đổi mật khẩu.",
+    "validation": {
+      "length": "Mật khẩu phải có ít nhất 12 ký tự",
+      "sameAsCurrent": "Hãy chọn mật khẩu khác với mật khẩu hiện tại"
+    }
+  },
+  "WorkspaceSwitcher": {
+    "label": "Chuyển không gian làm việc",
+    "workspaces": "Không gian làm việc",
+    "admin": "Quản trị",
+    "member": "Thành viên"
+  },
+  "Workspaces": {
+    "title": "Không gian làm việc",
+    "description": "Tạo, đổi tên và lưu trữ các không gian làm việc của tổ chức.",
+    "create": "Không gian mới",
+    "createTitle": "Tạo không gian làm việc",
+    "name": "Tên",
+    "namePlaceholder": "ví dụ: Tài chính",
+    "visibility": "Hiển thị",
+    "visibilityHint": "Không gian công khai được tự động thêm cho thành viên tự đăng ký.",
+    "public": "Công khai",
+    "private": "Riêng tư",
+    "makePublic": "Chuyển công khai",
+    "makePrivate": "Chuyển riêng tư",
+    "rename": "Đổi tên",
+    "renamePrompt": "Tên mới cho {name}",
+    "archive": "Lưu trữ",
+    "confirmArchive": "Lưu trữ {name}? Thành viên vẫn giữ các không gian khác.",
+    "archived": "Đã lưu trữ {name}",
+    "archivedBadge": "Đã lưu trữ",
+    "default": "Mặc định",
+    "created": "Đã tạo {name}",
+    "renamed": "Đã đổi tên không gian",
+    "visibilityUpdated": "Hiển thị đặt thành {visibility}",
+    "refresh": "Tải lại",
+    "retry": "Thử lại",
+    "creating": "Đang tạo...",
+    "empty": "Chưa có không gian làm việc",
+    "table": {
+      "name": "Tên",
+      "slug": "Slug",
+      "visibility": "Hiển thị",
+      "members": "Thành viên",
+      "created": "Ngày tạo",
+      "actions": "Thao tác"
+    },
+    "validation": {
+      "nameRequired": "Tên không gian làm việc là bắt buộc"
+    },
+    "fallback": {
+      "load": "Không thể tải danh sách không gian",
+      "create": "Không thể tạo không gian",
+      "rename": "Không thể đổi tên",
+      "visibility": "Không thể thay đổi hiển thị",
+      "archive": "Không thể lưu trữ"
+    }
+  },
+  "Settings": {
+    "title": "Cài đặt tổ chức",
+    "description": "Đăng ký và kênh thông báo của tổ chức này.",
+    "ownerOnly": "Chỉ chủ sở hữu tổ chức mới mở được cài đặt.",
+    "save": "Lưu",
+    "saved": "Đã lưu",
+    "retry": "Thử lại",
+    "fallback": {
+      "load": "Không thể tải cài đặt",
+      "save": "Không thể lưu cài đặt"
+    },
+    "organization": {
+      "title": "Đăng ký",
+      "description": "Tổ chức {name}. Kiểm soát ai được tạo tài khoản mà không cần lời mời.",
+      "selfRegistration": "Cho phép tự đăng ký",
+      "selfRegistrationHint": "Khi bật, bất kỳ ai truy cập được bản cài đặt đều có thể tạo tài khoản THÀNH VIÊN và tham gia các không gian công khai.",
+      "current": "Tổ chức {name}. Kiểm soát ai được tạo tài khoản mà không cần lời mời."
+    },
+    "channels": {
+      "title": "Kênh email",
+      "description": "Lời mời là loại email duy nhất OpenVie gửi. Không có kênh bật, lời mời bị từ chối; sự tạo khi kênh lưu bị tắt sẽ được gửi lại khi bật.",
+      "add": "Thêm kênh",
+      "addTitle": "Thêm kênh thông báo",
+      "editTitle": "Sửa kênh {type}",
+      "type": "Nhà cung cấp",
+      "fromEmail": "Email gửi",
+      "fromName": "Tên gửi",
+      "host": "Máy chủ SMTP",
+      "port": "Cổng",
+      "username": "Tên đăng nhập",
+      "password": "Mật khẩu",
+      "passwordKeep": "Mật khẩu (để trống nếu giữ nguyên)",
+      "apiKey": "Khóa API",
+      "apiKeyHint": "Được lưu ở dạng mã hóa và không hiển thị lại.",
+      "apiKeyKeepHint": "Để trống nếu giữ khóa hiện tại.",
+      "smtpAuth": "Dùng SMTP AUTH",
+      "enabled": "Đã bật",
+      "disabled": "Đã tắt",
+      "credentialsStored": "Đã lưu thông tin đăng nhập",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "edit": "Sửa",
+      "enableAfterSave": "Bật kênh này ngay sau khi lưu",
+      "enableHint": "Bật kênh sẽ gửi lại các lời mời đang chờ.",
+      "saved": "Đã lưu kênh",
+      "deleted": "Đã xóa kênh",
+      "confirmDelete": "Xóa kênh {type}?",
+      "test": "Gửi thử",
+      "testTitle": "Gửi email thử",
+      "testEmail": "Email người nhận",
+      "testSent": "Đã gửi email thử",
+      "testFailed": "Gửi thử thất bại",
+      "empty": "Chưa cấu hình kênh nào. Cấu hình email cũng có thể đến từ biến môi trường.",
+      "validEmail": "Địa chỉ email không hợp lệ",
+      "nameRequired": "Tên gửi là bắt buộc",
+      "hostRequired": "Máy chủ SMTP là bắt buộc",
+      "keyRequired": "Khóa API là bắt buộc",
+      "fallback": {
+        "save": "Không thể lưu kênh",
+        "toggle": "Không thể thay đổi trạng thái kênh",
+        "delete": "Không thể xóa kênh"
+      }
+    }
   }
 }

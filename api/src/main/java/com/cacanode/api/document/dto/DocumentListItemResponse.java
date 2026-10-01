@@ -16,6 +16,7 @@ public record DocumentListItemResponse(
         DocumentStatus status,
         Integer chunkCount,
         String errorMessage,
-        LocalDateTime uploadedAt
+        LocalDateTime uploadedAt,
+        UUID uploadedBy
 ) {
 }
