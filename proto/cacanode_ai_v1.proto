@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package cacanode.ai.v1;
+
+option java_multiple_files = true;
+option java_package = "com.cacanode.ai.v1";
+option java_outer_classname = "CacanodeAiProto";
+
+service InferenceService {
+  rpc GenerateAnswer(GenerateAnswerRequest) returns (GenerateAnswerResponse);
+  rpc ListDocumentUnits(ListDocumentUnitsRequest) returns (ListDocumentUnitsResponse);
+  rpc DeleteDocumentIndex(DeleteDocumentIndexRequest) returns (DeleteDocumentIndexResponse);
+}
+
+message PriorMessage {
+  string role = 1;
+  string content = 2;
+}
+
+message TraceMetadata {
+  string request_id = 1;
+  string trace_id = 2;
+  string parent_span_id = 3;
+  map<string, string> baggage = 4;
+}
+
+message GenerateAnswerRequest {
+  string generation_id = 1;
+  string turn_id = 2;
+  string tenant_id = 3;
+  string chatbot_id = 4;
+  string knowledge_base_id = 5;
+  int64 authoritative_revision = 6;
+  string channel = 7;
+  string locale = 8;
+  string question = 9;
+  repeated PriorMessage prior_messages = 10;
+  string tenant_name = 11;
+  string prompt_schema_version = 12;
+  TraceMetadata trace = 13;
+}
+
+message Citation {
+  string id = 1;
+  string document_id = 2;
+  string source_name = 3;
+  optional int32 page_number = 4;
+  int32 chunk_index = 5;
+  double score = 6;
+  string snippet = 7;
+  optional string unit_id = 8;
+  optional string modality = 9;
+  repeated string section_path = 10;
+  optional string block_type = 11;
+  optional string sheet_name = 12;
+  optional string cell_range = 13;
+  optional string table_id = 14;
+}
+
+message GenerateAnswerResponse {
+  string generation_id = 1;
+  int64 authoritative_revision = 2;
+  string answer = 3;
+  repeated Citation citations = 4;
+  optional int64 input_tokens = 5;
+  optional int64 output_tokens = 6;
+  string cache_tier = 7;
+  optional int64 avoided_input_tokens = 8;
+  optional int64 avoided_output_tokens = 9;
+}
+
+message ListDocumentUnitsRequest {
+  string tenant_id = 1;
+  string knowledge_base_id = 2;
+  string document_id = 3;
+  TraceMetadata trace = 4;
+}
+
+message DocumentUnit {
+  optional string unit_id = 1;
+  int32 chunk_index = 2;
+  string text = 3;
+  optional string source_name = 4;
+  optional string modality = 5;
+  optional string block_type = 6;
+  repeated string section_path = 7;
+  optional string heading_context = 8;
+  optional int32 page_number = 9;
+  optional string sheet_name = 10;
+  optional string cell_range = 11;
+  optional string table_id = 12;
+  optional int32 source_start = 13;
+  optional int32 source_end = 14;
+}
+
+message ListDocumentUnitsResponse {
+  repeated DocumentUnit units = 1;
+}
+
+message DeleteDocumentIndexRequest {
+  string tenant_id = 1;
+  string knowledge_base_id = 2;
+  string document_id = 3;
+  TraceMetadata trace = 4;
+}
+
+message DeleteDocumentIndexResponse {
+  bool deleted = 1;
+}

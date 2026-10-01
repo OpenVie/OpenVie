@@ -1,0 +1,29 @@
+package com.cacanode.api.notification.listener;
+
+import com.cacanode.api.notification.service.NotificationService;
+import com.cacanode.api.tenant.api.event.UserInvitedEvent;
+import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+class NotificationListenerTest {
+
+    @Test
+    void invitationEventSendsMemberInvitationEmail() {
+        NotificationService notificationService = mock(NotificationService.class);
+        NotificationListener listener = new NotificationListener(notificationService);
+        UUID tenantId = UUID.randomUUID();
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(7);
+        UserInvitedEvent event = new UserInvitedEvent(
+                tenantId, UUID.randomUUID(), "member@example.com", "Acme", "USER", "invite-token", expiresAt);
+
+        listener.handleUserInvited(event);
+
+        verify(notificationService).sendAndRecordInvitationEmail(
+                tenantId, "member@example.com", "Acme", "USER", "invite-token", expiresAt);
+    }
+}

@@ -1,0 +1,238 @@
+# Environment shared by the Python services built from this repository
+# (the Kuzu graph service today; the same block feeds any future service
+# built from rag-chatbot-fastapi). Only keys the Python settings model
+# (rag-chatbot-fastapi/app/bootstrap/settings.py) actually reads belong here.
+x-local-environment: &local-environment
+  APP_ENV: ${APP_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  REDIS_URL: redis://redis:6379/0
+  REDIS_CONNECT_TIMEOUT_SECONDS: ${REDIS_CONNECT_TIMEOUT_SECONDS:-1}
+  REDIS_OPERATION_TIMEOUT_SECONDS: ${REDIS_OPERATION_TIMEOUT_SECONDS:-1}
+  READINESS_DIAGNOSTICS_TIMEOUT_SECONDS: ${READINESS_DIAGNOSTICS_TIMEOUT_SECONDS:-0.5}
+  READINESS_INGESTION_SCAN_LIMIT: ${READINESS_INGESTION_SCAN_LIMIT:-200}
+  CACHE_ENABLED: ${CACHE_ENABLED:-false}
+  CACHE_KEY_PREFIX: "${CACHE_KEY_PREFIX:-ccn:v1}"
+  CACHE_TTL_JITTER_PERCENT: ${CACHE_TTL_JITTER_PERCENT:-10}
+  EMBEDDING_CACHE_ENABLED: ${EMBEDDING_CACHE_ENABLED:-false}
+  EMBEDDING_CACHE_TTL_SECONDS: ${EMBEDDING_CACHE_TTL_SECONDS:-86400}
+  RETRIEVAL_CACHE_ENABLED: ${RETRIEVAL_CACHE_ENABLED:-false}
+  RETRIEVAL_CACHE_TTL_SECONDS: ${RETRIEVAL_CACHE_TTL_SECONDS:-120}
+  SEMANTIC_ANSWER_CACHE_MODE: ${SEMANTIC_ANSWER_CACHE_MODE:-off}
+  SEMANTIC_ANSWER_CACHE_TTL_SECONDS: ${SEMANTIC_ANSWER_CACHE_TTL_SECONDS:-3600}
+  SEMANTIC_ANSWER_CACHE_SIMILARITY_THRESHOLD: ${SEMANTIC_ANSWER_CACHE_SIMILARITY_THRESHOLD:-0.97}
+  SEMANTIC_ANSWER_CACHE_COLLECTION: ${SEMANTIC_ANSWER_CACHE_COLLECTION:-semantic_answer_cache_v1}
+  SEMANTIC_ANSWER_CACHE_VECTOR_NAME: ${SEMANTIC_ANSWER_CACHE_VECTOR_NAME:-query_v1}
+  SEMANTIC_ANSWER_CACHE_CANDIDATE_LIMIT: ${SEMANTIC_ANSWER_CACHE_CANDIDATE_LIMIT:-5}
+  SEMANTIC_ANSWER_CACHE_CLEANUP_BATCH_SIZE: ${SEMANTIC_ANSWER_CACHE_CLEANUP_BATCH_SIZE:-1000}
+  GENERATION_RESULT_CACHE_TTL_SECONDS: ${GENERATION_RESULT_CACHE_TTL_SECONDS:-600}
+  GRPC_HOST: 0.0.0.0
+  GRPC_PORT: 50051
+  GRPC_PLAINTEXT: true
+  RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rag_user}:${RABBITMQ_DEFAULT_PASS:-rag_password}@rabbitmq:5672/
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_COLLECTION: ${QDRANT_COLLECTION:-knowledge_units_v2}
+  QDRANT_DENSE_VECTOR_NAME: ${QDRANT_DENSE_VECTOR_NAME:-text_embeddinggemma_v1}
+  QDRANT_SPARSE_VECTOR_NAME: ${QDRANT_SPARSE_VECTOR_NAME:-text_bm25_v1}
+  KUZU_DATABASE_PATH: /data/kuzu/cacanode.kuzu
+  GRAPH_SERVICE_URL: http://graph-service:8010
+  GRAPH_INTERNAL_TOKEN: ${GRAPH_INTERNAL_TOKEN:-development-graph-token}
+  SEAWEEDFS_MASTER_URL: http://seaweedfs-master:9333
+  SEAWEEDFS_FILER_URL: http://seaweedfs-filer:8888
+  SEAWEEDFS_S3_ENDPOINT: http://seaweedfs-s3:8333
+  SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-cacanode}
+  SEAWEEDFS_CONNECT_TIMEOUT_SECONDS: ${SEAWEEDFS_CONNECT_TIMEOUT_SECONDS:-3}
+  SEAWEEDFS_READ_TIMEOUT_SECONDS: ${SEAWEEDFS_READ_TIMEOUT_SECONDS:-30}
+  SEAWEEDFS_MAX_ATTEMPTS: ${SEAWEEDFS_MAX_ATTEMPTS:-3}
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+  LLM_INTERNAL_API_KEY: ${LLM_INTERNAL_API_KEY:-ollama}
+  LLM_MODEL_ID: ${LLM_MODEL_ID:-gemma4:12b}
+  LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-128}
+  GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-4096}
+  GRAPH_EXTRACTION_BATCH_SIZE: ${GRAPH_EXTRACTION_BATCH_SIZE:-4}
+  LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
+  LLM_USE_OLLAMA_NATIVE_CHAT: ${LLM_USE_OLLAMA_NATIVE_CHAT:-true}
+  LLM_DISABLE_THINKING: ${LLM_DISABLE_THINKING:-true}
+  TEXT_EMBEDDING_BASE_URL: ${TEXT_EMBEDDING_BASE_URL:-http://ollama:11434}
+  TEXT_EMBEDDING_MODEL_ID: ${TEXT_EMBEDDING_MODEL_ID:-embeddinggemma}
+  TEXT_EMBEDDING_DIMENSION: ${TEXT_EMBEDDING_DIMENSION:-768}
+  TEXT_EMBEDDING_TIMEOUT_SECONDS: ${TEXT_EMBEDDING_TIMEOUT_SECONDS:-120}
+  SPARSE_MODEL_ID: ${SPARSE_MODEL_ID:-Qdrant/bm25}
+  SPARSE_MODEL_CACHE_DIR: /models/fastembed
+  GRAPH_MAX_HOPS: ${GRAPH_MAX_HOPS:-3}
+  RERANKER_ENABLED: ${RERANKER_ENABLED:-false}
+  RERANKER_URL: ${RERANKER_URL:-http://reranker-service}
+  RERANKER_MODEL_ID: ${RERANKER_MODEL_ID:-BAAI/bge-reranker-v2-m3}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cacanode}
+      POSTGRES_USER: ${POSTGRES_USER:-cacanode}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cacanode} -d ${POSTGRES_DB:-cacanode}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rag_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rag_password}
+    ports:
+      - "${RABBITMQ_PORT:-15673}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-25672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-16333}:6333"
+      - "${QDRANT_GRPC_PORT:-16334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  graph-service:
+    build:
+      context: ./rag-chatbot-fastapi
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "app.graph_main:app", "--host", "0.0.0.0", "--port", "8010"]
+    environment:
+      <<: *local-environment
+    ports:
+      - "${GRAPH_SERVICE_PORT:-8010}:8010"
+    volumes:
+      - kuzu_data:/data/kuzu
+
+  reranker-service:
+    image: ${RERANKER_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-1.8}
+    platform: ${RERANKER_PLATFORM:-linux/amd64}
+    profiles: [reranker]
+    restart: unless-stopped
+    command: ["--model-id", "${LOCAL_RERANKER_MODEL_ID:-cross-encoder/mmarco-mMiniLMv2-L12-H384-v1}"]
+    ports:
+      - "${RERANKER_PORT:-8082}:80"
+    volumes:
+      - model_cache:/data
+
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: master -mdir=/data
+    ports:
+      - "${SEAWEEDFS_MASTER_PORT:-19334}:9333"
+      - "${SEAWEEDFS_MASTER_GRPC_PORT:-29333}:19333"
+    volumes:
+      - seaweedfs_master:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://seaweedfs-master:9333/cluster/status"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: volume -mserver=seaweedfs-master:9333 -dir=/data -port=8080
+    ports:
+      - "${SEAWEEDFS_VOLUME_PORT:-18123}:8080"
+    volumes:
+      - seaweedfs_volume:/data
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://seaweedfs-volume:8080/status"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: filer -master=seaweedfs-master:9333
+    ports:
+      - "${SEAWEEDFS_FILER_PORT:-18888}:8888"
+    volumes:
+      - seaweedfs_filer:/data
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+      seaweedfs-volume:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://seaweedfs-filer:8888/"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  seaweedfs-s3:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: s3 -filer=seaweedfs-filer:8888
+    ports:
+      - "${SEAWEEDFS_S3_PORT:-18333}:8333"
+    depends_on:
+      seaweedfs-filer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://seaweedfs-s3:8333/"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  qdrant_data:
+  ollama_data:
+  kuzu_data:
+  model_cache:
+  seaweedfs_master:
+  seaweedfs_volume:
+  seaweedfs_filer:

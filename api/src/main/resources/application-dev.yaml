@@ -1,0 +1,105 @@
+# Local frontend + Swagger/UI: localhost and 127.0.0.1 are different origins.
+# Patterns allow any dev port (Next, Vite, CRA) and API/docs on :8080.
+app:
+  cors:
+    allowed-origin-patterns:
+      - ${ALLOWED_ORIGIN_PATTERN_1:http://localhost:*}
+      - ${ALLOWED_ORIGIN_PATTERN_2:http://127.0.0.1:*}
+  security:
+    cookie-secure: ${COOKIE_SECURE:false}
+    login-2fa-bypass-emails: ${LOGIN_2FA_BYPASS_EMAILS:admin@cacanode.local}
+  seaweedfs:
+    s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT:http://localhost:18333}
+    bucket: ${SEAWEEDFS_BUCKET:cacanode}
+    access-key: ${SEAWEEDFS_ACCESS_KEY:}
+    secret-key: ${SEAWEEDFS_SECRET_KEY:}
+    region: ${SEAWEEDFS_REGION:us-east-1}
+  email:
+    # Local development sends through a mail catcher (Mailpit/MailHog on
+    # MAIL_HOST:MAIL_PORT) so no external provider credential is needed.
+    provider: ${MAIL_PROVIDER:smtp}
+    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
+    from-email: ${FROM_EMAIL:}
+    from-name: ${FROM_NAME:CacaNode}
+    verification-link: ${VERIFICATION_LINK:}
+    login-2fa-link: ${LOGIN_2FA_LINK:http://localhost:3000/verify-login}
+    invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
+  ai:
+    grpc:
+      target: ${AI_GRPC_TARGET:localhost:50051}
+      plaintext: ${AI_GRPC_PLAINTEXT:true}
+      answer-deadline-seconds: ${AI_ANSWER_DEADLINE_SECONDS:100}
+      document-units-deadline-seconds: ${AI_DOCUMENT_UNITS_DEADLINE_SECONDS:10}
+      deletion-deadline-seconds: ${AI_DELETION_DEADLINE_SECONDS:15}
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+  devtools:
+    add-properties: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  datasource:
+    url: ${POSTGRES_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 20
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:16379/0}
+  rabbitmq:
+    addresses: ${RABBITMQ_URL:amqp://rag_user:rag_password@localhost:15673/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+  # Local SMTP catcher for app.email.provider=smtp (the dev default).
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+  sendgrid:
+    api-key: ${SENDGRID_API_KEY:}
+    support-email: ${SUPPORT_EMAIL:}
+    verification-resend-cooldown-seconds: ${VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
+    max-verification-resend-attempts: ${MAX_VERIFICATION_RESEND_ATTEMPTS:5}
+    login-2fa-expiry-minutes: ${LOGIN_2FA_EXPIRY_MINUTES:15}
+    mobile-login-2fa-expiry-minutes: ${MOBILE_LOGIN_2FA_EXPIRY_MINUTES:10}
+  brevo:
+    api-key: ${BREVO_API_KEY:}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+  packages-to-scan: com.cacanode.api
+
+openapi:
+  service:
+    api-docs: api
+    server: http://localhost:${server.port}
+    title: CacaNode API
+    version: 1.0.0
+
+jwt:
+  token-key: ${TOKEN_KEY}
+  expiry-mins: ${EXPIRY_MINS:15}
+  expiry-days: ${EXPIRY_DAYS:30}

@@ -1,0 +1,76 @@
+app:
+  rate-limit:
+    enabled: false
+  cors:
+    allowed-origin-patterns:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+  security:
+    cookie-secure: false
+  ai:
+    grpc:
+      target: localhost:50051
+      plaintext: true
+  seaweedfs:
+    s3-endpoint: http://localhost:8333
+    bucket: cacanode
+    access-key:
+    secret-key:
+    region: us-east-1
+  email:
+    from-email: test@test.com
+    from-name: CacaNode Test
+    verification-link: http://localhost:3000/verify
+    login-2fa-link: http://localhost:3000/verify-login
+    invitation-link: http://localhost:3000/accept-invitation
+
+spring:
+  config:
+    activate:
+      on-profile: test
+  devtools:
+    add-properties: false
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:h2:mem:cacanode-${random.uuid};MODE=PostgreSQL;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    show-sql: true
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+  sendgrid:
+    api-key: test-key
+    from-email: test@test.com
+    verification-link: http://localhost:3000/verify
+    login-2fa-link: http://localhost:3000/verify-login
+    mobile-login-2fa-expiry-minutes: 10
+  brevo:
+    api-key: test-brevo-key
+  rabbitmq:
+    addresses: ${RABBITMQ_TEST_URL:amqp://guest:guest@localhost:5672/}
+    listener:
+      simple:
+        auto-startup: false
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+  packages-to-scan: com.cacanode.api
+
+openapi:
+  service:
+    api-docs: api
+    server: http://localhost:${server.port}
+    title: CacaNode API (Test)
+    version: 1.0.0
+
+jwt:
+  token-key: ${TOKEN_KEY:test-access-secret}
+  expiry-mins: ${EXPIRY_MINS:15}
+  expiry-days: ${EXPIRY_DAYS:30}

@@ -1,0 +1,73 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: cacanode-api
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:20MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:21MB}
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  data:
+    redis:
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT_SECONDS:1}s
+      timeout: ${REDIS_OPERATION_TIMEOUT_SECONDS:1}s
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,modularReadiness
+  health:
+    mail:
+      # Off by default: a self-hosted install may not run a mail server, and
+      # health is checked without opening a SMTP connection. Turn on when a
+      # monitored SMTP relay is part of the deployment.
+      enabled: ${MAIL_HEALTH_ENABLED:false}
+
+logging:
+  level:
+    root: INFO
+    web: INFO
+
+app:
+  # Self-hosted boundary: only the auth routes above and health/info are public.
+  # (See bootstrap/config/SecurityConfig for the exact route list.)
+  rate-limit:
+    enabled: ${PUBLIC_RATE_LIMIT_ENABLED:true}
+    public-requests-per-minute: ${PUBLIC_RATE_LIMIT_PER_MINUTE:120}
+  security:
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:127.0.0.1/32,::1/128}
+  # Optional caches; all default to off so a fresh install has no unverified
+  # optimization enabled.
+  cache:
+    enabled: ${CACHE_ENABLED:false}
+    key-prefix: ${CACHE_KEY_PREFIX:ccn:v2}
+    ttl-jitter-percent: ${CACHE_TTL_JITTER_PERCENT:10}
+    business-read-enabled: ${BUSINESS_READ_CACHE_ENABLED:false}
+    workspace-enabled: ${WORKSPACE_CACHE_ENABLED:false}
+    workspace-ttl-seconds: ${WORKSPACE_CACHE_TTL_SECONDS:300}
+    user-directory-enabled: ${USER_DIRECTORY_CACHE_ENABLED:false}
+    user-directory-ttl-seconds: ${USER_DIRECTORY_CACHE_TTL_SECONDS:30}
+    document-list-enabled: ${DOCUMENT_LIST_CACHE_ENABLED:false}
+    document-list-ttl-seconds: ${DOCUMENT_LIST_CACHE_TTL_SECONDS:15}
+    embedding-enabled: ${EMBEDDING_CACHE_ENABLED:false}
+    retrieval-enabled: ${RETRIEVAL_CACHE_ENABLED:false}
+  # Mail is mandatory for login verification and invitations: the selected
+  # provider must be configured or the application refuses to start
+  # (see notification/service/MailConfigurationValidator).
+  email:
+    provider: ${MAIL_PROVIDER:sendgrid}
+    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
+

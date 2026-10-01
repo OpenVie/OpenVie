@@ -1,0 +1,2 @@
+"""RabbitMQ ingestion transport."""
+

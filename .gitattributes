@@ -1,0 +1,36 @@
+# Auto normalize
+* text=auto
+
+# Shell scripts — must be LF for Linux server
+*.sh text eol=lf
+
+# Code files
+*.java text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+
+# Config files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.xml text eol=lf
+*.properties text eol=lf
+*.env text eol=lf
+*.env.example text eol=lf
+Dockerfile text eol=lf
+*.proto text eol=lf
+
+# Binary — don't touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.class binary

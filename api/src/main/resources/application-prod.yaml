@@ -1,0 +1,104 @@
+app:
+  cors:
+    allowed-origins: ${CORS_ORIGINS}
+  security:
+    cookie-secure: ${COOKIE_SECURE:true}
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS}
+    login-2fa-bypass-emails: ${LOGIN_2FA_BYPASS_EMAILS:}
+  seaweedfs:
+    s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT}
+    bucket: ${SEAWEEDFS_BUCKET:cacanode}
+    access-key: ${SEAWEEDFS_ACCESS_KEY:}
+    secret-key: ${SEAWEEDFS_SECRET_KEY:}
+    region: ${SEAWEEDFS_REGION:us-east-1}
+  email:
+    # Production must be configured explicitly: MAIL_PROVIDER plus the matching
+    # credential (SENDGRID_API_KEY / BREVO_API_KEY / MAIL_HOST) and FROM_EMAIL.
+    # Startup fails with the missing variable name when it is not set.
+    provider: ${MAIL_PROVIDER:sendgrid}
+    fallback-provider: ${MAIL_FALLBACK_PROVIDER:}
+    from-email: ${FROM_EMAIL:}
+    from-name: ${FROM_NAME:CacaNode}
+    verification-link: ${VERIFICATION_LINK:}
+    login-2fa-link: ${LOGIN_2FA_LINK}
+    invitation-link: ${INVITATION_LINK}
+  ai:
+    grpc:
+      target: ${AI_GRPC_TARGET:ai-api:50051}
+      plaintext: ${AI_GRPC_PLAINTEXT:false}
+      ca-certificate: ${AI_GRPC_CA_CERTIFICATE:/run/cacanode-grpc/ca.crt}
+      client-certificate: ${AI_GRPC_CLIENT_CERTIFICATE:/run/cacanode-grpc/spring-client.crt}
+      client-key: ${AI_GRPC_CLIENT_KEY:/run/cacanode-grpc/spring-client.key}
+      authority-override: ${AI_GRPC_AUTHORITY_OVERRIDE:ai-api}
+      answer-deadline-seconds: ${AI_ANSWER_DEADLINE_SECONDS:100}
+      document-units-deadline-seconds: ${AI_DOCUMENT_UNITS_DEADLINE_SECONDS:10}
+      deletion-deadline-seconds: ${AI_DELETION_DEADLINE_SECONDS:15}
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+  devtools:
+    add-properties: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  datasource:
+    url: ${POSTGRES_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+  data:
+    redis:
+      url: ${REDIS_URL}
+  rabbitmq:
+    addresses: ${RABBITMQ_URL}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+  # Only used when app.email.provider=smtp; MAIL_HOST must then point at the
+  # operator's relay.
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+  sendgrid:
+    api-key: ${SENDGRID_API_KEY:}
+    support-email: ${SUPPORT_EMAIL:}
+    verification-resend-cooldown-seconds: ${VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
+    max-verification-resend-attempts: ${MAX_VERIFICATION_RESEND_ATTEMPTS:5}
+    login-2fa-expiry-minutes: ${LOGIN_2FA_EXPIRY_MINUTES:15}
+    mobile-login-2fa-expiry-minutes: ${MOBILE_LOGIN_2FA_EXPIRY_MINUTES:10}
+  brevo:
+    api-key: ${BREVO_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      show-details: never
+
+jwt:
+  token-key: ${TOKEN_KEY}
+  expiry-mins: ${EXPIRY_MINS:15}
+  expiry-days: ${EXPIRY_DAYS:30}

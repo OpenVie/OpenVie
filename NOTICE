@@ -1,0 +1,11 @@
+OpenVie
+Copyright 2026 LinkedNodeDigital
+
+The OpenVie application source in this repository is licensed under the
+Apache License, Version 2.0 (see LICENSE), unless a file states otherwise.
+The Apache license does not grant rights to use the OpenVie name or logo
+as a trademark, except as needed to describe the origin of the software.
+
+Third-party packages, model weights, datasets, container images, and services
+are not relicensed by this notice. Preserve their original notices and check
+their terms before redistributing them.

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "batch": {
+    "tenant_id": "tenant-graph",
+    "knowledge_base_id": "kb-graph",
+    "source_id": "doc-chain",
+    "source_name": "chain.txt",
+    "units": [
+      {"unit_id": "u0", "text": "Alpha profile", "page_number": 1},
+      {"unit_id": "u1", "text": "Alpha owns Beta", "page_number": 2},
+      {"unit_id": "u2", "text": "Beta serves Gamma", "page_number": 3},
+      {"unit_id": "u3", "text": "Gamma supports Delta", "page_number": 4},
+      {"unit_id": "u4", "text": "Delta profile", "page_number": 5}
+    ],
+    "entities": [
+      {
+        "name": "Alpha",
+        "normalized_name": "alpha",
+        "entity_type": "organization",
+        "aliases": ["Alpha Team"],
+        "evidence_unit_id": "u0"
+      },
+      {
+        "name": "Beta",
+        "normalized_name": "beta",
+        "entity_type": "product",
+        "evidence_unit_id": "u1"
+      },
+      {
+        "name": "Gamma",
+        "normalized_name": "gamma",
+        "entity_type": "service",
+        "evidence_unit_id": "u2"
+      },
+      {
+        "name": "Delta",
+        "normalized_name": "delta",
+        "entity_type": "policy",
+        "evidence_unit_id": "u4"
+      }
+    ],
+    "relations": [
+      {
+        "subject_normalized_name": "alpha",
+        "predicate": "owns",
+        "object_normalized_name": "beta",
+        "evidence_unit_id": "u1"
+      },
+      {
+        "subject_normalized_name": "beta",
+        "predicate": "serves",
+        "object_normalized_name": "gamma",
+        "evidence_unit_id": "u2"
+      },
+      {
+        "subject_normalized_name": "gamma",
+        "predicate": "supports",
+        "object_normalized_name": "delta",
+        "evidence_unit_id": "u3"
+      }
+    ]
+  },
+  "expectations": [
+    {"query": "Alpha", "max_hops": 0, "unit_ids": ["u0"]},
+    {"query": "Alpha", "max_hops": 1, "unit_ids": ["u0", "u1"]},
+    {"query": "Alpha", "max_hops": 2, "unit_ids": ["u0", "u1", "u2"]},
+    {"query": "Alpha", "max_hops": 3, "unit_ids": ["u0", "u1", "u2", "u3"]},
+    {"query": "Delta", "max_hops": 3, "unit_ids": ["u4", "u3", "u2", "u1"]},
+    {"query": "Alpha Team", "max_hops": 0, "unit_ids": ["u0"]}
+  ]
+}

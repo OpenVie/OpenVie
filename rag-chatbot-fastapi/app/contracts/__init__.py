@@ -1,0 +1,2 @@
+"""Versioned external transport contracts."""
+

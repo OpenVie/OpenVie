@@ -1,0 +1,27 @@
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── IDEs ────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+rag-chatbot-fastapi/artifacts/cache-baseline*.json
+frontend/playwright-report/
+frontend/test-results/
+
+# ─── Docker override (local only) ────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Environment (root level if any) ─────────────────────────────────────────
+.env
+.env.production
+.env.production.local
+!.env.production.example
+
+.claude
