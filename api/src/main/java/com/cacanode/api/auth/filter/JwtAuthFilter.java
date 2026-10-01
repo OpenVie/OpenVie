@@ -1,6 +1,7 @@
 package com.cacanode.api.auth.filter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ import com.cacanode.api.auth.service.JwtService;
 import com.cacanode.api.common.security.AppUserDetailsService;
 import com.cacanode.api.tenant.api.TenantIdentityApi;
 import com.cacanode.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
+import com.cacanode.api.tenant.api.WorkspaceRole;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.servlet.FilterChain;
@@ -78,9 +80,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
           throw new IllegalStateException("Token organization scope is invalid");
         }
 
+        // Effective workspace authority: an organization owner acting inside a
+        // workspace they belong to holds admin rights there.
+        WorkspaceRole effectiveRole = membership.isWorkspaceAdmin()
+          ? WorkspaceRole.WORKSPACE_ADMIN
+          : membership.workspaceRole();
+
         var userDetails = userDetailsService.loadUserByUsername(email);
-        var authorities = java.util.List.of(
-          new SimpleGrantedAuthority("ROLE_" + membership.workspaceRole().name()),
+        List<SimpleGrantedAuthority> authorities = List.of(
+          new SimpleGrantedAuthority("ROLE_" + effectiveRole.name()),
           new SimpleGrantedAuthority("ROLE_" + membership.orgRole().name()));
 
         UsernamePasswordAuthenticationToken authentication =
@@ -92,7 +100,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         request.setAttribute("tenantId", workspaceId.toString());
         request.setAttribute("orgId", membership.orgId().toString());
         request.setAttribute("userId", userId.toString());
-        request.setAttribute("role", membership.workspaceRole().name());
+        request.setAttribute("role", effectiveRole.name());
         request.setAttribute("orgRole", membership.orgRole().name());
       }
 

@@ -28,6 +28,7 @@ class Phase4KnowledgeBaseRevisionTest {
     private final UUID tenantId = UUID.randomUUID();
     private final UUID knowledgeBaseId = UUID.randomUUID();
     private final UUID documentId = UUID.randomUUID();
+    private final UUID actorId = UUID.randomUUID();
     private final DocumentRepository documentRepository = mock(DocumentRepository.class);
     private final DocumentStorage documentStorage = mock(DocumentStorage.class);
     private final DocumentIndexCleanup indexCleanup = mock(DocumentIndexCleanup.class);
@@ -68,7 +69,7 @@ class Phase4KnowledgeBaseRevisionTest {
         when(documentRepository.findByIdAndTenantId(documentId, tenantId))
                 .thenReturn(Optional.of(document));
 
-        service.delete(tenantId, "TENANT_ADMIN", documentId);
+        service.delete(tenantId, actorId, true, documentId);
 
         verify(indexCleanup).delete(tenantId, knowledgeBaseId, documentId);
         verify(documentStorage).delete("storage-key");
@@ -85,7 +86,7 @@ class Phase4KnowledgeBaseRevisionTest {
                 .when(indexCleanup).delete(tenantId, knowledgeBaseId, documentId);
 
         try {
-            service.delete(tenantId, "TENANT_ADMIN", documentId);
+            service.delete(tenantId, actorId, true, documentId);
         } catch (IllegalStateException ignored) {
             // Expected: FastAPI cleanup owns the partial-attempt revision bump.
         }

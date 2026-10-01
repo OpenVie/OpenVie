@@ -159,13 +159,17 @@ public class DocumentService {
         return toUploadResponse(document);
     }
 
+    /**
+     * Deletes a document and its derived indexes. A workspace admin may delete
+     * any document in the workspace; a member may delete only their own upload.
+     */
     @Transactional
-    public void delete(UUID tenantId, String role, UUID documentId) {
-        if (!"TENANT_ADMIN".equals(role)) {
-            throw new AccessDeniedException("Only tenant admins can delete documents");
-        }
+    public void delete(UUID tenantId, UUID actorId, boolean workspaceAdmin, UUID documentId) {
         Document document = documentRepository.findByIdAndTenantId(documentId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+        if (!workspaceAdmin && !actorId.equals(document.getUploadedBy())) {
+            throw new AccessDeniedException("You can only delete documents you uploaded");
+        }
         if (document.getStatus() == DocumentStatus.PENDING
                 || document.getStatus() == DocumentStatus.PROCESSING) {
             throw new BadRequestException("Wait for document processing to finish before deleting it");

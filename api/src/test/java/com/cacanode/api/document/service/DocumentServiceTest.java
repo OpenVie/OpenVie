@@ -47,7 +47,10 @@ import com.cacanode.api.tenant.api.TenantWorkspaceApi;
 class DocumentServiceTest {
 
     private final UUID tenantId = UUID.randomUUID();
+    /** The account that uploaded the fixture document; see document(). */
     private final UUID userId = UUID.randomUUID();
+    private final UUID uploaderId = userId;
+    private final UUID otherUserId = UUID.randomUUID();
     private final UUID knowledgeBaseId = UUID.randomUUID();
     private final UUID documentId = UUID.randomUUID();
 
@@ -383,7 +386,7 @@ class DocumentServiceTest {
         when(documentRepository.findByIdAndTenantId(documentId, tenantId))
                 .thenReturn(Optional.of(document));
 
-        documentService.delete(tenantId, "TENANT_ADMIN", documentId);
+        documentService.delete(tenantId, uploaderId, true, documentId);
 
         verify(indexCleanup).delete(tenantId, knowledgeBaseId, documentId);
         verify(documentStorage).delete("storage-key");
@@ -397,7 +400,7 @@ class DocumentServiceTest {
         when(documentRepository.findByIdAndTenantId(documentId, tenantId))
                 .thenReturn(Optional.of(document));
 
-        documentService.delete(tenantId, "TENANT_ADMIN", documentId);
+        documentService.delete(tenantId, uploaderId, true, documentId);
 
         verify(indexCleanup, never()).delete(any(), any(), any());
         verify(documentStorage, never()).delete(any());
@@ -412,10 +415,24 @@ class DocumentServiceTest {
                 .thenReturn(Optional.of(document));
 
         assertThrows(AccessDeniedException.class,
-                () -> documentService.delete(tenantId, "USER", documentId));
+                () -> documentService.delete(tenantId, otherUserId, false, documentId));
         assertThrows(BadRequestException.class,
-                () -> documentService.delete(tenantId, "TENANT_ADMIN", documentId));
+                () -> documentService.delete(tenantId, uploaderId, true, documentId));
         verify(indexCleanup, never()).delete(any(), any(), any());
+    }
+
+    @Test
+    void memberDeletesOwnCompletedDocument() {
+        Document document = document();
+        document.setStatus(DocumentStatus.COMPLETED);
+        when(documentRepository.findByIdAndTenantId(documentId, tenantId))
+                .thenReturn(Optional.of(document));
+
+        documentService.delete(tenantId, uploaderId, false, documentId);
+
+        verify(indexCleanup).delete(tenantId, knowledgeBaseId, documentId);
+        verify(documentStorage).delete("storage-key");
+        verify(documentRepository).delete(document);
     }
 
     private MockMultipartFile txtFile() {

@@ -25,6 +25,7 @@ import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.DeliveryAvailability;
 import com.cacanode.api.tenant.api.InvitationStatus;
 import com.cacanode.api.tenant.api.OrgRole;
+import com.cacanode.api.tenant.api.TenantCredentials;
 import com.cacanode.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.cacanode.api.tenant.api.TenantStatus;
 import com.cacanode.api.tenant.api.UserStatus;
@@ -51,6 +52,7 @@ class TenantUserManagementServiceTest {
     private WorkspaceMemberRepository members;
     private TenantRepository workspaces;
     private DeliveryAvailability channels;
+    private TenantCredentials credentials;
     private ApplicationEventPublisher events;
     private TenantUserManagementService service;
 
@@ -67,9 +69,10 @@ class TenantUserManagementServiceTest {
         members = mock(WorkspaceMemberRepository.class);
         workspaces = mock(TenantRepository.class);
         channels = mock(DeliveryAvailability.class);
+        credentials = mock(TenantCredentials.class);
         events = mock(ApplicationEventPublisher.class);
         service = new TenantUserManagementService(
-                users, invitations, members, workspaces, channels, events);
+                users, invitations, members, workspaces, channels, credentials, events);
 
         organization = new Organization();
         organization.setId(UUID.randomUUID());
@@ -221,6 +224,29 @@ class TenantUserManagementServiceTest {
     void theOrganizationOwnerCannotBeDeactivatedFromAWorkspace() {
         assertThrows(BadRequestException.class, () -> service.updateStatus(
                 workspaceId, admin.getId(), admin.getId(), UserStatus.INACTIVE));
+    }
+
+    @Test
+    void adminSetsMemberPasswordThroughTheCredentialGate() {
+        service.setMemberPassword(workspaceId, admin.getId(), member.getId(), "a-fresh-long-password");
+
+        verify(credentials).setInitialPassword(admin.getId(), member.getId(), "a-fresh-long-password");
+    }
+
+    @Test
+    void adminCannotSetTheirOwnPasswordThisWay() {
+        assertThrows(BadRequestException.class, () -> service.setMemberPassword(
+                workspaceId, admin.getId(), admin.getId(), "a-fresh-long-password"));
+        verify(credentials, never()).setInitialPassword(any(), any(), any());
+    }
+
+    @Test
+    void nonAdminCannotSetMemberPassword() {
+        User outsider = user("outsider@example.com", OrgRole.MEMBER);
+        givenMembership(outsider, WorkspaceRole.MEMBER);
+
+        assertThrows(UnauthorizedException.class, () -> service.setMemberPassword(
+                workspaceId, outsider.getId(), member.getId(), "a-fresh-long-password"));
     }
 
     @Test

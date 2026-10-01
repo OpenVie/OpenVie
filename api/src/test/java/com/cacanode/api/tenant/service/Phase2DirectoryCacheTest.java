@@ -26,6 +26,7 @@ import com.cacanode.api.common.cache.CacheMetrics;
 import com.cacanode.api.common.cache.CacheOperationStatus;
 import com.cacanode.api.common.cache.CacheReadResult;
 import com.cacanode.api.common.cache.CacheReadStatus;
+import com.cacanode.api.tenant.api.TenantCredentials;
 import com.cacanode.api.common.cache.CacheStore;
 import com.cacanode.api.common.cache.VersionedJsonCache;
 import com.cacanode.api.common.config.CacheProperties;
@@ -95,7 +96,8 @@ class Phase2DirectoryCacheTest {
 
         TenantUserManagementService service = new TenantUserManagementService(
                 users, invitations, members, workspaces,
-                mock(DeliveryAvailability.class), mock(ApplicationEventPublisher.class));
+                mock(DeliveryAvailability.class), mock(TenantCredentials.class),
+                mock(ApplicationEventPublisher.class));
         CacheProperties properties = new CacheProperties();
         properties.setEnabled(true);
         properties.setBusinessReadEnabled(true);

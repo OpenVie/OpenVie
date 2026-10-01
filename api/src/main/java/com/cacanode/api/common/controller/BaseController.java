@@ -4,6 +4,11 @@ import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+/**
+ * Reads the request scope established by JwtAuthFilter. Every value here is
+ * re-resolved from the database on each request; nothing is trusted straight
+ * from a token.
+ */
 public abstract class BaseController {
 
   protected UUID getTenantId(HttpServletRequest request) {
@@ -13,8 +18,15 @@ public abstract class BaseController {
   protected UUID getUserId(HttpServletRequest request) {
     return UUID.fromString((String) request.getAttribute("userId"));
   }
+
+  /** Workspace role of the caller: WORKSPACE_ADMIN or MEMBER. */
   protected String getRole(HttpServletRequest request) {
     return (String) request.getAttribute("role");
+  }
+
+  /** Organization owners act with admin authority inside workspaces they hold. */
+  protected boolean isWorkspaceAdmin(HttpServletRequest request) {
+    return "WORKSPACE_ADMIN".equals(getRole(request));
   }
 
   protected UUID getOrgId(HttpServletRequest request) {

@@ -37,7 +37,7 @@ endif
 
 FLYWAY_PROPS = -Dflyway.url="$(POSTGRES_URL)" -Dflyway.user="$(POSTGRES_USER)" -Dflyway.password="$(POSTGRES_PASSWORD)" -Dflyway.locations=filesystem:src/main/resources/db/migration
 
-.PHONY: help deps run dev run-dev run-prod test verify package clean migrate migrate-info migrate-validate migrate-repair db-reset
+.PHONY: help deps run dev run-dev run-prod test verify package clean migrate migrate-info migrate-validate migrate-repair db-reset recover-owner
 
 help:
 	$(info Available targets:)
@@ -55,6 +55,7 @@ help:
 	$(info   make migrate-validate Validate applied Flyway migrations)
 	$(info   make migrate-repair   Repair Flyway metadata)
 	$(info   make db-reset         Reset local Postgres, Qdrant, Kuzu, and SeaweedFS data, restart them, then migrate)
+	$(info   make recover-owner    Offline reset of a lost organization-owner password)
 	$(info Optional variables: PROFILE=dev ENV_FILE=.env MAVEN_ARGS=...)
 	$(info)
 	$(info The first account is created in the browser at /setup once the stack is)
@@ -106,3 +107,11 @@ db-reset:
 	$(ENV_RUN) docker compose --env-file $(ENV_FILE) -f $(ROOT_COMPOSE_FILE) up -d --wait --wait-timeout 120 \
 		postgres qdrant graph-service seaweedfs-master seaweedfs-volume seaweedfs-filer seaweedfs-s3
 	$(MAKE) migrate ENV_FILE=$(ENV_FILE)
+
+# Offline owner recovery. Requires local database access; pass the target and
+# new credential explicitly:
+#   make recover-owner RECOVER_ARGS="--recover-owner-email=ada@acme.test \
+#     --recover-owner-password="$(openssl rand -base64 24)""
+recover-owner:
+	$(ENV_RUN) $(MVNW) -P$(PROFILE) package -DskipTests $(MAVEN_ARGS)
+	$(ENV_RUN) java -jar target/cacanode-api.jar --app.command.mode=recover-owner --server.port=0 --spring.task.scheduling.enabled=false $(RECOVER_ARGS)

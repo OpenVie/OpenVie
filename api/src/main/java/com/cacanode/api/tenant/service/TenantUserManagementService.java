@@ -12,6 +12,7 @@ import com.cacanode.api.common.exception.custom.ConflictException;
 import com.cacanode.api.common.exception.custom.ResourceNotFoundException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.DeliveryAvailability;
+import com.cacanode.api.tenant.api.TenantCredentials;
 import com.cacanode.api.tenant.api.TenantIdentityApi.AcceptedAccount;
 import com.cacanode.api.tenant.api.TenantIdentityApi.InvitationSnapshot;
 import com.cacanode.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
@@ -69,6 +70,7 @@ public class TenantUserManagementService {
     private final WorkspaceMemberRepository memberRepository;
     private final TenantRepository workspaceRepository;
     private final DeliveryAvailability channels;
+    private final TenantCredentials credentials;
     private final ApplicationEventPublisher eventPublisher;
     @Autowired(required = false)
     private DurableEventPublisher durableEventPublisher;
@@ -86,6 +88,7 @@ public class TenantUserManagementService {
             WorkspaceMemberRepository memberRepository,
             TenantRepository workspaceRepository,
             DeliveryAvailability channels,
+            TenantCredentials credentials,
             ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
@@ -93,6 +96,7 @@ public class TenantUserManagementService {
         this.memberRepository = memberRepository;
         this.workspaceRepository = workspaceRepository;
         this.channels = channels;
+        this.credentials = credentials;
         this.eventPublisher = eventPublisher;
     }
 
@@ -274,6 +278,22 @@ public class TenantUserManagementService {
         invalidateMembers(workspaceId);
         return toMember(memberRepository.findByUser_IdAndWorkspace_Id(userId, workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found")), actorId);
+    }
+
+    /**
+     * Administrator sets a member's initial password; the member must change
+     * it on next login. Available with no email channel configured, which is
+     * how a closed workspace still onboards people.
+     */
+    @Transactional
+    public void setMemberPassword(UUID workspaceId, UUID actorId, UUID userId, String newPassword) {
+        requireAdmin(workspaceId, actorId);
+        User target = requireMembershipUser(workspaceId, userId);
+        if (target.getId().equals(actorId)) {
+            throw new BadRequestException("Use the change-password endpoint for your own password");
+        }
+        credentials.setInitialPassword(actorId, userId, newPassword);
+        invalidateMembers(workspaceId);
     }
 
     @Transactional(readOnly = true)

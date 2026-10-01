@@ -168,7 +168,8 @@ public class DocumentController extends BaseController {
             @PathVariable UUID documentId,
             HttpServletRequest request
     ) {
-        documentService.delete(getTenantId(request), getRole(request), documentId);
+        documentService.delete(getTenantId(request), getUserId(request),
+                isWorkspaceAdmin(request), documentId);
         return ResponseEntity.noContent().build();
     }
 }
