@@ -9,6 +9,7 @@ import type { WorkspaceSummary } from "@/types"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -89,23 +90,25 @@ export function WorkspaceSwitcher() {
         <ChevronsUpDown className="size-4 shrink-0 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>{t("workspaces")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {workspaces.map((workspace) => (
-          <DropdownMenuItem
-            key={workspace.id}
-            onSelect={() => void selectWorkspace(workspace)}
-            className={cn(
-              "justify-between",
-              workspace.id === user.activeWorkspaceId && "font-medium",
-            )}
-          >
-            <span className="truncate">{workspace.name}</span>
-            <span className="ml-2 text-xs text-slate-400">
-              {workspace.role === "WORKSPACE_ADMIN" ? t("admin") : t("member")}
-            </span>
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t("workspaces")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {workspaces.map((workspace) => (
+            <DropdownMenuItem
+              key={workspace.id}
+              onSelect={() => void selectWorkspace(workspace)}
+              className={cn(
+                "justify-between",
+                workspace.id === user.activeWorkspaceId && "font-medium",
+              )}
+            >
+              <span className="truncate">{workspace.name}</span>
+              <span className="ml-2 text-xs text-slate-400">
+                {workspace.role === "WORKSPACE_ADMIN" ? t("admin") : t("member")}
+              </span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
