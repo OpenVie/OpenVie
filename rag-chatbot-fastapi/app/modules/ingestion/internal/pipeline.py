@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 
@@ -122,9 +123,10 @@ class DocumentIngestionPipeline(IngestionApi):
             knowledge_base_id=event.knowledge_base_id,
             document_id=event.document_id,
         )
-        embeddings = await self._embedder.embed_documents([chunk.text for chunk in chunks])
-        sparse_embeddings = await self._sparse_encoder.embed_documents(
-            [chunk.text for chunk in chunks]
+        chunk_texts = [chunk.text for chunk in chunks]
+        embeddings, sparse_embeddings = await asyncio.gather(
+            self._embedder.embed_documents(chunk_texts),
+            self._sparse_encoder.embed_documents(chunk_texts),
         )
         return PreparedDocument(
             command=event,

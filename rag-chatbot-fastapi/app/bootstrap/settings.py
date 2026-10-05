@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     GRAPH_INTERNAL_TOKEN: str = "development-graph-token"
     GRAPH_TIMEOUT_SECONDS: float = 30.0
     GRAPH_EXTRACTION_BATCH_SIZE: int = 4
-    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 1024
+    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 4_096
     GRAPH_EXTRACTION_REASONING_EFFORT: Literal["low", "medium", "high"] = "low"
     PARSER_VERSION: str = "digital-v1"
     CHUNKER_VERSION: str = "structural-v2"

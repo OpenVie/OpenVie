@@ -139,7 +139,7 @@ INGESTION_WORKER_CONCURRENCY=4
 That setting is the worker's prefetch count, meaning at most that many documents are processed
 concurrently. Raising it only helps when the model server can actually serve parallel requests, so
 keep it at or below `OLLAMA_NUM_PARALLEL`, or at `1` when the model server is serial.
-`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `1024`) caps extraction output per batch; each chunk
+`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `4096`) caps extraction output per batch; dense tables
 adds entities and relations, so size it with `GRAPH_EXTRACTION_BATCH_SIZE`.
 
 ### Migrate the database

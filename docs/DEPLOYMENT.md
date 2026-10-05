@@ -143,7 +143,7 @@ a queue builds. Size the model server and the worker together:
 | `OLLAMA_NUM_PARALLEL` | `4` on this host | Parallel model slots on the Ollama server. Memory grows per slot. |
 | `OLLAMA_MAX_LOADED_MODELS` | `3` on this host | Keeps both `vylinh` and `bge-m3` resident without unloading each other. |
 | `INGESTION_WORKER_CONCURRENCY` | `4` | Maximum documents a worker processes concurrently. Also the RabbitMQ prefetch count. |
-| `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `1024` | Caps generated tokens per extraction batch; each chunk adds entities and relations. |
+| `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `4096` | Caps generated tokens per extraction batch; dense tables and multi-chunk batches can generate up to 2,000–3,000 tokens of structured JSON. |
 | `GRAPH_EXTRACTION_BATCH_SIZE` | `4` | Chunks per extraction request. |
 
 Keep `INGESTION_WORKER_CONCURRENCY` at or below `OLLAMA_NUM_PARALLEL`; higher values only build a

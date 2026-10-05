@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Sequence
@@ -45,13 +46,21 @@ class _EvidenceRelation(BaseModel):
 
 class EntityRelationExtractor:
     def __init__(
-        self, model: ChatModelApi, *, batch_size: int = 12, output_limit_retries: int = 1
+        self,
+        model: ChatModelApi,
+        *,
+        batch_size: int = 12,
+        output_limit_retries: int = 1,
+        max_concurrency: int = 4,
     ) -> None:
         if output_limit_retries < 0:
             raise ValueError("output_limit_retries must be non-negative")
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency must be at least 1")
         self._model = model
         self._batch_size = batch_size
         self._output_limit_retries = output_limit_retries
+        self._max_concurrency = max_concurrency
 
     async def extract(
         self, event: IngestDocumentCommand, chunks: Sequence[TextChunk]
@@ -60,12 +69,28 @@ class EntityRelationExtractor:
             _graph_unit(str(event.document_id), event.file_name, chunk)
             for chunk in chunks
         )
+        slices = [
+            chunks[start : start + self._batch_size]
+            for start in range(0, len(chunks), self._batch_size)
+        ]
+        if not slices:
+            batch_results = []
+        elif len(slices) == 1:
+            batch_results = [await self._extract_batch(slices[0])]
+        else:
+            semaphore = asyncio.Semaphore(self._max_concurrency)
+
+            async def _extract_bounded(
+                batch_slice: Sequence[TextChunk],
+            ) -> tuple[list[_EntityMention], list[_EvidenceRelation]]:
+                async with semaphore:
+                    return await self._extract_batch(batch_slice)
+
+            batch_results = await asyncio.gather(*(_extract_bounded(s) for s in slices))
+
         entities: list[_EntityMention] = []
         relations: list[_EvidenceRelation] = []
-        for start in range(0, len(chunks), self._batch_size):
-            batch_entities, batch_relations = await self._extract_batch(
-                chunks[start : start + self._batch_size]
-            )
+        for batch_entities, batch_relations in batch_results:
             entities.extend(batch_entities)
             relations.extend(batch_relations)
         entities, relations = _filter_grounded_extraction(

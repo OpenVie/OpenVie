@@ -36,5 +36,6 @@ def create_document_ingestion_pipeline(
                 reasoning_effort=settings.GRAPH_EXTRACTION_REASONING_EFFORT,
             ),
             batch_size=settings.GRAPH_EXTRACTION_BATCH_SIZE,
+            max_concurrency=settings.INGESTION_WORKER_CONCURRENCY,
         ),
     )
