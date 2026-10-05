@@ -21,7 +21,9 @@ import java.util.UUID;
                 @Index(name = "idx_document_job_id", columnList = "job_id"),
                 @Index(name = "idx_document_knowledge_base_id", columnList = "knowledge_base_id"),
                 @Index(name = "idx_document_tenant_status", columnList = "tenant_id,status"),
-                @Index(name = "idx_document_tenant_knowledge_base", columnList = "tenant_id,knowledge_base_id")
+                @Index(name = "idx_document_tenant_knowledge_base", columnList = "tenant_id,knowledge_base_id"),
+                @Index(name = "idx_documents_tenant_kb_filename", columnList = "tenant_id,knowledge_base_id,file_name"),
+                @Index(name = "idx_documents_tenant_kb_content_hash", columnList = "tenant_id,knowledge_base_id,content_hash")
         }
 )
 public class Document extends BaseEntity {
@@ -60,4 +62,7 @@ public class Document extends BaseEntity {
 
     @Column(name = "error_message")
     private String errorMessage;
+
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
 }

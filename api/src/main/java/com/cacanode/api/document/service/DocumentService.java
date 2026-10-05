@@ -6,7 +6,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.OptionalLong;
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import com.cacanode.api.common.storage.StoredDocument;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Page;
@@ -97,17 +103,108 @@ public class DocumentService {
 
         validateFile(file);
 
+        byte[] fileBytes;
+        try {
+            fileBytes = file.getBytes();
+        } catch (IOException e) {
+            throw new BadRequestException("Unable to read uploaded file");
+        }
+
         String safeFileName = safeFileName(file.getOriginalFilename());
         DocumentType documentType = documentTypeFor(safeFileName);
-        UUID jobId = UUID.randomUUID();
+        String contentHash = computeSha256(fileBytes);
 
+        Optional<Document> existingOpt = documentRepository
+                .findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                        tenantId, knowledgeBaseId, safeFileName);
+
+        if (existingOpt.isPresent()) {
+            Document existing = existingOpt.get();
+            DocumentStatus currentStatus = existing.getStatus();
+
+            boolean contentUnchanged = isContentIdentical(existing, contentHash, fileBytes);
+
+            if (contentUnchanged) {
+                if (currentStatus == DocumentStatus.COMPLETED
+                        || currentStatus == DocumentStatus.PENDING
+                        || currentStatus == DocumentStatus.PROCESSING) {
+                    return toUploadResponse(existing);
+                }
+            } else {
+                if (currentStatus == DocumentStatus.PENDING || currentStatus == DocumentStatus.PROCESSING) {
+                    throw new BadRequestException(
+                            "Wait for current document processing to finish before updating it");
+                }
+            }
+
+            UUID jobId = UUID.randomUUID();
+            existing.setUploadedBy(userId);
+            existing.setFileType(documentType);
+            existing.setFileSizeBytes((long) fileBytes.length);
+            existing.setContentHash(contentHash);
+            existing.setStatus(DocumentStatus.PENDING);
+            existing.setJobId(jobId.toString());
+            existing.setErrorMessage(null);
+
+            existing = documentRepository.save(existing);
+            String storageKey = existing.getStoragePath();
+            if (storageKey == null || storageKey.isBlank() || "pending".equals(storageKey)) {
+                storageKey = storageKey(tenantId, knowledgeBaseId, existing.getId(), safeFileName);
+                existing.setStoragePath(storageKey);
+            }
+
+            try {
+                documentStorage.store(storageKey, file);
+            } catch (RuntimeException e) {
+                existing.setStatus(DocumentStatus.FAILED);
+                existing.setErrorMessage("DOCUMENT_STORAGE_FAILED");
+                invalidateDocuments(tenantId, knowledgeBaseId);
+                if (e instanceof InternalServerErrorException) {
+                    throw e;
+                }
+                throw new InternalServerErrorException("Unable to store uploaded document");
+            }
+
+            DocumentIngestRequestedEvent event = new DocumentIngestRequestedEvent(
+                    "1.0",
+                    UUID.randomUUID(),
+                    jobId,
+                    tenantId,
+                    knowledgeBaseId,
+                    existing.getId(),
+                    userId,
+                    storageKey,
+                    safeFileName,
+                    file.getContentType(),
+                    (long) fileBytes.length,
+                    Instant.now()
+            );
+
+            try {
+                ingestionPublisher.publish(event);
+            } catch (RuntimeException e) {
+                existing.setStatus(DocumentStatus.FAILED);
+                existing.setErrorMessage("INGESTION_PUBLISH_FAILED");
+                invalidateDocuments(tenantId, knowledgeBaseId);
+                if (e instanceof InternalServerErrorException) {
+                    throw e;
+                }
+                throw new InternalServerErrorException("Unable to publish document ingestion request");
+            }
+
+            invalidateDocuments(tenantId, knowledgeBaseId);
+            return toUploadResponse(existing);
+        }
+
+        UUID jobId = UUID.randomUUID();
         Document document = new Document();
         document.setTenantId(tenantId);
         document.setKnowledgeBaseId(knowledgeBaseId);
         document.setUploadedBy(userId);
         document.setFileName(safeFileName);
         document.setFileType(documentType);
-        document.setFileSizeBytes(file.getSize());
+        document.setFileSizeBytes((long) fileBytes.length);
+        document.setContentHash(contentHash);
         document.setStoragePath("pending");
         document.setStatus(DocumentStatus.PENDING);
         document.setJobId(jobId.toString());
@@ -139,7 +236,7 @@ public class DocumentService {
                 storageKey,
                 safeFileName,
                 file.getContentType(),
-                file.getSize(),
+                (long) fileBytes.length,
                 Instant.now()
         );
 
@@ -591,5 +688,39 @@ public class DocumentService {
                 document.getCreatedAt(),
                 document.getUploadedBy()
         );
+    }
+
+    private boolean isContentIdentical(Document existing, String newContentHash, byte[] newFileBytes) {
+        if (existing.getContentHash() != null && !existing.getContentHash().isBlank()) {
+            return existing.getContentHash().equalsIgnoreCase(newContentHash);
+        }
+        if (existing.getFileSizeBytes() == null || existing.getFileSizeBytes() != newFileBytes.length) {
+            return false;
+        }
+        String path = existing.getStoragePath();
+        if (path == null || path.isBlank() || "pending".equals(path)) {
+            return false;
+        }
+        try {
+            StoredDocument stored = documentStorage.load(path);
+            if (stored != null && stored.content() != null) {
+                String existingHash = computeSha256(stored.content());
+                existing.setContentHash(existingHash);
+                documentRepository.save(existing);
+                return existingHash.equalsIgnoreCase(newContentHash);
+            }
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+        return false;
+    }
+
+    private String computeSha256(byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(bytes));
+        } catch (NoSuchAlgorithmException e) {
+            throw new InternalServerErrorException("SHA-256 algorithm not available", e);
+        }
     }
 }

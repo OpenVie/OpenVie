@@ -38,7 +38,7 @@ public class ModelConfigVersion extends BaseEntity {
     private String generationRuntime = "ollama";
 
     @Column(name = "generation_endpoint", nullable = false)
-    private String generationEndpoint = "http://ollama:11434/v1";
+    private String generationEndpoint = "http://localhost:11434/v1";
 
     @Column(name = "text_embedding_model_id", nullable = false)
     private String textEmbeddingModelId;

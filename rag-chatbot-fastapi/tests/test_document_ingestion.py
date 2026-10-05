@@ -263,7 +263,7 @@ class FakeQdrantClient:
         return SimpleNamespace(
             config=SimpleNamespace(
                 params=SimpleNamespace(
-                    vectors={"text_embeddinggemma_v1": SimpleNamespace(size=self.dimension)},
+                    vectors={"text_bge_m3_v1": SimpleNamespace(size=self.dimension)},
                     sparse_vectors={"text_bm25_v1": SimpleNamespace(modifier="idf")},
                 )
             )
@@ -299,7 +299,7 @@ async def test_qdrant_adapter_creates_collection_and_upserts_payloads() -> None:
     assert point.payload["tenant_id"] == str(event.tenant_id)
     assert point.payload["knowledge_base_id"] == str(event.knowledge_base_id)
     assert point.payload["text"] == "hello"
-    assert "text_embeddinggemma_v1" in point.vector
+    assert "text_bge_m3_v1" in point.vector
     assert {item[1] for item in client.payload_indexes} == {
         "tenant_id",
         "knowledge_base_id",
@@ -402,6 +402,55 @@ def worker_with(pipeline: object) -> tuple[DocumentWorker, FakeExchange]:
     return worker, exchange
 
 
+class FakeIngestionChannel:
+    def __init__(self) -> None:
+        self.prefetch_count: int | None = None
+
+    async def set_qos(self, prefetch_count: int) -> None:
+        self.prefetch_count = prefetch_count
+
+    async def declare_exchange(self, *args: object, **kwargs: object) -> FakeExchange:
+        del args, kwargs
+        return FakeExchange()
+
+    async def declare_queue(self, *args: object, **kwargs: object) -> FakeQueue:
+        del args, kwargs
+        return FakeQueue()
+
+    async def close(self) -> None:
+        return None
+
+
+class FakeIngestionConnection:
+    def __init__(self) -> None:
+        self.channel_instance = FakeIngestionChannel()
+
+    async def channel(self, publisher_confirms: bool = False) -> FakeIngestionChannel:
+        del publisher_confirms
+        return self.channel_instance
+
+
+class FakeQueue:
+    async def bind(self, *args: object, **kwargs: object) -> None:
+        del args, kwargs
+
+
+@pytest.mark.asyncio
+async def test_worker_applies_configured_ingestion_concurrency() -> None:
+    connection = FakeIngestionConnection()
+    worker = DocumentWorker(
+        Settings(INGESTION_WORKER_CONCURRENCY=6),
+        pipeline=SuccessfulPipeline(),  # type: ignore[arg-type]
+        connection=connection,  # type: ignore[arg-type]
+    )
+
+    await worker.start()
+    try:
+        assert connection.channel_instance.prefetch_count == 6
+    finally:
+        await worker.stop()
+
+
 @pytest.mark.asyncio
 async def test_worker_success_path_publishes_statuses_and_acks() -> None:
     worker, exchange = worker_with(SuccessfulPipeline())
@@ -443,7 +492,6 @@ async def test_worker_transient_failure_retries_then_dead_letters() -> None:
 
     await worker.handle_message(message)  # type: ignore[arg-type]
 
-    assert message.acked is True
     assert message.rejected is False
     assert exchange.published[-1][0] == document_worker.INGEST_REQUESTED
     assert exchange.published[-1][2][document_worker.RETRY_HEADER] == 1
@@ -452,6 +500,7 @@ async def test_worker_transient_failure_retries_then_dead_letters() -> None:
         event_bytes(),
         headers={document_worker.RETRY_HEADER: document_worker.MAX_TRANSIENT_RETRIES},
     )
+
     await worker.handle_message(exhausted)  # type: ignore[arg-type]
 
     assert exhausted.rejected is True

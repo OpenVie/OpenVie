@@ -155,7 +155,7 @@ async def test_tei_reranker_maps_scores_and_keeps_equal_scores_deterministic(
     reranker = TeiReranker(
         Settings(
             RERANKER_URL="http://reranker",
-            RERANKER_MODEL_ID="BAAI/bge-reranker-v2-m3",
+            RERANKER_MODEL_ID="Alibaba-NLP/gte-multilingual-reranker-base",
             RERANKER_TIMEOUT_SECONDS=3,
         )
     )
@@ -169,12 +169,16 @@ async def test_tei_reranker_maps_scores_and_keeps_equal_scores_deterministic(
 
     assert [item.unit_id for item in results] == ["u2", "u1", "u3"]
     assert results[0].score == 0.9
-    assert FakeHttpClient.last_json["model"] == "BAAI/bge-reranker-v2-m3"
+    assert FakeHttpClient.last_json == {
+        "query": "xin chào",
+        "texts": [item.text for item in candidates],
+        "truncate": True,
+    }
 
 
 def test_sparse_query_uses_named_vector_and_independent_filters() -> None:
     settings = Settings()
-    assert settings.QDRANT_DENSE_VECTOR_NAME == "text_embeddinggemma_v1"
+    assert settings.QDRANT_DENSE_VECTOR_NAME == "text_bge_m3_v1"
     assert settings.QDRANT_SPARSE_VECTOR_NAME == "text_bm25_v1"
     assert SimpleNamespace(value=settings.RRF_K).value == 30
 

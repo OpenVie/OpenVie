@@ -42,8 +42,8 @@ flowchart TB
     end
     subgraph Models[Configured model services]
         Generation[Generation provider]
-        Embed[Ollama / EmbeddingGemma]
-        Reranker[TEI reranker]
+        Embed[Ollama / BGE-M3]
+        Reranker[Optional TEI cross-encoder]
     end
     Dashboard -->|HTTPS, operator-supplied ingress| Business
     ChatClient -->|HTTPS, operator-supplied ingress| Business
@@ -72,13 +72,29 @@ flowchart TB
     Graph --> Kuzu
 ```
 
-The diagram is a support-chat view. Dashed edges are conditional capabilities. The document worker can run embedded in the Python process or as a dedicated consumer. General-purpose OCR, ASR, vision, audio, and video ingestion workers are **not delivered pipelines**: their lifecycle entries are scaffold mode in [worker bootstrap](../rag-chatbot-fastapi/app/bootstrap/workers.py).
+The diagram is a support-chat view. Dashed edges are conditional capabilities. The document worker can run embedded in the Python process or as a dedicated consumer; its in-flight limit is `INGESTION_WORKER_CONCURRENCY`, so multiple documents can be processed at once when the model server supports parallel requests. General-purpose OCR, ASR, vision, audio, and video ingestion workers are **not delivered pipelines**: their lifecycle entries are scaffold mode in [worker bootstrap](../rag-chatbot-fastapi/app/bootstrap/workers.py).
 
 ### Deployment and model boundaries
 
-This release delivers one Compose file, [Local Compose](../docker-compose.yml), which starts the data services, Ollama, SeaweedFS, and the graph service and intentionally publishes development ports on localhost. Reverse-proxy/TLS ingress, hardened network segmentation, and any edge rate limiting are operator-owned: see [Deployment](DEPLOYMENT.md). There is no production Compose file, gateway configuration, or deployment script in this repository. Public chat does not expose Qdrant, Kuzu, Ollama, or model-provider credentials.
+This release delivers one Compose file, [Local Compose](../docker-compose.yml), which starts the
+data services, SeaweedFS, and the graph service and intentionally publishes development ports on
+localhost. Native Ollama runs outside Docker so Apple Silicon installations can use Metal
+acceleration. Optional reranking uses one TEI `/rerank` contract with platform-specific runtimes:
+Compose on Linux and Windows WSL2, and native TEI with Metal on Apple Silicon. Reverse-proxy/TLS
+ingress, hardened network segmentation, and edge rate limiting are operator-owned: see
+[Deployment](DEPLOYMENT.md). There is no production Compose file, gateway configuration, or
+deployment script in this repository. Public chat does not expose Qdrant, Kuzu, Ollama, TEI, or
+model-provider credentials.
 
-“Managed AI” means **operator-selected and operated integration**, not necessarily self-hosted inference. The [model adapter factory](../rag-chatbot-fastapi/app/modules/model/internal/chat.py) supports Ollama and Qwen (OpenAI-compatible endpoints). The delivered default path is local Ollama generation and embedding. Operator configuration can point the adapter at another OpenAI-compatible endpoint, so tenant content may then be sent to that provider. Provider selection is deployment configuration, not a per-request customer endpoint. There is no automatic provider failover in that factory.
+“Managed AI” means **operator-selected and operated integration**, not necessarily self-hosted
+inference. The [model adapter factory](../rag-chatbot-fastapi/app/modules/model/internal/chat.py)
+supports Ollama and Qwen (OpenAI-compatible endpoints). The delivered default path is native
+Ollama with Arcee-VyLinh generation and BGE-M3 embeddings. The optional reranker defaults to the
+TEI-compatible `Alibaba-NLP/gte-multilingual-reranker-base`, remains disabled until explicitly
+configured, and preserves fused retrieval order on failure. Operator configuration can point the
+adapters at other compatible endpoints, so tenant content may then be sent across that provider's
+boundary. Provider selection is deployment configuration, not a per-request customer endpoint.
+There is no automatic generation-provider failover.
 
 ## Four-plane target and delivered boundary
 

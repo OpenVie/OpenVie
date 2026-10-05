@@ -54,6 +54,9 @@ class OllamaChatModel:
                 model=self.model,
             ).inc()
             raise ModelTimeoutError("Model generation timed out") from exc
+        except ModelUnavailableError:
+            outcome = "error"
+            raise
         except Exception as exc:
             outcome = "error"
             raise ModelUnavailableError("Model provider request failed") from exc
@@ -84,6 +87,10 @@ class OllamaChatModel:
             response = await client.post(self._ollama_chat_url(), json=payload)
             response.raise_for_status()
             data = response.json()
+        if data.get("done_reason") == "length":
+            raise ModelUnavailableError(
+                "Ollama provider reached the output limit (finish_reason=length)"
+            )
         message = data.get("message")
         if isinstance(message, dict):
             return ModelCompletion(

@@ -11,11 +11,12 @@ different working directory is shown.
 
 | Tool | Requirement |
 | --- | --- |
-| Git, Make, shell | Commands below use a POSIX shell; Windows users can use a suitable WSL environment |
+| Git, Make, shell | Commands below use a POSIX shell; Windows users can use WSL2 |
 | Docker | Engine/Desktop running, with the Compose plugin and capacity for databases and model weights |
 | Java | JDK 21; the API includes Maven wrappers |
 | Python | 3.11 or 3.12, as declared in [`pyproject.toml`](../rag-chatbot-fastapi/pyproject.toml) |
 | Node.js and npm | Supported LTS; Node 22.13 or newer on the 22.x line works with the client's declared requirements |
+| TEI (optional) | Compose on Linux/Windows WSL2; native Homebrew binary on Apple Silicon |
 
 The examples use `PYTHON=python3.11`. Substitute `python3.12` consistently if that is your
 installed interpreter. Model downloads and first container builds require network access.
@@ -59,9 +60,9 @@ make -C rag-chatbot-fastapi dev-infra
 docker compose -f docker-compose.yml ps
 ```
 
-This starts PostgreSQL, Redis, RabbitMQ, Qdrant, Ollama, SeaweedFS, and the Kuzu graph service.
-It does **not** start Spring, the host Python inference app, or Next.js. The optional reranker
-profile is not part of this default target.
+This starts PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, and the Kuzu graph service. It does
+**not** start native Ollama, Spring, the host Python inference app, or Next.js. The optional
+reranker profile is not part of this default target.
 
 Default host endpoints come from [`docker-compose.yml`](../docker-compose.yml):
 
@@ -71,7 +72,7 @@ Default host endpoints come from [`docker-compose.yml`](../docker-compose.yml):
 | Redis | `localhost:16379` |
 | RabbitMQ AMQP / management UI | `localhost:15673` / `http://localhost:25672` |
 | Qdrant HTTP | `http://localhost:16333` |
-| Ollama | `http://localhost:11434` |
+| Native Ollama | `http://localhost:11434` |
 | Kuzu graph HTTP | `http://localhost:8010` |
 | SeaweedFS S3 / filer | `http://localhost:18333` / `http://localhost:18888` |
 
@@ -80,17 +81,66 @@ the graph container owns that port.
 
 ### Prepare models
 
-For the default Ollama generation and embedding configuration:
+Run Ollama natively on the host. On Apple Silicon this keeps generation on Metal instead of
+CPU-only Docker virtualization:
 
 ```bash
-docker compose -f docker-compose.yml exec ollama ollama pull embeddinggemma
-docker compose -f docker-compose.yml exec ollama ollama pull gemma4:12b
-docker compose -f docker-compose.yml exec ollama ollama list
+brew install ollama
+brew services start ollama
+ollama pull bge-m3
+ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
+ollama cp hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M vylinh
+ollama rm hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
+ollama list
 ```
 
-These names match the checked-in configuration; availability and hardware capacity must be
-checked on the machine running Ollama. A running Ollama container does not imply the models
-have been downloaded. Keep the embedding model and vector dimension consistent with indexed data.
+The removal drops only the long source tag; `vylinh` retains the shared model data. Pulling
+installs models but does not load them. OpenVie loads them on demand, or developers can warm and
+pin both for the current Ollama server lifetime:
+
+```bash
+curl --fail --silent --output /dev/null http://127.0.0.1:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"vylinh","keep_alive":-1}'
+curl --fail --silent --output /dev/null http://127.0.0.1:11434/api/embed \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"bge-m3","input":["OpenVie warmup"],"keep_alive":-1}'
+ollama ps
+```
+
+`ollama list` shows installed models; `ollama ps` shows models loaded in memory. The
+`keep_alive: -1` requests prevent idle eviction; use `keep_alive: 0` to unload deliberately.
+The `vylinh` alias, `bge-m3` identifier, and 1,024-dimensional embedding setting match the
+checked-in configuration. Keep the embedding model, dimension, and Qdrant vector name consistent
+with indexed data; changing them requires recreating the collection and re-ingesting documents.
+
+#### Enable Ollama request parallelism
+
+By default Ollama serves one request at a time, so a long graph-extraction call blocks chat,
+embeddings, and every other ingestion job behind it. Allow parallel slots before benchmarking
+ingestion or chat latency:
+
+```bash
+launchctl setenv OLLAMA_NUM_PARALLEL 4
+launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
+brew services restart ollama
+```
+
+Then re-run the warm-up commands above. `ollama ps` should list both models, and the reported
+memory grows because each parallel slot holds its own KV cache. Systems without spare memory
+should lower `OLLAMA_CONTEXT_LENGTH` instead of leaving the default context divided across slots.
+
+Ingestion throughput itself is controlled separately:
+
+```dotenv
+INGESTION_WORKER_CONCURRENCY=4
+```
+
+That setting is the worker's prefetch count, meaning at most that many documents are processed
+concurrently. Raising it only helps when the model server can actually serve parallel requests, so
+keep it at or below `OLLAMA_NUM_PARALLEL`, or at `1` when the model server is serial.
+`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `1024`) caps extraction output per batch; each chunk
+adds entities and relations, so size it with `GRAPH_EXTRACTION_BATCH_SIZE`.
 
 ### Migrate the database
 
@@ -194,9 +244,9 @@ off on a fresh install.
 
 ### Model alternatives
 
-The delivered default path is local Ollama: `LLM_PROVIDER=ollama` with `LLM_BASE_URL` pointing at
-the Ollama container (Compose) or `http://localhost:11434/v1` (host processes) and
-`TEXT_EMBEDDING_*` on the local embeddinggemma model. Never put a provider key in a
+The delivered default path is native Ollama: `LLM_PROVIDER=ollama`,
+`LLM_BASE_URL=http://localhost:11434/v1`, `LLM_MODEL_ID=vylinh`, and BGE-M3 embeddings through
+`TEXT_EMBEDDING_BASE_URL=http://localhost:11434`. Never put a provider key in a
 `NEXT_PUBLIC_*` variable.
 
 An external OpenAI-compatible generation endpoint can be selected with `LLM_PROVIDER=qwen`
@@ -211,21 +261,50 @@ python -m mlx_lm.server \
 ```
 
 Point `LLM_BASE_URL` to `http://127.0.0.1:8081/v1`, set the matching `LLM_MODEL_ID`, and keep
-`TEXT_EMBEDDING_BASE_URL=http://localhost:11434` with `TEXT_EMBEDDING_MODEL_ID=embeddinggemma`.
+`TEXT_EMBEDDING_BASE_URL=http://localhost:11434` with `TEXT_EMBEDDING_MODEL_ID=bge-m3`.
 Port 8081 avoids the Spring API's default port 8080. Size the model to the machine; this example
 is not a claim of measured throughput or a requirement to use MLX. Tenant content sent to an
 external endpoint crosses that provider's boundary.
 
-Local reranking is opt-in:
+### Optional local reranking
+
+Reranking is disabled by default. The recommended portable model is
+[`Alibaba-NLP/gte-multilingual-reranker-base`](https://huggingface.co/Alibaba-NLP/gte-multilingual-reranker-base):
+an Apache-2.0 encoder-only cross-encoder with explicit Vietnamese support. OpenVie sends the 30
+fused dense, sparse, and graph candidates to a TEI `/rerank` endpoint before selecting primary
+evidence. If TEI is unavailable, retrieval records a fallback metric and preserves the fused order.
+
+On Linux x86-64 or Windows using Docker Desktop's WSL2 backend, start the CPU profile:
 
 ```bash
 make -C rag-chatbot-fastapi dev-reranker
 make -C rag-chatbot-fastapi dev PYTHON=python3.11 DEV_RERANKER_ENABLED=true
 ```
 
-The configured TEI image uses `linux/amd64`; emulation and larger models can exhaust Docker
-Desktop resources on Apple Silicon. The Make target selects the smaller multilingual MiniLM
-model. Stop the optional container with `make -C rag-chatbot-fastapi dev-reranker-down`.
+Linux ARM64 must select TEI's native ARM image rather than emulating x86-64:
+
+```bash
+make -C rag-chatbot-fastapi dev-reranker \
+  DEV_RERANKER_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9
+make -C rag-chatbot-fastapi dev PYTHON=python3.11 DEV_RERANKER_ENABLED=true
+```
+
+On Apple Silicon, use TEI's native Metal build instead of Docker:
+
+```bash
+brew install text-embeddings-inference
+make -C rag-chatbot-fastapi dev-reranker-native
+```
+
+Keep that foreground process open, then start the Python application in another terminal with
+`DEV_RERANKER_ENABLED=true` as above. The native target binds only to `127.0.0.1:8082`.
+Stop it with `Ctrl-C`; stop the Compose variant with
+`make -C rag-chatbot-fastapi dev-reranker-down`.
+
+The application and model server must use the same `RERANKER_MODEL_ID`; the Compose service
+derives its command from that setting rather than maintaining a second model identifier.
+Operators may select `BAAI/bge-reranker-v2-m3` as a larger multilingual alternative, but should
+compare retrieval quality and p95 latency on representative data before changing the default.
 
 ## Verification
 

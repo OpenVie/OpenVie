@@ -16,11 +16,11 @@ INSERT INTO model_config_versions (
 SELECT
     'local-default',
     '2026-10',
-    'gemma4:12b',
+    'vylinh',
     'ollama',
-    'http://ollama:11434/v1',
-    'embeddinggemma',
-    768,
+    'http://localhost:11434/v1',
+    'bge-m3',
+    1024,
     'ollama',
     'ACTIVE'
 WHERE NOT EXISTS (

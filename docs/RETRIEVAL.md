@@ -27,9 +27,9 @@ is **not self-hosted-only** and is not fixed to Gemma 4. Select providers and mo
 | Capability | Delivered implementation | Boundary |
 |---|---|---|
 | Answer generation, graph extraction, and calculation planning | Configured chat-model adapters: `ollama` or `qwen` | `qwen` targets an externally managed OpenAI-compatible endpoint; Ollama supports native chat or its compatibility endpoint. A provider name alone does not install a model. |
-| Dense text embeddings | Ollama `/api/embed` adapter; EmbeddingGemma is the configured settings default | Embeds extracted text, not files; validates returned vector count and dimension. The configured model identifier must exist on the embedding server. |
+| Dense text embeddings | Ollama `/api/embed` adapter; BGE-M3 with 1,024-dimensional vectors is the configured settings default | Embeds extracted text, not files; validates returned vector count and dimension. The configured model identifier must exist on the embedding server. |
 | Lexical retrieval | FastEmbed `Qdrant/bm25` sparse encoder | Complements semantic retrieval for literal wording, identifiers, dates, and values. |
-| Optional reranking | TEI cross-encoder endpoint; `BAAI/bge-reranker-v2-m3` is the configurable default | Disabled by default; not a mandatory model or a locally trained reranker. |
+| Optional reranking | TEI cross-encoder endpoint; `Alibaba-NLP/gte-multilingual-reranker-base` is the portable default | Disabled by default and fail-open. The default explicitly supports Vietnamese; operators may select another TEI-compatible model only after measuring retrieval quality and latency. |
 | Digital-document parsing | Format-specific parsers, including `pypdf` and `python-docx` | Do not assume a Docling/OCR pipeline is installed. |
 | Vector index | Qdrant dense and sparse named vectors | Tenant, knowledge-base, and document scope constrain retrieval. |
 | Knowledge graph | Kuzu behind the graph service | Evidence-linked entities and relationships, not unconstrained model-memory facts. |
@@ -81,6 +81,12 @@ PENDING -> FAILED
 PROCESSING -> FAILED
 ```
 
+### Upload idempotency and updates
+
+Document uploads identify documents by file name within a knowledge base:
+- **Identical content:** If a file with identical SHA-256 content is uploaded to the same knowledge base, the API performs a no-op: it returns the existing document record immediately without re-storing files in SeaweedFS, re-embedding in Qdrant, or re-extracting graph entities.
+- **Modified content:** If a file with the same name has modified content, the API updates the existing document in place (preserving its document ID), transitions its status back to `PENDING` with a new job ID, overwrites the stored source, and schedules re-ingestion. The downstream worker then replaces index points in Qdrant and graph entities in Kuzu for that document ID, preventing duplicate records or orphaned vectors.
+- **In-progress uploads:** Re-uploading an identical file while processing is underway returns the active document; re-uploading modified content while processing is in flight is rejected until the current job finishes.
 Public status data identifies the document/job, file name/type/size, knowledge base,
 current status, upload time, successful chunk count, and safe failure message as applicable;
 the Spring document API is the contract for those fields. Redis worker checkpoints separately track
@@ -101,6 +107,15 @@ flowchart LR
     Extract --> Validate[Validate evidence references]
     Validate --> Kuzu[(Kuzu graph projection)]
 ```
+
+Worker concurrency is configuration, not a fixed property. `INGESTION_WORKER_CONCURRENCY`
+(default `4`) is the maximum number of documents a worker processes at once and is also the
+RabbitMQ prefetch count; set it to `1` when the model server is serial. Graph extraction is
+chat-model work, not embeddings: it dominates ingestion time, and its cost grows with document
+size because each chunk contributes entities and relations to the response.
+`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `1024`) bounds that response per batch, and
+`GRAPH_EXTRACTION_BATCH_SIZE` (default `4`) sets how many chunks share a request. Raising
+concurrency only helps when the serving model accepts parallel requests.
 
 ## Structure and spreadsheet handling
 
@@ -187,7 +202,7 @@ Current default retrieval policy (not benchmark-tuned constants):
 1. Route with precedence **calculation → relational → exact → semantic**.
 2. Retrieve up to 40 dense, 40 sparse, and 20 graph candidates; channel operations run concurrently.
 3. Fuse by profile-weighted RRF with `k=30`, deduplicating `(document_id, unit_id)`, retaining 30 candidates.
-4. Optionally rerank through the configured TEI endpoint.
+4. Optionally rerank through the configured TEI endpoint. The portable default is the 306M-parameter GTE multilingual cross-encoder; TEI installation and acceleration are platform-specific while the HTTP contract remains the same.
 5. Select five primary units with a soft limit of two per document. Fill deferred candidates if diversity
    would otherwise leave the context incomplete.
 6. Add at most three eligible prose/page neighbors, for at most eight units, each with citation metadata.

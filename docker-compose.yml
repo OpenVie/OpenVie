@@ -31,7 +31,7 @@ x-local-environment: &local-environment
   RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-rag_user}:${RABBITMQ_DEFAULT_PASS:-rag_password}@rabbitmq:5672/
   QDRANT_URL: http://qdrant:6333
   QDRANT_COLLECTION: ${QDRANT_COLLECTION:-knowledge_units_v2}
-  QDRANT_DENSE_VECTOR_NAME: ${QDRANT_DENSE_VECTOR_NAME:-text_embeddinggemma_v1}
+  QDRANT_DENSE_VECTOR_NAME: ${QDRANT_DENSE_VECTOR_NAME:-text_bge_m3_v1}
   QDRANT_SPARSE_VECTOR_NAME: ${QDRANT_SPARSE_VECTOR_NAME:-text_bm25_v1}
   KUZU_DATABASE_PATH: /data/kuzu/cacanode.kuzu
   GRAPH_SERVICE_URL: http://graph-service:8010
@@ -43,25 +43,26 @@ x-local-environment: &local-environment
   SEAWEEDFS_CONNECT_TIMEOUT_SECONDS: ${SEAWEEDFS_CONNECT_TIMEOUT_SECONDS:-3}
   SEAWEEDFS_READ_TIMEOUT_SECONDS: ${SEAWEEDFS_READ_TIMEOUT_SECONDS:-30}
   SEAWEEDFS_MAX_ATTEMPTS: ${SEAWEEDFS_MAX_ATTEMPTS:-3}
-  LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
   LLM_INTERNAL_API_KEY: ${LLM_INTERNAL_API_KEY:-ollama}
-  LLM_MODEL_ID: ${LLM_MODEL_ID:-gemma4:12b}
+  LLM_MODEL_ID: ${LLM_MODEL_ID:-vylinh}
   LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-128}
-  GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-4096}
+  GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-1024}
   GRAPH_EXTRACTION_BATCH_SIZE: ${GRAPH_EXTRACTION_BATCH_SIZE:-4}
+  INGESTION_WORKER_CONCURRENCY: ${INGESTION_WORKER_CONCURRENCY:-4}
   LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
   LLM_USE_OLLAMA_NATIVE_CHAT: ${LLM_USE_OLLAMA_NATIVE_CHAT:-true}
   LLM_DISABLE_THINKING: ${LLM_DISABLE_THINKING:-true}
-  TEXT_EMBEDDING_BASE_URL: ${TEXT_EMBEDDING_BASE_URL:-http://ollama:11434}
-  TEXT_EMBEDDING_MODEL_ID: ${TEXT_EMBEDDING_MODEL_ID:-embeddinggemma}
-  TEXT_EMBEDDING_DIMENSION: ${TEXT_EMBEDDING_DIMENSION:-768}
+  TEXT_EMBEDDING_BASE_URL: ${TEXT_EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+  TEXT_EMBEDDING_MODEL_ID: ${TEXT_EMBEDDING_MODEL_ID:-bge-m3}
+  TEXT_EMBEDDING_DIMENSION: ${TEXT_EMBEDDING_DIMENSION:-1024}
   TEXT_EMBEDDING_TIMEOUT_SECONDS: ${TEXT_EMBEDDING_TIMEOUT_SECONDS:-120}
   SPARSE_MODEL_ID: ${SPARSE_MODEL_ID:-Qdrant/bm25}
   SPARSE_MODEL_CACHE_DIR: /models/fastembed
   GRAPH_MAX_HOPS: ${GRAPH_MAX_HOPS:-3}
   RERANKER_ENABLED: ${RERANKER_ENABLED:-false}
   RERANKER_URL: ${RERANKER_URL:-http://reranker-service}
-  RERANKER_MODEL_ID: ${RERANKER_MODEL_ID:-BAAI/bge-reranker-v2-m3}
+  RERANKER_MODEL_ID: ${RERANKER_MODEL_ID:-Alibaba-NLP/gte-multilingual-reranker-base}
 
 services:
   postgres:
@@ -121,21 +122,6 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    environment:
-      OLLAMA_HOST: 0.0.0.0:11434
-    ports:
-      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   graph-service:
     build:
       context: ./rag-chatbot-fastapi
@@ -147,13 +133,14 @@ services:
       - "127.0.0.1:${GRAPH_SERVICE_PORT:-8010}:8010"
     volumes:
       - kuzu_data:/data/kuzu
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   reranker-service:
-    image: ${RERANKER_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-1.8}
-    platform: ${RERANKER_PLATFORM:-linux/amd64}
+    image: ${RERANKER_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-1.9}
     profiles: [reranker]
     restart: unless-stopped
-    command: ["--model-id", "${LOCAL_RERANKER_MODEL_ID:-cross-encoder/mmarco-mMiniLMv2-L12-H384-v1}"]
+    command: ["--model-id", "${RERANKER_MODEL_ID:-Alibaba-NLP/gte-multilingual-reranker-base}"]
     ports:
       - "127.0.0.1:${RERANKER_PORT:-8082}:80"
     volumes:
@@ -230,7 +217,6 @@ volumes:
   redis_data:
   rabbitmq_data:
   qdrant_data:
-  ollama_data:
   kuzu_data:
   model_cache:
   seaweedfs_master:

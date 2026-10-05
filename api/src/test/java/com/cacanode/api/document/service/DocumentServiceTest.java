@@ -434,6 +434,128 @@ class DocumentServiceTest {
         verify(documentStorage).delete("storage-key");
         verify(documentRepository).delete(document);
     }
+    @Test
+    void uploadSameFileContentWhenCompletedDoesNothingAndReturnsExisting() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.COMPLETED);
+        existing.setContentHash("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals(documentId, response.id());
+        assertEquals(DocumentStatus.COMPLETED, response.status());
+        verify(documentStorage, never()).store(any(), any(MultipartFile.class));
+        verify(ingestionPublisher, never()).publish(any());
+        verify(documentRepository, never()).save(any());
+    }
+
+    @Test
+    void uploadModifiedFileContentWhenCompletedUpdatesExistingAndPublishesEvent() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "updated content".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.COMPLETED);
+        existing.setContentHash("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+        when(documentRepository.save(existing)).thenReturn(existing);
+
+        var response = documentService.upload(tenantId, otherUserId, knowledgeBaseId, file);
+
+        assertEquals(documentId, response.id());
+        assertEquals(DocumentStatus.PENDING, response.status());
+        assertEquals(DocumentStatus.PENDING, existing.getStatus());
+        assertEquals(otherUserId, existing.getUploadedBy());
+        assertEquals((long) "updated content".getBytes().length, existing.getFileSizeBytes());
+        verify(documentStorage).store("storage-key", file);
+        verify(ingestionPublisher).publish(any());
+    }
+
+    @Test
+    void uploadSameFileContentWhenProcessingDoesNothingAndReturnsExisting() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.PROCESSING);
+        existing.setContentHash("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals(documentId, response.id());
+        assertEquals(DocumentStatus.PROCESSING, response.status());
+        verify(documentStorage, never()).store(any(), any(MultipartFile.class));
+        verify(ingestionPublisher, never()).publish(any());
+    }
+
+    @Test
+    void uploadDifferentFileContentWhenProcessingThrowsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "changed while processing".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.PROCESSING);
+        existing.setContentHash("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+
+        assertThrows(BadRequestException.class, () -> documentService.upload(
+                tenantId, userId, knowledgeBaseId, file));
+        verify(documentStorage, never()).store(any(), any(MultipartFile.class));
+        verify(ingestionPublisher, never()).publish(any());
+    }
+
+    @Test
+    void uploadSameFileWhenFailedReingestsDocument() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.FAILED);
+        existing.setContentHash("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+        when(documentRepository.save(existing)).thenReturn(existing);
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals(documentId, response.id());
+        assertEquals(DocumentStatus.PENDING, response.status());
+        assertEquals(DocumentStatus.PENDING, existing.getStatus());
+        verify(documentStorage).store("storage-key", file);
+        verify(ingestionPublisher).publish(any());
+    }
+
+    @Test
+    void uploadBackfillsContentHashFromStorageForLegacyDocument() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.txt", "text/plain", "hello".getBytes());
+        Document existing = document();
+        existing.setStatus(DocumentStatus.COMPLETED);
+        existing.setContentHash(null);
+        existing.setFileSizeBytes(5L);
+        when(documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+                tenantId, knowledgeBaseId, "notes.txt"))
+                .thenReturn(Optional.of(existing));
+        when(documentStorage.load("storage-key"))
+                .thenReturn(new StoredDocument("hello".getBytes(), "text/plain"));
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals(documentId, response.id());
+        assertEquals(DocumentStatus.COMPLETED, response.status());
+        assertEquals("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", existing.getContentHash());
+        verify(documentStorage, never()).store(any(), any(MultipartFile.class));
+        verify(ingestionPublisher, never()).publish(any());
+    }
 
     private MockMultipartFile txtFile() {
         return new MockMultipartFile("file", "notes.txt", "text/plain", "hello".getBytes());

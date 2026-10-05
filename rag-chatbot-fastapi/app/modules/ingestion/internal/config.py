@@ -5,4 +5,10 @@ from app.common.config import FrozenModuleConfig
 
 @dataclass(frozen=True, slots=True)
 class IngestionTransportConfig(FrozenModuleConfig):
-    FIELDS = frozenset({"INGESTION_HEARTBEAT_SECONDS", "RABBITMQ_URL"})
+    FIELDS = frozenset(
+        {
+            "INGESTION_HEARTBEAT_SECONDS",
+            "INGESTION_WORKER_CONCURRENCY",
+            "RABBITMQ_URL",
+        }
+    )

@@ -12,6 +12,9 @@ import org.springframework.data.domain.Pageable;
 
 public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSpecificationExecutor<Document> {
     Optional<Document> findByIdAndTenantId(UUID id, UUID tenantId);
+    Optional<Document> findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(
+            UUID tenantId, UUID knowledgeBaseId, String fileName);
+
 
     List<Document> findByTenantIdAndKnowledgeBaseIdOrderByCreatedAtDescIdDesc(
             UUID tenantId,

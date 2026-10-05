@@ -131,7 +131,7 @@ async def test_qdrant_retriever_filters_by_tenant_and_knowledge_base() -> None:
     conditions = {condition.key: condition.match.value for condition in query_filter.must}
     assert conditions == {"tenant_id": "tenant-1", "knowledge_base_id": "kb-1"}
     assert client.kwargs["collection_name"] == "chunks"
-    assert client.kwargs["using"] == "text_embeddinggemma_v1"
+    assert client.kwargs["using"] == "text_bge_m3_v1"
     assert "score_threshold" not in client.kwargs
 
 

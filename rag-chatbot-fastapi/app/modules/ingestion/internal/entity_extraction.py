@@ -137,9 +137,11 @@ class EntityRelationExtractor:
             raise TransientIngestionFailure("Graph extraction model request failed") from exc
         try:
             payload = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip()))
+            if not isinstance(payload, dict):
+                raise TypeError("Graph extraction response must be a JSON object")
             return (
-                [_EntityMention.model_validate(item) for item in payload.get("entities", [])],
-                [_EvidenceRelation.model_validate(item) for item in payload.get("relations", [])],
+                _valid_entities(payload.get("entities")),
+                _valid_relations(payload.get("relations")),
             )
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             if len(selected) > 1:
@@ -173,6 +175,30 @@ def _graph_unit(document_id: str, source_name: str, chunk: TextChunk) -> GraphUn
         cell_range=chunk.cell_range,
         table_id=chunk.table_id,
     )
+
+
+def _valid_entities(raw: Any) -> list[_EntityMention]:
+    if not isinstance(raw, list):
+        raise TypeError("Graph extraction entities must be an array")
+    entities: list[_EntityMention] = []
+    for item in raw:
+        try:
+            entities.append(_EntityMention.model_validate(item))
+        except (TypeError, ValueError):
+            continue
+    return entities
+
+
+def _valid_relations(raw: Any) -> list[_EvidenceRelation]:
+    if not isinstance(raw, list):
+        raise TypeError("Graph extraction relations must be an array")
+    relations: list[_EvidenceRelation] = []
+    for item in raw:
+        try:
+            relations.append(_EvidenceRelation.model_validate(item))
+        except (TypeError, ValueError):
+            continue
+    return relations
 
 
 def _deduplicate_entities(entities: Sequence[_EntityMention]) -> list[_EntityMention]:
@@ -224,9 +250,11 @@ def _unit_payload(chunk: TextChunk) -> dict[str, Any]:
 
 
 _EXTRACTION_PROMPT = """You extract only facts explicitly supported by the supplied knowledge units.
-Return strict JSON: {"entities":[{"name":"","normalized_name":"","entity_type":"",
-"aliases":[],"evidence_unit_id":""}],"relations":[{"subject_normalized_name":"",
-"predicate":"","object_normalized_name":"","evidence_unit_id":""}]}.
+Return exactly one JSON object with two array fields: "entities" and "relations".
+Each entity must have non-empty name, normalized_name, entity_type, and evidence_unit_id strings,
+plus an aliases array. Each relation must have non-empty subject_normalized_name, predicate,
+object_normalized_name, and evidence_unit_id strings. Omit any item whose required fields cannot
+be populated; never emit placeholder objects or blank required strings.
 Every item must cite one supplied unit_id. Do not infer unsupported facts.
 Every relation subject and object must exactly match an entity normalized_name in the response.
-Use empty arrays when none."""
+Use empty arrays when no fully populated item exists."""

@@ -34,13 +34,24 @@ CACHE_DISABLED_RESULTS ?= artifacts/retrieval-cache-disabled.json
 CACHE_ENABLED_RESULTS ?= artifacts/retrieval-cache-enabled.json
 DOCKER_COMPOSE ?= docker compose
 DEV_COMPOSE_FILE ?= ../docker-compose.yml
-DEV_INFRA_SERVICES ?= postgres redis rabbitmq qdrant ollama seaweedfs-master \
+DEV_INFRA_SERVICES ?= postgres redis rabbitmq qdrant seaweedfs-master \
 	seaweedfs-volume seaweedfs-filer seaweedfs-s3 graph-service
 DEV_GRAPH_URL ?= http://localhost:8010
+DEV_LLM_BASE_URL ?= http://localhost:11434/v1
+DEV_TEXT_EMBEDDING_BASE_URL ?= http://localhost:11434
+DEV_LLM_MODEL_ID ?= vylinh
+DEV_TEXT_EMBEDDING_MODEL_ID ?= bge-m3
+DEV_TEXT_EMBEDDING_DIMENSION ?= 1024
+DEV_QDRANT_DENSE_VECTOR_NAME ?= text_bge_m3_v1
+DEV_GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS ?= 1024
 DEV_QDRANT_COLLECTION ?= knowledge_units_v2
 DEV_RERANKER_ENABLED ?= false
 DEV_RERANKER_URL ?= http://localhost:8082
-DEV_RERANKER_MODEL_ID ?= cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+DEV_RERANKER_MODEL_ID ?= Alibaba-NLP/gte-multilingual-reranker-base
+DEV_RERANKER_IMAGE ?= ghcr.io/huggingface/text-embeddings-inference:cpu-1.9
+DEV_RERANKER_PORT ?= 8082
+DEV_RERANKER_HOST ?= 127.0.0.1
+RERANKER_BIN ?= text-embeddings-router
 
 ifeq ($(OS),Windows_NT)
 VENV_PYTHON := $(VENV)/Scripts/python.exe
@@ -59,7 +70,7 @@ PYTHON_RUN := $(VENV_PYTHON)
 endif
 
 .PHONY: help env install install-dev setup run run-ai dev dev-ai run-graph dev-graph \
-	dev-infra dev-down dev-reranker dev-reranker-down \
+	dev-infra dev-down dev-reranker dev-reranker-native dev-reranker-down \
 	evaluate-retrieval compare-retrieval-cache baseline-cache baseline-cache-enabled \
 	cleanup-semantic-answer-cache \
 	recover-ingestion-checkpoints backfill-spreadsheet-artifacts generate-proto check-proto \
@@ -77,10 +88,11 @@ help:
 	$(info   make dev-ai               Run only the AI/chat API with reload)
 	$(info   make run-graph            Run app.graph_main:app on GRAPH_HOST:GRAPH_PORT)
 	$(info   make dev-graph            Run the graph API with reload)
-	$(info   make dev-infra            Start local storage, Ollama, and graph containers)
+	$(info   make dev-infra            Start local storage and the graph container)
 	$(info   make dev-down             Stop the local infrastructure started for development)
-	$(info   make dev-reranker         Explicitly start TEI reranking; not recommended on Apple Silicon)
-	$(info   make dev-reranker-down    Stop the optional TEI reranker)
+	$(info   make dev-reranker         Start the optional TEI CPU container)
+	$(info   make dev-reranker-native  Run native TEI on loopback, recommended on Apple Silicon)
+	$(info   make dev-reranker-down    Stop the optional TEI container)
 	$(info   make evaluate-retrieval   Score recorded retrieval rankings)
 	$(info   make baseline-cache       Capture the cache-disabled local latency baseline as JSON)
 	$(info   make baseline-cache-enabled Label a cache-enabled comparison run as JSON)
@@ -95,7 +107,7 @@ help:
 	$(info   make typecheck            Run mypy)
 	$(info   make check                Run lint, type checks, and tests)
 	$(info   make clean                Remove caches and test artifacts)
-	$(info Common variables: APP_PORT, DEV_GRAPH_URL, DEV_QDRANT_COLLECTION, DEV_RERANKER_URL, TARGET_COLLECTION)
+	$(info Common variables: APP_PORT, DEV_GRAPH_URL, DEV_QDRANT_COLLECTION, DEV_RERANKER_URL, DEV_RERANKER_MODEL_ID, TARGET_COLLECTION)
 
 env:
 ifeq ($(PYTHON_MODE),conda)
@@ -122,6 +134,13 @@ run-ai: env
 
 dev: env
 	GRAPH_SERVICE_URL=$(DEV_GRAPH_URL) \
+	LLM_BASE_URL=$(DEV_LLM_BASE_URL) \
+	TEXT_EMBEDDING_BASE_URL=$(DEV_TEXT_EMBEDDING_BASE_URL) \
+	LLM_MODEL_ID=$(DEV_LLM_MODEL_ID) \
+	TEXT_EMBEDDING_MODEL_ID=$(DEV_TEXT_EMBEDDING_MODEL_ID) \
+	TEXT_EMBEDDING_DIMENSION=$(DEV_TEXT_EMBEDDING_DIMENSION) \
+	QDRANT_DENSE_VECTOR_NAME=$(DEV_QDRANT_DENSE_VECTOR_NAME) \
+	GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=$(DEV_GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS) \
 	QDRANT_COLLECTION=$(DEV_QDRANT_COLLECTION) \
 	RERANKER_ENABLED=$(DEV_RERANKER_ENABLED) \
 	RERANKER_URL=$(DEV_RERANKER_URL) \
@@ -145,8 +164,14 @@ dev-down:
 	$(DOCKER_COMPOSE) -f $(DEV_COMPOSE_FILE) stop $(DEV_INFRA_SERVICES)
 
 dev-reranker:
-	LOCAL_RERANKER_MODEL_ID=$(DEV_RERANKER_MODEL_ID) \
+	RERANKER_IMAGE=$(DEV_RERANKER_IMAGE) \
+	RERANKER_MODEL_ID=$(DEV_RERANKER_MODEL_ID) \
+	RERANKER_PORT=$(DEV_RERANKER_PORT) \
 	$(DOCKER_COMPOSE) -f $(DEV_COMPOSE_FILE) --profile reranker up -d reranker-service
+
+dev-reranker-native:
+	$(RERANKER_BIN) --model-id $(DEV_RERANKER_MODEL_ID) \
+		--hostname $(DEV_RERANKER_HOST) --port $(DEV_RERANKER_PORT)
 
 dev-reranker-down:
 	$(DOCKER_COMPOSE) -f $(DEV_COMPOSE_FILE) stop reranker-service

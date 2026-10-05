@@ -92,7 +92,7 @@ class DocumentWorker:
         connection = self._connection
         channel = await connection.channel(publisher_confirms=True)
         self._channel = channel
-        await channel.set_qos(prefetch_count=1)
+        await channel.set_qos(prefetch_count=self._settings.INGESTION_WORKER_CONCURRENCY)
         self._exchange = await channel.declare_exchange(
             INGESTION_EXCHANGE,
             aio_pika.ExchangeType.TOPIC,

@@ -390,6 +390,47 @@ async def test_graph_extraction_fails_after_single_unit_output_limit_retry() -> 
 
 
 @pytest.mark.asyncio
+async def test_graph_extraction_discards_items_with_blank_required_fields() -> None:
+    class PlaceholderModel:
+        async def complete(self, messages: list[dict[str, object]]) -> str:
+            units = json.loads(str(messages[1]["content"]))
+            unit_id = units[0]["unit_id"]
+            return json.dumps(
+                {
+                    "entities": [
+                        {
+                            "name": "Policy",
+                            "normalized_name": "policy",
+                            "entity_type": "",
+                            "aliases": [],
+                            "evidence_unit_id": unit_id,
+                        }
+                    ],
+                    "relations": [
+                        {
+                            "subject_normalized_name": "policy",
+                            "predicate": "",
+                            "object_normalized_name": "",
+                            "evidence_unit_id": unit_id,
+                        }
+                    ],
+                }
+            )
+
+    parsed = DocumentTextExtractor().parse(
+        b"# Policy",
+        content_type="text/markdown",
+        file_name="policy.md",
+    )
+    chunks = DeterministicChunker().chunk(parsed)
+
+    entities, relations = await EntityRelationExtractor(PlaceholderModel())._extract_batch(chunks)
+
+    assert entities == []
+    assert relations == []
+
+
+@pytest.mark.asyncio
 async def test_graph_extraction_discards_ungrounded_entities_and_relations() -> None:
     class UngroundedModel:
         async def complete(self, messages: list[dict[str, object]]) -> str:

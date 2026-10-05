@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     INGESTION_CHECKPOINT_RETENTION_SECONDS: int = 30 * 24 * 60 * 60
     INGESTION_LEASE_SECONDS: int = 300
     INGESTION_HEARTBEAT_SECONDS: int = 30
+    INGESTION_WORKER_CONCURRENCY: int = 4
 
     CACHE_ENABLED: bool = False
     CACHE_KEY_PREFIX: str = "ccn:v1"
@@ -72,7 +73,7 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:16333"
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION: str = "knowledge_units_v2"
-    QDRANT_DENSE_VECTOR_NAME: str = "text_embeddinggemma_v1"
+    QDRANT_DENSE_VECTOR_NAME: str = "text_bge_m3_v1"
     QDRANT_SPARSE_VECTOR_NAME: str = "text_bm25_v1"
     QDRANT_TENANT_FIELD: str = "tenant_id"
     QDRANT_KNOWLEDGE_BASE_FIELD: str = "knowledge_base_id"
@@ -81,7 +82,7 @@ class Settings(BaseSettings):
     GRAPH_INTERNAL_TOKEN: str = "development-graph-token"
     GRAPH_TIMEOUT_SECONDS: float = 30.0
     GRAPH_EXTRACTION_BATCH_SIZE: int = 4
-    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 25_000
+    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 1024
     GRAPH_EXTRACTION_REASONING_EFFORT: Literal["low", "medium", "high"] = "low"
     PARSER_VERSION: str = "digital-v1"
     CHUNKER_VERSION: str = "structural-v2"
@@ -91,8 +92,8 @@ class Settings(BaseSettings):
     # Local generation/embedding by default. Providers target configured internal
     # endpoints only; there is no hosted-provider fallback.
     LLM_PROVIDER: Literal["ollama", "qwen"] = "ollama"
-    LLM_BASE_URL: str = "http://localhost:8001/v1"
-    LLM_MODEL_ID: str = ""
+    LLM_BASE_URL: str = "http://localhost:11434/v1"
+    LLM_MODEL_ID: str = "vylinh"
     LLM_ADAPTER_ID: str = ""
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_OUTPUT_TOKENS: int = 1024
@@ -100,9 +101,9 @@ class Settings(BaseSettings):
     LLM_USE_OLLAMA_NATIVE_CHAT: bool = True
     LLM_DISABLE_THINKING: bool = True
 
-    TEXT_EMBEDDING_BASE_URL: str = "http://localhost:8081"
-    TEXT_EMBEDDING_MODEL_ID: str = "google/embeddinggemma-300m"
-    TEXT_EMBEDDING_DIMENSION: int = 768
+    TEXT_EMBEDDING_BASE_URL: str = "http://localhost:11434"
+    TEXT_EMBEDDING_MODEL_ID: str = "bge-m3"
+    TEXT_EMBEDDING_DIMENSION: int = 1024
     TEXT_EMBEDDING_BATCH_SIZE: int = 32
     TEXT_EMBEDDING_TIMEOUT_SECONDS: float = 120.0
     SPARSE_MODEL_ID: str = "Qdrant/bm25"
@@ -136,7 +137,7 @@ class Settings(BaseSettings):
     NEIGHBOR_EXPANSION_LIMIT: int = 3
     RERANKER_ENABLED: bool = False
     RERANKER_URL: str = "http://localhost:8082"
-    RERANKER_MODEL_ID: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_MODEL_ID: str = "Alibaba-NLP/gte-multilingual-reranker-base"
     RERANKER_TIMEOUT_SECONDS: float = 10.0
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
@@ -190,6 +191,12 @@ class Settings(BaseSettings):
             raise ValueError("Ingestion checkpoint and lease durations must be positive")
         if self.INGESTION_HEARTBEAT_SECONDS >= self.INGESTION_LEASE_SECONDS:
             raise ValueError("Ingestion heartbeat must be shorter than the lease")
+        if not 1 <= self.INGESTION_WORKER_CONCURRENCY <= 64:
+            raise ValueError("INGESTION_WORKER_CONCURRENCY must be between 1 and 64")
+        if not 1 <= self.GRAPH_EXTRACTION_BATCH_SIZE <= 64:
+            raise ValueError("GRAPH_EXTRACTION_BATCH_SIZE must be between 1 and 64")
+        if self.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS < 64:
+            raise ValueError("GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS must be at least 64")
         if not 0 <= self.CACHE_TTL_JITTER_PERCENT <= 100:
             raise ValueError("CACHE_TTL_JITTER_PERCENT must be between 0 and 100")
         if self.EMBEDDING_CACHE_TTL_SECONDS <= 0:

@@ -57,6 +57,22 @@ class FakeOllamaClient:
         return FakeOllamaResponse()
 
 
+class LengthLimitedOllamaResponse(FakeOllamaResponse):
+    def json(self) -> dict[str, object]:
+        return {
+            "message": {"role": "assistant", "content": '{"entities":['},
+            "done_reason": "length",
+            "eval_count": 4096,
+        }
+
+
+class LengthLimitedOllamaClient(FakeOllamaClient):
+    async def post(self, url: str, json: dict[str, object]) -> FakeOllamaResponse:
+        FakeOllamaClient.last_url = url
+        FakeOllamaClient.last_json = dict(json)
+        return LengthLimitedOllamaResponse()
+
+
 class SlowOllamaClient(FakeOllamaClient):
     async def post(self, url: str, json: dict[str, object]) -> FakeOllamaResponse:
         del url, json
@@ -167,7 +183,7 @@ def settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "_env_file": (),
         "LLM_BASE_URL": "http://localhost:11434/v1",
-        "LLM_MODEL_ID": "gemma4:12b",
+        "LLM_MODEL_ID": "vylinh",
         "LLM_MAX_OUTPUT_TOKENS": 64,
         "LLM_TEMPERATURE": 0,
         "LLM_TIMEOUT_SECONDS": 1,
@@ -294,6 +310,19 @@ async def test_qwen_output_limit_reports_finish_reason(monkeypatch: pytest.Monke
         "app.modules.model.internal.chat.httpx.AsyncClient", LengthLimitedQwenClient
     )
     gateway = QwenChatModel(settings(LLM_PROVIDER="qwen"))
+
+    with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
+        await gateway.complete([{"role": "user", "content": "hello"}])
+
+
+@pytest.mark.asyncio
+async def test_ollama_output_limit_reports_finish_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.modules.model.internal.chat.httpx.AsyncClient", LengthLimitedOllamaClient
+    )
+    gateway = OllamaChatModel(settings())
 
     with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
         await gateway.complete([{"role": "user", "content": "hello"}])

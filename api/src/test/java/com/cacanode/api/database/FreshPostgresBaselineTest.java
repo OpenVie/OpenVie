@@ -127,9 +127,10 @@ class FreshPostgresBaselineTest {
     void flywayMigratesTheBaselineIntoAnEmptyDatabase() {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "select version, description, success from flyway_schema_history order by installed_rank");
-        assertEquals(2, history.size(), "baseline must contain exactly the schema and model seed");
+        assertEquals(3, history.size(), "baseline must contain the schema, model seed, and document content hash");
         assertEquals("1", String.valueOf(history.get(0).get("version")));
         assertEquals("2", String.valueOf(history.get(1).get("version")));
+        assertEquals("3", String.valueOf(history.get(2).get("version")));
         history.forEach(row -> assertTrue((Boolean) row.get("success"),
                 "migration " + row.get("version") + " must be recorded as successful"));
     }

@@ -21,7 +21,6 @@ class Reranker(Protocol):
 class TeiReranker:
     def __init__(self, settings: RetrievalConfig):
         self._url = settings.RERANKER_URL.rstrip("/")
-        self._model = settings.RERANKER_MODEL_ID
         self._timeout = settings.RERANKER_TIMEOUT_SECONDS
 
     async def rerank(
@@ -36,7 +35,6 @@ class TeiReranker:
                     json={
                         "query": query_text,
                         "texts": [candidate.text for candidate in candidates],
-                        "model": self._model,
                         "truncate": True,
                     },
                 )

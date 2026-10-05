@@ -7,7 +7,7 @@ configuration this repository actually delivers and the checks to run after inst
 
 **On this page:** [what is delivered](#1-what-this-release-delivers),
 [prerequisites](#2-prerequisites), [configuration](#3-prepare-configuration),
-[infrastructure](#4-start-the-infrastructure), [applications](#5-install-and-run-the-applications),
+[infrastructure](#4-start-the-infrastructure-and-native-model-service), [applications](#5-install-and-run-the-applications),
 [first-run setup](#first-run-web-setup-and-owner-recovery), [verification](#6-verification),
 [operations](#7-operating-the-stack), [rollback](#8-migrations-and-rollback),
 [gRPC](#9-internal-grpc-transport).
@@ -16,7 +16,7 @@ configuration this repository actually delivers and the checks to run after inst
 
 | Delivered | Notes |
 | --- | --- |
-| [`docker-compose.yml`](../docker-compose.yml) | The only Compose file. Starts PostgreSQL, Redis, RabbitMQ, Qdrant, Ollama, SeaweedFS, and the Kuzu graph service, with an optional `reranker` profile |
+| [`docker-compose.yml`](../docker-compose.yml) | The only Compose file. Starts PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, and the Kuzu graph service, with an optional `reranker` profile |
 | Spring API (`api/`) | Runs on the host under `make -C api`; Flyway migrates at startup |
 | Python AI/chat service (`rag-chatbot-fastapi/`) | Runs on the host under `make -C rag-chatbot-fastapi`; embeds the document worker by default |
 | Web console (`frontend/`) | Built and served with npm |
@@ -37,12 +37,12 @@ only from the host or your internal network.
 
 | Requirement | Notes |
 | --- | --- |
-| Docker with the Compose plugin | Capacity for the data services plus model weights |
+| Docker with the Compose plugin | Required for data services and the Linux/Windows-WSL2 reranker path |
 | JDK 21 | `api/` ships Maven wrappers |
 | Python 3.11 or 3.12 | As declared in [`pyproject.toml`](../rag-chatbot-fastapi/pyproject.toml) |
 | Node.js LTS + npm | For building the web console |
-| Make and a POSIX shell | All documented commands assume them |
-| Disk for models | Ollama model weights, the fastembed sparse model, and the optional reranker model |
+| Make and a POSIX shell | Linux/macOS directly; Windows through WSL2 |
+| Disk for models | Ollama model weights, the fastembed sparse model, and the optional TEI reranker model |
 
 ## 3. Prepare configuration
 
@@ -73,10 +73,10 @@ At minimum review:
   fully without email: chat, ingestion, and search do not require it. If you want outbound invitations
   immediately, configure `MAIL_PROVIDER` (`smtp`, `sendgrid`, or `brevo`), credentials, and `FROM_EMAIL`
   as the environment bootstrap default, or configure channels later in the web console under `/settings`.
-- **Model path:** the delivered defaults are local Ollama (`LLM_PROVIDER=ollama`) with
-  `LLM_MODEL_ID` matching a model you pull in the next step. Model endpoints
-  (`LLM_BASE_URL`, `TEXT_EMBEDDING_BASE_URL`, `RERANKER_URL`) intentionally live in
-  `docker-compose.yml` (container) and `rag-chatbot-fastapi/.env` (host); set them there.
+- **Model path:** the delivered defaults use native Ollama (`LLM_PROVIDER=ollama`) with
+  Arcee-VyLinh generation and BGE-M3 embeddings. The Python process reaches Ollama through
+  localhost; keep `LLM_BASE_URL`, `TEXT_EMBEDDING_BASE_URL`, model identifiers, embedding
+  dimension, and Qdrant vector name aligned.
 - **Worker mode:** `WORKER_MODE=embedded` runs the document consumer inside the Python process.
   If you start a separate consumer, set `WORKER_MODE=disabled` for the main process and never
   run both consumers at once.
@@ -95,26 +95,119 @@ docker compose --env-file .env.production --profile reranker config --quiet
 
 Both commands must exit successfully. Fix any reported problem before continuing.
 
-## 4. Start the infrastructure
+## 4. Start the infrastructure and native model service
 
 ```bash
 docker compose --env-file .env.production up -d --wait
 ```
 
-Then pull the models referenced by your configuration (names must match `LLM_MODEL_ID` and
-`TEXT_EMBEDDING_MODEL_ID`):
+Install Ollama on the host and run it under the operating system's service manager. Pulling
+installs a model on disk; it does not load that model into memory:
 
 ```bash
-docker compose --env-file .env.production exec ollama ollama pull embeddinggemma
-docker compose --env-file .env.production exec ollama ollama pull gemma4:12b
+ollama pull bge-m3
+ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
+ollama cp hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M vylinh
+ollama rm hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
+ollama list
 ```
 
-A running Ollama container does not imply the models are downloaded. Start the optional
-reranker only when you configured it:
+The removal deletes only the long source tag; the `vylinh` alias retains the shared model data.
+The Ollama server must listen on `127.0.0.1:11434` before the host Python process starts. OpenVie
+loads both models on demand. A deployed service should warm both before accepting traffic and pin
+them in memory until Ollama restarts:
+
+```bash
+curl --fail --silent --output /dev/null http://127.0.0.1:11434/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"vylinh","keep_alive":-1}'
+curl --fail --silent --output /dev/null http://127.0.0.1:11434/api/embed \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"bge-m3","input":["OpenVie warmup"],"keep_alive":-1}'
+ollama ps
+```
+
+`ollama list` reports models installed on disk; `ollama ps` reports models currently loaded in
+memory. `keep_alive: -1` prevents idle eviction. Run the warm-up from the process supervisor after
+every Ollama restart so the service is ready before it receives traffic. An operator may choose a
+bounded duration only when memory pressure is more important than avoiding model reload latency.
+
+### Model concurrency and ingestion throughput
+
+Ollama defaults to a single request slot. With that default, one long graph-extraction request
+blocks chat, embeddings, and all other ingestion jobs, and document latency grows without bound as
+a queue builds. Size the model server and the worker together:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `OLLAMA_NUM_PARALLEL` | `4` on this host | Parallel model slots on the Ollama server. Memory grows per slot. |
+| `OLLAMA_MAX_LOADED_MODELS` | `3` on this host | Keeps both `vylinh` and `bge-m3` resident without unloading each other. |
+| `INGESTION_WORKER_CONCURRENCY` | `4` | Maximum documents a worker processes concurrently. Also the RabbitMQ prefetch count. |
+| `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `1024` | Caps generated tokens per extraction batch; each chunk adds entities and relations. |
+| `GRAPH_EXTRACTION_BATCH_SIZE` | `4` | Chunks per extraction request. |
+
+Keep `INGESTION_WORKER_CONCURRENCY` at or below `OLLAMA_NUM_PARALLEL`; higher values only build a
+queue inside the model server. Set it to `1` when the model server is serial. On Apple Silicon,
+set the Ollama variables through the service manager so they survive restarts:
+
+```bash
+launchctl setenv OLLAMA_NUM_PARALLEL 4
+launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
+brew services restart ollama
+```
+
+Confirm the change on a running server by checking that concurrent requests complete together
+rather than strictly one after another, and re-run the warm-up commands so both models reload into
+the new slots.
+
+### Optional reranker by platform
+
+Reranking is opt-in. Set `RERANKER_ENABLED=true` only after a compatible TEI endpoint is healthy.
+The delivered default is the 306M-parameter
+[`Alibaba-NLP/gte-multilingual-reranker-base`](https://huggingface.co/Alibaba-NLP/gte-multilingual-reranker-base),
+which explicitly supports Vietnamese and more than 70 languages. The model server and Python
+application must use the same `RERANKER_MODEL_ID`.
+
+Linux x86-64 and Windows Docker Desktop with its WSL2 backend use the shipped CPU profile:
 
 ```bash
 docker compose --env-file .env.production --profile reranker up -d reranker-service
 ```
+
+Linux ARM64 uses the official ARM image:
+
+```bash
+RERANKER_IMAGE=ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9 \
+  docker compose --env-file .env.production --profile reranker up -d reranker-service
+```
+
+For an NVIDIA deployment, select the TEI 1.9 image matching the GPU architecture and add GPU
+access in an operator-owned Compose override. For example, RTX 40 series uses:
+
+```yaml
+services:
+  reranker-service:
+    image: ghcr.io/huggingface/text-embeddings-inference:89-1.9
+    gpus: all
+```
+
+Pass that override with `-f` after the repository Compose file. Windows GPU deployment uses the
+same Linux container through WSL2 GPU passthrough. Do not select a CUDA image without granting
+the container GPU access.
+
+Apple Silicon should use native TEI with Metal rather than a Linux container:
+
+```bash
+brew install text-embeddings-inference
+text-embeddings-router \
+  --model-id Alibaba-NLP/gte-multilingual-reranker-base \
+  --hostname 127.0.0.1 \
+  --port 8082
+```
+
+The reranker has no public authentication boundary. Keep port 8082 on loopback or a private
+service network. OpenVie's reranker client is fail-open: endpoint errors retain the fused
+retrieval order rather than failing answer generation.
 
 ## 5. Install and run the applications
 
@@ -191,6 +284,11 @@ curl --fail http://localhost:8080/actuator/health
 curl --fail http://localhost:18000/health/live
 curl --fail http://localhost:18000/health/ready
 curl --fail http://localhost:8010/health/ready
+# When RERANKER_ENABLED=true:
+curl --fail http://localhost:8082/health
+curl --fail http://localhost:8082/rerank \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"Nhân viên được làm việc từ xa bao nhiêu ngày?","texts":["Nhân viên chính thức được làm việc từ xa tối đa 2 ngày mỗi tuần.","Thời gian thử việc kéo dài 60 ngày."],"truncate":true}'
 ```
 
 A ready response reports model configuration and bounded diagnostics; it is not proof that
@@ -210,20 +308,22 @@ embedding, and index versions alongside the result.
 ### Logs and resources
 
 ```bash
-docker compose --env-file .env.production logs -f graph-service ollama qdrant
+docker compose --env-file .env.production logs -f graph-service qdrant
 docker stats --no-stream
 free -h
 df -h
 ```
 
-Application logs come from the processes (or supervisors) you started in section 5. If memory
-is constrained, stop the optional reranker first, then pause new uploads, and inspect queue
-depth before touching the graph service.
+Application logs come from the processes (or supervisors) started in sections 4 and 5, including
+native Ollama and, on Apple Silicon, native TEI. Container deployments can inspect the optional
+reranker with `docker compose logs -f reranker-service`. If memory is constrained, stop the
+optional reranker first, then pause new uploads and inspect queue depth before touching the graph
+service.
 
 ### Data and backups
 
-Named Compose volumes hold PostgreSQL, Redis, RabbitMQ, Qdrant, Ollama, Kuzu, and SeaweedFS
-data; the Python service writes derived artifacts and the Kuzu file under its working
+Named Compose volumes hold PostgreSQL, Redis, RabbitMQ, Qdrant, Kuzu, and SeaweedFS data; native
+Ollama stores models in its host data directory. The Python service writes derived artifacts and the Kuzu file under its working
 directory. **This repository ships no backup or restore scripts.** Provide your own scheduled,
 off-host backups covering:
 
