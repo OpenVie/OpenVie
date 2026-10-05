@@ -6,7 +6,8 @@ This guide is for an operator installing OpenVie on a host they control. It docu
 configuration this repository actually delivers and the checks to run after installing it.
 
 **On this page:** [what is delivered](#1-what-this-release-delivers),
-[prerequisites](#2-prerequisites), [configuration](#3-prepare-configuration),
+[prerequisites](#2-prerequisites) and [platform notes](#platform-notes),
+[configuration](#3-prepare-configuration),
 [infrastructure](#4-start-the-infrastructure-and-native-model-service), [applications](#5-install-and-run-the-applications),
 [first-run setup](#first-run-web-setup-and-owner-recovery), [verification](#6-verification),
 [operations](#7-operating-the-stack), [rollback](#8-migrations-and-rollback),
@@ -37,12 +38,29 @@ only from the host or your internal network.
 
 | Requirement | Notes |
 | --- | --- |
-| Docker with the Compose plugin | Required for data services and the Linux/Windows-WSL2 reranker path |
+| Docker with the Compose plugin | Linux: Engine plus `docker compose version`. Windows and macOS: Docker Desktop. Required for data services and the Linux/Windows-WSL2 reranker path |
 | JDK 21 | `api/` ships Maven wrappers |
-| Python 3.11 or 3.12 | As declared in [`pyproject.toml`](../rag-chatbot-fastapi/pyproject.toml) |
+| Python 3.11 or 3.12 | As declared in [`pyproject.toml`](../rag-chatbot-fastapi/pyproject.toml). On Windows pass `PYTHON=python` or `PYTHON="py -3.11"`; the `python3.11` command name does not exist there |
 | Node.js LTS + npm | For building the web console |
-| Make and a POSIX shell | Linux/macOS directly; Windows through WSL2 |
+| Make and a POSIX shell | Linux/macOS directly; Windows through WSL2 (or Git Bash with GNU Make) |
 | Disk for models | Ollama model weights, the fastembed sparse model, and the optional TEI reranker model |
+
+### Platform notes
+
+Every command in this guide is POSIX shell syntax unless a block is marked PowerShell:
+
+| Topic | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Shell for `make`, `curl`, `sed`, `test` | `bash` or `zsh` | `zsh` | WSL2 (`wsl`) or Git Bash with GNU Make. PowerShell resolves `curl` to `Invoke-WebRequest`, so use `curl.exe` or a WSL2 shell for the health checks in [verification](#6-verification) |
+| Data services | Docker Engine plus the Compose plugin; add your user to the `docker` group | Docker Desktop | Docker Desktop with the WSL2 backend |
+| Model service | systemd unit created by the Ollama installer | Homebrew service (`launchctl`) | Per-user application started at sign-in; on a headless host run `ollama serve` under a service wrapper such as NSSM |
+| Secret generation and file permissions | `openssl rand -hex 32`, `chmod 600` | Same | Git Bash ships `openssl`; restrict `.env.production` with `icacls` or keep it in a directory only your account can read |
+| Application supervision | systemd | launchd | WSL2's systemd, or a Windows service wrapper such as NSSM or Task Scheduler |
+| Resource checks in [operations](#7-operating-the-stack) | `free -h`, `df -h` | `vm_stat`, `df -h` | Run inside WSL2 |
+
+Continuous integration runs on Linux only
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); confirm each step on your own
+platform.
 
 ## 3. Prepare configuration
 
@@ -53,12 +71,21 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 
+In PowerShell, replace the first line with
+`Copy-Item .env.production.example .env.production`. `chmod` inside WSL2 does not change
+Windows ACLs: restrict the file with `icacls`, or keep it in a directory only your account can
+read.
+
 Replace every example domain, email address, password, token, and key. Generate independent
 secrets rather than reusing one value:
 
 ```bash
 openssl rand -hex 32
 ```
+
+`openssl` ships with Git for Windows and inside WSL2; in PowerShell call `openssl.exe` from a
+Git for Windows installation. Do not substitute a non-cryptographic generator such as
+`Get-Random`.
 
 At minimum review:
 
@@ -76,7 +103,9 @@ At minimum review:
 - **Model path:** the delivered defaults use native Ollama (`LLM_PROVIDER=ollama`) with
   Arcee-VyLinh generation and BGE-M3 embeddings. The Python process reaches Ollama through
   localhost; keep `LLM_BASE_URL`, `TEXT_EMBEDDING_BASE_URL`, model identifiers, embedding
-  dimension, and Qdrant vector name aligned.
+  dimension, and Qdrant vector name aligned. On Windows, run Ollama inside the same WSL2
+  distro that runs the Python service, or verify the address from that environment first:
+  Windows and WSL2 do not share `localhost` in every networking mode.
 - **Worker mode:** `WORKER_MODE=embedded` runs the document consumer inside the Python process.
   If you start a separate consumer, set `WORKER_MODE=disabled` for the main process and never
   run both consumers at once.
@@ -101,8 +130,33 @@ Both commands must exit successfully. Fix any reported problem before continuing
 docker compose --env-file .env.production up -d --wait
 ```
 
-Install Ollama on the host and run it under the operating system's service manager. Pulling
-installs a model on disk; it does not load that model into memory:
+Install Ollama on the host — not in a container — and run it under the operating system's
+service manager:
+
+```bash
+# Linux: installs the binary and creates/enables the systemd unit
+curl -fsSL https://ollama.com/install.sh | sh
+systemctl status ollama --no-pager
+```
+
+```bash
+# macOS
+brew install ollama
+brew services start ollama
+```
+
+```powershell
+# Windows PowerShell (per-user install that starts at sign-in)
+irm https://ollama.com/install.ps1 | iex
+```
+
+The Linux installer cannot start the unit when systemd is disabled (some WSL2 setups), and the
+Windows installer starts Ollama with your user session rather than at boot. For a headless
+Windows host, run `ollama serve` under a service wrapper such as NSSM using the standalone zip
+from Ollama's Windows documentation. Ollama must be listening on `127.0.0.1:11434` before the
+host Python process starts.
+
+Pulling installs a model on disk; it does not load that model into memory:
 
 ```bash
 ollama pull bge-m3
@@ -113,9 +167,8 @@ ollama list
 ```
 
 The removal deletes only the long source tag; the `vylinh` alias retains the shared model data.
-The Ollama server must listen on `127.0.0.1:11434` before the host Python process starts. OpenVie
-loads both models on demand. A deployed service should warm both before accepting traffic and pin
-them in memory until Ollama restarts:
+OpenVie loads both models on demand. A deployed service should warm both before accepting traffic
+and pin them in memory until Ollama restarts:
 
 ```bash
 curl --fail --silent --output /dev/null http://127.0.0.1:11434/api/generate \
@@ -147,14 +200,39 @@ a queue builds. Size the model server and the worker together:
 | `GRAPH_EXTRACTION_BATCH_SIZE` | `4` | Chunks per extraction request. |
 
 Keep `INGESTION_WORKER_CONCURRENCY` at or below `OLLAMA_NUM_PARALLEL`; higher values only build a
-queue inside the model server. Set it to `1` when the model server is serial. On Apple Silicon,
-set the Ollama variables through the service manager so they survive restarts:
+queue inside the model server. Set it to `1` when the model server is serial. Set the Ollama
+variables through the platform's service manager so they survive restarts and reach the process
+that actually starts Ollama:
 
 ```bash
+# Linux (systemd): opens a drop-in override
+sudo systemctl edit ollama
+```
+
+Add this block in the editor that opens, then save:
+
+```ini
+[Service]
+Environment="OLLAMA_NUM_PARALLEL=4"
+Environment="OLLAMA_MAX_LOADED_MODELS=3"
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+```bash
+# macOS
 launchctl setenv OLLAMA_NUM_PARALLEL 4
 launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
 brew services restart ollama
 ```
+
+Windows: quit Ollama from the notification area, add `OLLAMA_NUM_PARALLEL=4` and
+`OLLAMA_MAX_LOADED_MODELS=3` as user or system environment variables, then start Ollama again.
+When `ollama serve` runs under a service wrapper, set the variables in that service's
+environment instead of your interactive session.
 
 Confirm the change on a running server by checking that concurrent requests complete together
 rather than strictly one after another, and re-run the warm-up commands so both models reload into
@@ -219,6 +297,17 @@ set -a
 set +a
 ```
 
+PowerShell cannot source a dotenv file. Run this section inside WSL2, or load plain `KEY=value`
+lines into the current PowerShell session before continuing:
+
+```powershell
+Get-Content .\.env.production | ForEach-Object {
+  if ($_ -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+    Set-Item -Path "Env:$($matches[1])" -Value $matches[2].Trim('"', "'")
+  }
+}
+```
+
 Python service (this also installs its dependencies):
 
 ```bash
@@ -241,9 +330,10 @@ npm --prefix frontend run build
 npm --prefix frontend run start
 ```
 
-Run them under your own supervisor (systemd, launchd, containers of your own construction) so
-they restart after failure and reboot. Keep their logs off-host if your retention policy
-requires it, and never log tokens, credentials, or document text.
+Run them under your own supervisor — systemd on Linux, launchd on macOS, WSL2's systemd or a
+Windows service wrapper such as NSSM or Task Scheduler on Windows, or containers of your own
+construction — so they restart after failure and reboot. Keep their logs off-host if your
+retention policy requires it, and never log tokens, credentials, or document text.
 
 The `prod` Spring profile runs Flyway with `validate-on-migrate` and Hibernate
 `ddl-auto=validate`; a schema/code mismatch stops startup instead of silently altering the
@@ -313,6 +403,9 @@ docker stats --no-stream
 free -h
 df -h
 ```
+
+`free -h` exists on Linux only: use `vm_stat` on macOS, and run these checks inside WSL2 on
+Windows.
 
 Application logs come from the processes (or supervisors) started in sections 4 and 5, including
 native Ollama and, on Apple Silicon, native TEI. Container deployments can inspect the optional

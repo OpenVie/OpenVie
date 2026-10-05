@@ -11,15 +11,36 @@ different working directory is shown.
 
 | Tool | Requirement |
 | --- | --- |
-| Git, Make, shell | Commands below use a POSIX shell; Windows users can use WSL2 |
-| Docker | Engine/Desktop running, with the Compose plugin and capacity for databases and model weights |
+| Git, Make, shell | Commands below use a POSIX shell. Linux and macOS run them natively; Windows runs them in WSL2 or another POSIX shell with GNU Make — see [platform notes](#platform-notes) |
+| Docker | Linux: Engine with the Compose plugin (`docker compose version` must succeed) and your user in the `docker` group. Windows and macOS: Docker Desktop with the Compose plugin, WSL2 backend enabled on Windows. All platforms need room for databases and model weights |
 | Java | JDK 21; the API includes Maven wrappers |
 | Python | 3.11 or 3.12, as declared in [`pyproject.toml`](../rag-chatbot-fastapi/pyproject.toml) |
 | Node.js and npm | Supported LTS; Node 22.13 or newer on the 22.x line works with the client's declared requirements |
 | TEI (optional) | Compose on Linux/Windows WSL2; native Homebrew binary on Apple Silicon |
 
-The examples use `PYTHON=python3.11`. Substitute `python3.12` consistently if that is your
-installed interpreter. Model downloads and first container builds require network access.
+Install the toolchain from your distribution's packages, a version manager (SDKMAN!, pyenv,
+nvm), or the platform installer (Homebrew, winget). The examples use `PYTHON=python3.11`.
+Substitute `python3.12` consistently if that is your installed interpreter; on Windows that
+command name does not exist, so pass `PYTHON=python` or `PYTHON="py -3.11"` instead. Model
+downloads and first container builds require network access.
+
+### Platform notes
+
+Continuous integration runs the commands below on Linux
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)); macOS and Windows reproduce the
+same steps but are not covered by CI, so confirm them on your own machine.
+
+| Topic | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| Shell for `make`, `curl`, `sed`, `test` | `bash` or `zsh` | `zsh` | WSL2 (`wsl`) or Git Bash with GNU Make. PowerShell resolves `curl` to `Invoke-WebRequest` and cannot expand Make recipe syntax such as `VAR=value command` |
+| Docker | Engine plus the Compose plugin | Docker Desktop | Docker Desktop with the WSL2 backend |
+| Checkout location | Any path | Any path | Prefer the WSL filesystem for I/O and file watching; if the checkout stays on a Windows drive, add that path to Docker Desktop's file sharing |
+| Ollama | systemd unit created by the installer | Homebrew service | Per-user Windows application started at sign-in |
+| Secrets and file permissions | `openssl`, `chmod` | `openssl`, `chmod` | Git Bash ships `openssl`; `chmod` inside WSL2 does not change Windows ACLs |
+
+Everything not listed here is identical on all three platforms: the same `.env` files, ports,
+Make targets, and health checks. When a command fails only on Windows, re-run it in WSL2 before
+changing configuration.
 
 ## Local setup
 
@@ -81,12 +102,31 @@ the graph container owns that port.
 
 ### Prepare models
 
-Run Ollama natively on the host. On Apple Silicon this keeps generation on Metal instead of
-CPU-only Docker virtualization:
+Run Ollama on the host rather than inside Docker, so generation uses the platform's own GPU
+stack instead of CPU-only container virtualization. Install it once for your platform:
 
 ```bash
+# Linux: installs the binary and creates/enables the systemd unit
+curl -fsSL https://ollama.com/install.sh | sh
+systemctl status ollama --no-pager
+```
+
+```bash
+# macOS: Apple Silicon keeps generation on Metal
 brew install ollama
 brew services start ollama
+```
+
+```powershell
+# Windows PowerShell: per-user install that starts at sign-in
+irm https://ollama.com/install.ps1 | iex
+```
+
+If systemd is disabled in your WSL2 distro, the installer cannot start the unit; run
+`ollama serve` yourself or enable systemd first. The model commands are identical on every
+platform:
+
+```bash
 ollama pull bge-m3
 ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
 ollama cp hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M vylinh
@@ -114,17 +154,56 @@ The `vylinh` alias, `bge-m3` identifier, and 1,024-dimensional embedding setting
 checked-in configuration. Keep the embedding model, dimension, and Qdrant vector name consistent
 with indexed data; changing them requires recreating the collection and re-ingesting documents.
 
+On Windows, either install Ollama inside the same WSL2 distro that runs the applications
+(`localhost` then works unchanged), or run the native Windows application and reach it from
+WSL2. `localhost` is not shared between Windows and WSL2 in every networking mode, so verify
+from inside WSL2 before starting the stack:
+
+```bash
+# Ollama installed inside WSL2:
+curl http://127.0.0.1:11434/api/tags
+# Ollama running natively on Windows, reached from WSL2 (NAT networking):
+curl http://$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf):11434/api/tags
+```
+
+Point `LLM_BASE_URL` and `TEXT_EMBEDDING_BASE_URL` at whichever address answers; on Windows 11
+with mirrored networking the host is reachable as `localhost`.
+
 #### Enable Ollama request parallelism
 
 By default Ollama serves one request at a time, so a long graph-extraction call blocks chat,
 embeddings, and every other ingestion job behind it. Allow parallel slots before benchmarking
-ingestion or chat latency:
+ingestion or chat latency. Set the variables through the platform's own mechanism so they
+survive restarts — a running server only sees variables that existed when it started.
 
 ```bash
+# Linux (systemd): opens a drop-in override
+sudo systemctl edit ollama
+```
+
+Add this block in the editor that opens, then save:
+
+```ini
+[Service]
+Environment="OLLAMA_NUM_PARALLEL=4"
+Environment="OLLAMA_MAX_LOADED_MODELS=3"
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+```bash
+# macOS
 launchctl setenv OLLAMA_NUM_PARALLEL 4
 launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
 brew services restart ollama
 ```
+
+Windows: quit Ollama from the notification area, add `OLLAMA_NUM_PARALLEL=4` and
+`OLLAMA_MAX_LOADED_MODELS=3` under *Edit environment variables for your account*, then start
+Ollama again from the Start menu.
 
 Then re-run the warm-up commands above. `ollama ps` should list both models, and the reported
 memory grows because each parallel slot holds its own KV cache. Systems without spare memory
@@ -389,6 +468,9 @@ the [deployment guide](DEPLOYMENT.md) for install verification and rollback cons
 | Invitations cannot be sent | Verify an email channel is configured in Settings or set `MAIL_PROVIDER`; invitations are refused without an enabled channel |
 | A cache behaves inconsistently | Check the flag is on in the owning service's env file; see [caches](ARCHITECTURE.md#caches) before flushing Redis |
 | Setup fails after moving the checkout | Check virtual-environment entry points and native build caches for old absolute paths |
+| Make or `sed` fails only on Windows | Re-run the command from WSL2 or Git Bash; PowerShell/cmd cannot expand `VAR=value` recipe prefixes or POSIX utilities — see [platform notes](#platform-notes) |
+| Python ready but cannot reach Ollama on Windows | `localhost` is not shared between Windows and WSL2 in every networking mode; verify with the reachability commands in [prepare models](#prepare-models) and align `LLM_BASE_URL` / `TEXT_EMBEDDING_BASE_URL` |
+| `docker compose` is missing or refuses connections on Linux | Install the Compose plugin, add your user to the `docker` group, and start a new login session so the group membership applies |
 
 Inspect local logs without exposing tokens, credentials, or document text.
 Never use destructive database resets as a generic troubleshooting step.
