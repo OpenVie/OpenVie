@@ -30,6 +30,7 @@ class ModelCompletion:
     content: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    truncated: bool = False
 
 
 @dataclass(frozen=True, slots=True)

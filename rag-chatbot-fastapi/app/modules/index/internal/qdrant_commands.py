@@ -184,6 +184,7 @@ class QdrantKnowledgeIndex:
             (self._tenant_field, models.PayloadSchemaType.KEYWORD),
             (self._knowledge_base_field, models.PayloadSchemaType.KEYWORD),
             ("document_id", models.PayloadSchemaType.KEYWORD),
+            ("table_id", models.PayloadSchemaType.KEYWORD),
             ("chunk_index", models.PayloadSchemaType.INTEGER),
         ):
             await self._client.create_payload_index(

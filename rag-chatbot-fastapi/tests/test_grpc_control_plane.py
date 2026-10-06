@@ -91,7 +91,7 @@ def request() -> pb.GenerateAnswerRequest:
         question="Question",
         prior_messages=[pb.PriorMessage(role="user", content="Earlier")],
         tenant_name="Tenant",
-        prompt_schema_version="chat-prompts-v3",
+        prompt_schema_version="chat-prompts-v4",
     )
 
 

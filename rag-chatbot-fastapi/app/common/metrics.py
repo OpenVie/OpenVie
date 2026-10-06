@@ -76,6 +76,18 @@ AI_CONTEXT_UNITS = Histogram(
     "Final cited context unit count.",
 )
 
+AI_QUERY_PLAN_SECONDS = Histogram(
+    "cacanode_ai_query_plan_seconds",
+    "Time spent rewriting a follow-up question into a standalone search query.",
+    ["outcome"],
+)
+
+AI_QUERY_PLAN_REWRITES_TOTAL = Counter(
+    "cacanode_ai_query_plan_rewrites_total",
+    "Outcome of contextual query planning for retrieval.",
+    ["outcome"],
+)
+
 CACHE_OPERATIONS_TOTAL = Counter(
     "cacanode_cache_operations_total",
     "Cache operations by controlled cache and outcome.",

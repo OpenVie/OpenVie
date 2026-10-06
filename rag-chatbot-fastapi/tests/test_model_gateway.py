@@ -312,6 +312,9 @@ async def test_qwen_output_limit_reports_finish_reason(monkeypatch: pytest.Monke
     gateway = QwenChatModel(settings(LLM_PROVIDER="qwen"))
 
     with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
+        await gateway.complete_text([{"role": "user", "content": "hello"}], max_output_tokens=16)
+
+    with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
         await gateway.complete([{"role": "user", "content": "hello"}])
 
 
@@ -319,10 +322,14 @@ async def test_qwen_output_limit_reports_finish_reason(monkeypatch: pytest.Monke
 async def test_ollama_output_limit_reports_finish_reason(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The extraction path still receives a raisable signal, with content kept for answers."""
     monkeypatch.setattr(
         "app.modules.model.internal.chat.httpx.AsyncClient", LengthLimitedOllamaClient
     )
     gateway = OllamaChatModel(settings())
+
+    with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
+        await gateway.complete_text([{"role": "user", "content": "hello"}], max_output_tokens=16)
 
     with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
         await gateway.complete([{"role": "user", "content": "hello"}])

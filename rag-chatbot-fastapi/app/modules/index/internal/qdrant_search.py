@@ -10,6 +10,7 @@ from app.modules.index.api import (
     KnowledgeIndexResult,
     NeighborQuery,
     SparseKnowledgeIndexQuery,
+    TableQuery,
 )
 
 
@@ -92,6 +93,47 @@ class QdrantKnowledgeIndexQuery:
                 and item.modality in {None, "document"}
             ),
             key=lambda item: (abs(item.chunk_index - query.chunk_index), item.chunk_index),
+        )
+
+    async def list_table_rows(self, query: TableQuery) -> list[KnowledgeIndexResult]:
+        """All units of one logical table, ordered by chunk index.
+
+        A structural table is stored as one unit per line, so its sibling rows
+        are the rest of the same table and are what a row-level question needs.
+        """
+        if not await self._client.collection_exists(self._collection):
+            return []
+        records: list[Any] = []
+        offset: Any = None
+        while True:
+            page, next_offset = await self._client.scroll(
+                collection_name=self._collection,
+                scroll_filter=self._filter(
+                    query.tenant_id,
+                    query.knowledge_base_id,
+                    query.document_ids,
+                    (
+                        models.FieldCondition(
+                            key="document_id",
+                            match=models.MatchValue(value=query.document_id),
+                        ),
+                        models.FieldCondition(
+                            key="table_id", match=models.MatchValue(value=query.table_id)
+                        ),
+                    ),
+                ),
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            records.extend(page)
+            if next_offset is None or next_offset == offset:
+                break
+            offset = next_offset
+        return sorted(
+            (item for point in records if (item := self._from_point(point))),
+            key=lambda item: item.chunk_index,
         )
 
     async def list_document_units(

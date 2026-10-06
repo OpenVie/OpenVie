@@ -190,7 +190,8 @@ three evidence channels, using a deterministic router rather than a learned clas
 
 ```mermaid
 flowchart TD
-    Query[Authenticated query and visible document scope] --> Route[Calculation then relational then exact then semantic]
+    Query[Authenticated query and visible document scope] --> Plan[Rewrite follow-up into standalone query]
+    Plan --> Route[Calculation then relational then exact then semantic]
     Route --> Dense[Dense text ranking]
     Route --> Sparse[BM25 sparse ranking]
     Route --> Graph[Entity and alias seeds]
@@ -232,9 +233,20 @@ are not benchmark-tuned constants.
 
 ## Grounding and response behavior
 
+- A follow-up turn is rewritten into one standalone search query before retrieval, using the recent
+  conversation supplied by the control plane. The rewrite runs only when the session already has a
+  user turn, is capped at `MAX_FOLLOW_UP_OUTPUT_TOKENS`, and falls back to the original question on
+  any timeout, provider error, or unusable output, so retrieval never depends on it. The answer
+  prompt also receives the bounded recent turns, so pronouns resolve during generation as well.
+- Answer instructions require complete enumeration: when the sources list items, every item is
+  reproduced with its identifier, name, and values in source order. Brevity is secondary to
+  completeness, and `LLM_MAX_OUTPUT_TOKENS` (default `512`) must leave room for the longest
+  enumeration the corpus expects.
 - Tenant-specific knowledge claims must use retrieved evidence; graph facts must reference valid source units.
 - Answers carry structured citations, not only in-text markers. The Java control plane validates citation
   document ownership, completion, knowledge-base membership, and visibility before acceptance.
+  Only sources cited by the answer are returned with it; an answer that cites nothing keeps the full
+  retrieved evidence set rather than reporting no sources.
 - An authoritative knowledge revision is checked across inference and persistence; a changed revision
   triggers one rebuilt-context retry.
 - When no context is selected, the response is the unavailable-information answer rather than a

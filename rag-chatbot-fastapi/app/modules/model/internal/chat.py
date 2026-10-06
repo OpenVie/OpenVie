@@ -29,15 +29,52 @@ class OllamaChatModel:
         self.model = settings.LLM_MODEL_ID
         self._timeout_seconds = settings.LLM_TIMEOUT_SECONDS
 
-    async def complete(self, messages: Sequence[dict[str, Any]]) -> str:
-        return (await self.complete_with_usage(messages)).content
+    async def complete(
+        self, messages: Sequence[dict[str, Any]], *, allow_truncated: bool = False
+    ) -> str:
+        return (await self.complete_with_usage(messages, allow_truncated=allow_truncated)).content
 
-    async def complete_with_usage(self, messages: Sequence[dict[str, Any]]) -> ModelCompletion:
+    async def complete_text(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int,
+        temperature: float | None = None,
+    ) -> str:
+        """Generate with a bounded output budget for auxiliary, non-answer calls."""
+        return (
+            await self._complete_with_limits(
+                messages,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+            )
+        ).content
+
+    async def complete_with_usage(
+        self, messages: Sequence[dict[str, Any]], *, allow_truncated: bool = False
+    ) -> ModelCompletion:
+        return await self._complete_with_limits(
+            messages, allow_truncated=allow_truncated
+        )
+
+    async def _complete_with_limits(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        allow_truncated: bool = False,
+    ) -> ModelCompletion:
         started_at = time.perf_counter()
         outcome = "success"
         try:
             return await asyncio.wait_for(
-                self._complete_ollama_native(messages),
+                self._complete_ollama_native(
+                    messages,
+                    max_output_tokens=max_output_tokens,
+                    temperature=temperature,
+                    allow_truncated=allow_truncated,
+                ),
                 timeout=self._timeout_seconds,
             )
         except TimeoutError as exc:
@@ -67,7 +104,14 @@ class OllamaChatModel:
                 outcome=outcome,
             ).observe(time.perf_counter() - started_at)
 
-    async def _complete_ollama_native(self, messages: Sequence[dict[str, Any]]) -> ModelCompletion:
+    async def _complete_ollama_native(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        allow_truncated: bool = False,
+    ) -> ModelCompletion:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -76,8 +120,14 @@ class OllamaChatModel:
             ],
             "stream": False,
             "options": {
-                "temperature": self._settings.LLM_TEMPERATURE,
-                "num_predict": self._settings.LLM_MAX_OUTPUT_TOKENS,
+                "temperature": (
+                    self._settings.LLM_TEMPERATURE if temperature is None else temperature
+                ),
+                "num_predict": (
+                    self._settings.LLM_MAX_OUTPUT_TOKENS
+                    if max_output_tokens is None
+                    else max_output_tokens
+                ),
             },
         }
         if self._settings.LLM_DISABLE_THINKING:
@@ -88,8 +138,20 @@ class OllamaChatModel:
             response.raise_for_status()
             data = response.json()
         if data.get("done_reason") == "length":
-            raise ModelUnavailableError(
-                "Ollama provider reached the output limit (finish_reason=length)"
+            # Extraction subdivides batches on this signal, so it always treats a
+            # length stop as a failure; only an explicit opt-in receives the
+            # partial content instead.
+            message = data.get("message")
+            content = str(message.get("content", "")) if isinstance(message, dict) else ""
+            if not (allow_truncated and content.strip()):
+                raise ModelUnavailableError(
+                    "Ollama provider reached the output limit (finish_reason=length)"
+                )
+            return ModelCompletion(
+                content=content,
+                input_tokens=_non_negative_token_count(data.get("prompt_eval_count")),
+                output_tokens=_non_negative_token_count(data.get("eval_count")),
+                truncated=True,
             )
         message = data.get("message")
         if isinstance(message, dict):
@@ -129,15 +191,50 @@ class QwenChatModel:
         self.model = settings.LLM_MODEL_ID
         self._timeout_seconds = settings.LLM_TIMEOUT_SECONDS
 
-    async def complete(self, messages: Sequence[dict[str, Any]]) -> str:
-        return (await self.complete_with_usage(messages)).content
+    async def complete(
+        self, messages: Sequence[dict[str, Any]], *, allow_truncated: bool = False
+    ) -> str:
+        return (await self.complete_with_usage(messages, allow_truncated=allow_truncated)).content
 
-    async def complete_with_usage(self, messages: Sequence[dict[str, Any]]) -> ModelCompletion:
+    async def complete_text(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int,
+        temperature: float | None = None,
+    ) -> str:
+        """Generate with a bounded output budget for auxiliary, non-answer calls."""
+        return (
+            await self._complete_with_limits(
+                messages,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+            )
+        ).content
+
+    async def complete_with_usage(
+        self, messages: Sequence[dict[str, Any]], *, allow_truncated: bool = False
+    ) -> ModelCompletion:
+        return await self._complete_with_limits(messages, allow_truncated=allow_truncated)
+
+    async def _complete_with_limits(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        allow_truncated: bool = False,
+    ) -> ModelCompletion:
         started_at = time.perf_counter()
         outcome = "success"
         try:
             return await asyncio.wait_for(
-                self._complete_qwen(messages),
+                self._complete_qwen(
+                    messages,
+                    max_output_tokens=max_output_tokens,
+                    temperature=temperature,
+                    allow_truncated=allow_truncated,
+                ),
                 timeout=self._timeout_seconds,
             )
         except (TimeoutError, httpx.TimeoutException) as exc:
@@ -160,7 +257,14 @@ class QwenChatModel:
                 outcome=outcome,
             ).observe(time.perf_counter() - started_at)
 
-    async def _complete_qwen(self, messages: Sequence[dict[str, Any]]) -> ModelCompletion:
+    async def _complete_qwen(
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        allow_truncated: bool = False,
+    ) -> ModelCompletion:
         payload = {
             "model": self.model,
             "messages": [
@@ -170,8 +274,14 @@ class QwenChatModel:
                 }
                 for message in messages
             ],
-            "temperature": self._settings.LLM_TEMPERATURE,
-            "max_tokens": self._settings.LLM_MAX_OUTPUT_TOKENS,
+            "temperature": (
+                self._settings.LLM_TEMPERATURE if temperature is None else temperature
+            ),
+            "max_tokens": (
+                self._settings.LLM_MAX_OUTPUT_TOKENS
+                if max_output_tokens is None
+                else max_output_tokens
+            ),
             "stream": False,
         }
         async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
@@ -185,8 +295,22 @@ class QwenChatModel:
             raise ModelUnavailableError("Qwen provider returned a malformed response")
         finish_reason = choices[0].get("finish_reason")
         if finish_reason == "length":
-            raise ModelUnavailableError(
-                "Qwen provider reached the output limit (finish_reason=length)"
+            # Extraction subdivides batches on this signal, so it always treats a
+            # length stop as a failure; only an explicit opt-in receives the
+            # partial content instead.
+            message = choices[0].get("message")
+            content = str(message.get("content", "")) if isinstance(message, dict) else ""
+            if not (allow_truncated and content.strip()):
+                raise ModelUnavailableError(
+                    "Qwen provider reached the output limit (finish_reason=length)"
+                )
+            usage = data.get("usage")
+            token_usage = usage if isinstance(usage, dict) else {}
+            return ModelCompletion(
+                content=content,
+                input_tokens=_non_negative_token_count(token_usage.get("prompt_tokens")),
+                output_tokens=_non_negative_token_count(token_usage.get("completion_tokens")),
+                truncated=True,
             )
         message = choices[0].get("message")
         if not isinstance(message, dict) or not isinstance(message.get("content"), str):

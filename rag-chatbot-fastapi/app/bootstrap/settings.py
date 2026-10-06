@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     LLM_MODEL_ID: str = "vylinh"
     LLM_ADAPTER_ID: str = ""
     LLM_TEMPERATURE: float = 0.2
-    LLM_MAX_OUTPUT_TOKENS: int = 1024
+    LLM_MAX_OUTPUT_TOKENS: int = 512
     LLM_TIMEOUT_SECONDS: float = 90.0
     LLM_USE_OLLAMA_NATIVE_CHAT: bool = True
     LLM_DISABLE_THINKING: bool = True
@@ -199,6 +199,8 @@ class Settings(BaseSettings):
             raise ValueError("GRAPH_EXTRACTION_BATCH_SIZE must be between 1 and 64")
         if self.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS < 64:
             raise ValueError("GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS must be at least 64")
+        if self.LLM_MAX_OUTPUT_TOKENS < 64:
+            raise ValueError("LLM_MAX_OUTPUT_TOKENS must be at least 64")
         if (
             min(
                 self.GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT,

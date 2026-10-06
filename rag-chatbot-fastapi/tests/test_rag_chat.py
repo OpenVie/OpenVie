@@ -13,7 +13,17 @@ from app.modules.generation.internal.errors import (
     ChatSessionNotFoundError,
     ChatSessionStoreUnavailableError,
 )
-from app.modules.generation.internal.models import ChatSession, RetrievedChunk
+from app.modules.generation.internal.models import (
+    AssistantMessage,
+    ChatMessage,
+    ChatSession,
+    RetrievedChunk,
+)
+from app.modules.generation.internal.query_plan import (
+    MAX_QUERY_CHARS,
+    ContextualQueryPlanner,
+    _clean_query,
+)
 from app.modules.generation.internal.sensitive_policy import (
     has_authorized_citation,
     is_sensitive_query,
@@ -202,6 +212,30 @@ class FakeChatModel:
         return "Sản phẩm được đổi trong 7 ngày [S1]."
 
 
+class ScriptedChatModel(FakeChatModel):
+    """Returns one queued answer per call, in order."""
+
+    def __init__(self, answers: list[str]) -> None:
+        super().__init__()
+        self._answers = list(answers)
+
+    async def complete(self, messages: Sequence[dict[str, object]]) -> str:
+        self.calls.append(messages)
+        if not self._answers:
+            raise AssertionError("ScriptedChatModel ran out of queued answers")
+        return self._answers.pop(0)
+
+
+class PlannerTimeoutChatModel(FakeChatModel):
+    """Times out only on the query-plan call; answers the real prompt normally."""
+
+    async def complete(self, messages: Sequence[dict[str, object]]) -> str:
+        self.calls.append(messages)
+        if "standalone search query" in str(messages[0]["content"]):
+            raise ChatModelTimeoutError("Model generation timed out")
+        return "Sản phẩm được đổi trong 7 ngày [S1]."
+
+
 class TimeoutChatModel(FakeChatModel):
     provider = "timeout-provider"
     model = "timeout-model"
@@ -231,6 +265,7 @@ def make_service(
         embedder=FakeEmbedder(),
         retriever=retriever,
         chat_model=model,
+        query_planner=ContextualQueryPlanner(model),
     )
     return service, service._sessions, retriever, model
 
@@ -302,6 +337,185 @@ async def test_employee_prompt_is_grounded_and_tenant_prompt_free() -> None:
     assert "internal assistant" in system_prompt
     assert "You answer only from the supplied sources." in system_prompt
     assert "Tenant-specific customer answer instructions" not in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_follow_up_question_is_rewritten_for_retrieval() -> None:
+    service, store, retriever, _ = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Lớp 1 và Lớp 2.",
+                score=0.9,
+            )
+        ],
+        model=ScriptedChatModel(["Các lớp công nghệ ở đây là gì?", "Câu trả lời [S1]."]),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+    store.add_user_message(session.id, "Các lớp công nghệ ở đây là gì?")
+    store.add_assistant_message(
+        session.id, AssistantMessage(role="assistant", content="Lớp 1 và Lớp 2.")
+    )
+
+    answer = await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Bạn có thể cụ thể rõ ràng hơn được không?",
+    )
+
+    assert retriever.calls[0]["query_text"] == "Các lớp công nghệ ở đây là gì?"
+    assert answer.content == "Câu trả lời [S1]."
+    assert answer.citations
+
+
+@pytest.mark.asyncio
+async def test_first_question_is_not_rewritten() -> None:
+    service, _, retriever, model = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Sản phẩm được đổi trong 7 ngày.",
+                score=0.9,
+            )
+        ],
+        model=ScriptedChatModel(["KHONG-DUOC-GOI", "Sản phẩm được đổi trong 7 ngày [S1]."]),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+
+    await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Chinh sach doi tra?",
+    )
+
+    assert retriever.calls[0]["query_text"] == "Chinh sach doi tra?"
+    assert len(model.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_query_planner_timeout_falls_back_to_original_question() -> None:
+    service, store, retriever, _ = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Sản phẩm được đổi trong 7 ngày.",
+                score=0.9,
+            )
+        ],
+        model=PlannerTimeoutChatModel(),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+    store.add_user_message(session.id, "Chinh sach doi tra?")
+
+    answer = await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Cụ thể hơn?",
+    )
+
+    assert retriever.calls[0]["query_text"] == "Cụ thể hơn?"
+    assert answer.content == "Sản phẩm được đổi trong 7 ngày [S1]."
+
+
+@pytest.mark.asyncio
+async def test_answer_citations_are_limited_to_cited_sources() -> None:
+    service, _, _, _ = make_service(
+        chunks=[
+            sensitive_chunk("doc-1"),
+            sensitive_chunk("doc-2"),
+            sensitive_chunk("doc-3"),
+        ],
+        model=FixedAnswerChatModel("Chỉ nguồn thứ hai nói điều này [S2]."),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="en", channel="EMPLOYEE_PLAYGROUND",
+    )
+
+    answer = await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="What are the opening hours?",
+    )
+
+    assert [citation.id for citation in answer.citations] == ["S2"]
+    assert [citation.document_id for citation in answer.citations] == ["doc-2"]
+
+
+@pytest.mark.asyncio
+async def test_grounded_prompt_preserves_enumerated_items() -> None:
+    service, _, _, model = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Lớp 1 đến Lớp 7.",
+                score=0.9,
+            )
+        ]
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+
+    await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Các lớp công nghệ ở đây là gì?",
+    )
+
+    system_prompt = str(model.calls[0][0]["content"])
+    assert "reproduces every item" in system_prompt
+    assert "never drop, renumber, merge, or abbreviate" in system_prompt
+    assert "three short sentences" not in system_prompt
+
+
+def test_query_plan_cleans_model_output() -> None:
+    assert _clean_query("```\nLớp công nghệ\n```") == "Lớp công nghệ"
+    assert _clean_query("Truy vấn: Lớp công nghệ") == "Lớp công nghệ"
+    assert _clean_query('"Lớp công nghệ"') == "Lớp công nghệ"
+    assert _clean_query("Lớp công nghệ\n(lý do: ngắn)") == "Lớp công nghệ"
+    assert _clean_query("   ") == ""
+    assert _clean_query("x" * (MAX_QUERY_CHARS + 1)) == ""
+
+
+class FakePlannerModel:
+    async def complete(self, messages: Sequence[dict[str, object]]) -> str:
+        del messages
+        return "Lớp công nghệ"
+
+
+@pytest.mark.asyncio
+async def test_query_planner_skips_first_turn_and_reuses_standalone_question() -> None:
+    planner = ContextualQueryPlanner(FakePlannerModel())
+    first = await planner.plan(question="Hạn gửi bài là gì?", prior_messages=())
+    assert first.query == "Hạn gửi bài là gì?"
+    assert first.replaced is False
+    assert first.outcome == "skipped"
+
+    same = await planner.plan(
+        question="Lớp công nghệ",
+        prior_messages=[ChatMessage(role="user", content="Hỏi trước đó")],
+    )
+    assert same.query == "Lớp công nghệ"
+    assert same.replaced is False
+    assert same.outcome == "unchanged"
 
 
 @pytest.mark.asyncio
@@ -676,3 +890,47 @@ async def test_sensitive_query_bypasses_semantic_cache_and_fetches_fresh_evidenc
 
     assert [citation.id for citation in answer.citations] == ["S1"]
     assert len(retriever.calls) == 1
+
+
+class TestAnswerPolish:
+    def test_placeholder_is_grounded(self) -> None:
+        from app.modules.generation.internal.answer_polish import polish_answer
+
+        polished = polish_answer(
+            "Đăng ký dự thi theo đúng quy định của BTC thông qua [Tên Trường]."
+        )
+        assert "[Tên Trường]" not in polished
+        assert "trường/thành viên đăng ký" in polished
+
+    def test_document_echo_is_removed(self) -> None:
+        from app.modules.generation.internal.answer_polish import (
+            contains_source_echo,
+            polish_answer,
+        )
+
+        raw = (
+            "Tham khảo Khung kiến trúc DX-OS từ tài liệu "
+            "e___thi_pha__n_me__m_nguo__n_mo___-_OLP_2026.docx, chunk 32."
+        )
+        assert contains_source_echo(raw)
+        polished = polish_answer(raw)
+        assert not contains_source_echo(polished)
+        assert ".docx" not in polished
+        assert "chunk 32" not in polished
+        assert "Khung kiến trúc DX-OS" in polished
+
+    def test_knowledge_markers_are_untouched(self) -> None:
+        from app.modules.generation.internal.answer_polish import polish_answer
+
+        answer = "Sản phẩm được đổi trong 7 ngày [S1]."
+        assert polish_answer(answer) == answer
+
+    def test_prose_placeholder_becomes_grounded_phrase(self) -> None:
+        from app.modules.generation.internal.answer_polish import polish_answer
+
+        polished = polish_answer(
+            "Truy cập kho mã nguồn dự thi từ "
+            "[đường dẫn truy cập kho mã nguồn chứa đầy đủ nội dung kết quả dự thi]."
+        )
+        assert "[đường dẫn" not in polished
+        assert "đường dẫn do ban tổ chức cung cấp" in polished

@@ -227,8 +227,10 @@ batch stays within the output budget. Increase the per-unit limits only with a m
 budget.
 
 
-`make dev` supplies this value through `DEV_GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS`; override that
-development variable only after measuring it against the configured timeout.
+`make dev` supplies these values through `DEV_GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` and
+`DEV_LLM_MAX_OUTPUT_TOKENS`; override a development variable only after measuring it against the
+configured timeout. `LLM_MAX_OUTPUT_TOKENS` (default `512`) is the answer budget, not the extraction
+budget: enumerations such as a seven-row reference table are truncated when it is too low.
 
 
 ### Migrate the database
@@ -393,6 +395,11 @@ On Apple Silicon, use TEI's native Metal build instead of Docker:
 brew install text-embeddings-inference
 make -C rag-chatbot-fastapi dev-reranker-native
 ```
+
+`make dev` sets `DEV_RERANKER_ENABLED=true`, so the native reranker must be running before the
+Python application starts; when it is unavailable, retrieval records a fallback metric and keeps
+the fused order, but the extra round trip is wasted. Set `DEV_RERANKER_ENABLED=false` when working
+without TEI.
 
 Keep that foreground process open, then start the Python application in another terminal with
 `DEV_RERANKER_ENABLED=true` as above. The native target binds only to `127.0.0.1:8082`.

@@ -72,6 +72,15 @@ class NeighborQuery:
 
 
 @dataclass(frozen=True, slots=True)
+class TableQuery:
+    tenant_id: str
+    knowledge_base_id: str
+    document_id: str
+    table_id: str
+    document_ids: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class KnowledgeIndexResult:
     document_id: str
     source_name: str
@@ -121,6 +130,10 @@ class KnowledgeIndexQueryApi(Protocol):
 
     async def load_neighbors(self, query: NeighborQuery) -> Sequence[KnowledgeIndexResult]: ...
 
+    async def list_table_rows(
+        self, query: TableQuery
+    ) -> Sequence[KnowledgeIndexResult]: ...
+
     async def list_document_units(
         self, tenant_id: str, document_id: str
     ) -> Sequence[KnowledgeIndexResult]: ...
@@ -140,4 +153,5 @@ __all__ = [
     "NeighborQuery",
     "ReplaceDocumentIndex",
     "SparseKnowledgeIndexQuery",
+    "TableQuery",
 ]

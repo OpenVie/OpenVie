@@ -44,7 +44,7 @@ import java.util.Locale;
 @Service
 @RequiredArgsConstructor
 public class ChatControlPlaneService {
-    private static final String PROMPT_SCHEMA_VERSION = "chat-prompts-v3";
+    private static final String PROMPT_SCHEMA_VERSION = "chat-prompts-v4";
 
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;

@@ -196,6 +196,7 @@ a queue builds. Size the model server and the worker together:
 | `OLLAMA_NUM_PARALLEL` | `4` on this host | Parallel model slots on the Ollama server. Memory grows per slot. |
 | `OLLAMA_MAX_LOADED_MODELS` | `3` on this host | Keeps both `vylinh` and `bge-m3` resident without unloading each other. |
 | `INGESTION_WORKER_CONCURRENCY` | `4` | Maximum documents a worker processes concurrently. Also the RabbitMQ prefetch count. |
+| `LLM_MAX_OUTPUT_TOKENS` | `512` | Caps generated tokens per chat answer. Must leave room for the longest enumeration the corpus expects; a low value truncates listed items. |
 | `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `512` | Caps generated tokens per extraction batch. A length-limited multi-chunk batch is subdivided; a still-length-limited single unit is omitted from the concise graph rather than failing the indexed document. |
 | `GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT` | `2` | Keeps the most central entities per knowledge unit. |
 | `GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT` | `2` | Keeps the most central grounded relations per knowledge unit. |

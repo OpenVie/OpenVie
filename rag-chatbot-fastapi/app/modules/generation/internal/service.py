@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Sequence
 from typing import Any, Protocol
 
 from app.common.metrics import AI_RAG_ANSWER_SECONDS
+from app.modules.generation.internal.answer_polish import polish_answer
 from app.modules.generation.internal.calculation import SpreadsheetCalculationCoordinator
 from app.modules.generation.internal.config import GenerationConfig
 from app.modules.generation.internal.errors import ChatModelTimeoutError, ChatSessionNotFoundError
@@ -16,6 +18,7 @@ from app.modules.generation.internal.models import (
     Citation,
     RetrievedChunk,
 )
+from app.modules.generation.internal.query_plan import ContextualQueryPlanner
 from app.modules.generation.internal.semantic_answer_cache import (
     SemanticAnswerCache,
     SemanticCacheCandidate,
@@ -33,6 +36,70 @@ logger = logging.getLogger(__name__)
 NO_INFORMATION_RESPONSE = (
     "Mình không tìm thấy thông tin phù hợp trong tài liệu đã tải lên để trả lời câu hỏi này."
 )
+
+_SYSTEM_PROMPT = (
+    "You are an internal assistant for one organization's workspace. "
+    "You answer only from the supplied sources. "
+    "If the sources do not contain the answer, say you do not know. "
+    "Cite factual claims with [S1], [S2], etc. "
+    "When the sources enumerate items (numbered layers, tiers, steps, rows, options, or fields), "
+    "answer with a list that reproduces every item exactly as the sources present it: keep each "
+    "item's number or label, its name, and the values associated with it, and never drop, "
+    "renumber, merge, or abbreviate entries. Keep prose answers short. "
+    "When the user asks to elaborate, be more specific, or give more detail, expand the previous "
+    "answer with the complete enumerated content from the sources instead of repeating a summary. "
+    "Write for the user, in a helpful and natural tone: do not copy source labels into the answer. "
+    "Never mention document names, file names, chunk numbers, or source IDs in the answer body, "
+    "and never repeat literal placeholder text such as [Tên Trường]; rephrase what the source "
+    "means instead. "
+    "Respond in the same language as the question. "
+)
+
+_CITATION = re.compile(r"\[\s*S\s*([0-9]+)\s*\]", re.IGNORECASE)
+
+_CONVERSATION_MESSAGES = 6
+_CONVERSATION_CHARS = 400
+
+
+def _render_chunk_text(chunk: RetrievedChunk) -> str:
+    """Render structural tables as markdown rows.
+
+    Structural chunking stores each table line as `header | column | column`, so
+    a whole row reads like one sentence. A small model asked to enumerate rows
+    then lists the header cells instead of the rows. Rendering the pipe table
+    back to markdown makes the row boundary explicit for any model.
+    """
+    text = chunk.text
+    if chunk.block_type != "table" or "|" not in text or "\n" not in text:
+        return text
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    rendered: list[str] = []
+    for index, line in enumerate(lines):
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) < 2:
+            rendered.append(line)
+            continue
+        if index == 0:
+            rendered.append("| " + " | ".join(cells) + " |")
+            rendered.append("| " + " | ".join("---" for _ in cells) + " |")
+        else:
+            rendered.append("| " + " | ".join(cells) + " |")
+    return "\n".join(rendered)
+
+
+def _conversation_block(conversation: Sequence[ChatMessage]) -> str:
+    """Render bounded recent turns so follow-up questions keep their referents."""
+    turns: list[str] = []
+    for message in conversation:
+        if message.role not in {"user", "assistant"}:
+            continue
+        content = " ".join(message.content.split())
+        if not content:
+            continue
+        turns.append(f"{message.role}: {content[:_CONVERSATION_CHARS]}")
+    if not turns:
+        return ""
+    return "Recent conversation:\n" + "\n".join(turns[-_CONVERSATION_MESSAGES:]) + "\n\n"
 
 
 class QueryEmbedder(Protocol):
@@ -67,6 +134,7 @@ class RagChatService:
         chat_model: ChatModel,
         calculations: SpreadsheetCalculationCoordinator | None = None,
         semantic_answer_cache: SemanticAnswerCache | None = None,
+        query_planner: ContextualQueryPlanner | None = None,
     ):
         self._settings = settings
         self._sessions = sessions
@@ -75,6 +143,7 @@ class RagChatService:
         self._chat_model = chat_model
         self._calculations = calculations
         self._semantic_answer_cache = semantic_answer_cache
+        self._query_planner = query_planner
 
     def create_session(self, **kwargs: Any) -> ChatSession:
         if self._sessions is None:
@@ -177,6 +246,7 @@ class RagChatService:
         llm_seconds = 0.0
         chunk_count = 0
         completion = ModelCompletion(content="")
+        truncated_answer = False
         llm_provider = str(getattr(self._chat_model, "provider", self._settings.LLM_PROVIDER))
         llm_model = str(getattr(self._chat_model, "model", self._settings.LLM_MODEL_ID))
 
@@ -231,13 +301,36 @@ class RagChatService:
                 if semantic_cache.mode == "shadow" and shadow_candidate is None:
                     shadow_candidate = semantic_candidate
 
+            retrieval_query = content
+            if self._query_planner is not None:
+                plan = await self._query_planner.plan(
+                    question=content, prior_messages=prior_messages
+                )
+                if plan.replaced:
+                    retrieval_query = plan.query
+                    embedding_started_at = time.perf_counter()
+                    embedding_outcome = "success"
+                    try:
+                        query_vector = await self._embedder.embed_query(retrieval_query)
+                    except Exception:
+                        embedding_outcome = "error"
+                        outcome = "error"
+                        raise
+                    finally:
+                        embedding_seconds += time.perf_counter() - embedding_started_at
+                        AI_RAG_ANSWER_SECONDS.labels(
+                            stage="embedding",
+                            provider=llm_provider,
+                            outcome=embedding_outcome,
+                        ).observe(embedding_seconds)
+
             retrieval_started_at = time.perf_counter()
             retrieval_outcome = "success"
             try:
                 chunks = await self._retrieve(
                     tenant_id=tenant_id,
                     knowledge_base_id=session.knowledge_base_id,
-                    query_text=content,
+                    query_text=retrieval_query,
                     query_vector=query_vector,
                     authoritative_revision=session.authoritative_revision,
                 )
@@ -298,9 +391,12 @@ class RagChatService:
                         citations=citations,
                         calculation_context=calculation_text,
                         sensitive_instruction=sensitive_instruction,
-                    )
+                        conversation=prior_messages,
+                    ),
+                    allow_truncated=True,
                 )
                 raw_answer = completion.content.strip()
+                truncated_answer = completion.truncated
             except (ModelTimeoutError, ChatModelTimeoutError):
                 llm_outcome = "timeout"
                 outcome = "timeout"
@@ -317,12 +413,20 @@ class RagChatService:
                     outcome=llm_outcome,
                 ).observe(llm_seconds)
 
-            answer = raw_answer
+            answer = polish_answer(raw_answer)
+            if truncated_answer and sensitive_query:
+                # A cut-off enumeration must not be presented as complete, and a
+                # partial sensitive answer cannot be re-grounded safely.
+                raise ChatModelTimeoutError("Model generation truncated")
             if sensitive_query and not has_authorized_citation(
                 answer, {citation.id for citation in citations}
             ):
                 return AssistantMessage(role="assistant", content=NO_INFORMATION_RESPONSE)
-            message = AssistantMessage(role="assistant", content=answer, citations=citations)
+            message = AssistantMessage(
+                role="assistant",
+                content=answer,
+                citations=self._cited_citations(answer, citations),
+            )
             if (
                 cache_context is not None
                 and semantic_cache is not None
@@ -384,14 +488,25 @@ class RagChatService:
                 },
             )
 
-    async def _complete_with_usage(self, messages: Sequence[dict[str, object]]) -> ModelCompletion:
+    async def _complete_with_usage(
+        self,
+        messages: Sequence[dict[str, object]],
+        *,
+        allow_truncated: bool = False,
+    ) -> ModelCompletion:
         method = getattr(self._chat_model, "complete_with_usage", None)
         if callable(method):
-            result = await method(messages)
+            try:
+                result = await method(messages, allow_truncated=allow_truncated)
+            except TypeError as exc:
+                if "allow_truncated" not in str(exc):
+                    raise
+                result = await method(messages)
             if isinstance(result, ModelCompletion):
                 return result
             raise TypeError("complete_with_usage must return ModelCompletion")
-        return ModelCompletion(content=await self._chat_model.complete(messages))
+        content = await self._chat_model.complete(messages)
+        return ModelCompletion(content=content)
 
     async def _retrieve(self, **kwargs: Any) -> list[RetrievedChunk]:
         try:
@@ -410,35 +525,42 @@ class RagChatService:
         citations: list[Citation],
         calculation_context: str | None = None,
         sensitive_instruction: str = "",
+        conversation: Sequence[ChatMessage] = (),
     ) -> list[dict[str, object]]:
         sources = "\n\n".join(
             f"[{citation.id}] {chunk.source_name}"
             f"{', page ' + str(chunk.page_number) if chunk.page_number is not None else ''}, "
-            f"chunk {chunk.chunk_index}\n{chunk.text}"
+            f"chunk {chunk.chunk_index}\n{_render_chunk_text(chunk)}"
             for chunk, citation in zip(chunks, citations, strict=True)
         )
+        transcript = _conversation_block(conversation)
         return [
             {
                 "role": "system",
-                "content": (
-                    "You are an internal assistant for one organization's workspace. "
-                    "You answer only from the supplied sources. "
-                    "If the sources do not contain the answer, say you do not know. "
-                    "Cite factual claims with [S1], [S2], etc. "
-                    "Keep the answer concise, with at most three short sentences. "
-                    "Respond in the same language as the question. "
-                    f"{sensitive_instruction}"
-                ),
+                "content": f"{_SYSTEM_PROMPT}{sensitive_instruction}",
             },
             {
                 "role": "user",
                 "content": (
+                    f"{transcript}"
                     f"Sources:\n{sources}\n\n"
                     f"{calculation_context + chr(10) + chr(10) if calculation_context else ''}"
                     f"Question:\n{question}"
                 ),
             },
         ]
+
+    def _cited_citations(
+        self, answer: str, citations: list[Citation]
+    ) -> list[Citation]:
+        """Keep the sources the answer actually cites, in offered order.
+
+        Uncited answers keep every offered source: the panel is labelled as the
+        retrieved evidence, and dropping it would hide the evidence used.
+        """
+        mentioned = {f"S{number}".upper() for number in _CITATION.findall(answer)}
+        cited = [citation for citation in citations if citation.id.upper() in mentioned]
+        return cited or citations
 
     def _citations(self, chunks: list[RetrievedChunk]) -> list[Citation]:
         return [
@@ -465,4 +587,5 @@ class RagChatService:
         normalized = " ".join(text.split())
         if len(normalized) <= 220:
             return normalized
-        return f"{normalized[:217].rstrip()}..."
+        cut = normalized[:217].rsplit(" ", 1)[0].rstrip(",.;:")
+        return f"{cut}..."

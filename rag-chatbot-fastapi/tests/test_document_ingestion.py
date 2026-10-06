@@ -304,6 +304,7 @@ async def test_qdrant_adapter_creates_collection_and_upserts_payloads() -> None:
         "tenant_id",
         "knowledge_base_id",
         "document_id",
+        "table_id",
         "chunk_index",
     }
 

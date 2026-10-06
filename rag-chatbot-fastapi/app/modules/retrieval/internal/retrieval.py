@@ -23,6 +23,7 @@ from app.modules.index.api import (
     KnowledgeIndexQueryApi,
     NeighborQuery,
     SparseKnowledgeIndexQuery,
+    TableQuery,
 )
 from app.modules.model.api import SparseEmbeddingApi, TextEmbeddingApi
 from app.modules.retrieval.api import (
@@ -329,6 +330,35 @@ class HybridRetriever:
             AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component="reranker").inc()
             return candidates
 
+    async def _related_table_rows(
+        self,
+        *,
+        tenant_id: str,
+        knowledge_base_id: str,
+        item: RetrievedChunk,
+        excluded: set[tuple[str, str]],
+        document_ids: Sequence[str] | None,
+    ) -> list[RetrievedChunk]:
+        if self._index is None or not item.table_id or item.modality == "spreadsheet":
+            return []
+        query = getattr(self._index, "list_table_rows", None)
+        if not callable(query):
+            return []
+        rows = await query(
+            TableQuery(
+                tenant_id=tenant_id,
+                knowledge_base_id=knowledge_base_id,
+                document_id=item.document_id,
+                table_id=item.table_id,
+                document_ids=(tuple(document_ids) if document_ids is not None else None),
+            )
+        )
+        return [
+            row
+            for row in (_retrieved(value) for value in rows)
+            if _identity(row) not in excluded
+        ]
+
     async def _expand_neighbors(
         self,
         *,
@@ -369,6 +399,14 @@ class HybridRetriever:
                         )
                     )
                     neighbors = [_retrieved(row) for row in rows]
+                    related = await self._related_table_rows(
+                        tenant_id=tenant_id,
+                        knowledge_base_id=knowledge_base_id,
+                        item=item,
+                        excluded=seen,
+                        document_ids=document_ids,
+                    )
+                    neighbors.extend(related)
             except Exception:
                 AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component="neighbors").inc()
                 continue

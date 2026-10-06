@@ -21,6 +21,7 @@ from app.modules.generation.internal.generator import (
     GenerationRetrievalAdapter,
     GenerationService,
 )
+from app.modules.generation.internal.query_plan import ContextualQueryPlanner
 from app.modules.generation.internal.semantic_answer_cache import SemanticAnswerCache
 from app.modules.generation.internal.service import RagChatService
 from app.modules.graph.internal.service import GraphServiceClient
@@ -91,6 +92,7 @@ class RagRuntime:
                 create_chat_model(model_settings),
             ),
             semantic_answer_cache=semantic,
+            query_planner=ContextualQueryPlanner(chat_model),
         )
         return cls(
             generation=GenerationService(
