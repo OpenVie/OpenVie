@@ -8,6 +8,10 @@ import type {
 export function getApiBase(): string {
   const canonical = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (canonical) {
+    if (typeof window === "undefined" && canonical.startsWith("/")) {
+      const internal = process.env.API_INTERNAL_URL || "http://localhost:8080";
+      return `${internal.replace(/\/$/, "")}${canonical.replace(/\/$/, "")}`;
+    }
     return canonical.replace(/\/$/, "");
   }
 
