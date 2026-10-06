@@ -233,6 +233,26 @@ class AuthServiceImplTest {
                 () -> service.switchWorkspace(workspaceB, "old", new MockHttpServletResponse()));
         verify(refreshTokens, never()).save(any());
     }
+    @Test
+    void switchWorkspaceWithAuthenticatedUserIdWhenCookieMissingSucceeds() {
+        when(identity.findUserById(userId)).thenReturn(identitySnapshot());
+        when(identity.requireMembership(userId, workspaceB))
+                .thenReturn(membership(workspaceB, WorkspaceRole.MEMBER));
+
+        AuthResponse result = service.switchWorkspace(
+                workspaceB, null, userId, new MockHttpServletResponse());
+
+        assertEquals(workspaceB.toString(), result.getUser().getActiveWorkspaceId());
+        assertEquals("MEMBER", result.getUser().getWorkspaceRole());
+        verify(refreshTokens).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void switchWorkspaceWithNeitherTokenNorUserIdThrowsUnauthorized() {
+        assertThrows(UnauthorizedException.class,
+                () -> service.switchWorkspace(workspaceB, null, null, new MockHttpServletResponse()));
+        verify(refreshTokens, never()).save(any());
+    }
 
     @Test
     void logoutRevokesOnlyThePresentedTokenHash() {

@@ -1,10 +1,13 @@
 package com.cacanode.api.tenant.controller;
 
 import com.cacanode.api.common.controller.BaseController;
+import com.cacanode.api.tenant.dto.UserManagementDtos.AddMemberToWorkspaceRequest;
+import com.cacanode.api.tenant.dto.UserManagementDtos.CreateUserRequest;
 import com.cacanode.api.tenant.dto.UserManagementDtos.DirectoryResponse;
 import com.cacanode.api.tenant.dto.UserManagementDtos.InvitationResponse;
 import com.cacanode.api.tenant.dto.UserManagementDtos.InviteRequest;
 import com.cacanode.api.tenant.dto.UserManagementDtos.MemberResponse;
+import com.cacanode.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
 import com.cacanode.api.tenant.dto.UserManagementDtos.PasswordResetRequest;
 import com.cacanode.api.tenant.dto.UserManagementDtos.RoleUpdateRequest;
 import com.cacanode.api.tenant.dto.UserManagementDtos.StatusUpdateRequest;
@@ -24,13 +27,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Member directory and invitations for the caller's ACTIVE workspace. Admin
- * authority is enforced twice on purpose: the annotation checks the granted
- * role, and each service call re-resolves membership from the database.
+ * Workspace member and invitation management for the caller's active workspace.
+ * Mutations resolve live membership again in the service, including the
+ * public-workspace rule for regular members.
  */
 @RestController
 @RequestMapping({"/api/v1/users", "/api/users"})
@@ -92,5 +95,30 @@ public class UserController extends BaseController {
         userManagementService.setMemberPassword(
                 getTenantId(request), getUserId(request), userId, body.password());
         return ResponseEntity.noContent().build();
+    }
+    @PostMapping("/members")
+    public ResponseEntity<MemberResponse> addMember(
+            @Valid @RequestBody AddMemberToWorkspaceRequest body,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                userManagementService.addMember(
+                        getTenantId(request), getUserId(request), body.email(), body.role()));
+    }
+
+    @GetMapping("/organization")
+    @PreAuthorize("hasRole('ORG_OWNER')")
+    public List<OrganizationMemberResponse> organizationMembers(HttpServletRequest request) {
+        return userManagementService.getOrganizationMembers(
+                getOrgId(request), getTenantId(request), getUserId(request));
+    }
+
+    @PostMapping("/organization")
+    @PreAuthorize("hasRole('ORG_OWNER')")
+    public ResponseEntity<OrganizationMemberResponse> createOrganizationUser(
+            @Valid @RequestBody CreateUserRequest body,
+            HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                userManagementService.createOrganizationUser(
+                        getOrgId(request), getTenantId(request), getUserId(request), body));
     }
 }

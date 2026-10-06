@@ -283,11 +283,11 @@
   },
   "Users": {
     "title": "Team members",
-    "description": "Manage members and pending invitations for your workspace.",
+    "description": "Manage members of this workspace.",
     "inviteUser": "Invite user",
     "retry": "Retry",
     "empty": "No team members yet",
-    "emptyDescription": "Invite your first team member to get started.",
+    "emptyDescription": "Add an existing organization member to get started.",
     "validEmail": "Enter a valid email address",
     "invitationSent": "Invitation sent to {email}",
     "roleUpdated": "Role updated",
@@ -311,7 +311,7 @@
     "sending": "Sending…",
     "sendInvitation": "Send invitation",
     "roles": {
-      "admin": "Tenant Admin",
+      "admin": "Workspace Admin",
       "user": "Member"
     },
     "statuses": {
@@ -333,7 +333,30 @@
       "status": "Unable to update status",
       "resend": "Unable to resend invitation",
       "cancel": "Unable to cancel invitation",
-      "password": "Unable to set the password"
+      "password": "Unable to set the password",
+      "addMember": "Unable to add member to workspace",
+      "createUser": "Unable to create user account"
+    },
+    "addToWorkspace": "Add to workspace",
+    "addToWorkspaceTitle": "Add member to workspace",
+    "memberAdded": "Member added to workspace",
+    "addMember": "Add member",
+    "tabs": {
+      "workspace": "Workspace Members",
+      "organization": "Organization Members"
+    },
+    "createUser": "Create user",
+    "createUserTitle": "Create organization user",
+    "fullName": "Full name",
+    "initialPassword": "Password",
+    "initialPasswordHint": "The user must change this password at their first sign-in.",
+    "existingMemberHint": "The user must already have an account in this organization.",
+    "organizationDescription": "Manage all accounts in this organization.",
+    "orgRole": "Organization role",
+    "userCreated": "User account created",
+    "orgRoles": {
+      "owner": "Owner",
+      "member": "Member"
     },
     "setPassword": "Set password",
     "setPasswordHint": "Set an initial password; the member must change it on next login",

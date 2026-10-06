@@ -82,7 +82,9 @@ class Settings(BaseSettings):
     GRAPH_INTERNAL_TOKEN: str = "development-graph-token"
     GRAPH_TIMEOUT_SECONDS: float = 30.0
     GRAPH_EXTRACTION_BATCH_SIZE: int = 4
-    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 4_096
+    GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: int = 512
+    GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT: int = 2
+    GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT: int = 2
     GRAPH_EXTRACTION_REASONING_EFFORT: Literal["low", "medium", "high"] = "low"
     PARSER_VERSION: str = "digital-v1"
     CHUNKER_VERSION: str = "structural-v2"
@@ -197,6 +199,14 @@ class Settings(BaseSettings):
             raise ValueError("GRAPH_EXTRACTION_BATCH_SIZE must be between 1 and 64")
         if self.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS < 64:
             raise ValueError("GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS must be at least 64")
+        if (
+            min(
+                self.GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT,
+                self.GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT,
+            )
+            < 1
+        ):
+            raise ValueError("Graph extraction per-unit limits must be at least 1")
         if not 0 <= self.CACHE_TTL_JITTER_PERCENT <= 100:
             raise ValueError("CACHE_TTL_JITTER_PERCENT must be between 0 and 100")
         if self.EMBEDDING_CACHE_TTL_SECONDS <= 0:

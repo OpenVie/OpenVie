@@ -45,6 +45,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.security.cookie-secure:false}")
     private boolean cookieSecure;
 
+    @Value("${app.security.cookie-same-site:Lax}")
+    private String cookieSameSite = "Lax";
+
     private final TenantIdentityApi identityApi;
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
@@ -74,14 +77,38 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse switchWorkspace(
             UUID workspaceId, String refreshToken, HttpServletResponse response) {
-        if (refreshToken == null || refreshToken.isBlank()) {
+        return switchWorkspace(workspaceId, refreshToken, null, response);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse switchWorkspace(
+            UUID workspaceId, String refreshToken, UUID authenticatedUserId, HttpServletResponse response) {
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            try {
+                StoredCredential stored = consumeRefresh(refreshToken);
+                MembershipSnapshot membership =
+                        identityApi.requireMembership(stored.identity().userId(), workspaceId);
+                CredentialPair credentials = issueCredentials(
+                        stored.identity(), workspaceId, membership.workspaceRole(), stored.persistent());
+                return deliver(credentials, response);
+            } catch (UnauthorizedException e) {
+                if (authenticatedUserId == null) {
+                    throw e;
+                }
+            }
+        }
+        if (authenticatedUserId == null) {
             throw new UnauthorizedException("Refresh token missing");
         }
-        StoredCredential stored = consumeRefresh(refreshToken);
+        IdentitySnapshot identity = identityApi.findUserById(authenticatedUserId);
+        if (identity == null) {
+            throw new UnauthorizedException("Session is no longer valid");
+        }
         MembershipSnapshot membership =
-                identityApi.requireMembership(stored.identity().userId(), workspaceId);
+                identityApi.requireMembership(authenticatedUserId, workspaceId);
         CredentialPair credentials = issueCredentials(
-                stored.identity(), workspaceId, membership.workspaceRole(), stored.persistent());
+                identity, workspaceId, membership.workspaceRole(), true);
         return deliver(credentials, response);
     }
 
@@ -193,7 +220,7 @@ public class AuthServiceImpl implements AuthService {
                 .secure(cookieSecure)
                 .path("/api")
                 .maxAge(maxAge)
-                .sameSite("Strict")
+                .sameSite(cookieSameSite)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 
@@ -210,7 +237,7 @@ public class AuthServiceImpl implements AuthService {
         ResponseCookie cookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("Strict")
+                .sameSite(cookieSameSite)
                 .path("/api")
                 .maxAge(0)
                 .build();

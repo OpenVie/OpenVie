@@ -14,7 +14,9 @@ Start with the guide for your task.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): capability modules, transports, and runtime roles.
    - [Web development and checks](DEVELOPMENT.md#start-the-applications).
 5. Consult the feature reference only when your change needs it.
-6. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before exporting a public repository.
+6. Read the [DX-OS / Open-Core mapping](DX_OS.md) before presenting or comparing this repository
+   with the three-tier DX-OS architecture.
+7. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before exporting a public repository.
 
 ## Guides by task
 
@@ -24,7 +26,9 @@ Start with the guide for your task.
 | Understand service ownership, storage, security, or runtime sequences | [Architecture](ARCHITECTURE.md) |
 | Change document parsing, indexing, models, or retrieval | [Ingestion and retrieval](RETRIEVAL.md) |
 | Configure a self-hosted release or plan verification and recovery | [Deployment](DEPLOYMENT.md) |
+| Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
+| Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
 
 ## What belongs where
 

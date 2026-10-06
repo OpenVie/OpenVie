@@ -52,7 +52,6 @@ class PreparedDocument:
     parsed: ParsedDocument
     chunks: tuple[TextChunk, ...]
     artifacts: tuple[SpreadsheetArtifact, ...]
-    index_command: ReplaceDocumentIndex
 
 
 class DocumentIngestionPipeline(IngestionApi):
@@ -123,27 +122,11 @@ class DocumentIngestionPipeline(IngestionApi):
             knowledge_base_id=event.knowledge_base_id,
             document_id=event.document_id,
         )
-        chunk_texts = [chunk.text for chunk in chunks]
-        embeddings, sparse_embeddings = await asyncio.gather(
-            self._embedder.embed_documents(chunk_texts),
-            self._sparse_encoder.embed_documents(chunk_texts),
-        )
         return PreparedDocument(
             command=event,
             parsed=parsed,
             chunks=tuple(chunks),
             artifacts=artifacts,
-            index_command=ReplaceDocumentIndex(
-                tenant_id=event.tenant_id,
-                knowledge_base_id=event.knowledge_base_id,
-                document_id=event.document_id,
-                source_name=event.file_name,
-                units=tuple(_index_unit(chunk) for chunk in chunks),
-                dense_vectors=tuple(tuple(vector) for vector in embeddings),
-                sparse_vectors=tuple(
-                    IndexSparseVector(item.indices, item.values) for item in sparse_embeddings
-                ),
-            ),
         )
 
     async def replace_artifacts(self, prepared: PreparedDocument) -> None:
@@ -157,7 +140,25 @@ class DocumentIngestionPipeline(IngestionApi):
         )
 
     async def replace_index(self, prepared: PreparedDocument) -> None:
-        await self._vector_store.replace_document(prepared.index_command)
+        event = prepared.command
+        chunk_texts = [chunk.text for chunk in prepared.chunks]
+        embeddings, sparse_embeddings = await asyncio.gather(
+            self._embedder.embed_documents(chunk_texts),
+            self._sparse_encoder.embed_documents(chunk_texts),
+        )
+        await self._vector_store.replace_document(
+            ReplaceDocumentIndex(
+                tenant_id=event.tenant_id,
+                knowledge_base_id=event.knowledge_base_id,
+                document_id=event.document_id,
+                source_name=event.file_name,
+                units=tuple(_index_unit(chunk) for chunk in prepared.chunks),
+                dense_vectors=tuple(tuple(vector) for vector in embeddings),
+                sparse_vectors=tuple(
+                    IndexSparseVector(item.indices, item.values) for item in sparse_embeddings
+                ),
+            )
+        )
 
     async def replace_graph(self, prepared: PreparedDocument) -> None:
         event = prepared.command

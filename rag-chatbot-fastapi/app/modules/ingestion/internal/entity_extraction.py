@@ -50,17 +50,26 @@ class EntityRelationExtractor:
         model: ChatModelApi,
         *,
         batch_size: int = 12,
-        output_limit_retries: int = 1,
+        output_limit_retries: int = 0,
         max_concurrency: int = 4,
+        max_entities_per_unit: int = 2,
+        max_relations_per_unit: int = 2,
     ) -> None:
         if output_limit_retries < 0:
             raise ValueError("output_limit_retries must be non-negative")
         if max_concurrency < 1:
             raise ValueError("max_concurrency must be at least 1")
+        if max_entities_per_unit < 1:
+            raise ValueError("max_entities_per_unit must be at least 1")
+        if max_relations_per_unit < 1:
+            raise ValueError("max_relations_per_unit must be at least 1")
         self._model = model
         self._batch_size = batch_size
         self._output_limit_retries = output_limit_retries
         self._max_concurrency = max_concurrency
+        self._max_entities_per_unit = max_entities_per_unit
+        self._max_relations_per_unit = max_relations_per_unit
+        self._prompt = _extraction_prompt(max_entities_per_unit, max_relations_per_unit)
 
     async def extract(
         self, event: IngestDocumentCommand, chunks: Sequence[TextChunk]
@@ -86,7 +95,17 @@ class EntityRelationExtractor:
                 async with semaphore:
                     return await self._extract_batch(batch_slice)
 
-            batch_results = await asyncio.gather(*(_extract_bounded(s) for s in slices))
+            tasks = [
+                asyncio.create_task(_extract_bounded(batch_slice))
+                for batch_slice in slices
+            ]
+            try:
+                batch_results = await asyncio.gather(*tasks)
+            except BaseException:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
 
         entities: list[_EntityMention] = []
         relations: list[_EvidenceRelation] = []
@@ -94,7 +113,11 @@ class EntityRelationExtractor:
             entities.extend(batch_entities)
             relations.extend(batch_relations)
         entities, relations = _filter_grounded_extraction(
-            units, _deduplicate_entities(entities), _deduplicate_relations(relations)
+            units,
+            _deduplicate_entities(entities),
+            _deduplicate_relations(relations),
+            max_entities_per_unit=self._max_entities_per_unit,
+            max_relations_per_unit=self._max_relations_per_unit,
         )
         return GraphBatch(
             tenant_id=str(event.tenant_id),
@@ -129,7 +152,7 @@ class EntityRelationExtractor:
         try:
             raw = await self._model.complete(
                 [
-                    {"role": "system", "content": _EXTRACTION_PROMPT},
+                    {"role": "system", "content": self._prompt},
                     {
                         "role": "user",
                         "content": json.dumps(
@@ -156,9 +179,7 @@ class EntityRelationExtractor:
                     return await self._extract_batch(
                         selected, output_limit_attempt=output_limit_attempt + 1
                     )
-                raise PermanentIngestionFailure(
-                    "Graph extraction exceeded the configured model output limit"
-                ) from exc
+                return [], []
             raise TransientIngestionFailure("Graph extraction model request failed") from exc
         try:
             payload = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip()))
@@ -246,21 +267,58 @@ def _deduplicate_relations(relations: Sequence[_EvidenceRelation]) -> list[_Evid
     return list(unique.values())
 
 
+def _limit_entities_per_unit(
+    entities: Sequence[_EntityMention], limit: int
+) -> list[_EntityMention]:
+    counts: dict[str, int] = {}
+    limited: list[_EntityMention] = []
+    for entity in entities:
+        count = counts.get(entity.evidence_unit_id, 0)
+        if count >= limit:
+            continue
+        counts[entity.evidence_unit_id] = count + 1
+        limited.append(entity)
+    return limited
+
+
+def _limit_relations_per_unit(
+    relations: Sequence[_EvidenceRelation], limit: int
+) -> list[_EvidenceRelation]:
+    counts: dict[str, int] = {}
+    limited: list[_EvidenceRelation] = []
+    for relation in relations:
+        count = counts.get(relation.evidence_unit_id, 0)
+        if count >= limit:
+            continue
+        counts[relation.evidence_unit_id] = count + 1
+        limited.append(relation)
+    return limited
+
+
 def _filter_grounded_extraction(
     units: Sequence[GraphUnit],
     entities: Sequence[_EntityMention],
     relations: Sequence[_EvidenceRelation],
+    *,
+    max_entities_per_unit: int,
+    max_relations_per_unit: int,
 ) -> tuple[list[_EntityMention], list[_EvidenceRelation]]:
     unit_ids = {unit.unit_id for unit in units}
-    grounded_entities = [entity for entity in entities if entity.evidence_unit_id in unit_ids]
+    grounded_entities = _limit_entities_per_unit(
+        [entity for entity in entities if entity.evidence_unit_id in unit_ids],
+        max_entities_per_unit,
+    )
     entity_names = {entity.normalized_name for entity in grounded_entities}
-    return grounded_entities, [
+    grounded_relations = [
         relation
         for relation in relations
         if relation.evidence_unit_id in unit_ids
         and relation.subject_normalized_name in entity_names
         and relation.object_normalized_name in entity_names
     ]
+    return grounded_entities, _limit_relations_per_unit(
+        grounded_relations, max_relations_per_unit
+    )
 
 
 def _unit_payload(chunk: TextChunk) -> dict[str, Any]:
@@ -274,8 +332,12 @@ def _unit_payload(chunk: TextChunk) -> dict[str, Any]:
     }
 
 
-_EXTRACTION_PROMPT = """You extract only facts explicitly supported by the supplied knowledge units.
+def _extraction_prompt(max_entities_per_unit: int, max_relations_per_unit: int) -> str:
+    return f"""You extract only facts explicitly supported by the supplied knowledge units.
 Return exactly one JSON object with two array fields: "entities" and "relations".
+For each supplied knowledge unit, emit at most {max_entities_per_unit} entities and at most
+{max_relations_per_unit} relations. Prefer central, document-useful facts; omit lower-priority
+facts instead of explaining them.
 Each entity must have non-empty name, normalized_name, entity_type, and evidence_unit_id strings,
 plus an aliases array. Each relation must have non-empty subject_normalized_name, predicate,
 object_normalized_name, and evidence_unit_id strings. Omit any item whose required fields cannot

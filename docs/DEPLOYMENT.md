@@ -11,23 +11,23 @@ configuration this repository actually delivers and the checks to run after inst
 [infrastructure](#4-start-the-infrastructure-and-native-model-service), [applications](#5-install-and-run-the-applications),
 [first-run setup](#first-run-web-setup-and-owner-recovery), [verification](#6-verification),
 [operations](#7-operating-the-stack), [rollback](#8-migrations-and-rollback),
-[gRPC](#9-internal-grpc-transport).
+[edge gateway](#9-edge-gateway-apache-apisix), [gRPC](#10-internal-grpc-transport).
 
 ## 1. What this release delivers
 
 | Delivered | Notes |
 | --- | --- |
-| [`docker-compose.yml`](../docker-compose.yml) | The only Compose file. Starts PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, and the Kuzu graph service, with an optional `reranker` profile |
+| [`docker-compose.yml`](../docker-compose.yml) | The only Compose file. Starts PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, the Kuzu graph service, and the [Apache APISIX edge gateway](#9-edge-gateway-apache-apisix), with an optional `reranker` profile |
 | Spring API (`api/`) | Runs on the host under `make -C api`; Flyway migrates at startup |
 | Python AI/chat service (`rag-chatbot-fastapi/`) | Runs on the host under `make -C rag-chatbot-fastapi`; embeds the document worker by default |
 | Web console (`frontend/`) | Built and served with npm |
 | [`.env.production.example`](../.env.production.example) | Configuration template for all of the above |
 
-**Not delivered in this release:** production ingress (TLS termination, reverse proxy, edge
-rate limiting), deployment/backup/restore scripts, and any hosted-operations configuration.
-Those are operator-owned: put your own proxy in front of the console and API, and choose your
-own process supervisor, log pipeline, and backup tooling. `.github/workflows/ci.yml` runs
-checks only and never deploys.
+**Not delivered in this release:** TLS termination and domain configuration, a web-application
+firewall, malware scanning of uploads, deployment/backup/restore scripts, and any
+hosted-operations configuration. Those are operator-owned: terminate TLS in front of the
+[edge gateway](#9-edge-gateway-apache-apisix), and choose your own process supervisor, log
+pipeline, and backup tooling. `.github/workflows/ci.yml` runs checks only and never deploys.
 
 The shipped Compose file publishes development-style ports on the host. Before a deployment
 reachable from other machines, close or firewall every port you do not intend to expose and
@@ -196,7 +196,9 @@ a queue builds. Size the model server and the worker together:
 | `OLLAMA_NUM_PARALLEL` | `4` on this host | Parallel model slots on the Ollama server. Memory grows per slot. |
 | `OLLAMA_MAX_LOADED_MODELS` | `3` on this host | Keeps both `vylinh` and `bge-m3` resident without unloading each other. |
 | `INGESTION_WORKER_CONCURRENCY` | `4` | Maximum documents a worker processes concurrently. Also the RabbitMQ prefetch count. |
-| `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `4096` | Caps generated tokens per extraction batch; dense tables and multi-chunk batches can generate up to 2,000–3,000 tokens of structured JSON. |
+| `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` | `512` | Caps generated tokens per extraction batch. A length-limited multi-chunk batch is subdivided; a still-length-limited single unit is omitted from the concise graph rather than failing the indexed document. |
+| `GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT` | `2` | Keeps the most central entities per knowledge unit. |
+| `GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT` | `2` | Keeps the most central grounded relations per knowledge unit. |
 | `GRAPH_EXTRACTION_BATCH_SIZE` | `4` | Chunks per extraction request. |
 
 Keep `INGESTION_WORKER_CONCURRENCY` at or below `OLLAMA_NUM_PARALLEL`; higher values only build a
@@ -461,7 +463,55 @@ ingestion. Enable it only for the intended maintenance start, watch ingestion ou
 remove the flag afterwards so later restarts do not enqueue again. It is not a schema
 migration tool for the graph store.
 
-## 9. Internal gRPC transport
+## 9. Edge gateway (Apache APISIX)
+
+`docker compose up -d --wait` also starts **Apache APISIX** as the single HTTP entry point on
+`127.0.0.1:${APISIX_PORT:-8088}`. Configuration lives in
+[`apisix/config.yaml`](../apisix/config.yaml) and [`apisix/routes.yaml`](../apisix/routes.yaml);
+APISIX runs in standalone YAML mode (`APISIX_STAND_ALONE=true`), so there is no etcd, no control
+plane and no Admin API to secure. The port `Caddyfile.dev` used for its one-line development
+shim is the same one, so run either Caddy or APISIX on it, not both.
+
+| Route on the gateway | Upstream | Edge policy |
+| --- | --- | --- |
+| `/apisix/status` | answered by the gateway | health probe, no upstream |
+| `/api/v1/auth/*` | Spring `host.docker.internal:8080` | `limit-req`: 5 r/s, burst 10 → HTTP 429 |
+| `/api/v1/*` | Spring `host.docker.internal:8080` | `limit-req`: 50 r/s, burst 100 → HTTP 429 |
+| `/*` | web client `host.docker.internal:3000` | — |
+
+Deliberately **not** routed: the AI HTTP service (`:18000`), the internal gRPC interface
+(`:50051`), PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, and the graph service. They stay
+reachable only from the host and the Compose network.
+
+Verify the edge:
+
+```bash
+docker compose ps apisix                     # healthy
+curl -fsS http://127.0.0.1:8088/apisix/status # {"status": "pass"}
+for i in $(seq 1 30); do curl -s -o /dev/null -w '%{http_code}\n' \
+  http://127.0.0.1:8088/api/v1/auth/registration-status; done | sort | uniq -c  # expect 429
+```
+
+To serve the console and the API from one origin, run the client with a relative API base:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=/api/v1 npm --prefix frontend run dev  # open http://localhost:8088
+```
+
+`NEXT_PUBLIC_*` values are inlined at build time, so a production bundle needs the same value
+during `npm run build`. One origin means no CORS preflight and the session cookie is set on the
+gateway origin.
+
+**Client IP behind the gateway.** Spring only honours `X-Forwarded-For` from a trusted proxy;
+`app.security.trusted-proxy-cidrs` defaults to `127.0.0.1/32,::1/128`. When traffic arrives from
+the container bridge, set `TRUSTED_PROXY_CIDRS` to your Docker network range (for example
+`172.16.0.0/12`), otherwise audit records and the public-route rate limiter key on the gateway
+address instead of the real client.
+
+**Still operator-owned:** TLS/HTTPS, IP filtering, and web-application firewalling or malware
+scanning of uploads are not configured here. Put your own TLS terminator in front of port 8088.
+
+## 10. Internal gRPC transport
 
 The `prod` Spring profile defaults to certificate-authenticated TLS with
 `AI_GRPC_PLAINTEXT=false` and certificate paths under `AI_GRPC_CA_CERTIFICATE`,
@@ -475,10 +525,11 @@ For certificate rotation, stage the replacement files beside the current set, va
 chains, atomically replace the mounted files, restart the Python service and then the Spring
 API, and keep the previous CA trusted until every process has restarted.
 
-## 10. Out of scope
+## 11. Out of scope
 
 The following are intentionally operator-owned and are not claims this repository makes:
-TLS/HTTPS and domain configuration, edge rate limiting and IP filtering, malware scanning of
-uploads, parser sandboxing, log aggregation and retention, monitoring and alerting, backup
-scheduling and restore drills, and any availability or latency guarantee. Measure your own
-deployment and keep the evidence with your release records.
+TLS/HTTPS and domain configuration, IP filtering and web-application firewalling, malware
+scanning of uploads, parser sandboxing, log aggregation and retention, monitoring and alerting,
+backup scheduling and restore drills, and any availability or latency guarantee. The
+[edge gateway](#9-edge-gateway-apache-apisix) applies per-IP `limit-req` at the edge; it does
+not terminate TLS. Measure your own deployment and keep the evidence with your release records.

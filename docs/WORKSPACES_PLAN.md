@@ -64,10 +64,12 @@ workspace_members    (user_id, workspace_id, role: WORKSPACE_ADMIN|MEMBER,
 | Org settings (self-registration toggle, email channels) | ✅ | — | — |
 | Appoint/dismiss workspace admins | ✅ (any ws) | — | — |
 | Invite members to ws (requires enabled channel) | ✅ (any ws) | own ws | — |
+| Add an existing organization account to the active workspace | ✅ | own ws | PUBLIC workspace only, as `MEMBER` |
 | Approve/see pending joiners | ✅ | own ws | — |
 | Delete documents | — | any in own ws | own uploads only |
 | Upload / chat / view / citations | as member of ws | own ws | own ws |
 | Reset a member's password | ✅ | own ws | — |
+| Create a regular organization account directly | ✅ (default workspace; forced password change) | — | — |
 
 - Guards: last active `ORG_OWNER` cannot be demoted/deactivated (promotable owners —
   bus-factor rule); last active `WORKSPACE_ADMIN` per workspace likewise (extend the
@@ -76,8 +78,8 @@ workspace_members    (user_id, workspace_id, role: WORKSPACE_ADMIN|MEMBER,
 - Owner lockout recovery without email: documented offline procedure (single SQL or a
   `--app.command.mode=reset-owner` headless command that requires local DB access).
   Decision: ship the headless command; SQL snippets in docs are not a feature.
-- Admin-created account with no email: admin sets an initial password shown once,
-  `must_change_password=true`, forced change on first login.
+- Owner-created accounts have an initial password supplied in the creation dialog, join the
+  default workspace as `MEMBER`, and are marked `must_change_password=true` for first-login change.
 
 ## 5. Email as optional plugin (in-repo SPI — no runtime jar loading)
 

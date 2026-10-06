@@ -123,10 +123,17 @@ export async function listWorkspacesApi(
 }
 
 /** Re-issues the session scoped to another workspace the caller belongs to. */
-export async function switchWorkspaceApi(workspaceId: string): Promise<AuthResponse> {
+export async function switchWorkspaceApi(
+  workspaceId: string,
+  accessToken?: string | null,
+): Promise<AuthResponse> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
   const res = await fetch(`${getApiBase()}/auth/workspaces/switch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify({ workspaceId }),
   });

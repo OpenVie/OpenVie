@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from io import BytesIO
@@ -27,8 +28,8 @@ from app.modules.graph.api import (
     GraphSearchQuery as GraphSearchRequest,
 )
 from app.modules.graph.internal.service import KuzuGraphRepository
-from app.modules.ingestion.api import PermanentIngestionFailure, TransientIngestionFailure
-from app.modules.ingestion.internal.chunking import DeterministicChunker
+from app.modules.ingestion.api import TransientIngestionFailure
+from app.modules.ingestion.internal.chunking import DeterministicChunker, TextChunk
 from app.modules.ingestion.internal.entity_extraction import EntityRelationExtractor
 from app.modules.ingestion.internal.extraction import DocumentTextExtractor
 from app.modules.model.api import ModelTimeoutError as ChatModelTimeoutError
@@ -331,6 +332,53 @@ async def test_graph_extraction_preserves_single_unit_timeout_as_transient() -> 
     with pytest.raises(TransientIngestionFailure, match="request timed out"):
         await EntityRelationExtractor(TimeoutModel())._extract_batch(chunks)
 
+@pytest.mark.asyncio
+async def test_graph_extraction_cancels_sibling_batches_after_failure() -> None:
+    class FailingAndWaitingModel:
+        def __init__(self) -> None:
+            self.waiting_started = asyncio.Event()
+            self.block = asyncio.Event()
+            self.cancelled = False
+
+        async def complete(self, messages: list[dict[str, object]]) -> str:
+            payload = json.loads(str(messages[1]["content"]))
+            if payload[0]["unit_id"] == "unit-fail":
+                await self.waiting_started.wait()
+                raise ChatModelTimeoutError("Model generation timed out")
+            self.waiting_started.set()
+            try:
+                await self.block.wait()
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    event = DocumentIngestRequestedEvent(
+        schema_version="1.0",
+        event_id=uuid4(),
+        job_id=uuid4(),
+        tenant_id=uuid4(),
+        knowledge_base_id=uuid4(),
+        document_id=uuid4(),
+        uploader_id=uuid4(),
+        storage_key="documents/notes.txt",
+        file_name="notes.txt",
+        content_type="text/plain",
+        file_size_bytes=9,
+        occurred_at=datetime.now(UTC),
+    )
+    chunks = (
+        TextChunk(None, 0, "fail", "fail-hash", unit_id="unit-fail"),
+        TextChunk(None, 1, "wait", "wait-hash", unit_id="unit-wait"),
+    )
+    model = FailingAndWaitingModel()
+
+    with pytest.raises(TransientIngestionFailure, match="request timed out"):
+        await EntityRelationExtractor(model, batch_size=1, max_concurrency=2).extract(
+            event, chunks
+        )
+
+    assert model.cancelled is True
+
 
 @pytest.mark.asyncio
 async def test_graph_extraction_retries_single_unit_after_output_limit() -> None:
@@ -355,7 +403,9 @@ async def test_graph_extraction_retries_single_unit_after_output_limit() -> None
     chunks = DeterministicChunker().chunk(parsed)
     model = InitiallyLengthLimitedModel()
 
-    entities, relations = await EntityRelationExtractor(model)._extract_batch(chunks)
+    entities, relations = await EntityRelationExtractor(
+        model, output_limit_retries=1
+    )._extract_batch(chunks)
 
     assert entities == []
     assert relations == []
@@ -363,7 +413,7 @@ async def test_graph_extraction_retries_single_unit_after_output_limit() -> None
 
 
 @pytest.mark.asyncio
-async def test_graph_extraction_fails_after_single_unit_output_limit_retry() -> None:
+async def test_graph_extraction_discards_single_unit_after_output_limit() -> None:
     class AlwaysLengthLimitedModel:
         def __init__(self) -> None:
             self.calls = 0
@@ -383,10 +433,11 @@ async def test_graph_extraction_fails_after_single_unit_output_limit_retry() -> 
     chunks = DeterministicChunker().chunk(parsed)
     model = AlwaysLengthLimitedModel()
 
-    with pytest.raises(PermanentIngestionFailure, match="configured model output limit"):
-        await EntityRelationExtractor(model)._extract_batch(chunks)
+    entities, relations = await EntityRelationExtractor(model)._extract_batch(chunks)
 
-    assert model.calls == 2
+    assert entities == []
+    assert relations == []
+    assert model.calls == 1
 
 
 @pytest.mark.asyncio
@@ -513,3 +564,78 @@ async def test_graph_extraction_discards_ungrounded_entities_and_relations() -> 
     assert [entity.normalized_name for entity in batch.entities] == ["acme", "policy"]
     assert len(batch.relations) == 1
     assert batch.relations[0].predicate == "has"
+
+
+@pytest.mark.asyncio
+async def test_graph_extraction_limits_items_per_unit() -> None:
+    class VerboseModel:
+        async def complete(self, messages: list[dict[str, object]]) -> str:
+            unit_id = json.loads(str(messages[1]["content"]))[0]["unit_id"]
+            return json.dumps(
+                {
+                    "entities": [
+                        {
+                            "name": "Alpha",
+                            "normalized_name": "alpha",
+                            "entity_type": "concept",
+                            "evidence_unit_id": unit_id,
+                        },
+                        {
+                            "name": "Beta",
+                            "normalized_name": "beta",
+                            "entity_type": "concept",
+                            "evidence_unit_id": unit_id,
+                        },
+                        {
+                            "name": "Gamma",
+                            "normalized_name": "gamma",
+                            "entity_type": "concept",
+                            "evidence_unit_id": unit_id,
+                        },
+                    ],
+                    "relations": [
+                        {
+                            "subject_normalized_name": "alpha",
+                            "predicate": "relates_to",
+                            "object_normalized_name": "alpha",
+                            "evidence_unit_id": unit_id,
+                        },
+                        {
+                            "subject_normalized_name": "alpha",
+                            "predicate": "cites",
+                            "object_normalized_name": "alpha",
+                            "evidence_unit_id": unit_id,
+                        },
+                    ],
+                }
+            )
+
+    parsed = DocumentTextExtractor().parse(
+        b"Alpha, Beta, and Gamma.",
+        content_type="text/plain",
+        file_name="notes.txt",
+    )
+    chunks = DeterministicChunker().chunk(parsed)
+    event = DocumentIngestRequestedEvent(
+        schema_version="1.0",
+        event_id=uuid4(),
+        job_id=uuid4(),
+        tenant_id=uuid4(),
+        knowledge_base_id=uuid4(),
+        document_id=uuid4(),
+        uploader_id=uuid4(),
+        storage_key="documents/notes.txt",
+        file_name="notes.txt",
+        content_type="text/plain",
+        file_size_bytes=23,
+        occurred_at=datetime.now(UTC),
+    )
+
+    batch = await EntityRelationExtractor(
+        VerboseModel(),
+        max_entities_per_unit=1,
+        max_relations_per_unit=1,
+    ).extract(event, chunks)
+
+    assert [entity.normalized_name for entity in batch.entities] == ["alpha"]
+    assert [relation.predicate for relation in batch.relations] == ["relates_to"]

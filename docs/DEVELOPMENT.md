@@ -218,8 +218,18 @@ INGESTION_WORKER_CONCURRENCY=4
 That setting is the worker's prefetch count, meaning at most that many documents are processed
 concurrently. Raising it only helps when the model server can actually serve parallel requests, so
 keep it at or below `OLLAMA_NUM_PARALLEL`, or at `1` when the model server is serial.
-`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `4096`) caps extraction output per batch; dense tables
-adds entities and relations, so size it with `GRAPH_EXTRACTION_BATCH_SIZE`.
+`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `512`) caps extraction output per batch. A
+length-limited multi-chunk batch is subdivided; a single unit that still reaches the cap is omitted
+from the concise graph rather than failing the document.
+
+The default retains at most two entities and two relations per knowledge unit, so a four-chunk
+batch stays within the output budget. Increase the per-unit limits only with a measured timeout
+budget.
+
+
+`make dev` supplies this value through `DEV_GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS`; override that
+development variable only after measuring it against the configured timeout.
+
 
 ### Migrate the database
 
@@ -285,9 +295,18 @@ an actual workflow:
 4. Ask a question answered by that document and verify the answer's citations.
 5. Reload the client and confirm the conversation persists.
 
-No reverse proxy or TLS termination is part of this stack: the client talks to Spring on
-`localhost:8080` directly. See [deployment](DEPLOYMENT.md) for installing the stack on a host
-you operate.
+No TLS termination is part of this stack. The client normally talks to Spring on
+`localhost:8080` directly; the Compose stack also starts an
+[Apache APISIX edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) on
+`http://localhost:8088` that fronts both the client and the API:
+
+```bash
+docker compose up -d apisix
+curl -fsS http://127.0.0.1:8088/apisix/status
+NEXT_PUBLIC_API_BASE_URL=/api/v1 npm --prefix frontend run dev  # then open http://localhost:8088
+```
+
+See [deployment](DEPLOYMENT.md) for installing the stack on a host you operate.
 
 ### Stop without deleting data
 

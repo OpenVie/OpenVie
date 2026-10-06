@@ -37,5 +37,7 @@ def create_document_ingestion_pipeline(
             ),
             batch_size=settings.GRAPH_EXTRACTION_BATCH_SIZE,
             max_concurrency=settings.INGESTION_WORKER_CONCURRENCY,
+            max_entities_per_unit=settings.GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT,
+            max_relations_per_unit=settings.GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT,
         ),
     )

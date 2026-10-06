@@ -26,6 +26,7 @@ flowchart TB
         ChatClient[Chat client]
     end
     subgraph Applications[Application services]
+        Gateway[Apache APISIX gateway :8088]
         AdminWeb[Next.js management console]
         Business[Spring Boot business API]
         AI[FastAPI AI API and gRPC]
@@ -45,9 +46,10 @@ flowchart TB
         Embed[Ollama / BGE-M3]
         Reranker[Optional TEI cross-encoder]
     end
-    Dashboard -->|HTTPS, operator-supplied ingress| Business
-    ChatClient -->|HTTPS, operator-supplied ingress| Business
-    Dashboard --> AdminWeb
+    Dashboard -->|HTTPS, TLS operator-supplied| Gateway
+    ChatClient -->|HTTPS, TLS operator-supplied| Gateway
+    Gateway -->|/api/v1/*| Business
+    Gateway -->|/*| AdminWeb
     Business --> PostgreSQL
     Business --> Redis
     Business --> Objects
@@ -80,11 +82,11 @@ This release delivers one Compose file, [Local Compose](../docker-compose.yml), 
 data services, SeaweedFS, and the graph service and intentionally publishes development ports on
 localhost. Native Ollama runs outside Docker so Apple Silicon installations can use Metal
 acceleration. Optional reranking uses one TEI `/rerank` contract with platform-specific runtimes:
-Compose on Linux and Windows WSL2, and native TEI with Metal on Apple Silicon. Reverse-proxy/TLS
-ingress, hardened network segmentation, and edge rate limiting are operator-owned: see
-[Deployment](DEPLOYMENT.md). There is no production Compose file, gateway configuration, or
-deployment script in this repository. Public chat does not expose Qdrant, Kuzu, Ollama, TEI, or
-model-provider credentials.
+Compose on Linux and Windows WSL2, and native TEI with Metal on Apple Silicon. Reverse-proxy/TLS ingress and hardened network segmentation are operator-owned: see
+[Deployment](DEPLOYMENT.md). The Compose file does start an Apache APISIX gateway that fronts
+the web client and the business API on the host loopback with per-IP edge rate limits, but the
+repository ships no TLS terminator, no production Compose file, and no deployment script. Public
+chat does not expose Qdrant, Kuzu, Ollama, TEI, or model-provider credentials.
 
 “Managed AI” means **operator-selected and operated integration**, not necessarily self-hosted
 inference. The [model adapter factory](../rag-chatbot-fastapi/app/modules/model/internal/chat.py)

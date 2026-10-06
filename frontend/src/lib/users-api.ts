@@ -1,7 +1,7 @@
 import { getApiBase } from "@/lib/auth-api";
 import { parseApiError, readJsonOrThrow } from "@/lib/api-error";
 import type { ApiRequest } from "@/lib/documents-api";
-import type { TeamDirectory, TeamInvitation, TeamMember, UserStatus, WorkspaceRole } from "@/types";
+import type { OrganizationMember, TeamDirectory, TeamInvitation, TeamMember, UserStatus, WorkspaceRole } from "@/types";
 
 export async function getTeamDirectory(request: ApiRequest): Promise<TeamDirectory> {
   return readJsonOrThrow<TeamDirectory>(await request(`${getApiBase()}/users/directory`));
@@ -65,4 +65,30 @@ export async function setTeamMemberPassword(
     body: JSON.stringify({ password }),
   });
   if (!response.ok) throw await parseApiError(response);
+}
+export async function addMemberToWorkspaceApi(
+  request: ApiRequest,
+  email: string,
+  role: WorkspaceRole,
+): Promise<TeamMember> {
+  return readJsonOrThrow<TeamMember>(await request(`${getApiBase()}/users/members`, {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  }));
+}
+
+export async function getOrganizationMembersApi(
+  request: ApiRequest,
+): Promise<OrganizationMember[]> {
+  return readJsonOrThrow<OrganizationMember[]>(await request(`${getApiBase()}/users/organization`));
+}
+
+export async function createOrganizationUserApi(
+  request: ApiRequest,
+  payload: { email: string; fullName: string; password: string },
+): Promise<OrganizationMember> {
+  return readJsonOrThrow<OrganizationMember>(await request(`${getApiBase()}/users/organization`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }));
 }

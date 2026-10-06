@@ -1,0 +1,17 @@
+# Apache APISIX — edge gateway (Cổng API) of the DX-OS Open-Core stack.
+#
+# Standalone (YAML) mode: routes are read from routes.yaml (mounted at
+# /usr/local/apisix/conf/apisix.yaml), so this deployment needs no etcd, no
+# Admin API and no control plane. The container must run with
+# APISIX_STAND_ALONE=true (set in docker-compose.yml); the entrypoint then
+# skips `apisix init_etcd` entirely.
+#
+# APISIX merges this file over its built-in config-default.yaml, so only the
+# keys that differ from the defaults are written here.
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml
+
+apisix:
+  enable_admin: false

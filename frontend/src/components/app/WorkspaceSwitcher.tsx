@@ -59,10 +59,11 @@ export function WorkspaceSwitcher() {
     }
     setSwitching(true)
     try {
-      const res = await switchWorkspaceApi(target.id)
+      const res = await switchWorkspaceApi(target.id, accessToken)
       setAuth(res.user, res.accessToken)
       window.location.reload()
-    } catch {
+    } catch (err) {
+      console.error("Workspace switch failed", err)
       setSwitching(false)
       setOpen(false)
     }
@@ -96,6 +97,7 @@ export function WorkspaceSwitcher() {
           {workspaces.map((workspace) => (
             <DropdownMenuItem
               key={workspace.id}
+              onClick={() => void selectWorkspace(workspace)}
               onSelect={() => void selectWorkspace(workspace)}
               className={cn(
                 "justify-between",

@@ -28,6 +28,9 @@ public interface AuthService {
     AuthResponse switchWorkspace(
             UUID workspaceId, String refreshToken, HttpServletResponse response);
 
+    AuthResponse switchWorkspace(
+            UUID workspaceId, String refreshToken, UUID authenticatedUserId, HttpServletResponse response);
+
     void logout(String refreshToken);
 
     void clearRefreshTokenCookie(HttpServletResponse response);

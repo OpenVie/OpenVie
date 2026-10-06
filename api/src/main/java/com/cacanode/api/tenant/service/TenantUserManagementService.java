@@ -33,6 +33,10 @@ import com.cacanode.api.tenant.model.WorkspaceMember;
 import com.cacanode.api.tenant.repository.InvitationRepository;
 import com.cacanode.api.tenant.repository.TenantRepository;
 import com.cacanode.api.tenant.repository.UserRepository;
+import com.cacanode.api.tenant.dto.UserManagementDtos.CreateUserRequest;
+import com.cacanode.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
+import com.cacanode.api.tenant.model.Organization;
+import com.cacanode.api.tenant.repository.OrganizationRepository;
 import com.cacanode.api.tenant.repository.WorkspaceMemberRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -69,6 +73,7 @@ public class TenantUserManagementService {
     private final InvitationRepository invitationRepository;
     private final WorkspaceMemberRepository memberRepository;
     private final TenantRepository workspaceRepository;
+    private final OrganizationRepository organizationRepository;
     private final DeliveryAvailability channels;
     private final TenantCredentials credentials;
     private final ApplicationEventPublisher eventPublisher;
@@ -81,12 +86,12 @@ public class TenantUserManagementService {
     @Autowired(required = false)
     private BusinessCacheInvalidationPublisher businessInvalidationPublisher;
 
-    @Autowired
     public TenantUserManagementService(
             UserRepository userRepository,
             InvitationRepository invitationRepository,
             WorkspaceMemberRepository memberRepository,
             TenantRepository workspaceRepository,
+            OrganizationRepository organizationRepository,
             DeliveryAvailability channels,
             TenantCredentials credentials,
             ApplicationEventPublisher eventPublisher
@@ -95,6 +100,7 @@ public class TenantUserManagementService {
         this.invitationRepository = invitationRepository;
         this.memberRepository = memberRepository;
         this.workspaceRepository = workspaceRepository;
+        this.organizationRepository = organizationRepository;
         this.channels = channels;
         this.credentials = credentials;
         this.eventPublisher = eventPublisher;
@@ -102,7 +108,7 @@ public class TenantUserManagementService {
 
     @Transactional
     public DirectoryResponse getDirectory(UUID workspaceId, UUID currentUserId) {
-        MembershipSnapshot actor = requireAdmin(workspaceId, currentUserId);
+        MembershipSnapshot actor = resolveMembership(currentUserId, workspaceId);
         DirectoryResponse snapshot = businessCache == null || cacheKeyFactory == null
                 ? loadDirectorySnapshot(actor.orgId(), workspaceId)
                 : businessCache.getOrLoad(
@@ -130,7 +136,8 @@ public class TenantUserManagementService {
                         || invitation.getStatus() == InvitationStatus.EXPIRED)
                 .map(this::toInvitation)
                 .toList();
-        return new DirectoryResponse(members, pending);
+        Tenant workspace = requireWorkspace(workspaceId);
+        return new DirectoryResponse(members, pending, workspace.getVisibility());
     }
 
     /**
@@ -411,15 +418,16 @@ public class TenantUserManagementService {
                 .toList();
     }
 
-    private void grantMembership(User user, Tenant workspace, WorkspaceRole role) {
-        if (memberRepository.findByUser_IdAndWorkspace_Id(user.getId(), workspace.getId()).isPresent()) {
-            return;
+    private WorkspaceMember grantMembership(User user, Tenant workspace, WorkspaceRole role) {
+        var existing = memberRepository.findByUser_IdAndWorkspace_Id(user.getId(), workspace.getId());
+        if (existing.isPresent()) {
+            return existing.get();
         }
         WorkspaceMember membership = new WorkspaceMember();
         membership.setUser(user);
         membership.setWorkspace(workspace);
         membership.setRole(role);
-        memberRepository.save(membership);
+        return memberRepository.save(membership);
     }
 
     private DirectoryResponse decorateDirectory(
@@ -439,7 +447,7 @@ public class TenantUserManagementService {
                 .filter(invitation -> invitation.status() == InvitationStatus.PENDING
                         || invitation.status() == InvitationStatus.EXPIRED)
                 .toList();
-        return new DirectoryResponse(members, invitations);
+        return new DirectoryResponse(members, invitations, snapshot.visibility());
     }
 
     private void requireChannel(UUID orgId) {
@@ -462,6 +470,13 @@ public class TenantUserManagementService {
             throw new UnauthorizedException("This action requires workspace admin authority");
         }
         return membership;
+    }
+
+    private void requireOrganizationOwner(UUID orgId, UUID workspaceId, UUID actorId) {
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        if (!actor.orgId().equals(orgId) || actor.orgRole() != OrgRole.ORG_OWNER) {
+            throw new UnauthorizedException("This action requires organization owner authority");
+        }
     }
 
     private MembershipSnapshot resolveMembership(UUID userId, UUID workspaceId) {
@@ -581,12 +596,6 @@ public class TenantUserManagementService {
                 currentUserId != null && user.getId().equals(currentUserId));
     }
 
-    private MemberResponse toMember(User user, WorkspaceMember membership, UUID currentUserId) {
-        return new MemberResponse(user.getId(), user.getEmail(), user.getFullName(),
-                membership.getRole(), user.getStatus(), membership.getCreatedAt(),
-                user.getLastLoginAt(),
-                currentUserId != null && user.getId().equals(currentUserId));
-    }
 
     private InvitationResponse toInvitation(Invitation invitation) {
         return new InvitationResponse(invitation.getId(), invitation.getEmail(), invitation.getRole(),
@@ -628,5 +637,95 @@ public class TenantUserManagementService {
                 : invitationRepository.findByTokenHash(legacyHashToken(rawToken)))
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Invitation is invalid or no longer available")));
+    }
+
+    @Transactional
+    public MemberResponse addMember(
+            UUID workspaceId, UUID actorId, String rawEmail, WorkspaceRole role) {
+        Tenant workspace = requireWorkspace(workspaceId);
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        boolean isPublic = workspace.getVisibility() == WorkspaceVisibility.PUBLIC;
+        if (!isPublic && !actor.isWorkspaceAdmin()) {
+            throw new UnauthorizedException("Only workspace admins can add members to a private workspace");
+        }
+        if (!actor.isWorkspaceAdmin() && role != WorkspaceRole.MEMBER) {
+            throw new BadRequestException("Regular members can only add colleagues as regular members");
+        }
+        String email = normalizeEmail(rawEmail);
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .filter(candidate -> candidate.getOrganization().getId().equals(actor.orgId()))
+                .orElseThrow(() -> new ResourceNotFoundException("No account exists for that email in the organization"));
+        if (memberRepository.findByUser_IdAndWorkspace_Id(user.getId(), workspaceId).isPresent()) {
+            throw new ConflictException("That account is already a member of this workspace");
+        }
+        WorkspaceMember membership = grantMembership(user, workspace, role);
+        audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(), Map.of("role", role.name()));
+        invalidateMembers(workspaceId);
+        return toMember(membership, actorId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> getOrganizationMembers(
+            UUID orgId, UUID workspaceId, UUID currentUserId) {
+        requireOrganizationOwner(orgId, workspaceId, currentUserId);
+        return userRepository.findByOrganization_IdOrderByFullNameAsc(orgId).stream()
+                .map(user -> new OrganizationMemberResponse(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getFullName(),
+                        user.getRole(),
+                        user.getStatus(),
+                        user.getCreatedAt(),
+                        user.getLastLoginAt(),
+                        user.getId().equals(currentUserId)
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public OrganizationMemberResponse createOrganizationUser(
+            UUID orgId, UUID workspaceId, UUID actorId, CreateUserRequest request) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        String email = normalizeEmail(request.email());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("An account already exists for this email");
+        }
+
+        Organization organization = organizationRepository.findById(orgId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
+        List<Tenant> defaultWorkspaces =
+                workspaceRepository.findByOrganization_IdAndDefaultWorkspaceTrue(orgId);
+        if (defaultWorkspaces.isEmpty()) {
+            throw new ResourceNotFoundException("Organization has no default workspace");
+        }
+
+        User user = new User();
+        user.setOrganization(organization);
+        user.setEmail(email);
+        user.setFullName(request.fullName().trim());
+        user.setPasswordHash(credentials.hashNewPassword(request.password()));
+        user.setRole(OrgRole.MEMBER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setMustChangePassword(true);
+        user = userRepository.save(user);
+
+        for (Tenant defaultWorkspace : defaultWorkspaces) {
+            grantMembership(user, defaultWorkspace, WorkspaceRole.MEMBER);
+            invalidateMembers(defaultWorkspace.getId());
+        }
+
+        audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(),
+                Map.of("via", "admin-create", "email", email, "role", user.getRole().name()));
+
+        return new OrganizationMemberResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus(),
+                user.getCreatedAt(),
+                user.getLastLoginAt(),
+                user.getId().equals(actorId)
+        );
     }
 }

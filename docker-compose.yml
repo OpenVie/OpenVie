@@ -47,7 +47,9 @@ x-local-environment: &local-environment
   LLM_INTERNAL_API_KEY: ${LLM_INTERNAL_API_KEY:-ollama}
   LLM_MODEL_ID: ${LLM_MODEL_ID:-vylinh}
   LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-128}
-  GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-4096}
+  GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-512}
+  GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT: ${GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT:-2}
+  GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT: ${GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT:-2}
   GRAPH_EXTRACTION_BATCH_SIZE: ${GRAPH_EXTRACTION_BATCH_SIZE:-4}
   INGESTION_WORKER_CONCURRENCY: ${INGESTION_WORKER_CONCURRENCY:-4}
   LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
@@ -145,6 +147,34 @@ services:
       - "127.0.0.1:${RERANKER_PORT:-8082}:80"
     volumes:
       - model_cache:/data
+
+  # Edge gateway (Cổng API). Standalone YAML mode: routes and plugins live in
+  # ./apisix/, no etcd and no Admin API. Publishes the single HTTP entry point
+  # for the web client and the business API; the AI/data services below are
+  # deliberately not routed here. `host.docker.internal` resolves to the host
+  # where Spring (:8080) and the Next.js client (:3000) run.
+  apisix:
+    image: apache/apisix:3.19.0-ubuntu
+    restart: unless-stopped
+    environment:
+      APISIX_STAND_ALONE: "true"
+    ports:
+      - "127.0.0.1:${APISIX_PORT:-8088}:9080"
+    volumes:
+      - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./apisix/routes.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # The image ships no curl/wget: probe the gateway route over bash /dev/tcp.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9080 && printf 'GET /apisix/status HTTP/1.0\r\n\r\n' >&3 && grep -q pass <&3"
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   seaweedfs-master:
     image: chrislusf/seaweedfs:latest

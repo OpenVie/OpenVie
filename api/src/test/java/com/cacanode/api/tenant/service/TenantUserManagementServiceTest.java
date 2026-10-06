@@ -3,6 +3,7 @@ package com.cacanode.api.tenant.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 
+import com.cacanode.api.common.event.AuditLogEvent;
 import com.cacanode.api.common.exception.custom.BadRequestException;
 import com.cacanode.api.common.exception.custom.ConflictException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
@@ -30,6 +32,7 @@ import com.cacanode.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.cacanode.api.tenant.api.TenantStatus;
 import com.cacanode.api.tenant.api.UserStatus;
 import com.cacanode.api.tenant.api.WorkspaceRole;
+import com.cacanode.api.tenant.dto.UserManagementDtos.CreateUserRequest;
 import com.cacanode.api.tenant.enums.WorkspaceVisibility;
 import com.cacanode.api.tenant.model.Invitation;
 import com.cacanode.api.tenant.model.Organization;
@@ -37,6 +40,7 @@ import com.cacanode.api.tenant.model.Tenant;
 import com.cacanode.api.tenant.model.User;
 import com.cacanode.api.tenant.model.WorkspaceMember;
 import com.cacanode.api.tenant.repository.InvitationRepository;
+import com.cacanode.api.tenant.repository.OrganizationRepository;
 import com.cacanode.api.tenant.repository.TenantRepository;
 import com.cacanode.api.tenant.repository.UserRepository;
 import com.cacanode.api.tenant.repository.WorkspaceMemberRepository;
@@ -51,6 +55,7 @@ class TenantUserManagementServiceTest {
     private InvitationRepository invitations;
     private WorkspaceMemberRepository members;
     private TenantRepository workspaces;
+    private OrganizationRepository organizations;
     private DeliveryAvailability channels;
     private TenantCredentials credentials;
     private ApplicationEventPublisher events;
@@ -68,11 +73,12 @@ class TenantUserManagementServiceTest {
         invitations = mock(InvitationRepository.class);
         members = mock(WorkspaceMemberRepository.class);
         workspaces = mock(TenantRepository.class);
+        organizations = mock(OrganizationRepository.class);
         channels = mock(DeliveryAvailability.class);
         credentials = mock(TenantCredentials.class);
         events = mock(ApplicationEventPublisher.class);
         service = new TenantUserManagementService(
-                users, invitations, members, workspaces, channels, credentials, events);
+                users, invitations, members, workspaces, organizations, channels, credentials, events);
 
         organization = new Organization();
         organization.setId(UUID.randomUUID());
@@ -250,6 +256,92 @@ class TenantUserManagementServiceTest {
     }
 
     @Test
+    void publicWorkspaceMemberCanAddAnExistingOrganizationAccount() {
+        User colleague = user("colleague@example.com", OrgRole.MEMBER);
+        when(users.findByEmailIgnoreCase("colleague@example.com")).thenReturn(Optional.of(colleague));
+        when(members.findByUser_IdAndWorkspace_Id(colleague.getId(), workspaceId))
+                .thenReturn(Optional.empty());
+
+        var response = service.addMember(
+                workspaceId, member.getId(), " Colleague@example.com ", WorkspaceRole.MEMBER);
+
+        assertEquals(colleague.getId(), response.id());
+        assertEquals(WorkspaceRole.MEMBER, response.workspaceRole());
+        ArgumentCaptor<WorkspaceMember> membership = ArgumentCaptor.forClass(WorkspaceMember.class);
+        verify(members).save(membership.capture());
+        assertEquals(colleague, membership.getValue().getUser());
+        assertEquals(workspace, membership.getValue().getWorkspace());
+    }
+
+    @Test
+    void regularMemberCannotAddAnAdministratorToAPublicWorkspace() {
+        assertThrows(BadRequestException.class, () -> service.addMember(
+                workspaceId, member.getId(), "colleague@example.com", WorkspaceRole.WORKSPACE_ADMIN));
+    }
+
+    @Test
+    void regularMemberCannotAddAnyoneToAPrivateWorkspace() {
+        workspace.setVisibility(WorkspaceVisibility.PRIVATE);
+
+        assertThrows(UnauthorizedException.class, () -> service.addMember(
+                workspaceId, member.getId(), "colleague@example.com", WorkspaceRole.MEMBER));
+    }
+
+    @Test
+    void workspaceAdminCanAddAnExistingAccountToAPrivateWorkspace() {
+        workspace.setVisibility(WorkspaceVisibility.PRIVATE);
+        User colleague = user("colleague@example.com", OrgRole.MEMBER);
+        when(users.findByEmailIgnoreCase("colleague@example.com")).thenReturn(Optional.of(colleague));
+        when(members.findByUser_IdAndWorkspace_Id(colleague.getId(), workspaceId))
+                .thenReturn(Optional.empty());
+
+        var response = service.addMember(
+                workspaceId, admin.getId(), "colleague@example.com", WorkspaceRole.MEMBER);
+
+        assertEquals(colleague.getId(), response.id());
+        assertEquals(WorkspaceRole.MEMBER, response.workspaceRole());
+    }
+
+    @Test
+    void nonOwnerCannotReadOrganizationMembersThroughTheService() {
+        assertThrows(UnauthorizedException.class, () -> service.getOrganizationMembers(
+                organization.getId(), workspaceId, member.getId()));
+    }
+
+    @Test
+    void organizationOwnerCreatesForcedPasswordMemberInDefaultWorkspace() {
+        when(users.existsByEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(organizations.findById(organization.getId())).thenReturn(Optional.of(organization));
+        when(workspaces.findByOrganization_IdAndDefaultWorkspaceTrue(organization.getId()))
+                .thenReturn(List.of(workspace));
+        when(credentials.hashNewPassword("very-long-password")).thenReturn("encoded-password");
+
+        var created = service.createOrganizationUser(
+                organization.getId(), workspaceId, admin.getId(),
+                new CreateUserRequest(" New@Example.com ", "New Person", "very-long-password"));
+
+        assertEquals("new@example.com", created.email());
+        assertEquals(OrgRole.MEMBER, created.orgRole());
+        ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
+        verify(users).save(savedUser.capture());
+        assertEquals(organization, savedUser.getValue().getOrganization());
+        assertTrue(savedUser.getValue().isMustChangePassword());
+        assertEquals("encoded-password", savedUser.getValue().getPasswordHash());
+
+        ArgumentCaptor<WorkspaceMember> membership = ArgumentCaptor.forClass(WorkspaceMember.class);
+        verify(members).save(membership.capture());
+        assertEquals(workspace, membership.getValue().getWorkspace());
+        assertEquals(WorkspaceRole.MEMBER, membership.getValue().getRole());
+
+        ArgumentCaptor<AuditLogEvent> event = ArgumentCaptor.forClass(AuditLogEvent.class);
+        verify(events).publishEvent(event.capture());
+        AuditLogEvent audit = event.getValue();
+        assertEquals(workspaceId, audit.getTenantId());
+        assertEquals(admin.getId(), audit.getUserId());
+        assertEquals(created.id(), audit.getResourceId());
+    }
+
+    @Test
     void deactivationPublishesTheSessionRevocationEvent() {
         service.updateStatus(workspaceId, admin.getId(), member.getId(), UserStatus.INACTIVE);
 
@@ -354,8 +446,5 @@ class TenantUserManagementServiceTest {
         invitation.setExpiresAt(LocalDateTime.now().plusHours(72));
         return invitation;
     }
-
-    private static void assertTrue(boolean condition) {
-        org.junit.jupiter.api.Assertions.assertTrue(condition);
-    }
 }
+

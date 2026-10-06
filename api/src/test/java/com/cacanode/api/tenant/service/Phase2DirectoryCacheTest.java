@@ -43,6 +43,7 @@ import com.cacanode.api.tenant.model.Tenant;
 import com.cacanode.api.tenant.model.User;
 import com.cacanode.api.tenant.model.WorkspaceMember;
 import com.cacanode.api.tenant.repository.InvitationRepository;
+import com.cacanode.api.tenant.repository.OrganizationRepository;
 import com.cacanode.api.tenant.repository.TenantRepository;
 import com.cacanode.api.tenant.repository.UserRepository;
 import com.cacanode.api.tenant.repository.WorkspaceMemberRepository;
@@ -78,6 +79,7 @@ class Phase2DirectoryCacheTest {
         InvitationRepository invitations = mock(InvitationRepository.class);
         WorkspaceMemberRepository members = mock(WorkspaceMemberRepository.class);
         TenantRepository workspaces = mock(TenantRepository.class);
+        OrganizationRepository organizations = mock(OrganizationRepository.class);
 
         when(users.findById(first.getId())).thenReturn(Optional.of(first));
         when(users.findById(second.getId())).thenReturn(Optional.of(second));
@@ -95,7 +97,7 @@ class Phase2DirectoryCacheTest {
         when(workspaces.findById(workspaceId)).thenReturn(Optional.of(workspace));
 
         TenantUserManagementService service = new TenantUserManagementService(
-                users, invitations, members, workspaces,
+                users, invitations, members, workspaces, organizations,
                 mock(DeliveryAvailability.class), mock(TenantCredentials.class),
                 mock(ApplicationEventPublisher.class));
         CacheProperties properties = new CacheProperties();

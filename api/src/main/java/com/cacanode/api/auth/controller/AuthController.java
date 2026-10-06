@@ -67,13 +67,25 @@ public class AuthController extends BaseController {
     public ResponseEntity<AuthResponse> switchWorkspace(
             @RequestBody Map<String, String> body,
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
+            HttpServletRequest request,
             HttpServletResponse response) {
         String raw = body.get("workspaceId");
         if (raw == null || raw.isBlank()) {
             throw new UnauthorizedException("workspaceId is required");
         }
+        UUID workspaceId;
+        try {
+            workspaceId = UUID.fromString(raw);
+        } catch (IllegalArgumentException e) {
+            throw new UnauthorizedException("Invalid workspaceId");
+        }
+        UUID authenticatedUserId = null;
+        try {
+            authenticatedUserId = getUserId(request);
+        } catch (RuntimeException ignored) {
+        }
         return ResponseEntity.ok(authService.switchWorkspace(
-                UUID.fromString(raw), refreshToken, response));
+                workspaceId, refreshToken, authenticatedUserId, response));
     }
 
     @GetMapping("/workspaces")

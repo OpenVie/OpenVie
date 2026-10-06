@@ -22,6 +22,8 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     List<Tenant> findByOrganization_IdAndVisibilityOrderByCreatedAtAsc(
             UUID orgId, WorkspaceVisibility visibility);
+    List<Tenant> findByOrganization_IdAndDefaultWorkspaceTrue(UUID orgId);
+
 
     long countByOrganization_Id(UUID orgId);
 

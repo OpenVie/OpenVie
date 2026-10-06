@@ -59,16 +59,23 @@ class MemoryObjectStore:
 
 
 class FakeEmbedder:
+    def __init__(self) -> None:
+        self.document_batches: list[list[str]] = []
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.document_batches.append(texts)
         return [[float(index), 1.0] for index, _ in enumerate(texts)]
 
     async def embed_query(self, text: str) -> list[float]:
         del text
         return [0.0, 1.0]
 
-
 class FakeSparseEncoder:
+    def __init__(self) -> None:
+        self.document_batches: list[list[str]] = []
+
     async def embed_documents(self, texts: list[str]) -> list[SparseEmbedding]:
+        self.document_batches.append(texts)
         return [SparseEmbedding((1,), (1.0,)) for _ in texts]
 
     async def embed_query(self, text: str) -> SparseEmbedding:
@@ -127,18 +134,51 @@ def command() -> IngestDocumentCommand:
 
 
 def pipeline(
-    store: MemoryObjectStore, index: FakeIndex, graph: FakeGraph
+    store: MemoryObjectStore,
+    index: FakeIndex,
+    graph: FakeGraph,
+    *,
+    embedder: FakeEmbedder | None = None,
+    sparse_encoder: FakeSparseEncoder | None = None,
 ) -> DocumentIngestionPipeline:
     return DocumentIngestionPipeline(
         store=store,
         extractor=DocumentTextExtractor(),
         chunker=DeterministicChunker(),
-        embedder=FakeEmbedder(),
-        sparse_encoder=FakeSparseEncoder(),
+        embedder=embedder or FakeEmbedder(),
+        sparse_encoder=sparse_encoder or FakeSparseEncoder(),
         vector_store=index,
         graph_store=graph,
         graph_extractor=UnexpectedGraphExtractor(),
     )
+
+
+@pytest.mark.asyncio
+async def test_prepare_defers_embeddings_until_index_replacement() -> None:
+    store = MemoryObjectStore()
+    index = FakeIndex()
+    graph = FakeGraph()
+    embedder = FakeEmbedder()
+    sparse_encoder = FakeSparseEncoder()
+    ingestion = pipeline(
+        store,
+        index,
+        graph,
+        embedder=embedder,
+        sparse_encoder=sparse_encoder,
+    )
+
+    prepared = await ingestion.prepare(command())
+
+    assert embedder.document_batches == []
+    assert sparse_encoder.document_batches == []
+
+    await ingestion.replace_index(prepared)
+
+    chunk_texts = [chunk.text for chunk in prepared.chunks]
+    assert embedder.document_batches == [chunk_texts]
+    assert sparse_encoder.document_batches == [chunk_texts]
+    assert index.replaced is not None
 
 
 def spreadsheet_chunk(table_id: str) -> RetrievedKnowledgeUnit:

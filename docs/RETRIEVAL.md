@@ -113,9 +113,18 @@ Worker concurrency is configuration, not a fixed property. `INGESTION_WORKER_CON
 RabbitMQ prefetch count; set it to `1` when the model server is serial. Graph extraction is
 chat-model work, not embeddings: it dominates ingestion time, and its cost grows with document
 size because each chunk contributes entities and relations to the response.
-`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `4096`) bounds that response per batch, and
-`GRAPH_EXTRACTION_BATCH_SIZE` (default `4`) sets how many chunks share a request. Raising
-concurrency only helps when the serving model accepts parallel requests.
+`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `512`) bounds that response per batch. A
+length-limited multi-chunk batch is subdivided; a single unit that still reaches the cap is omitted
+from the concise graph rather than failing the document.
+
+The default retains at most two entities and two relations per knowledge unit, prioritizing central
+facts so a four-chunk batch fits the output budget. Increase those per-unit limits only with a
+measured timeout budget.
+
+
+When graph extraction resumes after vector indexing, it rebuilds chunks but does not recompute
+embeddings. If one concurrent extraction batch fails, the worker cancels its sibling model
+requests before retrying.
 
 ## Structure and spreadsheet handling
 

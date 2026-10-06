@@ -219,7 +219,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* <Card>
         <CardHeader className="flex-row items-center justify-between">
           <div><CardTitle>{t("channels.title")}</CardTitle><CardDescription>{t("channels.description")}</CardDescription></div>
           <div className="flex gap-2">
@@ -245,7 +245,7 @@ export default function SettingsPage() {
             </div>
           ))}
         </CardContent>
-      </Card>
+      </Card> */}
     </>}
 
     <Dialog open={showEditor} onOpenChange={setShowEditor}>

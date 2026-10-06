@@ -8,6 +8,10 @@ For the current code, start with [local development](docs/DEVELOPMENT.md), then 
 [architecture](docs/ARCHITECTURE.md), [deployment guide](docs/DEPLOYMENT.md), and
 [open-source boundary](docs/OPEN_SOURCE.md). Contributors: [CONTRIBUTING.md](CONTRIBUTING.md).
 
+The [DX-OS mapping](docs/DX_OS.md) records how this repository sits in the three-tier DX-OS
+Open-Core architecture: which headless core services are delivered, which are not, and which
+H-P-D-I capability space each screen of the web client belongs to.
+
 > OpenVie is the user-facing product name. Internal package/protobuf names, deployment
 > resources, routes, credential prefixes, and existing domains intentionally retain their current
 > identifiers. This presentation rebrand does not change integration contracts.
@@ -22,7 +26,7 @@ For the current code, start with [local development](docs/DEVELOPMENT.md), then 
 | Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
 | Offline evaluation | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model |
 | Optional caches | Implemented but disabled by default; enable only after the applicable correctness and performance gates |
-| Not delivered | OCR/image/audio/video ingestion, a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and production ingress; model adaptation remains research work |
+| Not delivered | OCR/image/audio/video ingestion, a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#9-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
 
 Repository code alone is not evidence of a production-ready service: optional provider
 integrations and deployment hardening must be verified in their own environment.
@@ -33,9 +37,9 @@ See the [ingestion and retrieval guide](docs/RETRIEVAL.md) for detailed boundari
 
 | Role | Scope | Authority |
 | --- | --- | --- |
-| `ORG_OWNER` | Organization | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, offline password reset via `make recover-owner` |
-| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, sets initial passwords, deletes any document in the workspace |
-| `MEMBER` | Active workspace | Queries chat, uploads documents, deletes own uploaded documents |
+| `ORG_OWNER` | Organization | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, views organization accounts, creates regular organization accounts directly, adds existing organization accounts to the active workspace, offline password reset via `make recover-owner` |
+| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, adds existing organization accounts to the active private or public workspace, sets initial passwords, deletes any document in the workspace |
+| `MEMBER` | Active workspace | Queries chat, uploads documents, deletes own uploaded documents; may add an existing organization account as a regular member in a public workspace |
 
 The supplied four-plane architecture is a target: today's control, async data, and retrieval
 planes run as described below; sensitive-question routing and offline trace evaluation add

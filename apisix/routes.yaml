@@ -1,0 +1,73 @@
+# Edge routes for the DX-OS Open-Core stack (Apache APISIX standalone mode).
+#
+# This file is mounted at /usr/local/apisix/conf/apisix.yaml and picked up by
+# `apisix.config_provider: yaml` in config.yaml. APISIX reloads it when the
+# container restarts: `docker compose restart apisix`.
+#
+# Only the two presentation surfaces are published at the edge. The AI HTTP
+# service (:18000), the internal gRPC interface (:50051), PostgreSQL, Redis,
+# RabbitMQ, Qdrant, SeaweedFS and the graph service are NOT routed here: they
+# stay reachable only from the host/private network (zero-trust: nothing of the
+# core is exposed to the edge by accident).
+routes:
+  # Edge health probe. Answers on the gateway itself, so the Compose health
+  # check does not depend on the web client being up.
+  - uri: /apisix/status
+    name: edge-status
+    priority: 100
+    plugins:
+      serverless-pre-function:
+        phase: rewrite
+        functions:
+          - |
+            return function()
+              ngx.status = 200
+              ngx.header.content_type = "application/json"
+              ngx.say("{\"status\": \"pass\"}")
+              ngx.exit(200)
+            end
+
+  # Unauthenticated surface — installation claim and sign-in. Kept on its own
+  # route so the edge can throttle it harder than the rest of the API.
+  - uri: /api/v1/auth/*
+    name: edge-auth
+    priority: 20
+    plugins:
+      limit-req:
+        key: remote_addr
+        rate: 5
+        burst: 10
+        nodelay: true
+        rejected_code: 429
+        rejected_msg: "rate limit exceeded at the edge"
+    upstream:
+      type: roundrobin
+      nodes:
+        "host.docker.internal:8080": 1
+
+  # Headless business API (Spring Boot — Tầng 1, Nền tảng Dịch vụ Lõi số).
+  - uri: /api/v1/*
+    name: edge-api
+    priority: 10
+    plugins:
+      limit-req:
+        key: remote_addr
+        rate: 50
+        burst: 100
+        nodelay: true
+        rejected_code: 429
+        rejected_msg: "rate limit exceeded at the edge"
+    upstream:
+      type: roundrobin
+      nodes:
+        "host.docker.internal:8080": 1
+
+  # Web client (Next.js — Tầng 2, Không gian Năng lực số H-P-D-I).
+  - uri: /*
+    name: edge-web
+    priority: 0
+    upstream:
+      type: roundrobin
+      nodes:
+        "host.docker.internal:3000": 1
+#END

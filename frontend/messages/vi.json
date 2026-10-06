@@ -283,11 +283,11 @@
   },
   "Users": {
     "title": "Thành viên",
-    "description": "Quản lý thành viên và lời mời đang chờ trong không gian làm việc.",
+    "description": "Quản lý thành viên của không gian làm việc này.",
     "inviteUser": "Mời người dùng",
     "retry": "Thử lại",
     "empty": "Chưa có thành viên",
-    "emptyDescription": "Mời thành viên đầu tiên để bắt đầu.",
+    "emptyDescription": "Thêm một thành viên tổ chức hiện có để bắt đầu.",
     "validEmail": "Nhập địa chỉ email hợp lệ",
     "invitationSent": "Đã gửi lời mời đến {email}",
     "roleUpdated": "Đã cập nhật vai trò",
@@ -333,7 +333,30 @@
       "status": "Không thể cập nhật trạng thái",
       "resend": "Không thể gửi lại lời mời",
       "cancel": "Không thể hủy lời mời",
-      "password": "Không thể đặt mật khẩu"
+      "password": "Không thể đặt mật khẩu",
+      "addMember": "Không thể thêm thành viên vào không gian làm việc",
+      "createUser": "Không thể tạo tài khoản người dùng"
+    },
+    "addToWorkspace": "Thêm vào không gian làm việc",
+    "addToWorkspaceTitle": "Thêm thành viên vào không gian làm việc",
+    "memberAdded": "Đã thêm thành viên vào không gian làm việc",
+    "addMember": "Thêm thành viên",
+    "tabs": {
+      "workspace": "Thành viên không gian làm việc",
+      "organization": "Thành viên tổ chức"
+    },
+    "createUser": "Tạo người dùng",
+    "createUserTitle": "Tạo người dùng tổ chức",
+    "fullName": "Họ và tên",
+    "initialPassword": "Mật khẩu",
+    "initialPasswordHint": "Người dùng phải đổi mật khẩu này ở lần đăng nhập đầu tiên.",
+    "existingMemberHint": "Người dùng phải có sẵn tài khoản trong tổ chức này.",
+    "organizationDescription": "Quản lý tất cả tài khoản trong tổ chức này.",
+    "orgRole": "Vai trò tổ chức",
+    "userCreated": "Đã tạo tài khoản người dùng",
+    "orgRoles": {
+      "owner": "Chủ sở hữu",
+      "member": "Thành viên"
     },
     "setPassword": "Đặt mật khẩu",
     "setPasswordHint": "Đặt mật khẩu ban đầu; thành viên phải đổi ở lần đăng nhập kế tiếp",

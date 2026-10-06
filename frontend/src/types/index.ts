@@ -84,6 +84,18 @@ export interface TeamInvitation {
 export interface TeamDirectory {
   members: TeamMember[];
   invitations: TeamInvitation[];
+  visibility: WorkspaceVisibility;
+}
+
+export interface OrganizationMember {
+  id: string;
+  email: string;
+  fullName: string;
+  orgRole: OrgRole;
+  status: UserStatus;
+  createdAt: string;
+  lastLoginAt: string | null;
+  currentUser: boolean;
 }
 
 export interface InvitationValidation {
