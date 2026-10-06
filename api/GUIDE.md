@@ -1,424 +1,131 @@
 # Java API modular-monolith guide
 
-This guide explains how the Spring Boot API under `com.cacanode.api` is organized and how to add
-features without breaking its module boundaries.
+> **Ngôn ngữ / Language:** [Tiếng Việt](#hướng-dẫn-kiến-trúc-modular-monolith-java-api--tiếng-việt) · [English](#java-api-modular-monolith-guide-1)
 
-The API is a modular monolith: one repository, one JVM, one deployable application, and one
-database, split into business modules with explicit contracts and exclusive data ownership. The
-boundaries described here are the current architecture, not a future migration target. ArchUnit
-and table-ownership tests enforce them on every test run.
+---
 
-External compatibility remains a first-class constraint. Refactoring an internal module must not
-silently change REST paths, JSON contracts, protobuf contracts, authentication behavior, database
-table names, or customer-visible behavior.
+## Hướng dẫn kiến trúc Modular-Monolith Java API — Tiếng Việt
 
-## The four non-negotiable rules
+Tài liệu này giải thích cách tổ chức API Spring Boot (`com.cacanode.api`) và quy tắc mở rộng tính năng mà không phá vỡ ranh giới module.
 
-### Rule 1: cross modules only through `api` or `api.event`
+Ứng dụng là một **Modular Monolith**: một kho mã, một JVM, một ứng dụng triển khai, một cơ sở dữ liệu, nhưng chia thành các module nghiệp vụ độc lập với ranh giới hợp đồng chặt chẽ.
 
-A business module may not import another module's controller, service, query, repository, entity,
-internal DTO, configuration, or infrastructure implementation.
+### Bốn nguyên tắc bất khả xâm phạm
 
-Allowed cross-module imports are:
+1. **Giao tiếp liên module chỉ qua `<module>.api` hoặc `<module>.api.event`:** Không bao giờ import controller, service, repository, entity JPA hoặc DTO nội bộ của module khác.
+2. **Ranh giới đồng bộ là các Interface tập trung vào năng lực:** Gói `api` sở hữu các Command, Result, DTO, Enum và Exception ranh giới. Không để lộ JPA entity hay servlet type.
+3. **Mỗi bảng cơ sở dữ liệu chỉ do một module sở hữu độc quyền:** Không join bảng chéo module trong mã nghiệp vụ. Truy xuất qua API đồng bộ hoặc tiêu thụ sự kiện.
+4. **Phản ứng bất đồng bộ độc lập dùng sự kiện bền vững:** Sử dụng outbox sự kiện module bền vững (`module_event_outbox` / `inbox`) với cơ chế retry và idempotent, không dùng `@Async` tùy tiện.
 
-- synchronous contracts and their API-owned value types under `<module>.api`;
-- producer-owned event contracts under `<module>.api.event`;
-- business-neutral technical infrastructure from `common`;
-- generated external transport contracts, such as protobuf classes.
-
-```java
-// Wrong: auth reaches into tenant persistence.
-import com.cacanode.api.tenant.repository.UserRepository;
-
-// Wrong: chat calls another module's application service.
-import com.cacanode.api.tenant.service.TenantWorkspaceService;
-
-// Correct: auth uses a tenant capability.
-import com.cacanode.api.tenant.api.TenantIdentityApi;
-
-// Correct: chat validates its workspace through the tenant boundary.
-import com.cacanode.api.tenant.api.TenantWorkspaceApi;
-```
-
-Controllers belong to one module and call that module's application layer. A controller must not
-become a composition layer for another module's implementation.
-
-### Rule 2: synchronous boundaries are capability-focused interfaces
-
-When a caller needs an immediate answer or an atomic decision, the owning module exposes an
-interface under `<module>.api`.
-
-The API package owns every command, result, enum, and exception that crosses the boundary.
-An API contract must not expose JPA entities, repositories, servlet types, internal DTOs, query
-objects, or implementation services.
-
-```java
-// tenant.api
-public interface TenantIdentityApi {
-    UserSnapshot requireUser(UUID tenantId, UUID userId);
-}
-
-// auth depends on the interface and its API-owned snapshot.
-UserSnapshot user = tenantIdentityApi.requireUser(tenantId, userId);
-```
-
-Prefer small interfaces named after a capability. Do not create an umbrella interface merely to
-expose an internal service, an empty marker API, or a concrete class named `*ModuleApi`.
-
-Not every module needs a synchronous API. Terminal modules such as `notification`, and modules
-that react only to published facts, may expose no callable business boundary. `chat` currently
-exports none: its `ChatControlPlaneService` is an internal query/orchestration type.
-
-### Rule 3: one module owns each database table
-
-Only the owning module may access a table through JPA, JDBC, native SQL, `EntityManager`, or any
-other runtime persistence mechanism.
-
-A foreign key may point to another module's table, but it does not transfer ownership. The Java
-side represents cross-module references as scalar IDs when the referenced entity is owned
-elsewhere. For example, `notification` stores tenant, user, and chatbot UUIDs on its own
-`notifications` rows; it does not map `tenant`'s entities.
-
-If another module needs data, it must:
-
-1. call an owner API for a synchronous use case;
-2. consume an owner event for an independent reaction; or
-3. read its own projection, populated from owner events or owner export APIs.
-
-Cross-module reporting joins are not allowed in runtime application code. There is no reporting
-module in this release: a reader either owns its projection tables or asks the owner for an export.
-
-### Rule 4: independent reactions use producer-owned durable events
-
-If a producer does not need an immediate return value, it publishes a fact instead of calling the
-consumer's service.
-
-Business event contracts live under the producer's `<module>.api.event` package. They are
-immutable and carry enough data for consumers without exposing the producer's entities.
-
-Business events that drive invitation delivery or refresh-token revocation must use the durable
-module-event outbox. Do not implement a new durable consumer with `@TransactionalEventListener(AFTER_COMMIT)` or `@Async`; the relay must
-invoke consumers synchronously so it can detect failure and retry safely.
-
-Direct Spring application events remain appropriate for technical, in-process concerns such as
-audit recording and cache invalidation.
-
-## Package model
-
-Every first-level business package is a module:
-
-```text
-com.cacanode.api.<module>
-```
-
-A typical module looks like this:
-
-```text
-<module>/
-  api/                 supported synchronous contracts and boundary value types
-    event/             immutable facts owned by this producer
-  controller/          REST endpoints owned by the module
-  service/ or query/   application logic and owner-specific queries
-  model/               persistence/domain types private to the module
-  repository/          persistence access private to the module
-  ...                  other module-private implementation packages
-```
-
-Everything outside `api` and `api.event` is private to the module, even when Java visibility is
-`public`. Public visibility is sometimes required by Spring; it is not permission for another
-module to import the type.
-
-Two first-level packages have special roles:
-
-- `common` is the technical shared kernel. It contains business-neutral infrastructure such as
-  durable event storage, storage abstractions, cache infrastructure, filters, audit support,
-  and generic errors. It must not depend on any business module.
-- `bootstrap` is the composition root. It may wire all modules, register event types, configure
-  security, run startup commands (`TenantBootstrapCommand`), and expose operational health
-  (`ModularReadinessHealthIndicator`). It must not contain business decisions or become a
-  shortcut for cross-module orchestration.
-
-## Allowed dependency graph
-
-The business dependency graph is intentionally acyclic:
+### Sơ đồ phụ thuộc cho phép (Acyclic Graph)
 
 ```text
 tenant       -> ai.api
 auth         -> tenant.api, auth.api.event
 chat         -> ai.api, document.api, tenant.api
 document     -> ai.api, tenant.api
-notification -> producer api.event packages (auth, tenant)
-common       -> no business module
-bootstrap    -> all modules, wiring only (startup commands may read owner repositories directly)
+notification -> auth.api.event, tenant.api.event
+common       -> không phụ thuộc module nghiệp vụ nào
+bootstrap    -> kết nối (wiring) tất cả các module
 ```
 
-Before adding a dependency, check this graph. If the new edge reverses an existing direction or
-creates a cycle, redesign the interaction as an owner API, a producer event, or an owned
-projection.
+### Danh mục Module và Quyền sở hữu Bảng
 
-## Module catalog
-
-| Module | Responsibility | Supported synchronous boundaries | Owned tables / database objects |
+| Module | Trách nhiệm | Ranh giới API đồng bộ | Bảng sở hữu độc quyền |
 | --- | --- | --- | --- |
-| `ai` | Model configuration and the gRPC inference/index boundary | `AiInferenceApi` (`generate`, `listDocumentUnits`, `deleteDocumentIndex`), `ModelConfigurationApi`; API-owned AI requests, results, citations, units, and `AiInferenceException` | `model_config_versions` |
-| `auth` | Registration and login flows, JWTs, refresh tokens, workspace switching, and password management | No general business API; REST-facing, calls `tenant.api` for identity changes | `refresh_tokens` |
-| `chat` | Employee playground conversations, messages, turns, idempotency, and inference orchestration | No exported business API; `ChatControlPlaneService` is chat-internal and consumes `ai`, `document`, and `tenant` APIs | `chat_sessions`, `chat_messages`, `chat_turns` |
-| `document` | Document metadata, object storage, ingestion transport, index cleanup, citations, and the reindex command | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
-| `notification` | In-app notifications, notification channels, and transactional email reactions | `DeliveryAvailability` (outbound mail readiness port) | `notifications`, `notification_channels` |
-| `tenant` | Organizations, workspaces, memberships, users, invitations, knowledge bases, and chatbots | `TenantIdentityApi`, `TenantWorkspaceApi`, `WorkspaceService` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
-| `bootstrap` | Application composition, security wiring, event registry, startup commands, and readiness | Not a business API | No business tables |
+| `ai` | Cấu hình mô hình và giao tiếp gRPC với inference service | `AiInferenceApi`, `ModelConfigurationApi` | `model_config_versions` |
+| `auth` | Đăng ký, đăng nhập JWT, đổi workspace, quản lý mật khẩu | Controller REST (gọi `tenant.api`) | `refresh_tokens` |
+| `chat` | Hội thoại, tin nhắn, turns, idempotency | Nội bộ chat (tiêu thụ `ai`, `document`, `tenant`) | `chat_sessions`, `chat_messages`, `chat_turns` |
+| `document` | Quản lý tài liệu, upload S3, vận chuyển ingestion RabbitMQ | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
+| `notification` | Thông báo in-app, kênh thông báo, gửi email giao dịch | `DeliveryAvailability` | `notifications`, `notification_channels` |
+| `tenant` | Tổ chức, workspace, tài khoản, phân quyền, KB, chatbot | `TenantIdentityApi`, `TenantWorkspaceApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `bootstrap` | Cấu hình bảo mật, kết nối ứng dụng, khởi động | Wiring | Không sở hữu bảng |
 
-The document ingestion outbox/inbox is owned by `document` and handles its RabbitMQ ingestion
-transport. The module event outbox/inbox is shared technical infrastructure owned by `common` and
-handles durable reactions inside the modular monolith.
+### Quy trình sự kiện Module bền vững
 
-These twenty tables are the complete persistence surface of the API. `TableOwnershipTest`
-encodes exactly this ownership map.
+- **Bên phát (Producer):** Ghi sự kiện vào `module_event_outbox` trong cùng giao dịch nghiệp vụ. Relay định kỳ quét và phát tán đồng bộ.
+- **Bên nhận (Consumer):** Sử dụng `@EventListener`, đánh dấu `@Transactional(propagation = Propagation.REQUIRES_NEW)` và gọi `inboxService.claim("consumer-name")` trước khi xử lý để đảm bảo idempotency.
 
-## Choosing an API or an event
+### Bảng vị trí đặt mã nguồn mới
 
-Use a synchronous API when the caller needs the answer before it can continue:
+| Mã nguồn mới | Vị trí chính xác |
+| --- | --- |
+| Interface gọi đồng bộ liên module | Gói `<module>.api` của module sở hữu |
+| Command / Result / Enum ranh giới | Gói `<module>.api` của module sở hữu |
+| Sự kiện nghiệp vụ phát tán | Gói `<module>.api.event` của module phát |
+| DTO request/response chỉ dùng cho REST | Gói `<module>.dto` nội bộ |
+| JPA Entity / Repository | Gói `<module>.model` hoặc `<module>.repository` |
+| Hạ tầng dùng chung trung lập | Gói `common` |
+| Kết nối cấu hình toàn ứng dụng | Gói `bootstrap` |
 
-- authenticate a user or resolve an identity snapshot;
-- validate an active workspace before creating a chat turn or uploading a document;
-- validate citations before returning an answer;
-- resolve the active model configuration.
+### Kiểm chứng kiến trúc
 
-Use a durable event when the producer is announcing a completed fact and consumers can react
-independently:
+Kiểm tra ranh giới kiến trúc bằng ArchUnit:
+```bash
+make -C api test
+```
+`ModularMonolithArchitectureTest` và `TableOwnershipTest` sẽ thất bại nếu có bất kỳ vi phạm nào về ranh giới gói hoặc quyền sở hữu bảng.
 
-- a user was invited or a user was deactivated;
-- a document state changed or a document was deleted;
-- a refresh token should be revoked after user deactivation.
+---
 
-A useful test is: "Would the producer transaction need the consumer's return value?" If yes, use
-an API. If no, publish a fact. Do not use events to hide a synchronous request/response call, and
-do not use a synchronous consumer call for an independent side effect.
+# Java API modular-monolith guide
+
+This guide explains how the Spring Boot API under `com.cacanode.api` is organized and how to add features without violating module boundaries.
+
+The API is a **Modular Monolith**: one repository, one JVM, one deployable application, and one database, divided into business modules with explicit contracts.
+
+## The four non-negotiable rules
+
+1. **Cross modules only through `<module>.api` or `<module>.api.event`:** Never import another module's controller, service, repository, entity, or internal DTO.
+2. **Synchronous boundaries are capability-focused interfaces:** The `api` package owns commands, results, DTOs, enums, and exceptions. Never leak JPA entities or servlet types.
+3. **One module exclusively owns each database table:** No cross-module SQL joins at runtime. Access data via synchronous owner APIs or event projections.
+4. **Independent reactions use producer-owned durable events:** Use the durable outbox (`module_event_outbox` / `inbox`) for reliable asynchronous events.
+
+## Allowed dependency graph
+
+```text
+tenant       -> ai.api
+auth         -> tenant.api, auth.api.event
+chat         -> ai.api, document.api, tenant.api
+document     -> ai.api, tenant.api
+notification -> auth.api.event, tenant.api.event
+common       -> no business module dependencies
+bootstrap    -> wires all modules together
+```
+
+## Module catalog and table ownership
+
+| Module | Responsibility | Synchronous boundaries | Owned tables |
+| --- | --- | --- | --- |
+| `ai` | Model configuration and gRPC inference | `AiInferenceApi`, `ModelConfigurationApi` | `model_config_versions` |
+| `auth` | Auth flows, JWTs, workspace switching | REST controllers (calls `tenant.api`) | `refresh_tokens` |
+| `chat` | Playground chat, turns, idempotency | Internal orchestration | `chat_sessions`, `chat_messages`, `chat_turns` |
+| `document` | Document lifecycle, S3, RabbitMQ ingestion | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
+| `notification` | Notifications, channels, transactional mail | `DeliveryAvailability` | `notifications`, `notification_channels` |
+| `tenant` | Orgs, workspaces, users, memberships, KBs | `TenantIdentityApi`, `TenantWorkspaceApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `bootstrap` | Security, wiring, readiness | None | None |
 
 ## Durable module events
 
-### Producer workflow
+- **Producer:** Saves events to `module_event_outbox` within the same business transaction. An outbox relay delivers them synchronously to consumers.
+- **Consumer:** Uses synchronous `@EventListener` with `@Transactional(propagation = Propagation.REQUIRES_NEW)` and claims the event in `inboxService.claim("consumer-name")` before execution to guarantee idempotent processing.
 
-A producer publishes inside the same transaction as its business mutation:
+## Code placement reference
 
-```java
-@Transactional
-public void inviteUser(...) {
-    // Mutate the producer-owned aggregate.
-    durableEventPublisher.publish(
-            "tenant.user.invited.v1",
-            1,
-            new UserInvitedEvent(...));
-}
-```
-
-The stable type is an externalized persistence contract. Once deployed, do not rename it or reuse
-it for a different payload. Add a new version when the serialized contract changes incompatibly,
-and register the type/version in `bootstrap.config.ModuleEventRegistryConfig`. The registered
-types today are:
-
-```text
-tenant.created.v1
-tenant.user.invited.v1
-tenant.user.deactivated.v1
-auth.user.registered.v1
-auth.login-2fa.requested.v1
-```
-
-The durable flow is:
-
-```text
-producer transaction
-  -> insert JSON into module_event_outbox
-  -> commit
-scheduled relay locks a due batch
-  -> registry deserializes stable type + version
-  -> Spring publishes the typed event synchronously
-  -> each consumer claims its inbox key and commits its own mutation
-  -> relay marks the event PUBLISHED after every consumer returns
-```
-
-If publication or a consumer fails, the relay records the error and retries with bounded
-exponential backoff. After the configured attempt limit, the event is marked `DEAD` for operator
-attention.
-
-### Consumer workflow
-
-Every durable consumer needs a stable, unique consumer name and must claim the event in the same
-transaction as its mutation:
-
-```java
-@EventListener
-@Transactional(propagation = Propagation.REQUIRES_NEW)
-public void handleUserRegistered(UserRegisteredEvent event) {
-    if (!inboxService.claim("notification.welcome-email")) {
-        return;
-    }
-
-    notificationService.sendAndRecordWelcomeEmail(...);
-}
-```
-
-This produces at-most-once successful processing per `(consumer_name, event_id)` while allowing a
-failed consumer to be retried. On redelivery, consumers that already committed their inbox row are
-skipped, while the failed consumer gets another attempt.
-
-Current consumer names are `notification.welcome-email`, `notification.login-2fa-email`,
-`notification.invitation-email`, and `auth.refresh-token-revocation`.
-
-Consumer requirements:
-
-- use synchronous `@EventListener`;
-- use `REQUIRES_NEW` so each consumer commits independently of the relay and other consumers;
-- claim before mutating;
-- do not swallow failures that should trigger retry;
-- do not add `@Async` to a durable listener;
-- keep the consumer name stable across refactors;
-- make external effects logically idempotent where the downstream system supports idempotency.
-
-The core implementation lives in:
-
-- `common.event.durable.DurableEventPublisher`;
-- `common.event.durable.ModuleEventOutboxRelay`;
-- `common.event.durable.ModuleEventInboxService`;
-- `bootstrap.config.ModuleEventRegistryConfig`.
-
-### Document ingestion transport
-
-Document ingestion does not use the module-event outbox. `document` owns a separate internal
-transport: `DocumentIngestionPublisher` writes `internal_event_outbox`, `InternalEventOutboxRelay`
-delivers to RabbitMQ through `RabbitDocumentIngestionPublisher`, and `DocumentStatusEventListener`
-consumes status events back into `documents`. Keep that path separate from business module events.
-
-## Where new code belongs
-
-Use these placement rules before creating a class:
-
-| New code | Location |
+| Code type | Target location |
 | --- | --- |
-| Cross-module callable interface | Owning module's `api` package |
-| Boundary command, result, enum, or exception | Same owning `api` package |
-| Published business fact | Producer's `api.event` package |
-| REST request/response used only by one module's controllers | That module's internal `dto` package |
-| JPA entity or repository | Owning module's `model` or `repository` package |
-| Owner-specific JDBC query | Owning module's `query` or `repository` package |
-| Cross-module wiring or registry | `bootstrap` |
-| Business-neutral reusable infrastructure | `common` |
-| Projection or read model | Owner-owned tables populated from events or exports |
+| Cross-module callable interface | `<module>.api` |
+| Boundary command / result / enum | `<module>.api` |
+| Published business event | `<module>.api.event` |
+| Controller-only DTO | `<module>.dto` |
+| JPA Entity / Repository | `<module>.model` or `<module>.repository` |
+| Reusable technical infrastructure | `common` |
+| Wiring and configuration | `bootstrap` |
 
-Examples:
+## Architecture enforcement
 
-- A new chat field belongs in `chat`, its chat DTOs/events, and the existing chat-owned table. It
-  does not belong in `tenant` merely because the chat session has a tenant ID.
-- A new tenant value needed by `document` is returned by `TenantWorkspaceApi` or copied through a
-  tenant event. Document must not add a query against `tenants`.
-- A new email reaction belongs in `notification`, consuming an event owned by the module where the
-  fact occurred. The producer must not call `NotificationService`.
-- A generic object-storage implementation can live in `common.storage`; document-specific upload
-  policy stays in document.
-
-## Database and migration rules
-
-Flyway remains one ordered migration stream because the application deploys atomically
-(`V1__baseline_schema.sql`, `V2__seed_default_model_configuration.sql`). Table ownership still
-applies to every statement within a migration.
-
-When changing the schema:
-
-1. identify the owning module;
-2. keep the table name and external database contract stable unless a coordinated migration says
-   otherwise;
-3. prefer additive, backward-compatible changes;
-4. preserve existing foreign keys unless the migration explicitly replaces them;
-5. update the owning entity/repository and its boundary events or snapshots;
-6. add migration coverage with representative data for production-specific SQL.
-
-Migrations are excluded from the runtime SQL ownership scan because a migration may coordinate
-several modules in one atomic deployment. Runtime Java code receives no such exemption.
-
-## Enforcement
-
-`ModularMonolithArchitectureTest` enforces that:
-
-- the business modules (`ai`, `auth`, `chat`, `document`, `notification`, `tenant`) import another
-  module only through `api` or `api.event`;
-- API contracts do not leak internal entities, repositories, services, queries, or DTOs;
-- `common` does not depend on a business module;
-- the business-module graph is acyclic;
-- every type ending in `ModuleApi` is an interface;
-- JDBC and `EntityManager` access stays in an owner `repository`/`query` package, `common`, or
-  `bootstrap`.
-
-`TableOwnershipTest` scans runtime Java persistence references and rejects access to a known table
-from a non-owner module.
-
-These tests have no violation allowlist. If an architecture test fails, fix the boundary rather
-than weakening the rule or adding an exception for the new dependency.
-
-Run the complete API verification before opening a PR:
-
-```sh
-cd api
-sh mvnw test
-git diff --check
+Run ArchUnit tests locally before committing:
+```bash
+make -C api test
 ```
-
-Add focused tests at the owner API or event boundary as well as behavior-level controller/service
-tests. Durable flows should cover producer rollback, relay retry/dead-letter behavior, inbox
-deduplication, and logical consumer idempotency when relevant.
-
-## Operations and recovery
-
-The `modularReadiness` health contributor reports:
-
-- whether Flyway migration version `24` is recorded as successful in `flyway_schema_history`;
-- pending module-event count;
-- dead module-event count;
-- age of the oldest pending event.
-
-Known issue: this release's migration stream stops at `V2`, so the version-`24` lookup never
-matches and `modularReadiness` reports `DOWN`. The check has not been re-pointed at an existing
-migration yet; treat the pending/dead event details as the usable signal until it is.
-
-The readiness group includes `modularReadiness`. Its default maximum pending age is 30 seconds,
-configurable through `app.module-events.readiness-max-pending-age-seconds`.
-
-Readiness becomes `DOWN` when the migration check fails, the health query fails, or pending event
-age exceeds the configured limit. A terminal `DEAD` event is reported as a degraded operational
-state through the health details, but it does not make an otherwise serving API reject traffic
-indefinitely. Operators must still repair or replay every dead event.
-
-Monitor outbox age, retries/dead letters, consumer failures, and the operational failure read
-model. A `DEAD` event or a growing pending age is an operational incident, not a reason to bypass
-the event boundary.
-
-## New-developer checklist
-
-Before implementing a change, answer these questions:
-
-1. Which module owns the behavior?
-2. Which module owns every table involved?
-3. Does the caller need an immediate value, or is this an independent reaction?
-4. If synchronous, is there a capability-focused owner API with API-owned value types?
-5. If asynchronous, is the event owned by the producer and published durably?
-6. Does every durable consumer claim a stable inbox name in the same transaction as its mutation?
-7. Are all imported business types from the same module, another module's `api`, or
-   `api.event`?
-8. Does any API type leak an entity, repository, internal DTO, servlet type, or implementation?
-9. Does runtime SQL touch only tables owned by the current module?
-10. Are REST, JSON, protobuf, authentication, and database contracts still compatible?
-
-Common mistakes to avoid:
-
-- importing an implementation because it is already a Spring bean;
-- sharing a JPA entity across module boundaries instead of using a UUID and owner API;
-- placing business DTOs or orchestration in `common`;
-- putting business behavior in `bootstrap` because it can see all modules;
-- publishing a durable event outside the producer transaction;
-- using `@Async` or after-commit listeners for durable consumers;
-- swallowing a consumer exception and causing the relay to mark an incomplete event as published;
-- reading another module's table for a convenient report;
-- routing document ingestion through the module-event outbox (it has its own transport);
-- fixing an architecture-test failure by relaxing the rule.
-
-If a design cannot satisfy these four rules, stop and redesign the boundary before adding code.
+`ModularMonolithArchitectureTest` and `TableOwnershipTest` enforce package boundaries and table ownership strictly with zero allowlist exceptions.

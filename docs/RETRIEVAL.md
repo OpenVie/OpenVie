@@ -2,287 +2,179 @@
 
 [Documentation index](README.md) · [Development](DEVELOPMENT.md) · [Architecture](ARCHITECTURE.md)
 
-This guide describes OpenVie's delivered digital-document RAG path. Image, OCR, audio, and video
-knowledge ingestion are **not delivered** and are not additional formats accepted by the current
-document API. For setup and configuration, start with [Development](DEVELOPMENT.md#local-setup).
+> **Ngôn ngữ / Language:** [Tiếng Việt](#hấp-thụ-và-truy-hồi--tiếng-việt) · [English](#ingestion-and-retrieval-1)
 
-## Contents
+---
 
-- [Current model and storage stack](#current-model-and-storage-stack)
-- [Accepted knowledge sources](#accepted-knowledge-sources)
-- [Asynchronous ingestion](#asynchronous-ingestion)
-- [Structure and spreadsheet handling](#structure-and-spreadsheet-handling)
-- [Deletion behavior](#deletion-behavior)
-- [Hybrid query processing](#hybrid-query-processing)
-- [Grounding and response behavior](#grounding-and-response-behavior)
-- [Caching](#caching)
-- [Implementation map](#implementation-map)
+## Hấp thụ và truy hồi — Tiếng Việt
 
-## Current model and storage stack
+Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. Hệ thống **không** hỗ trợ OCR, hình ảnh, âm thanh hay video.
 
-The runtime integrates pretrained models; it does not contain a model-training pipeline. Generation
-is **not self-hosted-only** and is not fixed to Gemma 4. Select providers and model identifiers in
-[settings](../rag-chatbot-fastapi/app/bootstrap/settings.py) and deployment configuration.
+### 1. Ngăn xếp mô hình và lưu trữ
 
-| Capability | Delivered implementation | Boundary |
+| Năng lực | Triển khai | Ghi chú |
 |---|---|---|
-| Answer generation, graph extraction, and calculation planning | Configured chat-model adapters: `ollama` or `qwen` | `qwen` targets an externally managed OpenAI-compatible endpoint; Ollama supports native chat or its compatibility endpoint. A provider name alone does not install a model. |
-| Dense text embeddings | Ollama `/api/embed` adapter; BGE-M3 with 1,024-dimensional vectors is the configured settings default | Embeds extracted text, not files; validates returned vector count and dimension. The configured model identifier must exist on the embedding server. |
-| Lexical retrieval | FastEmbed `Qdrant/bm25` sparse encoder | Complements semantic retrieval for literal wording, identifiers, dates, and values. |
-| Optional reranking | TEI cross-encoder endpoint; `Alibaba-NLP/gte-multilingual-reranker-base` is the portable default | Disabled by default and fail-open. The default explicitly supports Vietnamese; operators may select another TEI-compatible model only after measuring retrieval quality and latency. |
-| Digital-document parsing | Format-specific parsers, including `pypdf` and `python-docx` | Do not assume a Docling/OCR pipeline is installed. |
-| Vector index | Qdrant dense and sparse named vectors | Tenant, knowledge-base, and document scope constrain retrieval. |
-| Knowledge graph | Kuzu behind the graph service | Evidence-linked entities and relationships, not unconstrained model-memory facts. |
-| Model orchestration | Internal LangChain adapters where used | Internal dependency, not a public API contract. |
+| Sinh văn bản, trích xuất đồ thị, lập kế hoạch tính toán | Chat model adapter: `ollama` hoặc `qwen` | Mặc định là Ollama với `vylinh` (3.09B). `qwen` trỏ tới endpoint tương thích OpenAI bên ngoài. |
+| Vector dày (Dense embeddings) | Adapter Ollama `/api/embed` | Mặc định là `bge-m3` (1024 chiều). |
+| Truy hồi từ vựng (Lexical/Sparse) | FastEmbed `Qdrant/bm25` | Bổ sung cho ngữ nghĩa đối với từ ngữ chính xác, mã hiệu, ngày tháng. |
+| Xếp hạng lại (Reranking - tùy chọn) | TEI cross-encoder endpoint | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt, cơ chế fail-open khi lỗi. |
+| Phân tích tài liệu số | Parser chuyên biệt: `pypdf`, `python-docx`... | Trích xuất văn bản có cấu trúc kèm nguồn gốc (provenance). |
+| Chỉ mục vector | Qdrant named vectors (dense + sparse) | Giới hạn theo tenant, knowledge base và document. |
+| Đồ thị tri thức (Graph) | Kuzu chạy ngầm sau graph-service | Thực thể và quan hệ được neo bằng bằng chứng trong tài liệu. |
 
-The generative model is separate from the text embedding model. Changing a model identifier or
-embedding dimension is not a documentation rename: it affects compatibility with indexed vectors
-and cache scope. See [Development configuration](DEVELOPMENT.md#configuration) and
-[caches](ARCHITECTURE.md#caches). vLLM was part of a proposed model-serving design; it is not a
-required runtime for every supported provider.
+### 2. Nguồn tài liệu được chấp nhận
 
-OpenVie application source is Apache-2.0 under the repository [LICENSE](../LICENSE),
-copyright 2026 LinkedNodeDigital. Open-source infrastructure, model weights, and third-party
-dependencies retain their own licenses and are not redistributed under the application's license.
+- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`). Giới hạn **20 MB/tệp**.
+- **Không hỗ trợ:** PDF scan/ảnh thuần, PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), file nén độc hại/hư hỏng.
 
-## Accepted knowledge sources
-
-| Current source | Extensions | Processing |
-|---|---|---|
-| Text-bearing PDF | `.pdf` | Extract page text and provenance; structure-aware chunks |
-| Word document | `.docx` | Paragraphs, headings, lists, and tables |
-| Plain text | `.txt` | UTF-8 text, paragraph blocks |
-| Markdown | `.md`, `.markdown` | Structural text blocks |
-| HTML | `.html`, `.htm` | Extracted text and document structure |
-| Spreadsheet | `.xlsx`, `.csv` | Logical tables, schema, rows, and cell provenance; constrained calculations |
-
-The Java upload service enforces **20 MB** per file. It validates the supported extension, accepted
-MIME type, and format-specific content: PDF signature, Office archive structure and expansion safety,
-or UTF-8 text without binary NUL content. Generic `application/octet-stream` is accepted for supported
-formats, so this is not a claim that the supplied MIME type proves the file's contents.
-
-Encrypted PDFs, scanned-only PDFs without extractable text, legacy `.doc`/`.xls`, and unsafe or
-malformed Office archives are unsupported. Some failures are discovered during asynchronous parsing,
-not necessarily at the initial upload request. Uploaded content remains untrusted data.
-
-Do not describe every upload as malware-scanned: the current validation path does not call a malware
-scanner. A settings flag or future worker-kind name is not evidence that an ingestion capability exists.
-See the [upload validator](../api/src/main/java/com/cacanode/api/document/service/DocumentFileValidator.java)
-and [parsers](../rag-chatbot-fastapi/app/modules/ingestion/internal/extraction.py) for exact behavior.
-
-## Asynchronous ingestion
-
-An accepted upload stores the raw source and schedules ingestion; success of the upload request does
-not mean the knowledge is ready for chat. Persisted document statuses are:
-
-```text
-PENDING -> PROCESSING -> COMPLETED
-PENDING -> FAILED
-PROCESSING -> FAILED
-```
-
-### Upload idempotency and updates
-
-Document uploads identify documents by file name within a knowledge base:
-- **Identical content:** If a file with identical SHA-256 content is uploaded to the same knowledge base, the API performs a no-op: it returns the existing document record immediately without re-storing files in SeaweedFS, re-embedding in Qdrant, or re-extracting graph entities.
-- **Modified content:** If a file with the same name has modified content, the API updates the existing document in place (preserving its document ID), transitions its status back to `PENDING` with a new job ID, overwrites the stored source, and schedules re-ingestion. The downstream worker then replaces index points in Qdrant and graph entities in Kuzu for that document ID, preventing duplicate records or orphaned vectors.
-- **In-progress uploads:** Re-uploading an identical file while processing is underway returns the active document; re-uploading modified content while processing is in flight is rejected until the current job finishes.
-Public status data identifies the document/job, file name/type/size, knowledge base,
-current status, upload time, successful chunk count, and safe failure message as applicable;
-the Spring document API is the contract for those fields. Redis worker checkpoints separately track
-processing publication, index replacement, graph replacement, completion publication, cleanup, and
-terminal failure; they are not extra public document statuses.
+### 3. Quy trình hấp thụ bất đồng bộ
 
 ```mermaid
 flowchart LR
-    Upload[Validate and store raw source] --> Job[Asynchronous ingestion job]
-    Job --> Parse[Format-specific structural parsing]
-    Parse --> Normalize[Sections and normalized tables]
-    Normalize --> Chunk[Provenance-bearing knowledge units]
-    Chunk --> Dense[Configured dense text encoder]
-    Chunk --> Sparse[FastEmbed BM25 encoder]
-    Chunk --> Extract[Configured chat-model entity extraction]
+    Upload[Lưu file gốc] --> Job[Tác vụ bất đồng bộ]
+    Job --> Parse[Phân tích cấu trúc]
+    Parse --> Chunk[Phân đoạn tri thức]
+    Chunk --> Dense[Mã hóa BGE-M3]
+    Chunk --> Sparse[Mã hóa FastEmbed BM25]
+    Chunk --> Extract[Trích xuất thực thể đồ thị]
     Dense --> Qdrant[(Qdrant)]
     Sparse --> Qdrant
-    Extract --> Validate[Validate evidence references]
-    Validate --> Kuzu[(Kuzu graph projection)]
+    Extract --> Kuzu[(Đồ thị Kuzu)]
 ```
 
-Worker concurrency is configuration, not a fixed property. `INGESTION_WORKER_CONCURRENCY`
-(default `4`) is the maximum number of documents a worker processes at once and is also the
-RabbitMQ prefetch count; set it to `1` when the model server is serial. Graph extraction is
-chat-model work, not embeddings: it dominates ingestion time, and its cost grows with document
-size because each chunk contributes entities and relations to the response.
-`GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (default `512`) bounds that response per batch. A
-length-limited multi-chunk batch is subdivided; a single unit that still reaches the cap is omitted
-from the concise graph rather than failing the document.
+- **Trạng thái:** `PENDING` → `PROCESSING` → `COMPLETED` (hoặc `FAILED`).
+- **Idempotency:**
+  - File trùng SHA-256 trong cùng KB: trả về tài liệu hiện có, bỏ qua xử lý lại.
+  - File cùng tên nhưng nội dung thay đổi: cập nhật tại chỗ, chuyển lại `PENDING`, ghi đè nguồn và thay thế vector/graph tương ứng.
+- **Giới hạn tài nguyên:** `INGESTION_WORKER_CONCURRENCY` (mặc định 4) điều tiết số tài liệu xử lý đồng thời. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) giới hạn token sinh ra mỗi batch trích xuất đồ thị (tối đa 2 thực thể, 2 quan hệ mỗi đơn vị tri thức).
 
-The default retains at most two entities and two relations per knowledge unit, prioritizing central
-facts so a four-chunk batch fits the output budget. Increase those per-unit limits only with a
-measured timeout budget.
+### 4. Xử lý cấu trúc và bảng tính
 
+- **Phân đoạn (Chunking):** Đoạn văn thông thường cắt ở **800 ký tự với 120 ký tự gối đầu (overlap)**. Bảng biểu, tiêu đề, danh sách dùng overlap bằng 0 và tôn trọng ranh giới dòng. Bảng bị cắt sẽ lặp lại dòng tiêu đề (header) để giữ ngữ cảnh.
+- **Bảng tính (Spreadsheet):**
+  - *Ngữ nghĩa:* Mỗi dòng được chuẩn hóa thành văn bản kèm metadata (Sheet, Range, Cột, Giá trị).
+  - *Tính toán tiền kiểm định:* Với câu hỏi tính toán, mô hình lập kế hoạch JSON (`count`, `sum`, `average`, `min`, `max`, `sort`, `top`, `bottom`) và Polars thực thi an toàn trên dữ liệu Parquet. Không chạy code tùy ý.
 
-When graph extraction resumes after vector indexing, it rebuilds chunks but does not recompute
-embeddings. If one concurrent extraction batch fails, the worker cancels its sibling model
-requests before retrying.
-
-## Structure and spreadsheet handling
-
-A knowledge unit retains source/document identity, file name, section and heading context, page number
-when applicable, source offsets, content hash, and parser/chunker version. Table and spreadsheet units
-also retain table identity, headers, sheet name, and cell range where available. Provenance depends on
-the source format; not every field exists for every unit.
-
-Oversized prose/page blocks target **800 characters with 120-character overlap**. Structural headings,
-lists, code, tables, spreadsheet rows, and sheet records use zero character overlap and prefer line or
-row boundaries. A non-table line longer than the target is hard-split without overlap; a table row is
-kept intact even if its fragment exceeds the target. Split tables repeat headers so each fragment
-remains interpretable and citable. The rules live in
-[chunking.py](../rag-chatbot-fastapi/app/modules/ingestion/internal/chunking.py).
-
-Spreadsheets have two complementary representations:
-
-1. **Semantic evidence:** table summaries and normalized rows carry the source workbook name, sheet,
-   header, range, and values as retrievable text. For example:
-
-   ```text
-   Sheet: Kho hàng; Range: A14:D14; Mã SP: SP-014; Tên sản phẩm: Máy in laser; Tồn kho: 50
-   ```
-
-   The summary block for the same table reads
-   `Sheet: Kho hàng; Range: A14:D14; Columns: Mã SP (string), Tên sản phẩm (string), Tồn kho (int)`.
-
-2. **Deterministic calculations:** the model may plan a restricted JSON operation against a retrieved
-   table; validated code executes it with Polars. Supported operations are `count`, `sum`, `average`,
-   `minimum`, `maximum`, `sort`, `top`, and `bottom`, with validated filters and optional grouping.
-   Unknown columns and invalid filter types are rejected. The model explains the result rather than
-   executing arbitrary code.
-
-The parser discovers logical tables across blank row/column bands, normalizes duplicate headers,
-infers primitive types, and records formula cells. It does **not** evaluate spreadsheet formulas.
-Neither generated Python, SQL, shell commands, nor unrestricted expressions are calculation inputs.
-See the planner/executor split in
-[calculation.py](../rag-chatbot-fastapi/app/modules/generation/internal/calculation.py) and
-[spreadsheets.py](../rag-chatbot-fastapi/app/modules/generation/internal/spreadsheets.py).
-
-## Deletion behavior
-
-Deletion is tenant-scoped and restricted to tenant admins. Current behavior is narrower than a
-universal deletion design:
-
-- `PENDING` and `PROCESSING` documents cannot be deleted; wait for processing to finish.
-- Completed-document deletion removes vector/graph indexes and raw storage before removing the
-  document record. Search revision and document caches are updated.
-- Failed-document deletion removes the record and requests index/storage cleanup through an event;
-  cleanup errors are logged rather than making that path equivalent to synchronous cleanup.
-- Source-owned graph relationships are removed while entities still supported by other sources remain.
-- A repeated delete of an absent document is not promised to succeed: the service returns not found.
-
-See [DocumentService](../api/src/main/java/com/cacanode/api/document/service/DocumentService.java),
-[failed cleanup listener](../api/src/main/java/com/cacanode/api/document/listener/FailedDocumentCleanupListener.java),
-and [graph lifecycle](../rag-chatbot-fastapi/app/modules/graph/internal/service.py).
-
-## Hybrid query processing
-
-The control plane derives tenant identity, policy, knowledge revision, and document visibility from
-trusted context. A tenant identifier supplied in request JSON is not authorization. Retrieval combines
-three evidence channels, using a deterministic router rather than a learned classifier.
+### 5. Xử lý truy vấn lai (Hybrid Retrieval)
 
 ```mermaid
 flowchart TD
-    Query[Authenticated query and visible document scope] --> Plan[Rewrite follow-up into standalone query]
-    Plan --> Route[Calculation then relational then exact then semantic]
-    Route --> Dense[Dense text ranking]
-    Route --> Sparse[BM25 sparse ranking]
-    Route --> Graph[Entity and alias seeds]
-    Graph --> Paths[Bounded bidirectional RELATED_TO paths]
-    Paths --> Evidence[Grounded graph evidence ranking]
-    Dense --> Fusion[Profile-weighted reciprocal rank fusion]
+    Query[Truy vấn người dùng] --> Plan[Viết lại câu hỏi nối tiếp]
+    Plan --> Route[Định tuyến: Tính toán -> Quan hệ -> Chính xác -> Ngữ nghĩa]
+    Route --> Dense[Xếp hạng Dense]
+    Route --> Sparse[Xếp hạng BM25]
+    Route --> Graph[Truy vết thực thể Đồ thị]
+    Dense --> Fusion[Dung hợp RRF có trọng số]
     Sparse --> Fusion
-    Evidence --> Fusion
-    Fusion --> Rerank[Optional TEI reranking]
-    Rerank --> Select[Diverse primary evidence]
-    Select --> Neighbors[Eligible prose and page neighbors]
-    Neighbors --> Generate[Grounded generation or constrained calculation]
-    Generate --> Response[Completed JSON response with structured citations]
+    Graph --> Fusion
+    Fusion --> Rerank[Xếp hạng lại TEI - nếu bật]
+    Rerank --> Select[Chọn 5 đơn vị sơ cấp]
+    Select --> Neighbors[Mở rộng lân cận & hoàn chỉnh bảng]
+    Neighbors --> Generate[Sinh câu trả lời có kiểm chứng]
 ```
 
-Current default retrieval policy (not benchmark-tuned constants):
+1. **Viết lại truy vấn theo ngữ cảnh (Query Planning):** Câu hỏi nối tiếp (follow-up) được viết lại thành truy vấn độc lập trước khi tìm kiếm dựa trên lịch sử hội thoại gần nhất.
+2. **Định tuyến:** `calculation` → `relational` → `exact` → `semantic` với trọng số kênh tương ứng.
+3. **Khai thác ứng viên:** Thu thập tối đa 40 dense, 40 sparse, 20 graph song song.
+4. **Dung hợp (Fusion):** RRF với $k=30$, giữ lại 30 ứng viên tốt nhất.
+5. **Reranking:** Tùy chọn xếp hạng lại bằng mô hình cross-encoder.
+6. **Lựa chọn & Mở rộng:** Lấy 5 đơn vị sơ cấp (tối đa 2 đơn vị/tài liệu). Tự động kéo thêm các dòng lân cận cùng bảng (`table_id`) và ngữ cảnh lân cận, tối đa 8 đơn vị tri thức đưa vào prompt.
 
-1. Route with precedence **calculation → relational → exact → semantic**.
-2. Retrieve up to 40 dense, 40 sparse, and 20 graph candidates; channel operations run concurrently.
-3. Fuse by profile-weighted RRF with `k=30`, deduplicating `(document_id, unit_id)`, retaining 30 candidates.
-4. Optionally rerank through the configured TEI endpoint. The portable default is the 306M-parameter GTE multilingual cross-encoder; TEI installation and acceleration are platform-specific while the HTTP contract remains the same.
-5. Select five primary units with a soft limit of two per document. Fill deferred candidates if diversity
-   would otherwise leave the context incomplete.
-6. Add at most three eligible prose/page neighbors, for at most eight units, each with citation metadata.
+### 6. Nguyên tắc sinh phản hồi và đối soát
 
-Graph search matches normalized entities and aliases, then follows grounded `RELATED_TO` evidence
-in either direction for zero through three hops. It rejects cyclic paths and filters document scope
-before the candidate limit. This is bounded evidence-grounded multi-hop retrieval, **not** community
-summarization or global-search GraphRAG. See [graph search](../rag-chatbot-fastapi/app/modules/graph/internal/search.py)
-for the implemented traversal and its limits.
+- **Liệt kê đầy đủ:** Khi nguồn tài liệu có danh sách, mô hình được chỉ thị liệt kê toàn bộ các mục, nhãn và thông số, không tóm tắt hay cắt xén.
+- **Trích dẫn có cấu trúc:** Câu trả lời dẫn nguồn `[S1]`, `[S2]`. Control plane kiểm tra tính hợp lệ và quyền truy cập tài liệu trước khi trả về client.
+- **Không tìm thấy:** Khi không có bằng chứng liên quan, mô hình từ chối suy đoán và thông báo thiếu thông tin.
 
-Channel, reranker, and neighbor-expansion failures retain usable evidence where the implementation
-can do so. This does not promise an answer through every outage: query embedding, absence of usable
-evidence, model errors, and authoritative consistency checks can still prevent generation.
+---
 
-Candidate counts, weights, and flags are defined in
-[settings](../rag-chatbot-fastapi/app/bootstrap/settings.py); their defaults are listed above and
-are not benchmark-tuned constants.
+# Ingestion and retrieval
 
-## Grounding and response behavior
+This guide describes OpenVie's digital-document RAG implementation. OCR, general image, audio, and video ingestion are **not delivered**.
 
-- A follow-up turn is rewritten into one standalone search query before retrieval, using the recent
-  conversation supplied by the control plane. The rewrite runs only when the session already has a
-  user turn, is capped at `MAX_FOLLOW_UP_OUTPUT_TOKENS`, and falls back to the original question on
-  any timeout, provider error, or unusable output, so retrieval never depends on it. The answer
-  prompt also receives the bounded recent turns, so pronouns resolve during generation as well.
-- Answer instructions require complete enumeration: when the sources list items, every item is
-  reproduced with its identifier, name, and values in source order. Brevity is secondary to
-  completeness, and `LLM_MAX_OUTPUT_TOKENS` (default `512`) must leave room for the longest
-  enumeration the corpus expects.
-- Tenant-specific knowledge claims must use retrieved evidence; graph facts must reference valid source units.
-- Answers carry structured citations, not only in-text markers. The Java control plane validates citation
-  document ownership, completion, knowledge-base membership, and visibility before acceptance.
-  Only sources cited by the answer are returned with it; an answer that cites nothing keeps the full
-  retrieved evidence set rather than reporting no sources.
-- An authoritative knowledge revision is checked across inference and persistence; a changed revision
-  triggers one rebuilt-context retry.
-- When no context is selected, the response is the unavailable-information answer rather than a
-  guessed one. Calibrated score-based abstention is not implemented.
-- Retrieved content is data, not permission to override tenant or chatbot policy. Prompt instructions
-  and citation checks are safeguards, not a proof that model output is always correct.
-- The chat submission contract returns a **completed JSON response**. It is not an SSE/token
-  stream; streaming-oriented settings do not establish a working streaming endpoint.
+## 1. Current model and storage stack
 
-The chatbot row stores a `general_knowledge_policy` value, but no enforcement path consumes it
-today; do not document it as a working feature. See
-[generation service](../rag-chatbot-fastapi/app/modules/generation/internal/service.py) for prompt
-and no-information behavior.
+| Capability | Implementation | Notes |
+|---|---|---|
+| Text generation, graph extraction, calculation planning | Chat model adapters: `ollama` or `qwen` | Default: native Ollama with `vylinh` (3.09B). `qwen` targets an external OpenAI-compatible endpoint. |
+| Dense embeddings | Ollama `/api/embed` | Default: `bge-m3` (1024 dimensions). |
+| Lexical retrieval | FastEmbed `Qdrant/bm25` | Complements semantic search for exact codes, identifiers, dates. |
+| Reranking (optional) | TEI cross-encoder endpoint | Default: `Alibaba-NLP/gte-multilingual-reranker-base`. Fails open on errors. |
+| Document parsing | Dedicated parsers: `pypdf`, `python-docx` | Extracts structured text with source provenance. |
+| Vector index | Qdrant dense and sparse vectors | Filtered by tenant, knowledge base, and document ID. |
+| Knowledge graph | Kuzu behind graph-service | Grounded entities and evidence-backed relations. |
 
-## Caching
+## 2. Accepted knowledge sources
 
-Do not assume all generated answers bypass caches. OpenVie implements embedding and retrieval caches,
-plus an **optional semantic answer cache** with `off`, `shadow`, and `serve` modes. Defaults leave the
-optional caches disabled. The semantic answer cache has an exact-query tier and a vector-similarity
-tier; only eligible grounded answers may be reused, with scope, visibility, revision, literal, and expiry
-guards. Queries with action intent or on the calculation route are rejected before any cache
-lookup or write.
+- **Supported:** PDF with extractable text (`.pdf`), Word (`.docx`), Plain text (`.txt`), Markdown (`.md`), HTML (`.html`), Spreadsheets (`.xlsx`, `.csv`). Size limit: **20 MB per file**.
+- **Unsupported:** Scanned/image-only PDFs, encrypted PDFs, legacy binary files (`.doc`, `.xls`), corrupted archives.
 
-Operational defaults, switches, failure behavior, and rollout gates are covered in
-[architecture · caches](ARCHITECTURE.md#caches).
+## 3. Asynchronous ingestion
 
-## Implementation map
+```mermaid
+flowchart LR
+    Upload[Store raw file] --> Job[Async ingestion job]
+    Job --> Parse[Structural parse]
+    Parse --> Chunk[Knowledge units]
+    Chunk --> Dense[BGE-M3 encode]
+    Chunk --> Sparse[FastEmbed BM25 encode]
+    Chunk --> Extract[Graph entity extraction]
+    Dense --> Qdrant[(Qdrant)]
+    Sparse --> Qdrant
+    Extract --> Kuzu[(Kuzu Graph)]
+```
 
-| Concern | Source |
+- **Statuses:** `PENDING` → `PROCESSING` → `COMPLETED` (or `FAILED`).
+- **Idempotency:**
+  - Identical SHA-256 within the same knowledge base: returns existing document without reprocessing.
+  - Same filename with changed content: updates document in place, resets status to `PENDING`, and replaces vector/graph entities.
+- **Resource limits:** `INGESTION_WORKER_CONCURRENCY` (default 4) governs document concurrency. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) caps tokens per graph batch (max 2 entities, 2 relations per unit).
+
+## 4. Structure and spreadsheet handling
+
+- **Chunking:** Prose blocks target **800 characters with 120-character overlap**. Tables, headings, and code use zero character overlap. Fragmented tables repeat header lines to preserve context.
+- **Spreadsheets:**
+  - *Semantic representation:* Normalized rows include sheet name, cell range, headers, and values.
+  - *Deterministic calculation:* Model plans restricted JSON operations (`count`, `sum`, `average`, `min`, `max`, `sort`, `top`, `bottom`) executed safely via Polars on derived Parquet files.
+
+## 5. Hybrid query processing
+
+```mermaid
+flowchart TD
+    Query[User query] --> Plan[Rewrite follow-up query]
+    Plan --> Route[Route: Calc -> Relational -> Exact -> Semantic]
+    Route --> Dense[Dense ranking]
+    Route --> Sparse[BM25 ranking]
+    Route --> Graph[Graph entity traversal]
+    Dense --> Fusion[Weighted RRF fusion]
+    Sparse --> Fusion
+    Graph --> Fusion
+    Fusion --> Rerank[TEI reranking - optional]
+    Rerank --> Select[Select 5 primary units]
+    Select --> Neighbors[Neighbor & table completion]
+    Neighbors --> Generate[Grounded generation]
+```
+
+1. **Contextual Query Planning:** Follow-up questions are reformulated into standalone search queries based on recent conversation turns.
+2. **Routing:** Order: `calculation` → `relational` → `exact` → `semantic` with profile-specific weights.
+3. **Retrieval:** Fetches up to 40 dense, 40 sparse, and 20 graph candidates concurrently.
+4. **Fusion:** Profile-weighted RRF with $k=30$, retaining top 30 candidates.
+5. **Reranking:** Optional cross-encoder scoring.
+6. **Selection & Expansion:** Selects 5 primary units (soft limit 2 per document), completed with structural table siblings (`table_id`) and eligible neighbors up to 8 total units.
+
+## 6. Grounding and response behavior
+
+- **Full Enumeration:** When sources contain lists/tables, the model reproduces every item with identifiers and values, avoiding truncation.
+- **Structured Citations:** Facts are marked with `[S1]`, `[S2]`. The control plane validates document visibility and ownership.
+- **Abstention:** If evidence is insufficient, the system abstains rather than hallucinating.
+
+## 7. Implementation map
+
+| Concern | Primary source files |
 |---|---|
-| Upload validation and lifecycle | [DocumentService.java](../api/src/main/java/com/cacanode/api/document/service/DocumentService.java), [DocumentFileValidator.java](../api/src/main/java/com/cacanode/api/document/service/DocumentFileValidator.java) |
-| Parsing, chunking, ingestion | [extraction.py](../rag-chatbot-fastapi/app/modules/ingestion/internal/extraction.py), [chunking.py](../rag-chatbot-fastapi/app/modules/ingestion/internal/chunking.py), [pipeline.py](../rag-chatbot-fastapi/app/modules/ingestion/internal/pipeline.py) |
-| Model adapters | [chat.py](../rag-chatbot-fastapi/app/modules/model/internal/chat.py), [embedding.py](../rag-chatbot-fastapi/app/modules/model/internal/embedding.py), [sparse.py](../rag-chatbot-fastapi/app/modules/model/internal/sparse.py) |
-| Retrieval and reranking | [retrieval.py](../rag-chatbot-fastapi/app/modules/retrieval/internal/retrieval.py), [reranking.py](../rag-chatbot-fastapi/app/modules/retrieval/internal/reranking.py) |
-| Graph extraction and search | [entity_extraction.py](../rag-chatbot-fastapi/app/modules/ingestion/internal/entity_extraction.py), [search.py](../rag-chatbot-fastapi/app/modules/graph/internal/search.py) |
-| Calculation execution | [calculation.py](../rag-chatbot-fastapi/app/modules/generation/internal/calculation.py), [spreadsheets.py](../rag-chatbot-fastapi/app/modules/generation/internal/spreadsheets.py) |
-
-Follow [Java module rules](../api/GUIDE.md) and [Python module rules](../rag-chatbot-fastapi/GUIDE.md)
-when changing these implementations; this guide does not replace those boundaries.
+| Upload & lifecycle | `DocumentService.java`, `DocumentFileValidator.java` |
+| Parsing & chunking | `extraction.py`, `chunking.py`, `pipeline.py` |
+| Model adapters | `chat.py`, `embedding.py`, `sparse.py` |
+| Retrieval & planning | `query_plan.py`, `retrieval.py`, `reranking.py` |
+| Graph projection | `entity_extraction.py`, `search.py` |
+| Calculation engine | `calculation.py`, `spreadsheets.py` |
