@@ -66,8 +66,10 @@ routes:
   - uri: /*
     name: edge-web
     priority: 0
+    enable_websocket: true
     upstream:
       type: roundrobin
+      pass_host: node
       nodes:
         "host.docker.internal:3000": 1
 #END
