@@ -117,6 +117,11 @@ Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật t
 - **Lỗi kết nối Postgres/Redis:** Đảm bảo các dịch vụ container đang chạy qua `docker compose ps`. File `.env` của service phải trỏ vào `localhost`, không dùng tên DNS nội bộ Docker như trong root `.env`.
 - **Dừng hệ thống giữ nguyên dữ liệu:** Nhấn `Ctrl-C` ở các terminal ứng dụng, sau đó hạ container bằng `make -C rag-chatbot-fastapi dev-down`. Tránh dùng lệnh `docker compose down -v`.
 
+### 7. Phân biệt với môi trường sản xuất (Development vs Production)
+
+- **Phát triển (Local Dev):** Dùng `docker-compose.yml` (hoặc `make dev-infra`) để chạy hạ tầng dữ liệu; mã nguồn Java, Python, Web chạy trực tiếp trên host để hỗ trợ live-reload và debug.
+- **Sản xuất (Production):** Dùng `docker-compose.prod.yml` để đóng gói và chạy trọn gói 100% ứng dụng trong container khép kín. Chi tiết xem [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ---
 
 # Local development guide
@@ -229,3 +234,8 @@ Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 - **Port conflicts:** Terminate existing processes on 18000 or 50051 before starting `make dev`.
 - **Database connectivity:** Check container health via `docker compose ps`. Service-level `.env` files must reference `localhost` ports rather than container names.
 - **Graceful shutdown:** Stop host applications with `Ctrl-C`, then bring down containers with `make -C rag-chatbot-fastapi dev-down`. Avoid `docker compose down -v` to prevent volume loss.
+
+## 7. Development vs Production
+
+- **Development:** `docker-compose.yml` (via `make dev-infra`) runs stateful databases only; applications run directly on the host with live reload.
+- **Production:** `docker-compose.prod.yml` containerizes the entire stack (data, backend, AI, frontend, APISIX) in a single deployment. See [DEPLOYMENT.md](DEPLOYMENT.md).

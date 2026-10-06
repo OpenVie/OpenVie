@@ -120,6 +120,25 @@ kèm npm (Node 22.13 trở lên trên nhánh 22.x là baseline phổ biến).
 `make -C rag-chatbot-fastapi dev-infra` mới khởi. Dùng `PYTHON=python3.12` nếu đó là interpreter
 hỗ trợ bạn đã cài.
 
+## Triển khai sản xuất (Production / Deployment)
+
+Để triển khai toàn bộ nền tảng dưới dạng container khép kín trên máy chủ production, sử dụng
+file `docker-compose.prod.yml`:
+
+1. Chuẩn bị file cấu hình môi trường sản xuất:
+   ```bash
+   cp .env.production.example .env.production
+   chmod 600 .env.production
+   # Cập nhật các secret (TOKEN_KEY, mật khẩu DB, model endpoints...)
+   ```
+2. Khởi chạy toàn bộ hệ thống bằng Docker Compose:
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+   ```
+3. Truy cập hệ thống qua cổng biên Apache APISIX tại `http://your-domain:8088` để hoàn tất thiết lập ban đầu (`/setup`).
+
+Xem chi tiết tại [hướng dẫn triển khai (DEPLOYMENT.md)](docs/DEPLOYMENT.md).
+
 ## Làm việc với mã nguồn
 
 | Lĩnh vực thay đổi | Quy tắc và kiểm tra |
@@ -266,6 +285,25 @@ Node.js LTS release with npm (Node 22.13 or newer on the 22.x line is a common b
 `make dev` in the Python service does **not** start Docker infrastructure. The separate
 `make -C rag-chatbot-fastapi dev-infra` target does. Use `PYTHON=python3.12` instead if that
 is your installed supported interpreter.
+
+## Production deployment
+
+To deploy the entire platform as a self-contained containerized stack on a production host,
+use `docker-compose.prod.yml`:
+
+1. Prepare the production environment configuration:
+   ```bash
+   cp .env.production.example .env.production
+   chmod 600 .env.production
+   # Update secrets (TOKEN_KEY, DB passwords, model endpoints...)
+   ```
+2. Start all services with Docker Compose:
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+   ```
+3. Access the web console via Apache APISIX at `http://your-domain:8088` to complete initial setup (`/setup`).
+
+For details on operations, backups, and security hardening, see the [deployment guide](docs/DEPLOYMENT.md).
 
 ## Working on the code
 

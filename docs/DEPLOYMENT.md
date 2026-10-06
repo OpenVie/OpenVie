@@ -12,9 +12,11 @@ Tài liệu này hướng dẫn người vận hành cài đặt và vận hành
 
 ### 1. Phân định phạm vi cung cấp
 
-- **Được cung cấp:** `docker-compose.yml` (Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Apache APISIX Gateway), mã nguồn Spring Boot API, Python AI Service, Next.js Web Console, và file mẫu `.env.production.example`.
+- **Được cung cấp:**
+  - `docker-compose.prod.yml`: Triển khai sản xuất trọn gói toàn bộ nền tảng (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Spring Boot API, Python AI Service, Next.js Web Console, và Apache APISIX Gateway).
+  - `docker-compose.yml`: Chỉ chạy các dịch vụ dữ liệu nền tảng (dùng cho phát triển hoặc mô hình hybrid chạy app trên host).
+  - File cấu hình mẫu `.env.production.example` và route gateway `apisix/routes.prod.yaml`.
 - **Trách nhiệm của người vận hành:** Cấu hình chứng chỉ SSL/TLS (HTTPS) phía trước Gateway, WAF, kiểm dịch mã độc tệp tải lên, hệ thống sao lưu/phục hồi tự động, và giám sát hạ tầng.
-
 ### 2. Yêu cầu tiên quyết
 
 - Máy chủ Linux (Ubuntu 22.04+ khuyến nghị) hoặc macOS/Windows WSL2.
@@ -36,17 +38,26 @@ Tạo các khóa bí mật ngẫu nhiên bằng `openssl rand -hex 32` cho:
 - Đồng bộ thông số sinh phản hồi: `LLM_MAX_OUTPUT_TOKENS=512`, `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
 - Kiểm tra tính hợp lệ của compose:
 ```bash
-docker compose --env-file .env.production config --quiet
+# Kiểm tra cấu hình stack sản xuất đầy đủ:
+docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
 ```
 
-### 4. Khởi động hạ tầng và dịch vụ mô hình
+### 4. Triển khai toàn bộ bằng Docker Compose (Khuyến nghị cho Production)
 
-Khởi động các dịch vụ lưu trữ nền tảng:
+Chỉ với một lệnh, toàn bộ stack ứng dụng và hạ tầng dữ liệu được khởi chạy khép kín trong container:
+
 ```bash
-docker compose --env-file .env.production up -d --wait
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Cài đặt và cấu hình Ollama trực tiếp trên host (systemd trên Linux, launchd trên macOS):
+Lệnh trên tự động khởi chạy:
+1. Hạ tầng dữ liệu: Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS (S3), Kuzu Graph.
+2. Dịch vụ AI & Ingestion: Python FastAPI + gRPC (:50051) + worker tài liệu.
+3. Dịch vụ Nghiệp vụ: Spring Boot API (:8080) tự động migrate Flyway database khi khởi động.
+4. Giao diện người dùng: Next.js Web Console (:3000).
+5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API và Web.
+
+Cài đặt và cấu hình Ollama trực tiếp trên host (systemd trên Linux, launchd trên macOS) để tận dụng GPU/Metal:
 ```ini
 # Thiết lập song song trong service manager của OS:
 Environment="OLLAMA_NUM_PARALLEL=4"
@@ -61,35 +72,24 @@ curl -s -o /dev/null http://127.0.0.1:11434/api/generate -d '{"model":"vylinh","
 curl -s -o /dev/null http://127.0.0.1:11434/api/embed -d '{"model":"bge-m3","input":["warmup"],"keep_alive":-1}'
 ```
 
-*Tùy chọn TEI Reranker (`RERANKER_ENABLED=true`):*
+*Tùy chọn TEI Reranker container:*
 ```bash
-# Linux x86_64:
-docker compose --env-file .env.production --profile reranker up -d reranker-service
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile reranker up -d reranker-service
 ```
 
-### 5. Cài đặt và vận hành ứng dụng
+### 5. Phương án triển khai Hybrid (Chạy ứng dụng trực tiếp trên Host)
 
-Nạp biến môi trường cho shell hiện tại:
+Nếu bạn chọn chạy các ứng dụng trực tiếp trên host thay vì container:
 ```bash
+# 1. Chỉ khởi động hạ tầng trong Docker:
+docker compose --env-file .env.production up -d --wait
+
+# 2. Nạp cấu hình và chạy các service trên host (systemd supervisor):
 set -a; . ./.env.production; set +a
+make -C rag-chatbot-fastapi setup PYTHON=python3.11 && make -C rag-chatbot-fastapi run PYTHON=python3.11
+make -C api migrate ENV_FILE=../.env.production && make -C api run-prod ENV_FILE=../.env.production
+npm --prefix frontend ci && npm --prefix frontend run build && npm --prefix frontend run start
 ```
-
-Khởi chạy ứng dụng (nên dùng systemd supervisor):
-```bash
-# 1. Python AI service
-make -C rag-chatbot-fastapi setup PYTHON=python3.11
-make -C rag-chatbot-fastapi run PYTHON=python3.11
-
-# 2. Spring Boot API
-make -C api migrate ENV_FILE=../.env.production
-make -C api run-prod ENV_FILE=../.env.production
-
-# 3. Web Console
-npm --prefix frontend ci
-npm --prefix frontend run build
-npm --prefix frontend run start
-```
-
 ### 6. Thiết lập lần đầu và khôi phục chủ sở hữu
 
 1. Mở `http://your-domain` (hoặc cổng APISIX 8088). Hệ thống chuyển hướng tới `/setup`.
@@ -109,7 +109,12 @@ curl --fail http://localhost:8010/health/ready
 curl --fail http://127.0.0.1:8088/apisix/status
 ```
 
-### 8. Cổng biên Apache APISIX (Edge Gateway)
+### 8. Vận hành, sao lưu và cập nhật
+
+- **Sao lưu:** Cần lên lịch sao lưu tự động định kỳ cho PostgreSQL (pg_dump), SeaweedFS volumes, và `.env.production`.
+- **Cập nhật & Tái lập chỉ mục:** Khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ qua `DocumentReindexCommand` của Spring Boot với cấu hình `app.maintenance.reindex.enabled=true`.
+
+### 9. Cổng biên Apache APISIX (Edge Gateway)
 
 APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/apisix/status`: Probe sức khỏe nội bộ.
@@ -117,11 +122,6 @@ APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/api/v1/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
 - `/*`: Trỏ tới Web client Next.js (`:3000`).
 *Lưu ý:* Các cổng gRPC (`:50051`), Qdrant, Redis, Postgres không được định tuyến qua gateway này.
-
-### 9. Vận hành, sao lưu và cập nhật
-
-- **Sao lưu:** Cần lên lịch sao lưu tự động định kỳ cho PostgreSQL (pg_dump), SeaweedFS volumes, và `.env.production`.
-- **Cập nhật & Tái lập chỉ mục:** Khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ qua `DocumentReindexCommand` của Spring Boot với cấu hình `app.maintenance.reindex.enabled=true`.
 
 ---
 
@@ -131,9 +131,11 @@ This guide covers deploying OpenVie on an operator-controlled production server.
 
 ## 1. Scope and boundaries
 
-- **Included:** `docker-compose.yml` (Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Apache APISIX), Spring Boot API, Python AI Service, Next.js frontend, and `.env.production.example`.
-- **Operator-owned:** TLS termination (HTTPS), public DNS, external WAF, upload antivirus scanning, backup/restore schedules, and systemd process supervision.
-
+- **Included:**
+  - `docker-compose.prod.yml`: Full containerized production stack (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Spring Boot API, Python AI Service, Next.js frontend, and Apache APISIX Gateway).
+  - `docker-compose.yml`: Data infrastructure only (used for development or hybrid host execution).
+  - Template `.env.production.example` and production gateway routes `apisix/routes.prod.yaml`.
+- **Operator-owned:** TLS termination (HTTPS), public DNS, external WAF, upload antivirus scanning, backup/restore schedules, and host systemd supervision.
 ## 2. Prerequisites
 
 - Linux host (Ubuntu 22.04+ recommended) or macOS/WSL2.
@@ -154,17 +156,26 @@ Ensure `CORS_ORIGINS`, `INVITATION_LINK`, and `NEXT_PUBLIC_*` match your public 
 
 Validate compose structure:
 ```bash
-docker compose --env-file .env.production config --quiet
+# Validate production full-stack compose:
+docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
 ```
 
-## 4. Infrastructure and model service
+## 4. Full-stack containerized deployment (Recommended)
 
-Start stateful infrastructure services:
+Deploy the complete application and data infrastructure with a single Docker Compose command:
+
 ```bash
-docker compose --env-file .env.production up -d --wait
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Install Ollama natively on the host and configure parallel processing:
+This containerizes and orchestrates:
+1. Data services: Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph.
+2. AI & Ingestion: Python FastAPI + gRPC (:50051) + embedded document worker.
+3. Business API: Spring Boot (:8080) with automatic Flyway database migrations.
+4. Frontend: Next.js production server (:3000).
+5. Edge Gateway: Apache APISIX (:8088 or configured `APISIX_PORT`).
+
+Install and configure native Ollama on the host for GPU/Metal hardware acceleration:
 ```ini
 # Add to host service manager environment:
 Environment="OLLAMA_NUM_PARALLEL=4"
@@ -181,30 +192,21 @@ curl -s -o /dev/null http://127.0.0.1:11434/api/embed -d '{"model":"bge-m3","inp
 
 *Optional TEI Reranker container:*
 ```bash
-docker compose --env-file .env.production --profile reranker up -d reranker-service
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile reranker up -d reranker-service
 ```
 
-## 5. Application deployment
+## 5. Hybrid deployment mode (Applications on Host)
 
-Export configuration to the deployment shell:
+If running applications directly on the host under systemd rather than containers:
 ```bash
+# 1. Start data infrastructure only:
+docker compose --env-file .env.production up -d --wait
+
+# 2. Export environment and run services on host:
 set -a; . ./.env.production; set +a
-```
-
-Run services (recommended under systemd supervision):
-```bash
-# 1. Python AI service
-make -C rag-chatbot-fastapi setup PYTHON=python3.11
-make -C rag-chatbot-fastapi run PYTHON=python3.11
-
-# 2. Spring Boot API
-make -C api migrate ENV_FILE=../.env.production
-make -C api run-prod ENV_FILE=../.env.production
-
-# 3. Web Console
-npm --prefix frontend ci
-npm --prefix frontend run build
-npm --prefix frontend run start
+make -C rag-chatbot-fastapi setup PYTHON=python3.11 && make -C rag-chatbot-fastapi run PYTHON=python3.11
+make -C api migrate ENV_FILE=../.env.production && make -C api run-prod ENV_FILE=../.env.production
+npm --prefix frontend ci && npm --prefix frontend run build && npm --prefix frontend run start
 ```
 
 ## 6. First-run setup and owner recovery
@@ -226,7 +228,12 @@ curl --fail http://localhost:8010/health/ready
 curl --fail http://127.0.0.1:8088/apisix/status
 ```
 
-## 8. Apache APISIX edge gateway
+## 8. Backup and operations
+
+- **Backups:** Implement off-host backups for PostgreSQL (`pg_dump`), SeaweedFS object volumes, and `.env.production`.
+- **Reindexing:** To re-extract knowledge graphs after pipeline updates, trigger Spring's `DocumentReindexCommand` via `app.maintenance.reindex.enabled=true`.
+
+## 9. Edge gateway (Apache APISIX)
 
 APISIX operates standalone on port `8088`:
 - `/apisix/status`: Gateway health probe.
@@ -234,8 +241,3 @@ APISIX operates standalone on port `8088`:
 - `/api/v1/*`: Spring Boot (:8080), rate-limited at 50 r/s (burst 100).
 - `/*`: Next.js web application (:3000).
 *Note:* Internal endpoints (`:50051`, Qdrant, Redis, Postgres) are not routed through the gateway.
-
-## 9. Backup and operations
-
-- **Backups:** Implement off-host backups for PostgreSQL (`pg_dump`), SeaweedFS object volumes, and `.env.production`.
-- **Reindexing:** To re-extract knowledge graphs after pipeline updates, trigger Spring's `DocumentReindexCommand` via `app.maintenance.reindex.enabled=true`.
