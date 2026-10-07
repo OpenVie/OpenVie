@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.1] - 2026-10-07
+
+### Added
+
+- Next.js rewrites same-origin `/api/v1/*` requests to the API for gateway and tunnel development.
+
+### Changed
+
+- Next.js development uses Webpack instead of Turbopack.
+
+### Fixed
+
+- APISIX web routes forward the upstream host and support WebSocket upgrades.
+- Explicit Next.js development WebSocket origins and Spring development CORS origins allow the tunneled login page to hydrate and its authentication requests to reach the API.
+- Frontend authentication defaults to the same-origin `/api/v1` path instead of a legacy absolute URL fallback.
+- Login links to self-registration only when the organization enables it; signup includes credentials so its session can be retained.
+
 ## [0.1.0] - 2026-10-06
 
 ### Added

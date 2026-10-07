@@ -184,6 +184,8 @@
       "rememberMe": "Remember me",
       "signingIn": "Signing in…",
       "signIn": "Sign in",
+      "noAccount": "Don't have an account?",
+      "createAccount": "Create account",
       "provisioned": "Accounts are provisioned by your workspace administrator."
     },
     "invitation": {

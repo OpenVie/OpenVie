@@ -1,10 +1,8 @@
 # Local frontend + Swagger/UI: localhost and 127.0.0.1 are different origins.
-# Patterns allow any dev port (Next, Vite, CRA) and API/docs on :8080.
+# Add an explicit HTTPS tunnel origin via ALLOWED_ORIGIN_PATTERNS when using ngrok.
 app:
   cors:
-    allowed-origin-patterns:
-      - ${ALLOWED_ORIGIN_PATTERN_1:http://localhost:*}
-      - ${ALLOWED_ORIGIN_PATTERN_2:http://127.0.0.1:*}
+    allowed-origin-patterns: "${ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}"
   security:
     cookie-secure: ${COOKIE_SECURE:false}
   seaweedfs:

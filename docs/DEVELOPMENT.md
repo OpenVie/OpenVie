@@ -81,6 +81,19 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 npm --prefix frontend run dev
 ```
 
+Nếu truy cập bản **dev** qua APISIX/ngrok, đặt `NEXT_DEV_ALLOWED_ORIGINS=your-subdomain.ngrok-free.dev`
+(chỉ hostname, không có `https://`) trong `frontend/.env.local`, giữ
+`NEXT_PUBLIC_API_BASE_URL=/api/v1`, rồi **khởi động lại** Next.js. Chạy
+`docker compose up -d apisix` và `ngrok http 8088`; mở URL HTTPS do ngrok cấp.
+Next.js chỉ cho phép WebSocket `/_next/webpack-hmr` từ các hostname khai báo;
+nếu tunnel đổi tên, cập nhật biến và khởi động lại. `localhost` và `127.0.0.1`
+được cho phép sẵn. Không dùng wildcard công khai cho allowlist này.
+
+Trong `api/.env`, đặt
+`ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-subdomain.ngrok-free.dev`
+và khởi động lại Spring API. POST đăng nhập có header `Origin`; Spring sẽ trả
+`403 Invalid CORS request` nếu HTTPS origin này chưa được cho phép.
+
 ### 3. Thiết lập lần đầu và khôi phục tài khoản
 
 1. Truy cập `http://localhost:3000` trên trình duyệt. Hệ thống tự động chuyển hướng tới `/setup`.
@@ -198,6 +211,20 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 # Terminal 3: Next.js frontend (:3000)
 npm --prefix frontend run dev
 ```
+
+To access the **dev** server through APISIX/ngrok, set
+`NEXT_DEV_ALLOWED_ORIGINS=your-subdomain.ngrok-free.dev` (hostname only, no
+`https://`) in `frontend/.env.local`, keep `NEXT_PUBLIC_API_BASE_URL=/api/v1`,
+then **restart** Next.js. Run `docker compose up -d apisix` and `ngrok http 8088`;
+open the HTTPS URL ngrok provides. Next.js allows `/_next/webpack-hmr`
+WebSocket connections only from configured hosts; update the variable and
+restart when the tunnel hostname changes. `localhost` and `127.0.0.1` are
+already allowed. Do not use a public wildcard in this allowlist.
+
+In `api/.env`, set
+`ALLOWED_ORIGIN_PATTERNS=http://localhost:*,http://127.0.0.1:*,https://your-subdomain.ngrok-free.dev`
+and restart the Spring API. Login POSTs include an `Origin` header; Spring
+returns `403 Invalid CORS request` unless this HTTPS origin is allowed.
 
 ## 3. First-run setup and owner recovery
 

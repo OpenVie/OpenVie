@@ -47,6 +47,11 @@ Xem [hướng dẫn hấp thụ và truy hồi](docs/RETRIEVAL.md) cho ranh gi�
 | `WORKSPACE_ADMIN` | Workspace đang hoạt động | Mời và quản lý thành viên workspace, thêm tài khoản tổ chức hiện có vào workspace riêng/tư hoặc công khai đang hoạt động, đặt mật khẩu ban đầu, xóa bất kỳ tài liệu nào trong workspace |
 | `MEMBER` | Workspace đang hoạt động | Trò chuyện, tải tài liệu lên, xóa tài liệu do mình tải lên; có thể thêm tài khoản tổ chức hiện có làm thành viên thường trong workspace công khai |
 
+Sau khi chủ sở hữu hoàn tất `/setup`, nếu bật **Cho phép tự đăng ký** trong cài đặt
+tổ chức thì trang `/login` hiển thị liên kết **Tạo tài khoản** tới `/register`.
+Tài khoản mới có vai trò `MEMBER`, tham gia workspace mặc định và các workspace
+công khai; khi tắt tùy chọn này, liên kết bị ẩn và API từ chối tự đăng ký.
+
 Kiến trúc bốn mặt phẳng là mục tiêu: hôm nay mặt phẳng điều khiển, dữ liệu bất đồng bộ và truy
 hồi chạy như mô tả; định tuyến câu hỏi nhạy cảm và đánh giá trace ngoại tuyến chỉ thêm kiểm tra
 chính sách có giới hạn, không phải model pháp lý/an toàn đã huấn luyện. Xem
@@ -212,6 +217,11 @@ See the [ingestion and retrieval guide](docs/RETRIEVAL.md) for detailed boundari
 | `ORG_OWNER` | Organization | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, views organization accounts, creates regular organization accounts directly, adds existing organization accounts to the active workspace, offline password reset via `make recover-owner` |
 | `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, adds existing organization accounts to the active private or public workspace, sets initial passwords, deletes any document in the workspace |
 | `MEMBER` | Active workspace | Queries chat, uploads documents, deletes own uploaded documents; may add an existing organization account as a regular member in a public workspace |
+
+After the owner completes `/setup`, enabling **Allow self-registration** in
+organization settings shows a **Create account** link on `/login` to `/register`.
+New accounts are `MEMBER`s in the default workspace and all public workspaces;
+turning the setting off hides the link and makes the API reject self-registration.
 
 The supplied four-plane architecture is a target: today's control, async data, and retrieval
 planes run as described below; sensitive-question routing and offline trace evaluation add

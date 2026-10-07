@@ -6,21 +6,12 @@ import type {
 } from "@/types";
 
 export function getApiBase(): string {
-  const canonical = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (canonical) {
-    if (typeof window === "undefined" && canonical.startsWith("/")) {
-      const internal = process.env.API_INTERNAL_URL || "http://localhost:8080";
-      return `${internal.replace(/\/$/, "")}${canonical.replace(/\/$/, "")}`;
-    }
-    return canonical.replace(/\/$/, "");
+  const canonical = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
+  if (typeof window === "undefined" && canonical.startsWith("/")) {
+    const internal = process.env.API_INTERNAL_URL || "http://localhost:8080";
+    return `${internal.replace(/\/$/, "")}${canonical.replace(/\/$/, "")}`;
   }
-
-  const legacy = process.env.NEXT_PUBLIC_API_URL;
-  if (legacy) {
-    return `${legacy.replace(/\/$/, "")}/api`;
-  }
-
-  throw new Error("NEXT_PUBLIC_API_BASE_URL is not set");
+  return canonical.replace(/\/$/, "");
 }
 
 type ApiErrorBody = {
@@ -174,6 +165,7 @@ export async function registerApi(payload: {
   const res = await fetch(`${getApiBase()}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
   const body = await parseJsonSafe(res);

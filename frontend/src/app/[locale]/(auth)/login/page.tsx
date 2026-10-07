@@ -20,7 +20,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { useAuthStore } from "@/components/providers/StoreProvider";
-import { authApiErrorMessage, loginApi } from "@/lib/auth-api";
+import { authApiErrorMessage, loginApi, registrationStatusApi } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
 import {
   consumeAuthDestination,
@@ -39,6 +39,7 @@ function LoginContent() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [canSelfRegister, setCanSelfRegister] = useState<boolean | null>(null);
   const loginSchema = z.object({
     email: z.string().min(1, t("validation.emailRequired")).email(t("validation.invalidEmail")),
     password: z.string().min(1, t("validation.passwordRequired")),
@@ -48,6 +49,18 @@ function LoginContent() {
   useEffect(() => {
     rememberAuthDestination(next);
   }, [next]);
+
+  useEffect(() => {
+    let active = true;
+    registrationStatusApi()
+      .then((status) => {
+        if (active) setCanSelfRegister(!status.setupRequired && status.selfRegistrationAllowed);
+      })
+      .catch(() => {
+        if (active) setCanSelfRegister(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const {
     register,
@@ -217,7 +230,18 @@ function LoginContent() {
             </form>
 
             <div className="text-center text-sm text-slate-500 mt-4 space-y-2">
-              <p>{t("login.provisioned")}</p>
+              {canSelfRegister && (
+                <p>
+                  {t("login.noAccount")}{" "}
+                  <Link
+                    href="/register"
+                    className="text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
+                  >
+                    {t("login.createAccount")}
+                  </Link>
+                </p>
+              )}
+              {canSelfRegister === false && <p>{t("login.provisioned")}</p>}
               <p>
                 <Link
                   href="/documentation"

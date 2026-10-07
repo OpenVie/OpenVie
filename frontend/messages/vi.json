@@ -184,6 +184,8 @@
       "rememberMe": "Ghi nhớ tôi",
       "signingIn": "Đang đăng nhập…",
       "signIn": "Đăng nhập",
+      "noAccount": "Chưa có tài khoản?",
+      "createAccount": "Tạo tài khoản",
       "provisioned": "Tài khoản do quản trị viên không gian làm việc cấp phát."
     },
     "invitation": {
