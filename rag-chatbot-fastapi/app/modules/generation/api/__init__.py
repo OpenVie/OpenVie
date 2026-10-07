@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -96,7 +97,12 @@ class GenerationUnavailableError(GenerationError):
 
 
 class GenerationApi(Protocol):
-    async def generate(self, context: GenerationContext) -> GenerationResult: ...
+    async def generate(
+        self,
+        context: GenerationContext,
+        *,
+        on_content: Callable[[str], Awaitable[None]] | None = None,
+    ) -> GenerationResult: ...
 
 
 class GenerationCacheMaintenanceApi(Protocol):

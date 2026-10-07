@@ -54,7 +54,7 @@ flowchart TB
 |---|---|---|
 | **Điều khiển (Control)** | Spring Boot quản lý tổ chức, workspace, tài khoản, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), kênh thông báo, phiên chat và lưu trữ PostgreSQL. | Dịch vụ điều phối chuyển đổi checkpoint model động. |
 | **Dữ liệu bất đồng bộ** | RabbitMQ điều phối hàng đợi, worker xử lý đa luồng, SeaweedFS lưu trữ file gốc, Qdrant lưu vector, Kuzu lưu đồ thị. | Xử lý OCR, hình ảnh, âm thanh, video tổng quát. |
-| **Suy luận (Inference)** | FastAPI xử lý gRPC unary, RAG ngữ cảnh theo tenant, router từ khóa nhạy cảm, LLM sinh câu trả lời có trích dẫn nguồn. | Mô hình Verifier đã huấn luyện, ngữ liệu pháp luật Việt Nam độc lập, tự động failover giữa các nhà cung cấp cloud. |
+| **Suy luận (Inference)** | FastAPI xử lý gRPC server-streaming cho câu trả lời, bộ lọc chào hỏi/nhiễu bảo thủ, RAG ngữ cảnh theo tenant, router từ khóa nhạy cảm, LLM sinh câu trả lời có trích dẫn nguồn. | Mô hình Verifier đã huấn luyện, ngữ liệu pháp luật Việt Nam độc lập, tự động failover giữa các nhà cung cấp cloud. |
 | **Đánh giá ngoại tuyến** | Công cụ chạy lại trace JSONL đo đạc nhãn nhạy cảm, độ chuẩn xác của trích dẫn mà không cần gọi API model. | Pipeline huấn luyện SFT/DPO/QLoRA, bộ benchmark tự động công bố. |
 
 ### 3. Phân định trách nhiệm dữ liệu
@@ -69,9 +69,13 @@ flowchart TB
 #### A. Xử lý yêu cầu trò chuyện (Chat Sequence)
 1. Client gửi câu hỏi kèm JWT tới Spring Boot qua Gateway APISIX.
 2. Spring xác thực quyền workspace, kiểm tra khóa idempotency, lưu trạng thái `PENDING`.
-3. Spring gọi gRPC `GenerateAnswer` sang Python FastAPI kèm ngữ cảnh và lịch sử gần nhất.
-4. Python viết lại truy vấn (Contextual Query Planning), truy hồi đa kênh (Qdrant, BM25, Kuzu), sinh câu trả lời kèm citation `[S1]`, làm sạch placeholder.
-5. Spring kiểm tra quyền xem tài liệu của citation, lưu phản hồi `COMPLETED`, trả JSON hoàn chỉnh về Client.
+3. Spring gọi gRPC server-streaming `GenerateAnswer` sang Python FastAPI kèm ngữ cảnh và lịch sử gần nhất.
+4. Python trả lời trực tiếp các lời chào/nhiễu rõ ràng theo lịch sử, không embedding, truy hồi hay LLM và không citation. Các câu hỏi còn lại đi qua query planning, truy hồi đa kênh và luồng token thật từ Ollama/endpoint tương thích OpenAI; bản nháp được làm sạch trước khi gửi.
+5. Spring chuyển các snapshot bản nháp thành SSE `content`; client thay thế nội dung đang hiển thị, chưa dựng link hay thẻ nguồn. Câu hỏi nhạy cảm không phát bản nháp.
+6. Spring kiểm tra revision và quyền xem tài liệu của citation, commit phản hồi `COMPLETED`, rồi mới gửi SSE `complete` chứa JSON phản hồi cuối. Chỉ phản hồi này có nguồn và được lưu vào hội thoại.
+7. Nếu revision đổi, Spring gửi `reset` trước lần sinh lại duy nhất; thất bại gửi `error`, không lưu bản nháp. Hủy được ghi nhận trước commit đánh dấu turn `FAILED`/`REQUEST_CANCELLED` và hủy gRPC/provider; không thể hoàn tác một phản hồi đã commit trước khi ghi nhận ngắt kết nối.
+
+POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác thực JWT, trả `text/event-stream` với `content`, `reset`, `complete`, `error`. Header `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no` tránh gom luồng qua proxy/nén. Giao diện có trạng thái đang viết, dấu chấm và con trỏ nhẹ; tắt animation khi người dùng chọn reduced motion.
 
 #### B. Hấp thụ tài liệu (Ingestion Sequence)
 1. Người dùng upload tệp (tối đa 20MB) tới Spring API.
@@ -96,7 +100,7 @@ This reference describes OpenVie's runtime architecture, trust boundaries, and c
 
 See the shared topology diagram above. Key boundaries:
 - **Client to Edge:** Apache APISIX (:8088) reverse-proxies `/api/v1/*` to Spring Boot (:8080) and `/*` to Next.js (:3000) with edge rate limiting (`limit-req`).
-- **Internal gRPC:** Spring communicates with Python AI (:50051) over unary gRPC.
+- **Internal gRPC:** Spring communicates with Python AI (:50051) using server-streaming `GenerateAnswer`; document-unit reads and index deletion remain unary.
 - **Data Isolation:** PostgreSQL is Spring-exclusive. Qdrant, Kuzu, and RabbitMQ ingestion workers are managed by Python. SeaweedFS holds raw uploads and Parquet artifacts.
 
 ## 2. Four-plane target and delivered boundary
@@ -105,7 +109,7 @@ See the shared topology diagram above. Key boundaries:
 |---|---|---|
 | **Control** | Spring Boot workspace/auth/chat API, PostgreSQL persistence (orgs, workspaces, memberships, notification channels), Redis runtime state. | Dynamic runtime model switching/promotion service. |
 | **Async data** | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. | General OCR, image, audio, or video pipelines. |
-| **Inference** | FastAPI unary gRPC, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. | Trained verifier runtime, standalone legal corpus, automated cloud provider failover. |
+| **Inference** | FastAPI server-streaming answer gRPC, conservative greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. | Trained verifier runtime, standalone legal corpus, automated cloud provider failover. |
 | **Offline alignment** | Local trace replay evaluating sensitive routes and citation markers without remote API calls. | Model fine-tuning (SFT/DPO), automatic candidate promotion. |
 
 ## 3. Data ownership
@@ -120,9 +124,13 @@ See the shared topology diagram above. Key boundaries:
 ### Chat execution
 1. Client submits message with JWT via APISIX gateway.
 2. Spring authenticates workspace scope, checks idempotency key, persists user turn as `PENDING`.
-3. Spring invokes unary gRPC `GenerateAnswer` on Python service with recent history.
-4. Python executes contextual query planning, hybrid retrieval, answer generation with citations, and placeholder polishing.
-5. Spring validates citation permissions, saves assistant turn as `COMPLETED`, returns response JSON.
+3. Spring invokes server-streaming gRPC `GenerateAnswer` with recent history.
+4. Python answers high-confidence greetings/nonsense directly, using history without embedding, retrieval, model calls, or citations. Other questions use contextual planning, hybrid retrieval, and native Ollama/OpenAI-compatible token streams; previews are polished before emission.
+5. Spring forwards provisional replacement snapshots as SSE `content`; the client does not render draft links or source cards. Sensitive questions emit no previews.
+6. Spring validates the knowledge revision and citation permissions, commits the assistant turn as `COMPLETED`, then emits SSE `complete` with the authoritative response JSON and sources.
+7. Revision changes emit `reset` before the single bounded regeneration attempt; failures emit `error`, never persist drafts. Cancellation observed before commit marks the turn `FAILED`/`REQUEST_CANCELLED` and cancels gRPC/provider work; disconnects cannot undo an answer already committed before they are observed.
+
+POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and JWT authentication but returns `text/event-stream` events: `content`, `reset`, `complete`, `error`. `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no` prevent proxy/compression buffering. The UI shows a writing status, subtle dots and cursor, and disables animations for reduced motion.
 
 ### Document ingestion
 1. Client uploads document (up to 20MB) to Spring API.

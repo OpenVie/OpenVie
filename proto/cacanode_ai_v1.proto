@@ -7,7 +7,7 @@ option java_package = "com.cacanode.ai.v1";
 option java_outer_classname = "CacanodeAiProto";
 
 service InferenceService {
-  rpc GenerateAnswer(GenerateAnswerRequest) returns (GenerateAnswerResponse);
+  rpc GenerateAnswer(GenerateAnswerRequest) returns (stream GenerateAnswerEvent);
   rpc ListDocumentUnits(ListDocumentUnitsRequest) returns (ListDocumentUnitsResponse);
   rpc DeleteDocumentIndex(DeleteDocumentIndexRequest) returns (DeleteDocumentIndexResponse);
 }
@@ -67,6 +67,15 @@ message GenerateAnswerResponse {
   string cache_tier = 7;
   optional int64 avoided_input_tokens = 8;
   optional int64 avoided_output_tokens = 9;
+}
+
+message GenerateAnswerEvent {
+  oneof payload {
+    // Provisional, polished answer snapshot; replaces the previous snapshot.
+    string content = 1;
+    // Final answer, revision, citations, and usage; exactly one on success.
+    GenerateAnswerResponse completed = 2;
+  }
 }
 
 message ListDocumentUnitsRequest {

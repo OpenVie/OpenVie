@@ -226,6 +226,7 @@
     "waitForIndexing": "Hãy chờ ít nhất một tài liệu hoàn tất lập chỉ mục.",
     "uploadBeforeQuestion": "Hãy tải lên một tài liệu số hoặc bảng tính được hỗ trợ trước khi đặt câu hỏi.",
     "thinking": "Đang suy nghĩ…",
+    "responding": "Đang viết câu trả lời",
     "canceled": "Đã hủy.",
     "questionPlaceholder": "Đặt câu hỏi về các nguồn đã lập chỉ mục…",
     "uploadPlaceholder": "Tải lên và lập chỉ mục nguồn trước khi trò chuyện…",

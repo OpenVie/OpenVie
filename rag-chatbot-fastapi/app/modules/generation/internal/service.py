@@ -3,14 +3,19 @@ from __future__ import annotations
 import logging
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from typing import Any, Protocol
 
 from app.common.metrics import AI_RAG_ANSWER_SECONDS
-from app.modules.generation.internal.answer_polish import polish_answer
+from app.modules.generation.api import TokenUsage
+from app.modules.generation.internal.answer_polish import polish_answer, polish_preview
 from app.modules.generation.internal.calculation import SpreadsheetCalculationCoordinator
 from app.modules.generation.internal.config import GenerationConfig
 from app.modules.generation.internal.errors import ChatModelTimeoutError, ChatSessionNotFoundError
+from app.modules.generation.internal.intent import (
+    build_non_retrieval_reply,
+    is_non_retrieval_question,
+)
 from app.modules.generation.internal.models import (
     AssistantMessage,
     ChatMessage,
@@ -29,7 +34,7 @@ from app.modules.generation.internal.sensitive_policy import (
     is_sensitive_query,
 )
 from app.modules.generation.internal.sessions import ChatSessionStore
-from app.modules.model.api import ModelCompletion, ModelTimeoutError
+from app.modules.model.api import ModelCompletion, ModelTimeoutError, ModelUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +127,10 @@ class VectorRetriever(Protocol):
 class ChatModel(Protocol):
     async def complete(self, messages: Sequence[dict[str, object]]) -> str: ...
 
+    def stream_with_usage(
+        self, messages: Sequence[dict[str, object]], *, allow_truncated: bool = False
+    ) -> AsyncGenerator[str | ModelCompletion, None]: ...
+
 
 class RagChatService:
     def __init__(
@@ -203,12 +212,14 @@ class RagChatService:
         tenant_id: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
+        on_content: Callable[[str], Awaitable[None]] | None = None,
     ) -> AssistantMessage:
         if session is not None:
             return await self._generate(
                 session=session,
                 content=content,
                 prior_messages=prior_messages,
+                on_content=on_content,
             )
         if self._sessions is None or tenant_id is None or session_id is None:
             raise ChatSessionNotFoundError(session_id or "")
@@ -226,6 +237,7 @@ class RagChatService:
             session=stored,
             content=content,
             prior_messages=history,
+            on_content=on_content,
         )
         self._sessions.add_assistant_message(session_id, message)
         return message
@@ -236,6 +248,7 @@ class RagChatService:
         session: ChatSession,
         content: str,
         prior_messages: Sequence[ChatMessage] = (),
+        on_content: Callable[[str], Awaitable[None]] | None = None,
     ) -> AssistantMessage:
         tenant_id = session.tenant_id
         session_id = session.id
@@ -252,6 +265,13 @@ class RagChatService:
 
         try:
             sensitive_query = is_sensitive_query(content)
+            if not sensitive_query and is_non_retrieval_question(content, prior_messages):
+                # Chit-chat or nonsense: skip embedding, retrieval, and the LLM
+                # entirely. Fixed template reply, never cached, never cited.
+                return AssistantMessage(
+                    role="assistant",
+                    content=build_non_retrieval_reply(content, prior_messages),
+                )
             cache_context: SemanticCacheContext | None = None
             shadow_candidate: SemanticCacheCandidate | None = None
             semantic_cache = self._semantic_answer_cache
@@ -394,6 +414,8 @@ class RagChatService:
                         conversation=prior_messages,
                     ),
                     allow_truncated=True,
+                    on_content=on_content,
+                    withhold_preview=sensitive_query,
                 )
                 raw_answer = completion.content.strip()
                 truncated_answer = completion.truncated
@@ -414,6 +436,8 @@ class RagChatService:
                 ).observe(llm_seconds)
 
             answer = polish_answer(raw_answer)
+            if on_content is not None and not answer:
+                raise ModelUnavailableError("Model provider returned an empty answer")
             if truncated_answer and sensitive_query:
                 # A cut-off enumeration must not be presented as complete, and a
                 # partial sensitive answer cannot be re-grounded safely.
@@ -421,11 +445,22 @@ class RagChatService:
             if sensitive_query and not has_authorized_citation(
                 answer, {citation.id for citation in citations}
             ):
-                return AssistantMessage(role="assistant", content=NO_INFORMATION_RESPONSE)
+                return AssistantMessage(
+                    role="assistant",
+                    content=NO_INFORMATION_RESPONSE,
+                    token_usage=TokenUsage(
+                        input_tokens=completion.input_tokens,
+                        output_tokens=completion.output_tokens,
+                    ),
+                )
             message = AssistantMessage(
                 role="assistant",
                 content=answer,
                 citations=self._cited_citations(answer, citations),
+                token_usage=TokenUsage(
+                    input_tokens=completion.input_tokens,
+                    output_tokens=completion.output_tokens,
+                ),
             )
             if (
                 cache_context is not None
@@ -493,7 +528,33 @@ class RagChatService:
         messages: Sequence[dict[str, object]],
         *,
         allow_truncated: bool = False,
+        on_content: Callable[[str], Awaitable[None]] | None = None,
+        withhold_preview: bool = False,
     ) -> ModelCompletion:
+        if on_content is not None:
+            stream = self._chat_model.stream_with_usage(messages, allow_truncated=allow_truncated)
+            draft = ""
+            preview = ""
+            completion: ModelCompletion | None = None
+            try:
+                async for event in stream:
+                    if isinstance(event, ModelCompletion):
+                        if completion is not None:
+                            raise TypeError("Model stream returned multiple completions")
+                        completion = event
+                    elif isinstance(event, str) and completion is None:
+                        draft += event
+                        polished = polish_preview(draft)
+                        if not withhold_preview and polished and polished != preview:
+                            preview = polished
+                            await on_content(preview)
+                    else:
+                        raise TypeError("Model stream returned an invalid event")
+            finally:
+                await stream.aclose()
+            if completion is None or not completion.content.strip():
+                raise TypeError("Model stream ended without a completion")
+            return completion
         method = getattr(self._chat_model, "complete_with_usage", None)
         if callable(method):
             try:

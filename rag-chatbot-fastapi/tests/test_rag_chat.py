@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from types import SimpleNamespace
 from typing import Any
 
@@ -32,7 +32,7 @@ from app.modules.generation.internal.service import NO_INFORMATION_RESPONSE, Rag
 from app.modules.generation.internal.sessions import InMemoryChatSessionStore
 from app.modules.index.api import KnowledgeIndexQuery
 from app.modules.index.internal.qdrant_search import QdrantKnowledgeIndexQuery
-from app.modules.model.api import ModelUnavailableError
+from app.modules.model.api import ModelCompletion, ModelUnavailableError
 from app.modules.model.internal.embedding import OllamaEmbeddingClient
 
 
@@ -301,6 +301,82 @@ async def test_chat_service_returns_no_information_without_evidence() -> None:
     assert retriever.calls[0]["query_text"] == "Khong co trong tai lieu?"
     assert store.get_for_tenant(session.id, "tenant-1") is not None
 
+@pytest.mark.asyncio
+async def test_nonsense_input_skips_retrieval_and_has_no_citations() -> None:
+    service, store, retriever, model = make_service(chunks=[
+        RetrievedChunk(
+            document_id="doc-1",
+            source_name="policy.txt",
+            page_number=1,
+            chunk_index=0,
+            text="Policy source text.",
+            score=0.9,
+        )
+    ])
+    session = service.create_session(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        chatbot_id="bot-1",
+        knowledge_base_id="kb-1",
+        locale="en",
+    )
+
+    message = await service.submit_message(
+        tenant_id="tenant-1",
+        session_id=session.id,
+        content="hi abcd",
+    )
+
+    assert "document" in message.content.lower()
+    assert message.citations == []
+    assert retriever.calls == []
+    assert model.calls == []
+    assert store.get_for_tenant(session.id, "tenant-1") is not None
+
+
+@pytest.mark.asyncio
+async def test_chit_chat_with_history_points_back_to_topic() -> None:
+    service, store, _, _ = make_service(chunks=[])
+    session = service.create_session(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        chatbot_id="bot-1",
+        knowledge_base_id="kb-1",
+        locale="vi-VN",
+    )
+    store.add_user_message(session.id, "Chính sách đổi trả thế nào?")
+    store.add_assistant_message(
+        session.id, AssistantMessage(role="assistant", content="Đổi trong 7 ngày.")
+    )
+
+    message = await service.submit_message(
+        tenant_id="tenant-1",
+        session_id=session.id,
+        content="hi",
+    )
+
+    assert "Chính sách đổi trả thế nào?" in message.content
+    assert message.citations == []
+
+
+@pytest.mark.asyncio
+async def test_real_question_still_retrieves_despite_greeting_word() -> None:
+    service, _, retriever, _ = make_service(chunks=[])
+    session = service.create_session(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        chatbot_id="bot-1",
+        knowledge_base_id="kb-1",
+        locale="en",
+    )
+
+    await service.submit_message(
+        tenant_id="tenant-1",
+        session_id=session.id,
+        content="Hi, what is the return policy?",
+    )
+
+    assert len(retriever.calls) == 1
 
 @pytest.mark.asyncio
 async def test_employee_prompt_is_grounded_and_tenant_prompt_free() -> None:
@@ -934,3 +1010,172 @@ class TestAnswerPolish:
         )
         assert "[đường dẫn" not in polished
         assert "đường dẫn do ban tổ chức cung cấp" in polished
+
+
+class StreamingAnswerModel(FakeChatModel):
+    def __init__(self, fragments: list[str], *, truncated: bool = False) -> None:
+        super().__init__()
+        self.fragments = fragments
+        self.truncated = truncated
+        self.finished = False
+        self.closed = False
+
+    async def stream_with_usage(
+        self, messages: Sequence[dict[str, object]], *, allow_truncated: bool = False
+    ) -> AsyncIterator[str | ModelCompletion]:
+        self.calls.append(messages)
+        assert allow_truncated
+        try:
+            for fragment in self.fragments:
+                yield fragment
+            self.finished = True
+            yield ModelCompletion(
+                content="".join(self.fragments),
+                input_tokens=42,
+                output_tokens=17,
+                truncated=self.truncated,
+            )
+        finally:
+            self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_rag_stream_polishes_fragmented_echoes_and_delivers_multiple_early_snapshots(
+) -> None:
+    fragments = [
+        "The return policy explains the process in detail for all registered customers. ",
+        "Submit the form for [Tên",
+        " Trường] together with the listed materials. ",
+        "See tài liệu tenant_very_long_document_name_",
+        "0123456789.doc",
+        "x, chunk ",
+        "32 for the supporting evidence. ",
+        "The process is confirmed by the supplied source [S1].",
+    ]
+    model = StreamingAnswerModel(fragments)
+    service, _, retriever, _ = make_service(chunks=[sensitive_chunk()], model=model)
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="en",
+    )
+    previews: list[str] = []
+
+    async def preview(content: str) -> None:
+        assert not model.finished
+        previews.append(content)
+
+    answer = await service.submit_message(
+        session=session, content="What is the return policy?", on_content=preview
+    )
+    assert len(previews) >= 2
+    assert len(retriever.calls) == 1
+    assert model.closed
+    assert (answer.token_usage.input_tokens, answer.token_usage.output_tokens) == (42, 17)
+    assert answer.content != previews[-1]
+    assert answer.content.endswith("[S1].")
+    assert "trường/thành viên đăng ký" in answer.content
+    for content in [*previews, answer.content]:
+        assert "[Tên" not in content
+        assert "tenant_" not in content
+        assert ".doc" not in content
+        assert "chunk" not in content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("citation", ["[S1]", "[S9]", ""])
+async def test_sensitive_stream_withholds_every_preview_until_validation(citation: str) -> None:
+    model = StreamingAnswerModel([
+        "The supplied source describes the relevant legal requirement in detail. ",
+        f"The rule applies only to the documented scenario {citation}.",
+    ])
+    service, _, _, _ = make_service(chunks=[sensitive_chunk()], model=model)
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="en",
+    )
+    previews: list[str] = []
+
+    async def preview(content: str) -> None:
+        previews.append(content)
+
+    answer = await service.submit_message(
+        session=session, content="What does the law require?", on_content=preview
+    )
+    assert previews == []
+    assert model.closed
+    assert answer.token_usage.input_tokens == 42
+    if citation == "[S1]":
+        assert answer.content.endswith("[S1].")
+        assert [item.id for item in answer.citations] == ["S1"]
+    else:
+        assert answer.content == NO_INFORMATION_RESPONSE
+        assert answer.citations == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sensitive", [False, True])
+async def test_rag_stream_truncation_preserves_existing_sensitive_policy(sensitive: bool) -> None:
+    model = StreamingAnswerModel([
+        "The source describes this requirement with enough detail to answer the question. ",
+        "The relevant rule is stated in the uploaded evidence [S1].",
+    ], truncated=True)
+    service, _, _, _ = make_service(chunks=[sensitive_chunk()], model=model)
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="en",
+    )
+    previews: list[str] = []
+
+    async def preview(content: str) -> None:
+        previews.append(content)
+
+    if sensitive:
+        with pytest.raises(ChatModelTimeoutError, match="truncated"):
+            await service.submit_message(
+                session=session, content="What does the law require?", on_content=preview
+            )
+        assert previews == []
+    else:
+        answer = await service.submit_message(
+            session=session, content="What is the return policy?", on_content=preview
+        )
+        assert answer.content.endswith("[S1].")
+        assert previews
+    assert model.closed
+
+
+def test_preview_never_exposes_split_placeholders_or_identifiers() -> None:
+    from app.modules.generation.internal.answer_polish import polish_preview
+
+    draft = (
+        "Follow the process described for [Tên Trường] using "
+        "tenant_very_long_document_identifier_0123456789.docx, chunk 12345. "
+        "The remaining explanation describes the full process in detail for members."
+    )
+    for end in range(len(draft)):
+        preview = polish_preview(draft[:end])
+        assert "[Tên" not in preview
+        assert "tenant_" not in preview
+        assert ".doc" not in preview
+        assert "chunk" not in preview
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_empty_after_polishing_is_not_a_successful_completion() -> None:
+    model = StreamingAnswerModel(["tenant_0123456789.docx"])
+    service, _, _, _ = make_service(chunks=[sensitive_chunk()], model=model)
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="en",
+    )
+    previews: list[str] = []
+
+    async def preview(content: str) -> None:
+        previews.append(content)
+
+    with pytest.raises(ModelUnavailableError, match="empty answer"):
+        await service.submit_message(
+            session=session, content="What is the return policy?", on_content=preview
+        )
+    assert previews == []
+    assert model.closed

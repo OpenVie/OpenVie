@@ -1,6 +1,8 @@
 package com.cacanode.api.chat.query;
 
 import com.cacanode.api.ai.api.AiInferenceApi;
+import com.cacanode.api.ai.api.AiInferenceException;
+import io.grpc.Context;
 import com.cacanode.api.chat.dto.ChatDtos;
 import com.cacanode.api.chat.enums.ChatChannel;
 import com.cacanode.api.chat.enums.ChatSessionStatus;
@@ -21,6 +23,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -40,6 +44,7 @@ import java.util.UUID;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.concurrent.CancellationException;
 
 @Service
 @RequiredArgsConstructor
@@ -57,6 +62,11 @@ public class ChatControlPlaneService {
     @Autowired(required = false)
     private NamedParameterJdbcTemplate namedJdbc;
 
+    public interface AnswerStreamListener {
+        void onContent(String content);
+        void onReset();
+    }
+
     public ChatDtos.SessionResponse createEmployeeSession(
             UUID tenantId, UUID userId, ChatDtos.CreateSessionRequest request) {
         return transactions.execute(status -> createSession(
@@ -66,16 +76,15 @@ public class ChatControlPlaneService {
 
     public ChatDtos.AssistantMessageResponse submitEmployeeMessage(
             UUID tenantId, UUID userId, UUID sessionId, String content,
-            Map<String, Object> metadata, String idempotencyKey, String requestId) {
-        return submit(tenantId, userId, sessionId, content, metadata, idempotencyKey, requestId);
-    }
-
-    private ChatDtos.AssistantMessageResponse submit(
-            UUID tenantId, UUID userId, UUID sessionId, String content,
-            Map<String, Object> metadata, String idempotencyKey, String requestId) {
+            Map<String, Object> metadata, String idempotencyKey, String requestId,
+            AnswerStreamListener listener) {
+        checkCancelled();
         PreparedTurn prepared = transactions.execute(status -> prepareTurn(
                 tenantId, userId, sessionId, content, metadata, idempotencyKey, requestId));
         Objects.requireNonNull(prepared);
+        if (isCancelled()) {
+            failCancelled(prepared.turnId());
+        }
         if (prepared.replayed() != null) {
             return prepared.replayed();
         }
@@ -83,10 +92,24 @@ public class ChatControlPlaneService {
         GenerationContext context = prepared.context();
         for (int revisionAttempt = 0; revisionAttempt < 2; revisionAttempt++) {
             try {
-                AiInferenceApi.GeneratedAnswer answer = inferenceClient.generate(context.toRequest());
+                checkCancelled();
+                AiInferenceApi.GeneratedAnswer answer = inferenceClient.generate(
+                        context.toRequest(), preview -> {
+                            checkCancelled();
+                            listener.onContent(preview);
+                        });
+                checkCancelled();
                 GenerationContext completedContext = context;
-                FinalizeResult finalized = transactions.execute(status -> finalizeTurn(
-                        prepared.turnId(), answer, completedContext));
+                FinalizeResult finalized = transactions.execute(status -> {
+                    checkCancelled();
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void beforeCommit(boolean readOnly) {
+                            checkCancelled();
+                        }
+                    });
+                    return finalizeTurn(prepared.turnId(), answer, completedContext);
+                });
                 Objects.requireNonNull(finalized);
                 if (!finalized.revisionChanged()) {
                     return finalized.response();
@@ -96,20 +119,51 @@ public class ChatControlPlaneService {
                     throw new ChatApiException(HttpStatus.CONFLICT, "KNOWLEDGE_BASE_CHANGED",
                             "The knowledge base changed while the answer was generated.");
                 }
+                checkCancelled();
+                listener.onReset();
                 context = transactions.execute(status -> rebuildContext(prepared.turnId(), requestId));
                 Objects.requireNonNull(context);
+            } catch (CancellationException exception) {
+                failCancelled(prepared.turnId());
+                throw exception;
+            } catch (AiInferenceException exception) {
+                if (isCancelled()) {
+                    failCancelled(prepared.turnId());
+                }
+                markFailed(prepared.turnId(), exception.getCode());
+                throw exception;
             } catch (ChatApiException exception) {
                 if (!"KNOWLEDGE_BASE_CHANGED".equals(exception.getCode())) {
                     markFailed(prepared.turnId(), exception.getCode());
                 }
                 throw exception;
             } catch (RuntimeException exception) {
+                if (isCancelled()) {
+                    failCancelled(prepared.turnId());
+                }
                 markFailed(prepared.turnId(), "AI_FAILURE");
                 throw new ChatApiException(HttpStatus.BAD_GATEWAY, "MODEL_PROVIDER_ERROR",
                         "The model provider could not complete the request.");
             }
         }
         throw new IllegalStateException("Unreachable generation state");
+    }
+
+    private static boolean isCancelled() {
+        return Context.current().isCancelled() || Thread.currentThread().isInterrupted();
+    }
+
+    private static void checkCancelled() {
+        if (isCancelled()) {
+            throw new CancellationException("The answer stream was cancelled.");
+        }
+    }
+
+    private void failCancelled(UUID turnId) {
+        // Interruption must not prevent the separate cleanup transaction from reaching the database.
+        Thread.interrupted();
+        markFailed(turnId, "REQUEST_CANCELLED");
+        throw new CancellationException("The answer stream was cancelled.");
     }
 
     private PreparedTurn prepareTurn(
@@ -190,6 +244,7 @@ public class ChatControlPlaneService {
                 answer.citations().stream().map(this::toChatCitation).toList();
         String persistedAnswer = answer.answer();
         validateCitations(session, persistedCitations);
+        checkCancelled();
         ChatMessage assistant = new ChatMessage();
         assistant.setSessionId(session.getId());
         assistant.setTenantId(session.getTenantId());

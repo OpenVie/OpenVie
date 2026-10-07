@@ -10,6 +10,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProtobufContractTest {
     @Test
@@ -20,6 +22,10 @@ class ProtobufContractTest {
                 "ListDocumentUnits",
                 "DeleteDocumentIndex"),
                 service.getMethods().stream().map(Descriptors.MethodDescriptor::getName).toList());
+        var generate = service.findMethodByName("GenerateAnswer");
+        assertFalse(generate.isClientStreaming());
+        assertTrue(generate.isServerStreaming());
+        assertEquals("GenerateAnswerEvent", generate.getOutputType().getName());
     }
 
     @Test
@@ -31,6 +37,10 @@ class ProtobufContractTest {
                 Map.entry("channel", 7), Map.entry("locale", 8), Map.entry("question", 9),
                 Map.entry("prior_messages", 10), Map.entry("tenant_name", 11),
                 Map.entry("prompt_schema_version", 12), Map.entry("trace", 13)));
+        assertFields("GenerateAnswerEvent", Map.of("content", 1, "completed", 2));
+        var event = CacanodeAiProto.getDescriptor().findMessageTypeByName("GenerateAnswerEvent");
+        assertEquals(List.of("payload"), event.getOneofs().stream()
+                .map(Descriptors.OneofDescriptor::getName).toList());
         assertFields("GenerateAnswerResponse", Map.ofEntries(
                 Map.entry("generation_id", 1), Map.entry("authoritative_revision", 2),
                 Map.entry("answer", 3), Map.entry("citations", 4), Map.entry("input_tokens", 5),

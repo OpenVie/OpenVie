@@ -35,7 +35,8 @@ Tạo các khóa bí mật ngẫu nhiên bằng `openssl rand -hex 32` cho:
 
 *Các thiết lập quan trọng:*
 - `CORS_ORIGINS`, `INVITATION_LINK`, và các biến `NEXT_PUBLIC_*` phải trỏ đúng domain/IP người dùng truy cập.
-- Đồng bộ thông số sinh phản hồi: `LLM_MAX_OUTPUT_TOKENS=512`, `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
+- Ngân sách phản hồi: `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction có ngân sách độc lập `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
+- Triển khai Spring và Python cùng phiên bản proto: `GenerateAnswer` đã chuyển từ unary sang server-streaming, không có đường tương thích unary. Proxy phải giữ `text/event-stream`, `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no`; không gom/nén luồng chat. Next.js same-origin rewrite đã được kiểm chứng với các header này.
 - Kiểm tra tính hợp lệ của compose:
 ```bash
 # Kiểm tra cấu hình stack sản xuất đầy đủ:
@@ -152,7 +153,9 @@ chmod 600 .env.production
 Generate unique 32-byte cryptographic secrets via `openssl rand -hex 32` for:
 `TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`.
 
-Ensure `CORS_ORIGINS`, `INVITATION_LINK`, and `NEXT_PUBLIC_*` match your public domain. Align generation budgets: `LLM_MAX_OUTPUT_TOKENS=512`, `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
+Ensure `CORS_ORIGINS`, `INVITATION_LINK`, and `NEXT_PUBLIC_*` match your public domain. Answer generation uses `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction retains its independent `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
+
+Deploy Spring and Python with the same proto version: `GenerateAnswer` is now server-streaming, with no unary compatibility path. Proxies must preserve `text/event-stream`, `Cache-Control: no-cache, no-transform`, and `X-Accel-Buffering: no` without buffering/compressing chat streams. The Next.js same-origin rewrite has been smoke-verified with these headers.
 
 Validate compose structure:
 ```bash
