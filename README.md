@@ -343,3 +343,9 @@ LinkedNodeDigital; see [NOTICE](NOTICE). Anyone may self-host, fork, or sell hos
 that license. Third-party packages, container images, services, model weights, and datasets
 retain their own terms. Publishing a new public repository still requires the
 [release review](docs/OPEN_SOURCE.md#publication-gate).
+
+
+## Authors
+- Nghiem Gia Bao
+- Tran Viet Thu
+- Dinh Quang Tung
