@@ -12,10 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Next.js rewrites same-origin `/api/v1/*` requests to the API for gateway and tunnel development.
+- Conservative Vietnamese/English greeting and nonsense gate with history-aware, citation-free replies that skip answer caches, embeddings, retrieval, and model calls.
+- Native Ollama NDJSON and OpenAI-compatible SSE answer streaming through gRPC and authenticated Spring SSE; provisional drafts are polished and only committed, validated final answers expose sources.
+- Subtle writing indicators, live cursor, final-source transition, reduced-motion support, and answer cancellation in the chat UI.
 
 ### Changed
 
 - Next.js development uses Webpack instead of Turbopack.
+- `GenerateAnswer` uses server-streaming `GenerateAnswerEvent`; chat message POST responses use `content`, `reset`, `complete`, and `error` SSE events instead of buffered JSON. Spring and Python must be deployed together; the unary answer contract is removed.
+- Default answer output budget increases from 512 to 1024 tokens across runtime, development, and deployment configuration; graph extraction remains at 512 tokens.
+- Contribution and security guides now include Vietnamese alongside English.
 
 ### Fixed
 
@@ -23,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit Next.js development WebSocket origins and Spring development CORS origins allow the tunneled login page to hydrate and its authentication requests to reach the API.
 - Frontend authentication defaults to the same-origin `/api/v1` path instead of a legacy absolute URL fallback.
 - Login links to self-registration only when the organization enables it; signup includes credentials so its session can be retained.
+- Maven incremental builds retain generated protobuf/gRPC sources and classes so `make -C api dev` starts after repeated builds.
+- Chat SSE disables intermediary transformation/compression to prevent the Next.js proxy from buffering previews until completion.
+- Revision retries reset provisional content; cancellation before commit fails the turn and stops provider work without persisting a partial answer.
 
 ## [0.1.0] - 2026-10-06
 

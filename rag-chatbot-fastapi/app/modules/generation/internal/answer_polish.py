@@ -60,6 +60,22 @@ def polish_answer(answer: str) -> str:
     return " ".join(polished.split())
 
 
+def polish_preview(answer: str) -> str:
+    """Withhold a short tail and incomplete tokens before applying the final cleaner.
+
+    Never expose an open placeholder or a split file/chunk reference. Whole
+    whitespace-delimited tokens stay buffered even when a filename is long.
+    """
+    candidate = answer[:-48]
+    boundary = max((match.start() for match in re.finditer(r"\s", candidate)), default=0)
+    candidate = candidate[:boundary]
+    open_bracket = candidate.rfind("[")
+    if open_bracket > candidate.rfind("]"):
+        candidate = candidate[:open_bracket]
+    candidate = re.sub(r"\bchunk\s*$", "", candidate, flags=re.IGNORECASE)
+    return polish_answer(candidate)
+
+
 def contains_source_echo(answer: str) -> bool:
     """True when the answer still mentions document names or chunk numbers."""
     return bool(_FILE_REFERENCE.search(answer) or _CHUNK_REFERENCE.search(answer))

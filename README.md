@@ -26,7 +26,7 @@ năng lực H-P-D-I nào.
 
 | Lĩnh vực | Ranh giới triển khai hiện có |
 | --- | --- |
-| Chat trên tài liệu | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, câu trả lời JSON hoàn chỉnh qua Spring API |
+| Chat trên tài liệu | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối |
 | Tuyến nhạy cảm có giới hạn | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện |
 | Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị |
 | Định danh và quản trị | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán |
@@ -157,7 +157,6 @@ Test cần Redis, Qdrant hoặc provider thật yêu cầu môi trường đư�
 [hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#verification) trước khi hiểu check tích hợp bị skip
 là kiểm chứng end-to-end thành công.
 
-
 ## Lộ trình MVP
 
 | Phiên bản | Phạm vi | Tiêu chí xong (Done) |
@@ -209,7 +208,7 @@ H-P-D-I capability space each screen of the web client belongs to.
 
 | Area | Current implementation boundary |
 | --- | --- |
-| Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and completed JSON answers through the Spring API |
+| Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence |
 | Bounded sensitive route | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment |
 | Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection |
 | Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
@@ -339,6 +338,16 @@ For details on operations, backups, and security hardening, see the [deployment 
 Tests with real Redis, Qdrant, or external providers require their documented environments.
 Read the [verification guide](docs/DEVELOPMENT.md#verification) before interpreting skipped
 integration checks as successful end-to-end verification.
+
+## MVP roadmap
+
+| Version | Scope | Done criteria |
+| --- | --- | --- |
+| `v0.1.x` (released) | Self-hosted RAG platform: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, password + JWT auth, SSE streaming | Fresh-clone install, authorized ingestion, cited chat, abstention without evidence |
+| `v0.2.0` — Keycloak SSO | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated |
+| `v0.3.0` — BPMN workflow | Workflow engine (Flowable or n8n) for one e-Office approval flow demo in the `[P]` space; approval inbox API + UI | Approval flow demonstrable, durable state, operations docs updated |
+
+Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone is broken into issues with their own acceptance criteria.
 
 ## Further reading
 

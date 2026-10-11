@@ -34,10 +34,10 @@ class InferenceServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.GenerateAnswer = channel.unary_unary(
+        self.GenerateAnswer = channel.unary_stream(
                 '/cacanode.ai.v1.InferenceService/GenerateAnswer',
                 request_serializer=cacanode__ai__v1__pb2.GenerateAnswerRequest.SerializeToString,
-                response_deserializer=cacanode__ai__v1__pb2.GenerateAnswerResponse.FromString,
+                response_deserializer=cacanode__ai__v1__pb2.GenerateAnswerEvent.FromString,
                 _registered_method=True)
         self.ListDocumentUnits = channel.unary_unary(
                 '/cacanode.ai.v1.InferenceService/ListDocumentUnits',
@@ -75,10 +75,10 @@ class InferenceServiceServicer(object):
 
 def add_InferenceServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'GenerateAnswer': grpc.unary_unary_rpc_method_handler(
+            'GenerateAnswer': grpc.unary_stream_rpc_method_handler(
                     servicer.GenerateAnswer,
                     request_deserializer=cacanode__ai__v1__pb2.GenerateAnswerRequest.FromString,
-                    response_serializer=cacanode__ai__v1__pb2.GenerateAnswerResponse.SerializeToString,
+                    response_serializer=cacanode__ai__v1__pb2.GenerateAnswerEvent.SerializeToString,
             ),
             'ListDocumentUnits': grpc.unary_unary_rpc_method_handler(
                     servicer.ListDocumentUnits,
@@ -112,12 +112,12 @@ class InferenceService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
+        return grpc.experimental.unary_stream(
             request,
             target,
             '/cacanode.ai.v1.InferenceService/GenerateAnswer',
             cacanode__ai__v1__pb2.GenerateAnswerRequest.SerializeToString,
-            cacanode__ai__v1__pb2.GenerateAnswerResponse.FromString,
+            cacanode__ai__v1__pb2.GenerateAnswerEvent.FromString,
             options,
             channel_credentials,
             insecure,

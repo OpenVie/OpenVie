@@ -5,10 +5,12 @@ import com.cacanode.api.ai.api.AiInferenceException;
 
 import com.cacanode.ai.v1.DeleteDocumentIndexRequest;
 import com.cacanode.ai.v1.GenerateAnswerRequest;
+import com.cacanode.ai.v1.GenerateAnswerEvent;
 import com.cacanode.ai.v1.GenerateAnswerResponse;
 import com.cacanode.ai.v1.InferenceServiceGrpc;
 import com.cacanode.ai.v1.ListDocumentUnitsRequest;
 import com.cacanode.ai.v1.TraceMetadata;
+import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
@@ -21,9 +23,11 @@ import org.springframework.stereotype.Component;
 
 import javax.net.ssl.SSLException;
 import java.io.File;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 @Component
@@ -72,7 +76,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
     }
 
     @Override
-    public GeneratedAnswer generate(GenerationRequest request) {
+    public GeneratedAnswer generate(GenerationRequest request, Consumer<String> onContent) {
         GenerateAnswerRequest.Builder builder = GenerateAnswerRequest.newBuilder()
                 .setGenerationId(request.generationId().toString())
                 .setTurnId(request.turnId().toString())
@@ -90,10 +94,38 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 com.cacanode.ai.v1.PriorMessage.newBuilder()
                         .setRole(message.role()).setContent(message.content())));
 
-        GenerateAnswerResponse response = unavailableRetry(
-                answerDeadlineSeconds,
-                service -> service.generateAnswer(builder.build()),
-                "answer generation");
+        GenerateAnswerResponse response = null;
+        Context.CancellableContext callContext = Context.current().withCancellation();
+        Context previousContext = callContext.attach();
+        try {
+            Iterator<GenerateAnswerEvent> events = stub
+                    .withDeadlineAfter(answerDeadlineSeconds, TimeUnit.SECONDS)
+                    .generateAnswer(builder.build());
+            while (events.hasNext()) {
+                GenerateAnswerEvent event = events.next();
+                if (response != null) {
+                    throw invalidStream();
+                }
+                switch (event.getPayloadCase()) {
+                    case CONTENT -> {
+                        if (event.getContent().isBlank()) {
+                            throw invalidStream();
+                        }
+                        onContent.accept(event.getContent());
+                    }
+                    case COMPLETED -> response = event.getCompleted();
+                    case PAYLOAD_NOT_SET -> throw invalidStream();
+                }
+            }
+        } catch (StatusRuntimeException exception) {
+            throw mappedFailure(exception, "answer generation");
+        } finally {
+            callContext.detach(previousContext);
+            callContext.cancel(null);
+        }
+        if (response == null || response.getAnswer().isBlank()) {
+            throw invalidStream();
+        }
         if (!response.getGenerationId().equals(request.generationId().toString())
                 || response.getAuthoritativeRevision() != request.authoritativeRevision()) {
             throw new AiInferenceException(HttpStatus.BAD_GATEWAY, "INVALID_AI_RESPONSE",
@@ -109,6 +141,11 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 response.getCacheTier(),
                 response.hasAvoidedInputTokens() ? response.getAvoidedInputTokens() : null,
                 response.hasAvoidedOutputTokens() ? response.getAvoidedOutputTokens() : null);
+    }
+
+    private AiInferenceException invalidStream() {
+        return new AiInferenceException(HttpStatus.BAD_GATEWAY, "INVALID_AI_RESPONSE",
+                "The inference service returned an invalid answer stream.");
     }
 
     @Override
@@ -148,19 +185,23 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 if (exception.getStatus().getCode() == Status.Code.UNAVAILABLE && attempt == 0) {
                     continue;
                 }
-                if (exception.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {
-                    throw new AiInferenceException(HttpStatus.GATEWAY_TIMEOUT, "MODEL_TIMEOUT",
-                            "The model took too long to answer.");
-                }
-                if (exception.getStatus().getCode() == Status.Code.NOT_FOUND) {
-                    throw new AiInferenceException(HttpStatus.NOT_FOUND, "INDEXED_DOCUMENT_NOT_FOUND",
-                            "Indexed document was not found.");
-                }
-                throw new AiInferenceException(HttpStatus.BAD_GATEWAY, "MODEL_PROVIDER_ERROR",
-                        "The inference service could not complete " + operationName + ".");
+                throw mappedFailure(exception, operationName);
             }
         }
         throw new IllegalStateException("Unreachable retry state");
+    }
+
+    private AiInferenceException mappedFailure(StatusRuntimeException exception, String operationName) {
+        if (exception.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {
+            return new AiInferenceException(HttpStatus.GATEWAY_TIMEOUT, "MODEL_TIMEOUT",
+                    "The model took too long to answer.");
+        }
+        if (exception.getStatus().getCode() == Status.Code.NOT_FOUND) {
+            return new AiInferenceException(HttpStatus.NOT_FOUND, "INDEXED_DOCUMENT_NOT_FOUND",
+                    "Indexed document was not found.");
+        }
+        return new AiInferenceException(HttpStatus.BAD_GATEWAY, "MODEL_PROVIDER_ERROR",
+                "The inference service could not complete " + operationName + ".");
     }
 
     private TraceMetadata trace(String requestId, String traceId) {

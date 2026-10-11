@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.modules.generation.api import Citation
+from app.modules.generation.api import Citation, TokenUsage
 from app.modules.retrieval.api import RetrievedKnowledgeUnit
 
 RetrievedChunk = RetrievedKnowledgeUnit
@@ -25,6 +25,7 @@ class AssistantMessage:
     role: str
     content: str
     citations: list[Citation] = field(default_factory=list)
+    token_usage: TokenUsage = TokenUsage()
 
 
 @dataclass(frozen=True, slots=True)

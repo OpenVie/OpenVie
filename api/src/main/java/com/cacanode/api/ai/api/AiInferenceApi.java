@@ -2,11 +2,12 @@ package com.cacanode.api.ai.api;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public interface AiInferenceApi {
-    GeneratedAnswer generate(GenerationRequest request);
+    GeneratedAnswer generate(GenerationRequest request, Consumer<String> onContent);
 
     List<DocumentUnit> listDocumentUnits(
             UUID tenantId, UUID knowledgeBaseId, UUID documentId, String requestId);

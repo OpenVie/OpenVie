@@ -116,6 +116,14 @@ class GenerateAnswerResponse(_message.Message):
     avoided_output_tokens: int
     def __init__(self, generation_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., answer: _Optional[str] = ..., citations: _Optional[_Iterable[_Union[Citation, _Mapping]]] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., cache_tier: _Optional[str] = ..., avoided_input_tokens: _Optional[int] = ..., avoided_output_tokens: _Optional[int] = ...) -> None: ...
 
+class GenerateAnswerEvent(_message.Message):
+    __slots__ = ("content", "completed")
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    COMPLETED_FIELD_NUMBER: _ClassVar[int]
+    content: str
+    completed: GenerateAnswerResponse
+    def __init__(self, content: _Optional[str] = ..., completed: _Optional[_Union[GenerateAnswerResponse, _Mapping]] = ...) -> None: ...
+
 class ListDocumentUnitsRequest(_message.Message):
     __slots__ = ("tenant_id", "knowledge_base_id", "document_id", "trace")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]

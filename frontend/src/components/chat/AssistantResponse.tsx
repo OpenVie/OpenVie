@@ -214,7 +214,7 @@ export function AssistantResponse({
     <div className={error ? "rounded-xl bg-red-50 px-4 py-3 text-red-700" : "text-slate-900"}>
       <div className="text-sm sm:text-[15px]">{markdownBlocks(content, citationsById)}</div>
       {grouped.length > 0 && (
-        <div className="mt-6 border-t border-slate-200 pt-4">
+        <div className="chat-sources-enter mt-6 border-t border-slate-200 pt-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("sources")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {grouped.map(([documentId, documentCitations]) => (

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import suppress
 
 import grpc
 
@@ -32,7 +35,7 @@ class GenerationGrpcHandler:
 
     async def generate(
         self, request: pb.GenerateAnswerRequest, context: grpc.aio.ServicerContext
-    ) -> pb.GenerateAnswerResponse:
+    ) -> AsyncGenerator[pb.GenerateAnswerEvent, None]:
         cached = await self._cache.get(request.generation_id)
         if cached is not None:
             cached.cache_tier = GenerationCacheTier.GENERATION_ID
@@ -40,9 +43,38 @@ class GenerationGrpcHandler:
                 cached.avoided_input_tokens = cached.input_tokens
             if cached.HasField("output_tokens"):
                 cached.avoided_output_tokens = cached.output_tokens
-            return cached
+            yield pb.GenerateAnswerEvent(completed=cached)
+            return
+
+        queue: asyncio.Queue[str | GenerationResult | Exception] = asyncio.Queue(maxsize=4)
+
+        async def on_content(content: str) -> None:
+            await queue.put(content)
+
+        async def produce() -> None:
+            try:
+                result = await self._generation.generate(_context(request), on_content=on_content)
+            except Exception as exc:
+                await queue.put(exc)
+            else:
+                await queue.put(result)
+
+        producer = asyncio.create_task(produce())
         try:
-            result = await self._generation.generate(_context(request))
+            while True:
+                event = await queue.get()
+                if isinstance(event, str):
+                    yield pb.GenerateAnswerEvent(content=event)
+                    continue
+                if isinstance(event, Exception):
+                    raise event
+                # Only a fully validated successful result can enter the cache.
+                if context.cancelled():
+                    return
+                response = _response(event)
+                await self._cache.put(request.generation_id, response)
+                yield pb.GenerateAnswerEvent(completed=response)
+                return
         except GenerationRejectedError as exc:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
         except GenerationTimeoutError:
@@ -60,9 +92,10 @@ class GenerationGrpcHandler:
                 "gRPC answer generation failed generation_id=%s", request.generation_id
             )
             await context.abort(grpc.StatusCode.INTERNAL, "Answer generation failed")
-        response = _response(result)
-        await self._cache.put(request.generation_id, response)
-        return response
+        finally:
+            producer.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer
 
 
 def _context(request: pb.GenerateAnswerRequest) -> GenerationContext:

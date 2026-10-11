@@ -81,6 +81,10 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 npm --prefix frontend run dev
 ```
 
+`make -C api dev` sinh mã Java/gRPC từ `proto/` vào `api/target/protobuf/`
+trước khi biên dịch. Đường dẫn này tách khỏi `generated-sources` để mã protobuf
+và class không bị mất khi Maven biên dịch tăng dần.
+
 Nếu truy cập bản **dev** qua APISIX/ngrok, đặt `NEXT_DEV_ALLOWED_ORIGINS=your-subdomain.ngrok-free.dev`
 (chỉ hostname, không có `https://`) trong `frontend/.env.local`, giữ
 `NEXT_PUBLIC_API_BASE_URL=/api/v1`, rồi **khởi động lại** Next.js. Chạy
@@ -211,6 +215,11 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 # Terminal 3: Next.js frontend (:3000)
 npm --prefix frontend run dev
 ```
+
+`make -C api dev` generates Java/gRPC code from `proto/` into
+`api/target/protobuf/` before compilation. This directory stays separate from
+`generated-sources` so incremental Maven builds retain the protobuf sources
+and classes.
 
 To access the **dev** server through APISIX/ngrok, set
 `NEXT_DEV_ALLOWED_ORIGINS=your-subdomain.ngrok-free.dev` (hostname only, no

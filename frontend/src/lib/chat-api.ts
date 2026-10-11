@@ -65,37 +65,154 @@ export async function hidePlaygroundSessionApi(
   if (!res.ok) await readJsonOrThrow(res);
 }
 
+export type ChatMessageStreamOptions = {
+  onContent: (content: string) => void;
+  onReset: () => void;
+  signal?: AbortSignal;
+};
+
+export class ChatMessageStreamError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = "ChatMessageStreamError";
+  }
+}
+
 export async function submitChatMessageApi(
   request: ApiRequest,
   sessionId: string,
   content: string,
-  signal?: AbortSignal,
+  { onContent, onReset, signal }: ChatMessageStreamOptions,
 ): Promise<AssistantMessageResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CHAT_MESSAGE_TIMEOUT_MS);
-  const abortFromCaller = () => controller.abort();
-
-  if (signal?.aborted) {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timedOut = false;
+  const abort = () => {
     controller.abort();
-  } else {
-    signal?.addEventListener("abort", abortFromCaller, { once: true });
-  }
+    void reader?.cancel().catch(() => {});
+  };
+  const timeout = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    timedOut = true;
+    abort();
+  }, CHAT_MESSAGE_TIMEOUT_MS);
+  const throwIfAborted = () => {
+    if (!controller.signal.aborted) return;
+    if (timedOut) throw new ChatMessageTimeoutError();
+    throw new DOMException("The chat response was canceled.", "AbortError");
+  };
+
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
 
   try {
+    throwIfAborted();
     const res = await request(`${getApiBase()}/chat/sessions/${sessionId}/messages`, {
       method: "POST",
+      headers: { Accept: "text/event-stream" },
       body: JSON.stringify({ content }),
       signal: controller.signal,
     });
-    return readJsonOrThrow<AssistantMessageResponse>(res);
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ChatMessageTimeoutError();
+    throwIfAborted();
+    if (!res.ok) await readJsonOrThrow(res);
+    if (res.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "text/event-stream" || !res.body) {
+      throw new ChatMessageStreamError("INVALID_STREAM", "The chat response could not be read. Please try again.");
     }
+
+    reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let buffer = "";
+    let event = "";
+    let data: string[] = [];
+    let completed: AssistantMessageResponse | undefined;
+    const malformed = () => new ChatMessageStreamError("INVALID_STREAM", "The chat response was malformed. Please try again.");
+    const consumeLine = (line: string) => {
+      throwIfAborted();
+      if (line === "") {
+        if (data.length === 0) {
+          event = "";
+          return;
+        }
+        let payload: unknown;
+        try {
+          payload = JSON.parse(data.join("\n"));
+        } catch {
+          throw malformed();
+        }
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw malformed();
+        const body = payload as Record<string, unknown>;
+        switch (event) {
+          case "content":
+            if (typeof body.content !== "string" || !body.content.trim()) throw malformed();
+            onContent(body.content);
+            break;
+          case "reset":
+            onReset();
+            break;
+          case "complete":
+            if (body.role !== "assistant" || typeof body.content !== "string" || !body.content.trim() || !Array.isArray(body.citations)) throw malformed();
+            completed = payload as AssistantMessageResponse;
+            break;
+          case "error":
+            if (typeof body.code !== "string" || typeof body.message !== "string" || !body.message.trim()) throw malformed();
+            throw new ChatMessageStreamError(body.code, body.message);
+          default:
+            throw malformed();
+        }
+        event = "";
+        data = [];
+        return;
+      }
+      if (line.startsWith(":")) return;
+      const colon = line.indexOf(":");
+      const field = colon < 0 ? line : line.slice(0, colon);
+      let value = colon < 0 ? "" : line.slice(colon + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+      if (field === "event") event = value;
+      if (field === "data") data.push(value);
+    };
+
+    while (!completed) {
+      const { value, done } = await reader.read();
+      throwIfAborted();
+      try {
+        buffer += decoder.decode(value, { stream: !done });
+      } catch {
+        throw malformed();
+      }
+      let start = 0;
+      for (let index = 0; index < buffer.length; index += 1) {
+        const char = buffer[index];
+        if (char !== "\r" && char !== "\n") continue;
+        // A CR at the end of a chunk may be the first half of CRLF.
+        if (char === "\r" && index === buffer.length - 1 && !done) break;
+        consumeLine(buffer.slice(start, index));
+        if (char === "\r" && buffer[index + 1] === "\n") index += 1;
+        start = index + 1;
+        if (completed) break;
+      }
+      buffer = buffer.slice(start);
+      if (done && !completed) {
+        throw new ChatMessageStreamError("INCOMPLETE_STREAM", "The chat response ended unexpectedly. Please try again.");
+      }
+    }
+    throwIfAborted();
+    return completed;
+  } catch (error) {
+    throwIfAborted();
     throw error;
   } finally {
     clearTimeout(timeout);
-    signal?.removeEventListener("abort", abortFromCaller);
+    signal?.removeEventListener("abort", abort);
+    if (reader) {
+      try {
+        await reader.cancel();
+      } catch {
+        // The network may already have closed the stream.
+      } finally {
+        reader.releaseLock();
+      }
+    }
   }
 }
 
