@@ -148,6 +148,8 @@ function Playground() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canPersistStateRef = useRef(false)
   const activeChatAbortRef = useRef<AbortController | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const followLatestRef = useRef(true)
   const historyAbortRef = useRef<AbortController | null>(null)
   const searchAbortRef = useRef<AbortController | null>(null)
   const historyRequestRef = useRef(0)
@@ -196,7 +198,10 @@ function Playground() {
       source.status === "PROCESSING",
   )
 
-  const loadHistory = useCallback(async (preferredSessionId?: string | null, append = false) => {
+  const loadHistory = useCallback(async ({
+    append = false,
+    selectSession = false,
+  }: { append?: boolean; selectSession?: boolean } = {}) => {
     if (append && (!historyNextCursorRef.current || historyLoadingMoreRef.current)) return
     const requestId = ++historyRequestRef.current
     if (!append) {
@@ -225,7 +230,9 @@ function Playground() {
       })
       setHistoryNextCursor(result.nextCursor)
       historyNextCursorRef.current = result.nextCursor
-      if (!append) setSessionId((current) => preferredSessionId ?? current ?? result.items[0]?.id ?? null)
+      if (!append && selectSession) {
+        setSessionId((current) => current ?? result.items[0]?.id ?? null)
+      }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) setHistoryError(error instanceof Error ? error.message : t("fallback.loadChats"))
     } finally {
@@ -263,7 +270,7 @@ function Playground() {
   useEffect(() => {
     if (!workspace) return
     historyNextCursorRef.current = null
-    const timer = window.setTimeout(() => void loadHistory(undefined, false), 0)
+    const timer = window.setTimeout(() => void loadHistory({ selectSession: true }), 0)
     return () => {
       window.clearTimeout(timer)
       historyAbortRef.current?.abort()
@@ -273,7 +280,7 @@ function Playground() {
   useEffect(() => {
     if (!historyNextCursor || historyLoading || historyLoadingMore) return
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadHistory(undefined, true)
+      if (entries.some((entry) => entry.isIntersecting)) void loadHistory({ append: true })
     }, { rootMargin: "160px" })
     if (desktopSentinelRef.current) observer.observe(desktopSentinelRef.current)
     if (mobileSentinelRef.current) observer.observe(mobileSentinelRef.current)
@@ -377,9 +384,17 @@ function Playground() {
 
   useEffect(() => {
     return () => {
-      activeChatAbortRef.current?.abort()
+      const controller = activeChatAbortRef.current
+      activeChatAbortRef.current = null
+      controller?.abort()
     }
   }, [])
+
+  useEffect(() => {
+    if (followLatestRef.current && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [messages])
 
   useEffect(() => {
     if (!workspace || !canPersistStateRef.current) return
@@ -430,12 +445,12 @@ function Playground() {
     }
   }, [request, sources])
 
-  async function ensureSession(): Promise<string> {
+  async function ensureSession(signal: AbortSignal): Promise<string> {
     if (sessionId) return sessionId
-    return createSession()
+    return createSession(signal)
   }
 
-  async function createSession(): Promise<string> {
+  async function createSession(signal: AbortSignal): Promise<string> {
     if (!workspace) {
       throw new Error(t("workspaceLoading"))
     }
@@ -444,19 +459,23 @@ function Playground() {
       knowledge_base_id: workspace.knowledgeBase.id,
       locale: workspace.chatbot.defaultLocale || workspace.knowledgeBase.defaultLocale,
     })
+    signal.throwIfAborted()
     setSessionId(session.id)
     return session.id
   }
 
   function startNewChat() {
-    if (sending) return
+    cancelMessage()
+    followLatestRef.current = true
     setSessionId(null)
     setMessages([])
     setMessage("")
   }
 
   function switchSession(nextSessionId: string) {
-    if (sending || nextSessionId === sessionId) return
+    if (nextSessionId === sessionId) return
+    cancelMessage()
+    followLatestRef.current = true
     setMessages([])
     setSessionId(nextSessionId)
   }
@@ -490,7 +509,7 @@ function Playground() {
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault()
     const content = message.trim()
-    if (!content || sending) return
+    if (!content || sending || activeChatAbortRef.current) return
     if (!hasCompletedSource) {
       toast.error(
         hasIndexingSource
@@ -501,89 +520,89 @@ function Playground() {
     }
 
     const assistantId = makeId()
+    followLatestRef.current = true
     setMessages((current) => [
       ...current,
       { id: makeId(), role: "user", content },
-      { id: assistantId, role: "assistant", content: t("thinking"), loading: true },
+      { id: assistantId, role: "assistant", content: "", loading: true },
     ])
     setMessage("")
     setSending(true)
 
     const abortController = new AbortController()
     activeChatAbortRef.current = abortController
+    const isActive = () =>
+      activeChatAbortRef.current === abortController && !abortController.signal.aborted
+    const streamOptions = {
+      signal: abortController.signal,
+      onContent: (preview: string) => {
+        if (!isActive()) return
+        setMessages((current) => current.map((item) =>
+          item.id === assistantId ? { ...item, content: preview, citations: undefined } : item,
+        ))
+      },
+      onReset: () => {
+        if (!isActive()) return
+        setMessages((current) => current.map((item) =>
+          item.id === assistantId ? { ...item, content: "", citations: undefined } : item,
+        ))
+      },
+    }
 
     try {
-      const activeSessionId = await ensureSession()
+      let activeSessionId = await ensureSession(abortController.signal)
+      if (!isActive()) return
       let response
       try {
-        response = await submitChatMessageApi(
-          request,
-          activeSessionId,
-          content,
-          abortController.signal,
-        )
+        response = await submitChatMessageApi(request, activeSessionId, content, streamOptions)
       } catch (error) {
+        if (!isActive()) return
         if (error instanceof Error && error.message === "Chat session was not found.") {
           setSessionId(null)
-          const replacementSessionId = await createSession()
-          response = await submitChatMessageApi(
-            request,
-            replacementSessionId,
-            content,
-            abortController.signal,
-          )
+          activeSessionId = await createSession(abortController.signal)
+          if (!isActive()) return
+          streamOptions.onReset()
+          response = await submitChatMessageApi(request, activeSessionId, content, streamOptions)
         } else {
           throw error
         }
       }
-      setMessages((current) => {
-        const assistantMessage: ChatMessage = {
-          id: assistantId,
-          role: "assistant",
-          content: response.content.trim() || t("fallback.noAnswer"),
-          citations: response.citations,
-          error: response.content.trim().length === 0,
-        }
-        let replaced = false
-        const updated = current.map((item) => {
-          if (item.id !== assistantId) return item
-          replaced = true
-          return assistantMessage
-        })
-        return replaced ? updated : [...updated, assistantMessage]
-      })
-      await loadHistory(activeSessionId)
+      if (!isActive()) return
+      setMessages((current) => current.map((item): ChatMessage =>
+        item.id === assistantId
+          ? { id: assistantId, role: "assistant", content: response.content, citations: response.citations }
+          : item,
+      ))
+      await loadHistory()
     } catch (error) {
-      const aborted = abortController.signal.aborted
-      const errorMessage = aborted
-        ? t("canceled")
-        : error instanceof ChatMessageTimeoutError
-          ? t("fallback.timeout")
-          : error instanceof Error
+      if (!isActive()) return
+      const errorMessage = error instanceof ChatMessageTimeoutError
+        ? t("fallback.timeout")
+        : error instanceof Error
           ? error.message
           : t("fallback.answer")
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === assistantId
-            ? {
-                id: assistantId,
-                role: "assistant",
-                content: errorMessage,
-                error: !aborted,
-              }
-            : item,
-        ),
-      )
+      setMessages((current) => current.map((item): ChatMessage =>
+        item.id === assistantId
+          ? { id: assistantId, role: "assistant", content: errorMessage, error: true }
+          : item,
+      ))
     } finally {
       if (activeChatAbortRef.current === abortController) {
         activeChatAbortRef.current = null
+        setSending(false)
       }
-      setSending(false)
     }
   }
 
   function cancelMessage() {
-    activeChatAbortRef.current?.abort()
+    const controller = activeChatAbortRef.current
+    if (!controller) return
+    activeChatAbortRef.current = null
+    controller.abort()
+    setMessages((current) => current.map((item): ChatMessage =>
+      item.loading ? { id: item.id, role: "assistant", content: t("canceled") } : item,
+    ))
+    setSending(false)
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -671,7 +690,7 @@ function Playground() {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {historyLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="mb-2 h-14 animate-pulse rounded-lg bg-slate-200" />) : historyError && history.length === 0 ? (
-          <div className="p-3 text-sm text-red-700"><AlertCircle className="mb-2 size-5" /><p>{historyError}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadHistory()}>{t("retry")}</Button></div>
+          <div className="p-3 text-sm text-red-700"><AlertCircle className="mb-2 size-5" /><p>{historyError}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadHistory({ selectSession: true })}>{t("retry")}</Button></div>
         ) : history.length === 0 ? (
           <p className="p-4 text-center text-sm text-slate-500">{t("historyWillAppear")}</p>
         ) : <>{history.map((item) => (
@@ -682,7 +701,7 @@ function Playground() {
             </button>
             <button type="button" disabled={sending || Boolean(deletingSessionId)} onClick={() => requestDeleteSession(item)} className="m-1 rounded-md p-2 text-slate-400 opacity-0 hover:bg-white hover:text-red-600 group-hover:opacity-100 focus:opacity-100" aria-label={t("hideChat", { title: item.title })}><Trash2 className="size-4" /></button>
           </div>
-        ))}<div ref={desktopSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-600" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-600" onClick={() => void loadHistory(undefined, true)}><RotateCw className="size-3" /> {t("retryOlder")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-400">{t("endHistory")}</p>}</>}
+        ))}<div ref={desktopSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-600" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-600" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retryOlder")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-400">{t("endHistory")}</p>}</>}
       </div>
     </div>
   )
@@ -722,7 +741,7 @@ function Playground() {
             <button
               type="button"
               className="mt-2 text-xs font-medium text-white underline underline-offset-4"
-              onClick={() => void loadHistory()}
+              onClick={() => void loadHistory({ selectSession: true })}
             >
               {t("retry")}
             </button>
@@ -756,7 +775,7 @@ function Playground() {
                 <Trash2 className="size-3.5" />
               </button>
             </div>
-          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-300" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-300" onClick={() => void loadHistory(undefined, true)}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-500">{t("endHistory")}</p>}</>
+          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-300" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-300" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-500">{t("endHistory")}</p>}</>
         )}
       </div>
     </div>
@@ -801,7 +820,14 @@ function Playground() {
           </aside>
         <div className="flex min-w-0 flex-1 flex-col">
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={chatScrollRef}
+        className="min-h-0 flex-1 overflow-y-auto"
+        onScroll={(event) => {
+          const element = event.currentTarget
+          followLatestRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64
+        }}
+      >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-8 sm:px-6">
           {messages.length === 0 ? (
             <div className="m-auto flex max-w-lg flex-col items-center py-12 text-center">
@@ -827,11 +853,21 @@ function Playground() {
                       {item.content}
                     </div>
                   ) : item.loading ? (
-                    <div className="w-full py-2 text-sm text-slate-500">
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="size-3.5 animate-spin" />
-                        {item.content}
-                      </span>
+                    <div className="w-full py-2" aria-busy="true">
+                      <div role="status" className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+                        <span>{item.content ? t("responding") : t("thinking")}</span>
+                        <span className="inline-flex gap-1" aria-hidden="true">
+                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
+                        </span>
+                      </div>
+                      {item.content && (
+                        <div className="chat-preview-enter whitespace-pre-wrap break-words text-sm leading-7 text-slate-800 sm:text-[15px]">
+                          {item.content}
+                          <span aria-hidden="true" className="chat-live-cursor ml-1 inline-block h-4 w-0.5 translate-y-0.5 rounded-full bg-indigo-400" />
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="w-full py-1">
@@ -925,15 +961,6 @@ function Playground() {
                   onChange={handleFiles}
                 />
               </div>
-              {sending && (
-                <button
-                  type="button"
-                  onClick={cancelMessage}
-                  className="h-9 rounded-lg px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 hidden"
-                >
-                  {t("cancel")}
-                </button>
-              )}
               <button
                 type={sending ? "button" : "submit"}
                 disabled={!sending && sendDisabled}

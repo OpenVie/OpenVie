@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from pathlib import Path
 
 import grpc
@@ -37,8 +39,10 @@ class InferenceGrpcService(pb_grpc.InferenceServiceServicer):
 
     async def GenerateAnswer(
         self, request: pb.GenerateAnswerRequest, context: grpc.aio.ServicerContext
-    ) -> pb.GenerateAnswerResponse:
-        return await self._generation.generate(request, context)
+    ) -> AsyncGenerator[pb.GenerateAnswerEvent, None]:
+        async with aclosing(self._generation.generate(request, context)) as stream:
+            async for event in stream:
+                yield event
 
     async def ListDocumentUnits(
         self, request: pb.ListDocumentUnitsRequest, context: grpc.aio.ServicerContext

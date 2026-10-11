@@ -5,6 +5,7 @@ import com.cacanode.api.common.config.CorsProperties;
 import com.cacanode.api.common.filter.PublicRateLimitFilter;
 import com.cacanode.api.common.security.AppUserDetailsService;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.DispatcherType;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 // Self-hosted boundary: only auth, OpenAPI and health/info are public.
 // Everything else requires an authenticated tenant-scoped principal.
@@ -33,6 +35,8 @@ import java.util.List;
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+    private static final Pattern CHAT_MESSAGE_STREAM_PATH =
+            Pattern.compile("/api/v1/chat/sessions/[^/]+/messages");
 
     private final JwtAuthFilter jwtAuthFilter;                  // auth module
     private final PublicRateLimitFilter publicRateLimitFilter;
@@ -73,6 +77,11 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .headers(headers -> headers.frameOptions(frame -> frame.disable()))
             .authorizeHttpRequests(request -> request
+                .requestMatchers(servletRequest ->
+                        servletRequest.getDispatcherType() == DispatcherType.ASYNC
+                                && "POST".equals(servletRequest.getMethod())
+                                && CHAT_MESSAGE_STREAM_PATH.matcher(servletRequest.getServletPath())
+                                .matches()).permitAll()
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .anyRequest().authenticated()
             )

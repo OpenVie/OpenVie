@@ -226,6 +226,7 @@
     "waitForIndexing": "Wait for at least one document to finish indexing.",
     "uploadBeforeQuestion": "Upload a supported digital document or spreadsheet before asking a question.",
     "thinking": "Thinking…",
+    "responding": "Writing response",
     "canceled": "Canceled.",
     "questionPlaceholder": "Ask a question about your indexed sources…",
     "uploadPlaceholder": "Upload and index a source before chatting…",

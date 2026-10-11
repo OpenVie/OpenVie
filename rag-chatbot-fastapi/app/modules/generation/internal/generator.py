@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from app.modules.generation.api import (
@@ -11,6 +11,7 @@ from app.modules.generation.api import (
     GenerationTimeoutError,
     GenerationUnavailableError,
 )
+from app.modules.generation.internal.errors import ChatModelTimeoutError
 from app.modules.generation.internal.models import ChatMessage, ChatSession
 from app.modules.generation.internal.service import RagChatService
 from app.modules.model.api import ModelTimeoutError, ModelUnavailableError
@@ -51,7 +52,12 @@ class GenerationService(GenerationApi):
         self._delegate = delegate
         self._default_locale = default_locale
 
-    async def generate(self, context: GenerationContext) -> GenerationResult:
+    async def generate(
+        self,
+        context: GenerationContext,
+        *,
+        on_content: Callable[[str], Awaitable[None]] | None = None,
+    ) -> GenerationResult:
         if not context.generation_id or not context.tenant_id or not context.knowledge_base_id:
             raise GenerationRejectedError("Generation scope is incomplete")
         if context.authoritative_revision < 0:
@@ -76,8 +82,9 @@ class GenerationService(GenerationApi):
                 session=session,
                 content=context.question,
                 prior_messages=history,
+                on_content=on_content,
             )
-        except ModelTimeoutError as exc:
+        except (ModelTimeoutError, ChatModelTimeoutError) as exc:
             raise GenerationTimeoutError("Model deadline exceeded") from exc
         except ModelUnavailableError as exc:
             raise GenerationUnavailableError("Model provider failed") from exc
@@ -87,4 +94,5 @@ class GenerationService(GenerationApi):
             authoritative_revision=context.authoritative_revision,
             answer=message.content,
             citations=tuple(message.citations),
+            token_usage=message.token_usage,
         )

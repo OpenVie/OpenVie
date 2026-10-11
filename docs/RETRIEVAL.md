@@ -59,7 +59,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Query[Truy vấn người dùng] --> Plan[Viết lại câu hỏi nối tiếp]
+    Query[Truy vấn người dùng] --> Gate{Chào hỏi / nhiễu rõ ràng?}
+    Gate -->|Có và không nhạy cảm| Polite[Phản hồi theo lịch sử, không citation]
+    Gate -->|Không / chưa chắc| Plan[Viết lại câu hỏi nối tiếp]
     Plan --> Route[Định tuyến: Tính toán -> Quan hệ -> Chính xác -> Ngữ nghĩa]
     Route --> Dense[Xếp hạng Dense]
     Route --> Sparse[Xếp hạng BM25]
@@ -73,6 +75,8 @@ flowchart TD
     Neighbors --> Generate[Sinh câu trả lời có kiểm chứng]
 ```
 
+**Bộ lọc ý định:** Quy tắc Việt/Anh bảo thủ chỉ chặn lời chào, hội thoại xã giao hoặc nhiễu rõ ràng; bỏ qua cả cache câu trả lời, embedding, query planning, truy hồi và LLM. Phản hồi nhắc chủ đề gần nhất khi phù hợp, không citation. Câu hỏi nhạy cảm, mã/định danh và câu nối tiếp có nội dung vẫn đi qua RAG; khi chưa chắc, ưu tiên truy hồi. Đây không phải bộ phân loại ngữ nghĩa đã huấn luyện.
+
 1. **Viết lại truy vấn theo ngữ cảnh (Query Planning):** Câu hỏi nối tiếp (follow-up) được viết lại thành truy vấn độc lập trước khi tìm kiếm dựa trên lịch sử hội thoại gần nhất.
 2. **Định tuyến:** `calculation` → `relational` → `exact` → `semantic` với trọng số kênh tương ứng.
 3. **Khai thác ứng viên:** Thu thập tối đa 40 dense, 40 sparse, 20 graph song song.
@@ -82,9 +86,12 @@ flowchart TD
 
 ### 6. Nguyên tắc sinh phản hồi và đối soát
 
-- **Liệt kê đầy đủ:** Khi nguồn tài liệu có danh sách, mô hình được chỉ thị liệt kê toàn bộ các mục, nhãn và thông số, không tóm tắt hay cắt xén.
-- **Trích dẫn có cấu trúc:** Câu trả lời dẫn nguồn `[S1]`, `[S2]`. Control plane kiểm tra tính hợp lệ và quyền truy cập tài liệu trước khi trả về client.
+- **Liệt kê đầy đủ:** Prompt yêu cầu toàn bộ các mục, nhãn và thông số trong nguồn. Ngân sách câu trả lời mặc định là `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction giữ ngân sách riêng 512 token.
+- **Trích dẫn có cấu trúc:** Câu trả lời dẫn nguồn `[S1]`, `[S2]`. Control plane kiểm tra tính hợp lệ và quyền truy cập tài liệu trước khi phát phản hồi cuối và thẻ nguồn.
 - **Không tìm thấy:** Khi không có bằng chứng liên quan, mô hình từ chối suy đoán và thông báo thiếu thông tin.
+- **Streaming thật:** Ollama NDJSON hoặc SSE từ endpoint tương thích OpenAI → gRPC server-streaming → SSE tới client. Bản nháp tích lũy thay thế snapshot cũ; giữ lại đuôi và token/placeholder chưa đủ để làm sạch trước khi hiển thị. Bản nháp không có link/thẻ nguồn và không được lưu.
+- **Câu hỏi nhạy cảm:** Chờ toàn bộ kết quả, kiểm tra citation và cắt cụt trước khi hiển thị; câu trả lời bị cắt hoặc thiếu nguồn hợp lệ không lộ bản nháp.
+
 
 ---
 
@@ -141,7 +148,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    Query[User query] --> Plan[Rewrite follow-up query]
+    Query[User query] --> Gate{Clear greeting / nonsense?}
+    Gate -->|Yes and not sensitive| Polite[History-aware reply, no citations]
+    Gate -->|No / uncertain| Plan[Rewrite follow-up query]
     Plan --> Route[Route: Calc -> Relational -> Exact -> Semantic]
     Route --> Dense[Dense ranking]
     Route --> Sparse[BM25 ranking]
@@ -155,6 +164,8 @@ flowchart TD
     Neighbors --> Generate[Grounded generation]
 ```
 
+**Intent gate:** Conservative Vietnamese/English rules short-circuit clear greetings, social-only messages, and nonsense before answer caches, embeddings, planning, retrieval, or LLM calls. Replies reference the recent topic when appropriate and carry no citations. Sensitive questions, codes/identifiers, and substantive follow-ups retain RAG; uncertainty defaults to retrieval. This is not a trained semantic classifier.
+
 1. **Contextual Query Planning:** Follow-up questions are reformulated into standalone search queries based on recent conversation turns.
 2. **Routing:** Order: `calculation` → `relational` → `exact` → `semantic` with profile-specific weights.
 3. **Retrieval:** Fetches up to 40 dense, 40 sparse, and 20 graph candidates concurrently.
@@ -164,9 +175,12 @@ flowchart TD
 
 ## 6. Grounding and response behavior
 
-- **Full Enumeration:** When sources contain lists/tables, the model reproduces every item with identifiers and values, avoiding truncation.
-- **Structured Citations:** Facts are marked with `[S1]`, `[S2]`. The control plane validates document visibility and ownership.
+- **Full Enumeration:** Prompt instructions require all listed items, identifiers, and values. Answer generation defaults to `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction keeps its independent 512-token budget.
+- **Structured Citations:** Facts are marked with `[S1]`, `[S2]`. The control plane validates document visibility and ownership before emitting the authoritative final response and source cards.
 - **Abstention:** If evidence is insufficient, the system abstains rather than hallucinating.
+- **Native Streaming:** Ollama NDJSON or OpenAI-compatible SSE → server-streaming gRPC → client SSE. Cumulative polished snapshots replace previous drafts; an incomplete tail, token, or placeholder is withheld until it can be cleaned safely. Drafts have no links/source cards and are never persisted.
+- **Sensitive Questions:** Full generation, citation, and truncation checks precede display; truncated or unauthorized sensitive answers expose no draft.
+
 
 ## 7. Implementation map
 
@@ -175,6 +189,6 @@ flowchart TD
 | Upload & lifecycle | `DocumentService.java`, `DocumentFileValidator.java` |
 | Parsing & chunking | `extraction.py`, `chunking.py`, `pipeline.py` |
 | Model adapters | `chat.py`, `embedding.py`, `sparse.py` |
-| Retrieval & planning | `query_plan.py`, `retrieval.py`, `reranking.py` |
+| Intent, retrieval & planning | `intent.py`, `query_plan.py`, `retrieval.py`, `reranking.py` |
 | Graph projection | `entity_extraction.py`, `search.py` |
 | Calculation engine | `calculation.py`, `spreadsheets.py` |

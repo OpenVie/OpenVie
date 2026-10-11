@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -70,6 +70,12 @@ class ChatModelApi(Protocol):
     async def complete_with_usage(
         self, messages: Sequence[dict[str, object]]
     ) -> ModelCompletion: ...
+
+    def stream_with_usage(
+        self, messages: Sequence[dict[str, object]], *, allow_truncated: bool = False
+    ) -> AsyncGenerator[str | ModelCompletion, None]:
+        """Content deltas followed by one completion with provider-reported usage."""
+        ...
 
 
 class TextEmbeddingApi(Protocol):
