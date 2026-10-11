@@ -157,7 +157,19 @@ Test cần Redis, Qdrant hoặc provider thật yêu cầu môi trường đư�
 [hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#verification) trước khi hiểu check tích hợp bị skip
 là kiểm chứng end-to-end thành công.
 
+
+## Lộ trình MVP
+
+| Phiên bản | Phạm vi | Tiêu chí xong (Done) |
+| --- | --- | --- |
+| `v0.1.x` (đã phát hành) | Nền tảng RAG self-host: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, xác thực mật khẩu + JWT, streaming SSE | Cài được từ clone mới, hấp thụ tài liệu có quyền, chat có trích dẫn, từ chối khi thiếu bằng chứng |
+| `v0.2.0` — Keycloak SSO | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật |
+| `v0.3.0` — Workflow BPMN | Tích hợp động cơ workflow (Flowable hoặc n8n) cho một luồng phê duyệt e-Office minh họa trong không gian `[P]`; API + UI hộp thư phê duyệt | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật |
+
+Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milestone chia nhỏ thành issue có tiêu chí nghiệm thu riêng.
+
 ## Đọc thêm
+- [Keycloak OIDC baseline](docs/KEYCLOAK.md) — cấu hình realm, client ID, redirect URI và chạy kiểm thử.
 
 - [Mục lục tài liệu](docs/README.md) — chọn guide theo việc cần làm.
 - [Hấp thụ, model, truy hồi](docs/RETRIEVAL.md).
@@ -343,3 +355,5 @@ LinkedNodeDigital; see [NOTICE](NOTICE). Anyone may self-host, fork, or sell hos
 that license. Third-party packages, container images, services, model weights, and datasets
 retain their own terms. Publishing a new public repository still requires the
 [release review](docs/OPEN_SOURCE.md#publication-gate).
+
+
