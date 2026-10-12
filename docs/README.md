@@ -159,3 +159,8 @@ OpenVie application source is Apache-2.0 under LinkedNodeDigital copyright; see
 Shared wire-format definitions remain in [`contracts/`](../contracts/) (JSON schemas and fixtures)
 and [`proto/`](../proto/) (gRPC). Documentation explains those boundaries; it does not replace their
 machine-readable definitions or compatibility checks.
+
+
+## Identity and authentication
+
+- [Keycloak OIDC baseline](KEYCLOAK.md) — realm/client provisioning, redirect URI configuration, and verification.
