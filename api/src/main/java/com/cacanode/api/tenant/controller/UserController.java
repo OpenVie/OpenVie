@@ -75,7 +75,7 @@ public class UserController extends BaseController {
     }
 
     @PatchMapping("/{userId}/status")
-    @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
+    @PreAuthorize("hasRole('ORG_OWNER')")
     public MemberResponse updateStatus(@PathVariable UUID userId, @Valid @RequestBody StatusUpdateRequest body,
                                        HttpServletRequest request) {
         return userManagementService.updateStatus(getTenantId(request), getUserId(request), userId, body.status());
@@ -85,9 +85,14 @@ public class UserController extends BaseController {
      * Administrator sets a member's password; the member must change it on next
      * login. This works with no email configured, which is how a closed
      * workspace (no channel, self-registration off) still onboards people.
+     *
+     * Account status and passwords are organization-level concerns: only the
+     * owner reaches this route. Workspace admins remove members from their own
+     * workspace instead (see {@code DELETE /users/members/{userId}}); the admin
+     * panel uses the org-scoped {@code /api/v1/admin/users} variants.
      */
     @PutMapping("/{userId}/password")
-    @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
+    @PreAuthorize("hasRole('ORG_OWNER')")
     public ResponseEntity<Void> setMemberPassword(
             @PathVariable UUID userId,
             @Valid @RequestBody PasswordResetRequest body,
@@ -105,6 +110,24 @@ public class UserController extends BaseController {
                         getTenantId(request), getUserId(request), body.email(), body.role()));
     }
 
+    /**
+     * Workspace admin removes one member from their own active workspace. The
+     * account itself stays in the organization; the default workspace (General)
+     * refuses removal. Deactivating the account is an owner action on the admin
+     * surface instead.
+     */
+    @DeleteMapping("/members/{userId}")
+    @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
+    public ResponseEntity<Void> removeMember(@PathVariable UUID userId,
+                                             HttpServletRequest request) {
+        userManagementService.removeWorkspaceMember(getTenantId(request), getUserId(request), userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Soft admin boundary note: these two organization endpoints stay on the
+    // canonical path in the soft phase because this controller also serves
+    // WORKSPACE_ADMIN traffic. In the Keycloak hard split they move to a
+    // dedicated admin controller under /api/v1/admin/users/organization.
     @GetMapping("/organization")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public List<OrganizationMemberResponse> organizationMembers(HttpServletRequest request) {

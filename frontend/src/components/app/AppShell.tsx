@@ -214,3 +214,51 @@ export function ProtectedAppShell({ children }: { children: ReactNode }) {
 
   return <AppShell>{children}</AppShell>
 }
+
+/**
+ * Soft admin boundary: same login gate as {@link ProtectedAppShell} plus an
+ * `ORG_OWNER` requirement. Used by the `(admin)` route-group layout; after the
+ * Keycloak hard split this maps to the `openvie-admin` client + gateway check
+ * on `/api/v1/admin/*`.
+ */
+export function ProtectedAdminShell({ children }: { children: ReactNode }) {
+  const common = useTranslations("Common")
+  const navigation = useTranslations("Navigation")
+  const router = useRouter()
+  const status = useTokenRehydration()
+  const user = useAuthStore((state) => state.user)
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      router.replace(withNext("/login", destination))
+    }
+  }, [router, status])
+
+  if (status === "rehydrating") {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-slate-100">
+        <Loader2 className="size-8 animate-spin text-indigo-600" aria-label={common("loading")} />
+      </div>
+    )
+  }
+
+  if (status === "unauthenticated") {
+    return null
+  }
+
+  if (user?.orgRole !== "ORG_OWNER") {
+    return (
+      <AppShell>
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+        >
+          {navigation("adminOnly")}
+        </div>
+      </AppShell>
+    )
+  }
+
+  return <AppShell>{children}</AppShell>
+}

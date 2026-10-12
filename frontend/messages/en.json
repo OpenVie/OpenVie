@@ -23,7 +23,9 @@
     "user": "User",
     "workspaces": "Workspaces",
     "settings": "Settings",
-    "changePassword": "Change password"
+    "organization": "Organization",
+    "changePassword": "Change password",
+    "adminOnly": "Only the organization owner can open this area."
   },
   "PageTitles": {
     "setup": "Set Up OpenVie",
@@ -304,6 +306,10 @@
     "you": "You",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate",
+    "removeFromWorkspace": "Remove",
+    "removeFromWorkspaceHint": "Remove this member from the current workspace (the account stays in the organization)",
+    "confirmRemove": "Remove {name} from this workspace? Their account stays in the organization.",
+    "memberRemoved": "Member removed from workspace",
     "pendingInvitation": "Pending invitation",
     "expires": "Expires {date}",
     "resend": "Resend",
@@ -338,6 +344,7 @@
       "cancel": "Unable to cancel invitation",
       "password": "Unable to set the password",
       "addMember": "Unable to add member to workspace",
+      "remove": "Unable to remove member from workspace",
       "createUser": "Unable to create user account"
     },
     "addToWorkspace": "Add to workspace",

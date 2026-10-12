@@ -58,7 +58,13 @@ Lệnh trên tự động khởi chạy:
 4. Giao diện người dùng: Next.js Web Console (:3000).
 5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API và Web.
 
-Cài đặt và cấu hình Ollama trực tiếp trên host (systemd trên Linux, launchd trên macOS) để tận dụng GPU/Metal:
+Cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal) **trước** khi tải mô hình:
+- **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`, chạy như service systemd.
+- **macOS:** tải tại `https://ollama.com/download` (hoặc `brew install --cask ollama`), chạy như LaunchAgent qua launchd.
+- **Windows:** tải installer tại `https://ollama.com/download` (hoặc `winget install Ollama.Ollama`).
+Kiểm tra `ollama --version` và `http://127.0.0.1:11434`.
+
+Cấu hình song song trong service manager của OS (systemd trên Linux, launchd trên macOS):
 ```ini
 # Thiết lập song song trong service manager của OS:
 Environment="OLLAMA_NUM_PARALLEL=4"
@@ -73,7 +79,8 @@ curl -s -o /dev/null http://127.0.0.1:11434/api/generate -d '{"model":"vylinh","
 curl -s -o /dev/null http://127.0.0.1:11434/api/embed -d '{"model":"bge-m3","input":["warmup"],"keep_alive":-1}'
 ```
 
-*Tùy chọn TEI Reranker container:*
+*Tùy chọn TEI Reranker container (chạy được trên mọi OS có Docker, kéo image
+CPU và checkpoint `Alibaba-NLP/gte-multilingual-reranker-base` ~1 GB ở lần đầu):*
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile reranker up -d reranker-service
 ```
@@ -178,7 +185,12 @@ This containerizes and orchestrates:
 4. Frontend: Next.js production server (:3000).
 5. Edge Gateway: Apache APISIX (:8088 or configured `APISIX_PORT`).
 
-Install and configure native Ollama on the host for GPU/Metal hardware acceleration:
+Install native Ollama on the host for GPU/Metal hardware acceleration **before**
+pulling weights:
+- **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`, run as a systemd service.
+- **macOS:** download from `https://ollama.com/download` (or `brew install --cask ollama`), run as a LaunchAgent via launchd.
+- **Windows:** download the installer from `https://ollama.com/download` (or `winget install Ollama.Ollama`).
+Verify with `ollama --version` and `http://127.0.0.1:11434`.
 ```ini
 # Add to host service manager environment:
 Environment="OLLAMA_NUM_PARALLEL=4"
@@ -193,7 +205,8 @@ curl -s -o /dev/null http://127.0.0.1:11434/api/generate -d '{"model":"vylinh","
 curl -s -o /dev/null http://127.0.0.1:11434/api/embed -d '{"model":"bge-m3","input":["warmup"],"keep_alive":-1}'
 ```
 
-*Optional TEI Reranker container:*
+*Optional TEI Reranker container (runs on any OS with Docker; first run pulls the
+CPU image and the ~1 GB `Alibaba-NLP/gte-multilingual-reranker-base` checkpoint):*
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile reranker up -d reranker-service
 ```
