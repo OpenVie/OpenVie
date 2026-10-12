@@ -19,8 +19,8 @@ Tài liệu này hướng dẫn chạy toàn bộ hạ tầng trong Docker và 3
 | **Java** | JDK 21 (API đã tích hợp sẵn Maven Wrapper) |
 | **Python** | Python 3.11 hoặc 3.12 |
 | **Node.js** | Node.js 22 LTS kèm npm |
-| **Ollama** | Cài đặt trực tiếp trên host để tận dụng GPU/Metal |
-| **TEI Reranker (tùy chọn)** | Chạy qua Docker (Linux/WSL2) hoặc nhị phân native Metal (macOS) |
+| **Ollama** | Cài đặt trực tiếp trên host để tận dụng GPU/Metal (mục Bước 4) |
+| **TEI Reranker (tùy chọn)** | Chạy qua Docker (mọi OS có Docker) hoặc nhị phân native (macOS Apple Silicon) |
 
 ### 2. Các bước thiết lập
 
@@ -47,8 +47,33 @@ docker compose ps
 ```
 *Dịch vụ khởi động:* PostgreSQL (15432), Redis (16379), RabbitMQ (15673/25672), Qdrant (16333), Kuzu Graph (8010), SeaweedFS S3/Filer (18333/18888).
 
-#### Bước 4: Chuẩn bị mô hình Ollama
-Cài đặt Ollama trên host và tải các mô hình tiêu chuẩn:
+*Chạy cả APISIX trên môi trường phát triển:* `dev-infra` cố ý bỏ gateway để nhẹ.
+Muốn test qua gateway y như production (APISIX `:8088`), chạy full compose dev:
+```bash
+docker compose up -d
+docker compose --profile reranker up -d  # kèm TEI Reranker (:8082), tùy chọn
+```
+Lệnh này dựng thêm APISIX (route `/api/v1/*` → Spring `:8080`, `/*` → Next.js `:3000` trên host qua `host.docker.internal`).
+
+#### Bước 4: Cài đặt Ollama và tải mô hình
+Tải và cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal):
+- **Linux / WSL2:**
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+- **macOS:** tải tại `https://ollama.com/download`, hoặc:
+  ```bash
+  brew install --cask ollama
+  ```
+- **Windows:** tải installer tại `https://ollama.com/download`, hoặc:
+  ```powershell
+  winget install Ollama.Ollama
+  ```
+Kiểm tra `ollama --version` và `http://127.0.0.1:11434`. Trên Windows, container
+trỏ vào Ollama qua `host.docker.internal:11434` — nếu không với tới, đặt
+`OLLAMA_HOST=0.0.0.0` rồi khởi động lại Ollama.
+
+Tải các mô hình tiêu chuẩn:
 ```bash
 ollama pull bge-m3
 ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
@@ -109,15 +134,18 @@ make -C api recover-owner RECOVER_ARGS="--recover-owner-email=owner@example.com 
 
 ### 4. Xếp hạng lại cục bộ (TEI Reranker - Tùy chọn)
 
-- **macOS (Apple Silicon):**
+- **macOS (Apple Silicon, native Metal):**
   ```bash
   brew install text-embeddings-inference
   make -C rag-chatbot-fastapi dev-reranker-native
   ```
-- **Linux/WSL2:**
+- **Linux / WSL2 / Windows (qua Docker, cần Docker Engine hoặc Docker Desktop):**
   ```bash
   make -C rag-chatbot-fastapi dev-reranker
   ```
+  Lần đầu kéo image `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9` và
+  tải checkpoint `Alibaba-NLP/gte-multilingual-reranker-base` (~1 GB).
+  (Windows native không có nhị phân TEI chính thức — dùng cách Docker này.)
 Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật theo mặc định trên cổng `127.0.0.1:8082`. Nếu không dùng TEI, tắt bằng `DEV_RERANKER_ENABLED=false`.
 
 ### 5. Kiểm tra và xác minh (Verification)
@@ -154,8 +182,8 @@ This guide covers running infrastructure in Docker and the three application tie
 | **Java** | JDK 21 (bundled Maven wrapper included) |
 | **Python** | Python 3.11 or 3.12 |
 | **Node.js** | Node.js 22 LTS with npm |
-| **Ollama** | Native host installation for GPU/Metal hardware acceleration |
-| **TEI Reranker (optional)** | Docker container (Linux/WSL2) or native Homebrew binary (Apple Silicon) |
+| **Ollama** | Native host installation for GPU/Metal hardware acceleration (see Step 4) |
+| **TEI Reranker (optional)** | Docker container (any OS with Docker) or native binary (Apple Silicon) |
 
 ## 2. Step-by-step setup
 
@@ -182,8 +210,35 @@ docker compose ps
 ```
 *Services started:* PostgreSQL (15432), Redis (16379), RabbitMQ (15673/25672), Qdrant (16333), Kuzu Graph (8010), SeaweedFS (18333/18888).
 
-### Step 4: Prepare models in Ollama
-Install Ollama natively and download standard weights:
+*Running APISIX in development as well:* `dev-infra` skips the gateway on purpose
+to stay light. To test through the gateway exactly like production (APISIX
+`:8088`), start the full dev compose instead:
+```bash
+docker compose up -d
+docker compose --profile reranker up -d  # plus TEI Reranker (:8082), optional
+```
+This additionally brings up APISIX (routes `/api/v1/*` → host Spring `:8080`,
+`/*` → host Next.js `:3000` via `host.docker.internal`).
+
+### Step 4: Install Ollama and prepare models
+Download and install Ollama natively on the host (for GPU/Metal acceleration):
+- **Linux / WSL2:**
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+- **macOS:** download from `https://ollama.com/download`, or:
+  ```bash
+  brew install --cask ollama
+  ```
+- **Windows:** download the installer from `https://ollama.com/download`, or:
+  ```powershell
+  winget install Ollama.Ollama
+  ```
+Verify with `ollama --version` and `http://127.0.0.1:11434`. On Windows,
+containers reach Ollama through `host.docker.internal:11434` — if unreachable,
+set `OLLAMA_HOST=0.0.0.0` and restart Ollama.
+
+Download the standard weights:
 ```bash
 ollama pull bge-m3
 ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
@@ -246,15 +301,18 @@ make -C api recover-owner RECOVER_ARGS="--recover-owner-email=owner@example.com 
 
 ## 4. Optional local reranker
 
-- **macOS (Apple Silicon):**
+- **macOS (Apple Silicon, native Metal):**
   ```bash
   brew install text-embeddings-inference
   make -C rag-chatbot-fastapi dev-reranker-native
   ```
-- **Linux / WSL2:**
+- **Linux / WSL2 / Windows (via Docker, needs Docker Engine or Docker Desktop):**
   ```bash
   make -C rag-chatbot-fastapi dev-reranker
   ```
+  The first run pulls `ghcr.io/huggingface/text-embeddings-inference:cpu-1.9` and
+  downloads the `Alibaba-NLP/gte-multilingual-reranker-base` checkpoint (~1 GB).
+  (There is no official native Windows TEI binary — use the Docker route.)
 Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 
 ## 5. Verification

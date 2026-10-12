@@ -31,10 +31,15 @@ import java.util.UUID;
 /**
  * Organization-owner notification channel administration. Credential values
  * are write-only: reads return presence, never the stored secret.
+ *
+ * <p>Soft admin boundary (Keycloak-ready): the {@code /api/v1/admin/channels}
+ * alias exposes the same handler under the admin prefix so the gateway can
+ * rate-limit and authorize it independently. The canonical path stays until
+ * the hard split; the frontend admin surface already calls the alias.
  */
 @Tag(name = "Notification channels", description = "Organization mail plugins (owner only)")
 @RestController
-@RequestMapping("/api/v1/channels")
+@RequestMapping({"/api/v1/channels", "/api/v1/admin/channels"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
 public class NotificationChannelController extends BaseController {
