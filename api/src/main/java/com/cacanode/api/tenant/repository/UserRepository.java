@@ -23,6 +23,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmailIgnoreCase(String email);
 
+    @EntityGraph(attributePaths = "organization")
+    Optional<User> findByKeycloakSubject(String keycloakSubject);
+
     Optional<User> findByIdAndOrganization_Id(UUID id, UUID orgId);
 
     List<User> findByOrganization_IdOrderByFullNameAsc(UUID orgId);

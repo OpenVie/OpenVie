@@ -419,6 +419,7 @@ volumes:
   qdrant_data:
   kuzu_data:
   sparse_models:
+  keycloak_db_data:
   model_cache:
   seaweedfs_master:
   seaweedfs_volume:

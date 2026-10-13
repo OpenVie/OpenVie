@@ -12,6 +12,7 @@ import com.cacanode.api.common.exception.custom.ConflictException;
 import com.cacanode.api.common.exception.custom.ResourceNotFoundException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.DeliveryAvailability;
+import com.cacanode.api.tenant.api.TenantIdentityApi;
 import com.cacanode.api.tenant.api.TenantCredentials;
 import com.cacanode.api.tenant.api.TenantIdentityApi.AcceptedAccount;
 import com.cacanode.api.tenant.api.TenantIdentityApi.InvitationSnapshot;
@@ -53,6 +54,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -137,7 +139,8 @@ public class TenantUserManagementService {
                 .map(this::toInvitation)
                 .toList();
         Tenant workspace = requireWorkspace(workspaceId);
-        return new DirectoryResponse(members, pending, workspace.getVisibility());
+        return new DirectoryResponse(members, pending, workspace.getVisibility(),
+                workspace.isDefaultWorkspace());
     }
 
     /**
@@ -303,6 +306,135 @@ public class TenantUserManagementService {
         invalidateMembers(workspaceId);
     }
 
+    /**
+     * Workspace admin removes one membership from their own workspace. The
+     * default workspace (General) is excluded: every account belongs there, so
+     * removal would be meaningless. Deactivation stays an organization-owner
+     * action on the admin surface instead.
+     */
+    @Transactional
+    public void removeWorkspaceMember(UUID workspaceId, UUID actorId, UUID userId) {
+        requireAdmin(workspaceId, actorId);
+        Tenant workspace = requireWorkspace(workspaceId);
+        if (workspace.isDefaultWorkspace()) {
+            throw new BadRequestException("Members cannot be removed from the default workspace");
+        }
+        if (actorId.equals(userId)) {
+            throw new BadRequestException("You cannot remove yourself from this workspace");
+        }
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_IdForUpdate(userId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (membership.getRole() == WorkspaceRole.WORKSPACE_ADMIN) {
+            ensureNotFinalAdmin(workspaceId);
+        }
+        memberRepository.delete(membership);
+        audit(workspaceId, actorId, LogAction.MEMBER_REMOVED, "user", userId, Map.of());
+        invalidateMembers(workspaceId);
+    }
+
+    /**
+     * Organization owner activates or deactivates any account in the org,
+     * regardless of which workspaces it belongs to. The workspace scope only
+     * anchors the audit trail.
+     */
+    @Transactional
+    public OrganizationMemberResponse updateOrgUserStatus(
+            UUID orgId, UUID workspaceId, UUID actorId, UUID userId, UserStatus status) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        if (status != UserStatus.ACTIVE && status != UserStatus.INACTIVE) {
+            throw new BadRequestException("Status must be ACTIVE or INACTIVE");
+        }
+        if (actorId.equals(userId) && status == UserStatus.INACTIVE) {
+            throw new BadRequestException("You cannot deactivate your own account");
+        }
+        User user = requireOrgUser(orgId, userId);
+        if (user.getRole() == OrgRole.ORG_OWNER) {
+            throw new BadRequestException("The organization owner cannot be deactivated here");
+        }
+        if (status == UserStatus.INACTIVE) {
+            ensureNotFinalAdminEverywhere(user);
+        }
+        user.setStatus(status);
+        userRepository.save(user);
+        if (status == UserStatus.INACTIVE) {
+            publishBusinessEvent("tenant.user.deactivated.v1", new UserDeactivatedEvent(workspaceId, userId));
+        }
+        audit(workspaceId, actorId,
+                status == UserStatus.ACTIVE ? LogAction.USER_REACTIVATED : LogAction.USER_DEACTIVATED,
+                "user", userId, Map.of("status", status.name()));
+        return toOrganizationMember(user, actorId);
+    }
+
+    /**
+     * Organization owner sets any org account password. Unlike the
+     * workspace-scoped variant, the target needs no membership in the actor's
+     * active workspace.
+     */
+    @Transactional
+    public void setOrgUserPassword(
+            UUID orgId, UUID workspaceId, UUID actorId, UUID userId, String newPassword) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        User target = requireOrgUser(orgId, userId);
+        if (target.getId().equals(actorId)) {
+            throw new BadRequestException("Use the change-password endpoint for your own password");
+        }
+        credentials.setInitialPassword(actorId, userId, newPassword);
+    }
+
+    /**
+     * Issue #4: link a pre-SSO password account to a Keycloak identity.
+     * Returns {@link TenantIdentityApi.SsoLinkResult} so callers stay on the
+     * published tenant boundary (see {@code ModularMonolithArchitectureTest}).
+     *
+     * Active path is auto-link by verified email inside the same org: the
+     * account keeps every workspace membership and role, so
+     * {@code recover-owner} and all workspace authorization keep working
+     * unchanged. Unknown emails are rejected (no auto-provisioning); the
+     * subject, once set, is immutable.
+     *
+     * The future TOTP-confirmation branch
+     * ({@code organizations.sso_link_require_otp}) is intentionally not
+     * implemented here: no SMTP code exists and the mail flow is untested.
+     * When that switch turns on, callers must present a
+     * Keycloak-OTP-authenticated session instead (see docs/KEYCLOAK.md).
+     */
+    @Transactional
+    public TenantIdentityApi.SsoLinkResult linkSsoIdentity(
+            UUID orgId, String keycloakSubject, String email, boolean emailVerified) {
+        if (keycloakSubject == null || keycloakSubject.isBlank()) {
+            throw new BadRequestException("SSO identity is missing");
+        }
+        Optional<User> already = userRepository.findByKeycloakSubject(keycloakSubject);
+        if (already.isPresent()) {
+            User linked = already.get();
+            if (!linked.getOrganization().getId().equals(orgId)) {
+                throw new ConflictException("SSO identity is already linked to another account");
+            }
+            return new TenantIdentityApi.SsoLinkResult(linked.getId(), false);
+        }
+        if (!emailVerified) {
+            throw new ConflictException("SSO requires a verified email address");
+        }
+        String normalized = normalizeEmail(email);
+        User user = userRepository.findByEmailIgnoreCase(normalized)
+                .filter(candidate -> candidate.getOrganization().getId().equals(orgId))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "SSO_UNKNOWN_EMAIL: No account exists for this email"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException("User account is disabled");
+        }
+        user.setKeycloakSubject(keycloakSubject);
+        userRepository.save(user);
+        List<WorkspaceMember> memberships = memberRepository.findVisibleByUserId(user.getId());
+        if (!memberships.isEmpty()) {
+            audit(memberships.get(0).getWorkspace().getId(), user.getId(),
+                    LogAction.USER_SSO_LINKED, "user", user.getId(),
+                    Map.of("via", "verified-email"));
+        }
+        return new TenantIdentityApi.SsoLinkResult(user.getId(), true);
+    }
+
     @Transactional(readOnly = true)
     public InvitationSnapshot validateInvitationToken(String rawToken) {
         Invitation invitation = findInvitation(rawToken, false);
@@ -447,7 +579,8 @@ public class TenantUserManagementService {
                 .filter(invitation -> invitation.status() == InvitationStatus.PENDING
                         || invitation.status() == InvitationStatus.EXPIRED)
                 .toList();
-        return new DirectoryResponse(members, invitations, snapshot.visibility());
+        return new DirectoryResponse(members, invitations, snapshot.visibility(),
+                snapshot.defaultWorkspace());
     }
 
     private void requireChannel(UUID orgId) {
@@ -511,6 +644,54 @@ public class TenantUserManagementService {
         return memberRepository.findByUser_IdAndWorkspace_Id(userId, workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"))
                 .getUser();
+    }
+
+    private User requireOrgUser(UUID orgId, UUID userId) {
+        User user = requireUser(userId);
+        if (!user.getOrganization().getId().equals(orgId)) {
+            throw new ResourceNotFoundException("User not found");
+        }
+        return user;
+    }
+
+    /**
+     * Issue #2: resolves the organization owning an email for the SSO bridge.
+     * Login emails are globally unique, so at most one organization matches.
+     */
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOrgIdByEmail(String email) {
+        if (email == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmailIgnoreCase(normalizeEmail(email))
+                .map(user -> user.getOrganization().getId());
+    }
+
+    private OrganizationMemberResponse toOrganizationMember(User user, UUID currentUserId) {
+        return new OrganizationMemberResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus(),
+                user.getCreatedAt(),
+                user.getLastLoginAt(),
+                user.getId().equals(currentUserId));
+    }
+
+    /**
+     * Deactivation locks the whole account, so the target must not be the last
+     * remaining admin of any workspace it administers — not just the actor's
+     * active one.
+     */
+    private void ensureNotFinalAdminEverywhere(User user) {
+        for (WorkspaceMember membership : memberRepository.findVisibleByUserId(user.getId())) {
+            if (membership.getRole() == WorkspaceRole.WORKSPACE_ADMIN
+                    && memberRepository.countByWorkspace_IdAndRole(
+                            membership.getWorkspace().getId(), WorkspaceRole.WORKSPACE_ADMIN) <= 1) {
+                throw new BadRequestException("A workspace needs at least one active admin");
+            }
+        }
     }
 
     private void ensureNotFinalAdmin(UUID workspaceId) {
