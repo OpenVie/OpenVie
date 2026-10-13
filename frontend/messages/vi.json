@@ -180,12 +180,28 @@
     "fallback": {
       "invalidCredentials": "Email hoặc mật khẩu không đúng"
     },
+    "sso": {
+      "startFailed": "Không thể bắt đầu đăng nhập một lần.",
+      "providerFailed": "Nhà cung cấp định danh không thể đăng nhập cho bạn.",
+      "missingCode": "Nhà cung cấp định danh không trả về mã ủy quyền.",
+      "invalidState": "Yêu cầu đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.",
+      "exchangeFailed": "Không thể hoàn tất đăng nhập một lần.",
+      "unknownAccount": "Tài khoản này chưa được cấp phát. Hãy liên hệ quản trị viên không gian làm việc.",
+      "completingTitle": "Đang hoàn tất đăng nhập",
+      "completingDescription": "Chúng tôi đang đăng nhập an toàn cho bạn.",
+      "failedTitle": "Không thể đăng nhập",
+      "failedDescription": "Tài khoản cục bộ của bạn chưa được đăng nhập.",
+      "backToLogin": "Quay lại đăng nhập"
+    },
     "login": {
       "title": "Chào mừng trở lại",
       "description": "Đăng nhập vào tài khoản để tiếp tục",
       "rememberMe": "Ghi nhớ tôi",
       "signingIn": "Đang đăng nhập…",
       "signIn": "Đăng nhập",
+      "or": "hoặc",
+      "signInWithSso": "Đăng nhập với SSO",
+      "redirectingToSso": "Đang chuyển đến SSO…",
       "noAccount": "Chưa có tài khoản?",
       "createAccount": "Tạo tài khoản",
       "provisioned": "Tài khoản do quản trị viên không gian làm việc cấp phát."

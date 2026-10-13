@@ -156,6 +156,21 @@ Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật t
 | **Python AI** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Web Frontend** | `npm --prefix frontend run lint` và `npm --prefix frontend run typecheck` |
 
+### Kiểm tra đăng nhập SSO qua APISIX
+
+Sau khi đã hoàn thành setup ban đầu, tạo một người dùng có cùng email trong Keycloak và
+OpenVie. Bật `SSO_ENABLED=true` cho Spring API, giữ `NEXT_PUBLIC_OIDC_ISSUER` trỏ tới
+realm Keycloak, sau đó chạy full compose để có gateway `:8088`.
+
+1. Mở `http://localhost:8088/login` và chọn **Đăng nhập với SSO**.
+2. Đăng nhập ở Keycloak, kiểm tra browser quay về callback rồi vào ứng dụng qua `:8088`.
+3. Tải lại trang; session phải được khôi phục bằng refresh cookie.
+4. Đăng xuất; tải lại trang phải quay về login. Keycloak SSO session không bị kết thúc bởi
+   logout cục bộ này.
+
+Tài khoản SSO chưa có trong OpenVie bị từ chối (`SSO_UNKNOWN_EMAIL`) theo contract hiện tại;
+frontend không tự provision tài khoản dù self-registration có bật.
+
 ### 6. Xử lý sự cố thường gặp
 
 - **Cổng bị chiếm (Address already in use):** Kiểm tra tiến trình ngầm bằng `lsof -i :18000` hoặc `lsof -i :50051` và đóng chúng trước khi chạy `make dev`.
@@ -322,6 +337,22 @@ Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 | **Java** | `make -C api test` or `make -C api verify` |
 | **Python** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Frontend** | `npm --prefix frontend run lint` && `npm --prefix frontend run typecheck` |
+
+### Verifying SSO login through APISIX
+
+After initial setup, create a user with the same email in Keycloak and OpenVie. Enable
+`SSO_ENABLED=true` for the Spring API, keep `NEXT_PUBLIC_OIDC_ISSUER` pointed at the
+Keycloak realm, then start full compose so the `:8088` gateway is available.
+
+1. Open `http://localhost:8088/login` and choose **Sign in with SSO**.
+2. Sign in at Keycloak and confirm the browser returns through the callback into the app via
+   `:8088`.
+3. Refresh the page; the refresh cookie must restore the application session.
+4. Sign out; refreshing must return to login. This local logout does not end the Keycloak SSO
+   session.
+
+An SSO identity without a pre-existing OpenVie account is rejected with `SSO_UNKNOWN_EMAIL`.
+The frontend never auto-provisions an account, even when self-registration is enabled.
 
 ## 6. Troubleshooting
 
