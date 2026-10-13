@@ -383,7 +383,7 @@ public class TenantUserManagementService {
     }
 
     /**
-     * Issue #4: link a pre-SSO password account to a Keycloak identity.
+     * Link a pre-SSO password account to a Keycloak identity.
      * Returns {@link TenantIdentityApi.SsoLinkResult} so callers stay on the
      * published tenant boundary (see {@code ModularMonolithArchitectureTest}).
      *
@@ -655,7 +655,7 @@ public class TenantUserManagementService {
     }
 
     /**
-     * Issue #2: resolves the organization owning an email for the SSO bridge.
+     * Resolves the organization owning an email for the SSO bridge.
      * Login emails are globally unique, so at most one organization matches.
      */
     @Transactional(readOnly = true)

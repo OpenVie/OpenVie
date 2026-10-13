@@ -25,7 +25,7 @@ public interface AuthService {
     AuthResponse login(LoginRequest request, HttpServletResponse response);
 
     /**
-     * Issue #2: one-time PKCE code exchange for Keycloak SSO (dual mode with
+     * One-time PKCE code exchange for Keycloak SSO (dual mode with
      * password login). Returns the standard internal credential pair, so every
      * downstream authorization behaves exactly like a password login.
      */

@@ -30,7 +30,7 @@ public class Organization extends BaseEntity {
     private boolean allowSelfRegistration = false;
 
     /**
-     * Future TOTP-confirmation switch for first-time SSO linking (issue #4).
+     * Future TOTP-confirmation switch for first-time SSO linking.
      * FALSE (default): auto-link by verified email. TRUE: require a
      * Keycloak-OTP-authenticated session before linking. Keycloak-native TOTP;
      * no SMTP code is involved.

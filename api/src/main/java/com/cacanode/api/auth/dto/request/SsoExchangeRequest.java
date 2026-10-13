@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Issue #2/#3 contract: PKCE authorization code handed to the backend for a
+ * PKCE authorization code handed to the backend for a
  * server-side exchange (code + verifier never leave this call; the browser
  * never sees any client secret).
  */

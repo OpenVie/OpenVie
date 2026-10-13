@@ -44,7 +44,7 @@ import com.cacanode.api.tenant.repository.WorkspaceMemberRepository;
 import com.cacanode.api.tenant.api.TenantIdentityApi.SsoLinkResult;
 
 /**
- * Issue #4: pre-SSO password accounts link to a Keycloak identity by verified
+ * Pre-SSO password accounts link to a Keycloak identity by verified
  * email. Linking never changes roles or memberships, so workspace
  * authorization (including {@code recover-owner}) keeps working unchanged.
  */

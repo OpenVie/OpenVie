@@ -85,9 +85,9 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * Issue #2: SSO bridge. The Keycloak code is exchanged server-side, the ID
+     * SSO bridge. The Keycloak code is exchanged server-side, the ID
      * token is validated over JWKS, and the pre-SSO account is linked by
-     * verified email (issue #4). What leaves this method is the standard
+     * verified email. What leaves this method is the standard
      * internal credential pair, so workspace authorization downstream is
      * identical to a password login. Local membership stays the authority:
      * IdP/local role mismatches are logged, never applied.
