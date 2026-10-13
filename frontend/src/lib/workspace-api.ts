@@ -6,7 +6,7 @@ import type {
   WorkspaceView,
   WorkspaceVisibility,
 } from "@/types";
-import { getApiBase } from "@/lib/auth-api";
+import { getAdminApiBase, getApiBase } from "@/lib/auth-api";
 import { parseApiError, readJsonOrThrow } from "@/lib/api-error";
 import type { ApiRequest } from "@/lib/documents-api";
 
@@ -19,9 +19,12 @@ export async function getTenantWorkspaceApi(
 }
 
 // ─── Organization-owner workspace administration (/workspaces) ───────────────
+// Soft admin boundary: these calls go through `/api/v1/admin/*` (backend
+// alias, gateway-rate-limited separately). `getTenantWorkspaceApi` above stays
+// on the canonical base — chat/documents are not admin-only.
 
 export async function listWorkspacesApi(request: ApiRequest): Promise<WorkspaceView[]> {
-  return readJsonOrThrow<WorkspaceView[]>(await request(`${getApiBase()}/workspaces`));
+  return readJsonOrThrow<WorkspaceView[]>(await request(`${getAdminApiBase()}/workspaces`));
 }
 
 export async function createWorkspaceApi(
@@ -29,7 +32,7 @@ export async function createWorkspaceApi(
   name: string,
   visibility: WorkspaceVisibility,
 ): Promise<WorkspaceView> {
-  return readJsonOrThrow<WorkspaceView>(await request(`${getApiBase()}/workspaces`, {
+  return readJsonOrThrow<WorkspaceView>(await request(`${getAdminApiBase()}/workspaces`, {
     method: "POST",
     body: JSON.stringify({ name, visibility }),
   }));
@@ -40,7 +43,7 @@ export async function renameWorkspaceApi(
   workspaceId: string,
   name: string,
 ): Promise<WorkspaceView> {
-  return readJsonOrThrow<WorkspaceView>(await request(`${getApiBase()}/workspaces/${workspaceId}`, {
+  return readJsonOrThrow<WorkspaceView>(await request(`${getAdminApiBase()}/workspaces/${workspaceId}`, {
     method: "PATCH",
     body: JSON.stringify({ name }),
   }));
@@ -52,7 +55,7 @@ export async function setWorkspaceVisibilityApi(
   visibility: WorkspaceVisibility,
 ): Promise<WorkspaceView> {
   return readJsonOrThrow<WorkspaceView>(
-    await request(`${getApiBase()}/workspaces/${workspaceId}/visibility`, {
+    await request(`${getAdminApiBase()}/workspaces/${workspaceId}/visibility`, {
       method: "PATCH",
       body: JSON.stringify({ visibility }),
     }),
@@ -63,7 +66,7 @@ export async function archiveWorkspaceApi(
   request: ApiRequest,
   workspaceId: string,
 ): Promise<void> {
-  const response = await request(`${getApiBase()}/workspaces/${workspaceId}`, {
+  const response = await request(`${getAdminApiBase()}/workspaces/${workspaceId}`, {
     method: "DELETE",
   });
   if (!response.ok) throw await parseApiError(response);
@@ -74,7 +77,7 @@ export async function listWorkspaceMembersApi(
   workspaceId: string,
 ): Promise<WorkspaceMemberView[]> {
   return readJsonOrThrow<WorkspaceMemberView[]>(
-    await request(`${getApiBase()}/workspaces/${workspaceId}/members`),
+    await request(`${getAdminApiBase()}/workspaces/${workspaceId}/members`),
   );
 }
 
@@ -85,7 +88,7 @@ export async function addWorkspaceMemberApi(
   role: WorkspaceRole,
 ): Promise<WorkspaceMemberView> {
   return readJsonOrThrow<WorkspaceMemberView>(
-    await request(`${getApiBase()}/workspaces/${workspaceId}/members`, {
+    await request(`${getAdminApiBase()}/workspaces/${workspaceId}/members`, {
       method: "POST",
       body: JSON.stringify({ email, role }),
     }),
@@ -98,7 +101,7 @@ export async function removeWorkspaceMemberApi(
   userId: string,
 ): Promise<void> {
   const response = await request(
-    `${getApiBase()}/workspaces/${workspaceId}/members/${userId}`,
+    `${getAdminApiBase()}/workspaces/${workspaceId}/members/${userId}`,
     { method: "DELETE" },
   );
   if (!response.ok) throw await parseApiError(response);
@@ -106,7 +109,7 @@ export async function removeWorkspaceMemberApi(
 
 export async function getOrganizationApi(request: ApiRequest): Promise<OrganizationSnapshot> {
   return readJsonOrThrow<OrganizationSnapshot>(
-    await request(`${getApiBase()}/workspaces/organization`),
+    await request(`${getAdminApiBase()}/workspaces/organization`),
   );
 }
 
@@ -115,7 +118,7 @@ export async function setSelfRegistrationApi(
   allowed: boolean,
 ): Promise<{ allowed: boolean }> {
   return readJsonOrThrow<{ allowed: boolean }>(
-    await request(`${getApiBase()}/workspaces/organization/self-registration`, {
+    await request(`${getAdminApiBase()}/workspaces/organization/self-registration`, {
       method: "PATCH",
       body: JSON.stringify({ allowed }),
     }),

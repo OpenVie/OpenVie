@@ -37,10 +37,15 @@ import java.util.UUID;
  * Organization-owner workspace lifecycle. Membership inside one workspace is
  * managed by {@link UserController}; these routes reach across workspaces and
  * therefore require the ORG_OWNER authority carried on the principal.
+ *
+ * <p>Soft admin boundary (Keycloak-ready): the {@code /api/v1/admin/workspaces}
+ * alias exposes the same handler under the admin prefix so the gateway can
+ * rate-limit and authorize it independently. The canonical path stays until
+ * the hard split; the frontend admin surface already calls the alias.
  */
 @Tag(name = "Workspaces", description = "Organization workspace lifecycle (owner only)")
 @RestController
-@RequestMapping("/api/v1/workspaces")
+@RequestMapping({"/api/v1/workspaces", "/api/v1/admin/workspaces"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
 public class WorkspaceController extends BaseController {

@@ -23,7 +23,9 @@
     "user": "Người dùng",
     "workspaces": "Không gian làm việc",
     "settings": "Cài đặt",
-    "changePassword": "Đổi mật khẩu"
+    "organization": "Tổ chức",
+    "changePassword": "Đổi mật khẩu",
+    "adminOnly": "Chỉ chủ sở hữu tổ chức mới mở được khu vực này."
   },
   "PageTitles": {
     "setup": "Thiết lập OpenVie",
@@ -304,6 +306,10 @@
     "you": "Bạn",
     "deactivate": "Vô hiệu hóa",
     "reactivate": "Kích hoạt lại",
+    "removeFromWorkspace": "Xóa khỏi nhóm",
+    "removeFromWorkspaceHint": "Xóa thành viên khỏi không gian làm việc hiện tại (tài khoản vẫn ở lại tổ chức)",
+    "confirmRemove": "Xóa {name} khỏi không gian làm việc này? Tài khoản của họ vẫn ở lại tổ chức.",
+    "memberRemoved": "Đã xóa thành viên khỏi không gian làm việc",
     "pendingInvitation": "Lời mời đang chờ",
     "expires": "Hết hạn {date}",
     "resend": "Gửi lại",
@@ -338,6 +344,7 @@
       "cancel": "Không thể hủy lời mời",
       "password": "Không thể đặt mật khẩu",
       "addMember": "Không thể thêm thành viên vào không gian làm việc",
+      "remove": "Không thể xóa thành viên khỏi không gian làm việc",
       "createUser": "Không thể tạo tài khoản người dùng"
     },
     "addToWorkspace": "Thêm vào không gian làm việc",

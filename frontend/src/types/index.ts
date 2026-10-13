@@ -85,6 +85,7 @@ export interface TeamDirectory {
   members: TeamMember[];
   invitations: TeamInvitation[];
   visibility: WorkspaceVisibility;
+  defaultWorkspace: boolean;
 }
 
 export interface OrganizationMember {

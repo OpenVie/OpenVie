@@ -143,7 +143,6 @@ public class TenantModuleApiImpl implements TenantIdentityApi {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public InvitationSnapshot validateInvitation(String rawToken) {
         return userManagementService.validateInvitationToken(rawToken);
     }
@@ -152,6 +151,19 @@ public class TenantModuleApiImpl implements TenantIdentityApi {
     @Transactional
     public AcceptedAccount acceptInvitation(String rawToken, String fullName, String passwordHash) {
         return userManagementService.acceptInvitationToken(rawToken, fullName, passwordHash);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<UUID> findOrgIdByEmail(String email) {
+        return userManagementService.findOrgIdByEmail(email);
+    }
+
+    @Override
+    @Transactional
+    public SsoLinkResult linkSsoIdentity(
+            UUID orgId, String keycloakSubject, String email, boolean emailVerified) {
+        return userManagementService.linkSsoIdentity(orgId, keycloakSubject, email, emailVerified);
     }
 
     private IdentitySnapshot identity(User user) {
