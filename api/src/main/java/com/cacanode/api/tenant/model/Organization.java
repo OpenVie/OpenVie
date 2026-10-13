@@ -28,4 +28,13 @@ public class Organization extends BaseEntity {
     /** When true, anyone with the URL may create an account (Slack-style join). */
     @Column(name = "allow_self_registration", nullable = false)
     private boolean allowSelfRegistration = false;
+
+    /**
+     * Future TOTP-confirmation switch for first-time SSO linking (issue #4).
+     * FALSE (default): auto-link by verified email. TRUE: require a
+     * Keycloak-OTP-authenticated session before linking. Keycloak-native TOTP;
+     * no SMTP code is involved.
+     */
+    @Column(name = "sso_link_require_otp", nullable = false)
+    private boolean ssoLinkRequireOtp = false;
 }
