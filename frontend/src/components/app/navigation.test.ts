@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appNavigation, visibleNavigation } from "@/components/app/navigation";
+import {
+  ADMIN_PATHS,
+  adminNavigation,
+  appNavigation,
+  isAdminPath,
+  visibleNavigation,
+} from "@/components/app/navigation";
 
 const REMOVED_HREFS = [
   "/dashboard",
@@ -18,6 +24,7 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/users",
+      "/organization",
       "/workspaces",
       "/settings",
       "/documentation",
@@ -41,5 +48,16 @@ describe("application navigation", () => {
     for (const removed of REMOVED_HREFS) {
       expect(hrefs).not.toContain(removed);
     }
+  });
+
+  it("keeps the admin boundary in sync with owner-only destinations", () => {
+    expect(adminNavigation.map((item) => item.href).sort()).toEqual([...ADMIN_PATHS].sort());
+    expect(isAdminPath("/organization")).toBe(true);
+    expect(isAdminPath("/workspaces")).toBe(true);
+    expect(isAdminPath("/settings")).toBe(true);
+    expect(isAdminPath("/vi/settings")).toBe(true);
+    expect(isAdminPath("/documents")).toBe(false);
+    expect(isAdminPath("/users")).toBe(false);
+    expect(isAdminPath(undefined)).toBe(false);
   });
 });

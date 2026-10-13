@@ -3,6 +3,7 @@ package com.cacanode.api.auth.service.implement;
 import com.cacanode.api.auth.dto.request.AcceptInvitationRequest;
 import com.cacanode.api.auth.dto.request.LoginRequest;
 import com.cacanode.api.auth.dto.request.RegisterRequest;
+import com.cacanode.api.auth.dto.request.SsoExchangeRequest;
 import com.cacanode.api.auth.dto.response.AuthResponse;
 import com.cacanode.api.auth.dto.response.InvitationValidationResponse;
 import com.cacanode.api.auth.dto.response.WorkspaceSummaryResponse;
@@ -10,13 +11,19 @@ import com.cacanode.api.auth.model.RefreshToken;
 import com.cacanode.api.auth.repository.RefreshTokenRepository;
 import com.cacanode.api.auth.service.AuthService;
 import com.cacanode.api.auth.service.JwtService;
+import com.cacanode.api.auth.sso.SsoIdentity;
+import com.cacanode.api.auth.sso.SsoProperties;
+import com.cacanode.api.auth.sso.SsoTokenClient;
 import com.cacanode.api.common.exception.custom.ConflictException;
+import com.cacanode.api.common.exception.custom.ResourceNotFoundException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.TenantIdentityApi;
 import com.cacanode.api.tenant.api.TenantIdentityApi.AcceptedAccount;
 import com.cacanode.api.tenant.api.TenantIdentityApi.AuthenticatedIdentity;
 import com.cacanode.api.tenant.api.TenantIdentityApi.IdentitySnapshot;
 import com.cacanode.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
+import com.cacanode.api.tenant.api.TenantIdentityApi.SsoLinkResult;
+import com.cacanode.api.tenant.api.TenantIdentityApi.WorkspaceSummary;
 import com.cacanode.api.tenant.api.WorkspaceRole;
 import com.cacanode.api.tenant.api.TenantCredentials;
 
@@ -25,9 +32,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -52,6 +61,8 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
     private final TenantCredentials credentialService;
+    private final SsoTokenClient ssoTokenClient;
+    private final SsoProperties ssoProperties;
 
     @Override
     @Transactional
@@ -71,6 +82,68 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse refreshToken(String refreshToken, HttpServletResponse response) {
         return deliver(rotate(refreshToken), response);
+    }
+
+    /**
+     * SSO bridge. The Keycloak code is exchanged server-side, the ID
+     * token is validated over JWKS, and the pre-SSO account is linked by
+     * verified email. What leaves this method is the standard
+     * internal credential pair, so workspace authorization downstream is
+     * identical to a password login. Local membership stays the authority:
+     * IdP/local role mismatches are logged, never applied.
+     */
+    @Override
+    @Transactional
+    public AuthResponse ssoExchange(SsoExchangeRequest request, HttpServletResponse response) {
+        if (!ssoProperties.isEnabled()) {
+            throw new UnauthorizedException("SSO is not enabled");
+        }
+        SsoIdentity sso = ssoTokenClient.exchange(
+                request.getCode(), request.getCodeVerifier(), request.getRedirectUri());
+        requireKnownRealmRole(sso.realmRoles());
+        UUID orgId = identityApi.findOrgIdByEmail(sso.email())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "SSO_UNKNOWN_EMAIL: No account exists for this email"));
+        SsoLinkResult link = identityApi.linkSsoIdentity(
+                orgId, sso.subject(), sso.email(), sso.emailVerified());
+        IdentitySnapshot identity = identityApi.findUserById(link.userId());
+        if (identity == null) {
+            throw new UnauthorizedException("Session is no longer valid");
+        }
+        if (!identity.orgRole().name().equals("ORG_OWNER")
+                && sso.realmRoles().contains("ORG_OWNER")) {
+            log.warn("SSO IdP/local org-role mismatch userId={} (IdP ORG_OWNER, local {}): local wins",
+                    link.userId(), identity.orgRole());
+        }
+        UUID workspaceId = defaultWorkspaceFor(link.userId());
+        MembershipSnapshot membership = identityApi.requireMembership(link.userId(), workspaceId);
+        log.info("sso_exchange userId={} newlyLinked={} amr={}",
+                link.userId(), link.newlyLinked(), sso.amr());
+        CredentialPair credentials = issueCredentials(
+                identity, workspaceId, membership.workspaceRole(), true);
+        return deliver(credentials, response);
+    }
+
+    /** Realm roles the bridge understands; anything else is rejected with 403. */
+    private static void requireKnownRealmRole(List<String> realmRoles) {
+        if (realmRoles.contains("ORG_OWNER")
+                || realmRoles.contains("WORKSPACE_ADMIN")
+                || realmRoles.contains("MEMBER")) {
+            return;
+        }
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "SSO_ROLE_UNKNOWN: No recognized realm role");
+    }
+
+    private UUID defaultWorkspaceFor(UUID userId) {
+        List<WorkspaceSummary> memberships = identityApi.listMemberships(userId);
+        return memberships.stream()
+                .filter(WorkspaceSummary::isDefault)
+                .findFirst()
+                .or(() -> memberships.stream().findFirst())
+                .map(WorkspaceSummary::workspaceId)
+                .orElseThrow(() -> new UnauthorizedException("You are not a member of any workspace"));
     }
 
     @Override

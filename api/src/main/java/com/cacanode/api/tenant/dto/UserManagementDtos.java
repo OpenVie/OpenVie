@@ -20,7 +20,8 @@ public final class UserManagementDtos {
     public record DirectoryResponse(
             List<MemberResponse> members,
             List<InvitationResponse> invitations,
-            WorkspaceVisibility visibility) {}
+            WorkspaceVisibility visibility,
+            boolean defaultWorkspace) {}
 
     public record MemberResponse(
             UUID id,
