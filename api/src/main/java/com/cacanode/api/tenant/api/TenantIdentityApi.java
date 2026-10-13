@@ -5,6 +5,7 @@ import com.cacanode.api.tenant.api.WorkspaceRole;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -68,6 +69,22 @@ public interface TenantIdentityApi {
 
     /** Consumes an invitation token and creates the account it targets. */
     AcceptedAccount acceptInvitation(String rawToken, String fullName, String passwordHash);
+
+    /**
+     * Resolves the organization owning an email for the SSO bridge.
+     * Login emails are globally unique, so at most one organization matches.
+     */
+    Optional<UUID> findOrgIdByEmail(String email);
+
+    /**
+     * Links a pre-SSO password account to a Keycloak identity by
+     * verified email. Published here so the auth module never reaches past the
+     * tenant boundary (see {@code ModularMonolithArchitectureTest}).
+     */
+    SsoLinkResult linkSsoIdentity(UUID orgId, String keycloakSubject, String email, boolean emailVerified);
+
+    /** Outcome of {@link #linkSsoIdentity}: who was linked and whether it just happened. */
+    record SsoLinkResult(UUID userId, boolean newlyLinked) {}
 
     record IdentitySnapshot(
             UUID userId,

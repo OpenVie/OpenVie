@@ -3,6 +3,7 @@ package com.cacanode.api.auth.controller;
 import com.cacanode.api.auth.dto.request.AcceptInvitationRequest;
 import com.cacanode.api.auth.dto.request.ChangePasswordRequest;
 import com.cacanode.api.auth.dto.request.LoginRequest;
+import com.cacanode.api.auth.dto.request.SsoExchangeRequest;
 import com.cacanode.api.auth.dto.request.RegisterRequest;
 import com.cacanode.api.auth.dto.response.AuthResponse;
 import com.cacanode.api.auth.dto.response.InvitationValidationResponse;
@@ -50,6 +51,18 @@ public class AuthController extends BaseController {
             @Valid @RequestBody LoginRequest request,
             HttpServletResponse response) {
         return ResponseEntity.ok(authService.login(request, response));
+    }
+
+    /**
+     * One-time PKCE code exchange for Keycloak SSO.
+     * Returns the standard internal credential pair, so the frontend session
+     * handling stays identical to password login.
+     */
+    @PostMapping("/sso/exchange")
+    public ResponseEntity<AuthResponse> ssoExchange(
+            @Valid @RequestBody SsoExchangeRequest request,
+            HttpServletResponse response) {
+        return ResponseEntity.ok(authService.ssoExchange(request, response));
     }
 
     @PostMapping("/refresh")

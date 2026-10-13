@@ -60,6 +60,7 @@ test("retained routes resolve for both locales", async ({ page }) => {
     "/change-password",
     "/workspaces",
     "/settings",
+    "/organization",
     "/documentation",
     "/documentation/getting-started",
     "/documentation/documents",

@@ -1,4 +1,4 @@
-import { getApiBase } from "@/lib/auth-api";
+import { getAdminApiBase, getApiBase } from "@/lib/auth-api";
 import { parseApiError, readJsonOrThrow } from "@/lib/api-error";
 import type { ApiRequest } from "@/lib/documents-api";
 import type { OrganizationMember, TeamDirectory, TeamInvitation, TeamMember, UserStatus, WorkspaceRole } from "@/types";
@@ -43,27 +43,16 @@ export async function updateTeamMemberRole(
   }));
 }
 
-export async function updateTeamMemberStatus(
+/**
+ * Workspace admin removes one member from their own active workspace. The
+ * account stays in the organization; the default workspace (General) refuses
+ * removal server-side.
+ */
+export async function removeWorkspaceMemberApi(
   request: ApiRequest,
   id: string,
-  status: UserStatus,
-): Promise<TeamMember> {
-  return readJsonOrThrow<TeamMember>(await request(`${getApiBase()}/users/${id}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  }));
-}
-
-/** Admin sets an initial password; the member must change it on next login. */
-export async function setTeamMemberPassword(
-  request: ApiRequest,
-  id: string,
-  password: string,
 ): Promise<void> {
-  const response = await request(`${getApiBase()}/users/${id}/password`, {
-    method: "PUT",
-    body: JSON.stringify({ password }),
-  });
+  const response = await request(`${getApiBase()}/users/members/${id}`, { method: "DELETE" });
   if (!response.ok) throw await parseApiError(response);
 }
 export async function addMemberToWorkspaceApi(
@@ -77,18 +66,46 @@ export async function addMemberToWorkspaceApi(
   }));
 }
 
+// ─── Organization administration (admin panel, ORG_OWNER only) ─────────────────
+// Every call goes through `/api/v1/admin/users/*`: the target needs no
+// membership in the actor's active workspace.
+
 export async function getOrganizationMembersApi(
   request: ApiRequest,
 ): Promise<OrganizationMember[]> {
-  return readJsonOrThrow<OrganizationMember[]>(await request(`${getApiBase()}/users/organization`));
+  return readJsonOrThrow<OrganizationMember[]>(await request(`${getAdminApiBase()}/users/organization`));
 }
 
 export async function createOrganizationUserApi(
   request: ApiRequest,
   payload: { email: string; fullName: string; password: string },
 ): Promise<OrganizationMember> {
-  return readJsonOrThrow<OrganizationMember>(await request(`${getApiBase()}/users/organization`, {
+  return readJsonOrThrow<OrganizationMember>(await request(`${getAdminApiBase()}/users/organization`, {
     method: "POST",
     body: JSON.stringify(payload),
   }));
+}
+
+export async function updateOrgUserStatusApi(
+  request: ApiRequest,
+  id: string,
+  status: UserStatus,
+): Promise<OrganizationMember> {
+  return readJsonOrThrow<OrganizationMember>(await request(`${getAdminApiBase()}/users/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  }));
+}
+
+/** Owner sets an org account password; the member must change it on next login. */
+export async function setOrgUserPasswordApi(
+  request: ApiRequest,
+  id: string,
+  password: string,
+): Promise<void> {
+  const response = await request(`${getAdminApiBase()}/users/${id}/password`, {
+    method: "PUT",
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw await parseApiError(response);
 }

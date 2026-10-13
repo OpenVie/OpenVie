@@ -3,6 +3,7 @@ package com.cacanode.api.auth.service;
 import com.cacanode.api.auth.dto.request.AcceptInvitationRequest;
 import com.cacanode.api.auth.dto.request.LoginRequest;
 import com.cacanode.api.auth.dto.request.RegisterRequest;
+import com.cacanode.api.auth.dto.request.SsoExchangeRequest;
 import com.cacanode.api.auth.dto.response.AuthResponse;
 import com.cacanode.api.auth.dto.response.InvitationValidationResponse;
 import com.cacanode.api.auth.dto.response.WorkspaceSummaryResponse;
@@ -22,6 +23,13 @@ import java.util.UUID;
 public interface AuthService {
 
     AuthResponse login(LoginRequest request, HttpServletResponse response);
+
+    /**
+     * One-time PKCE code exchange for Keycloak SSO (dual mode with
+     * password login). Returns the standard internal credential pair, so every
+     * downstream authorization behaves exactly like a password login.
+     */
+    AuthResponse ssoExchange(SsoExchangeRequest request, HttpServletResponse response);
 
     AuthResponse refreshToken(String refreshToken, HttpServletResponse response);
 
