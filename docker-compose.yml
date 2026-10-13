@@ -291,6 +291,7 @@ volumes:
   rabbitmq_data:
   qdrant_data:
   kuzu_data:
+  keycloak_db_data:
   model_cache:
   seaweedfs_master:
   seaweedfs_volume:

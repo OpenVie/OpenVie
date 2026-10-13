@@ -31,6 +31,8 @@ import com.cacanode.api.auth.dto.response.AuthResponse;
 import com.cacanode.api.auth.model.RefreshToken;
 import com.cacanode.api.auth.repository.RefreshTokenRepository;
 import com.cacanode.api.auth.service.JwtService;
+import com.cacanode.api.auth.sso.SsoProperties;
+import com.cacanode.api.auth.sso.SsoTokenClient;
 import com.cacanode.api.common.exception.custom.ConflictException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.OrgRole;
@@ -54,6 +56,8 @@ class AuthServiceImplTest {
     private RefreshTokenRepository refreshTokens;
     private JwtService jwt;
     private TenantCredentials credentials;
+    private SsoTokenClient ssoTokenClient;
+    private SsoProperties ssoProperties;
     private AuthServiceImpl service;
 
     private UUID userId;
@@ -67,7 +71,10 @@ class AuthServiceImplTest {
         refreshTokens = mock(RefreshTokenRepository.class);
         jwt = mock(JwtService.class);
         credentials = mock(TenantCredentials.class);
-        service = new AuthServiceImpl(identity, refreshTokens, jwt, credentials);
+        ssoTokenClient = mock(SsoTokenClient.class);
+        ssoProperties = mock(SsoProperties.class);
+        service = new AuthServiceImpl(
+                identity, refreshTokens, jwt, credentials, ssoTokenClient, ssoProperties);
 
         ReflectionTestUtils.setField(service, "refreshTokenExpiryTime", 30L);
         ReflectionTestUtils.setField(service, "cookieSecure", false);

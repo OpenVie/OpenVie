@@ -128,6 +128,8 @@ public class UserController extends BaseController {
     // canonical path in the soft phase because this controller also serves
     // WORKSPACE_ADMIN traffic. In the Keycloak hard split they move to a
     // dedicated admin controller under /api/v1/admin/users/organization.
+    // Deprecated: prefer AdminUserController (/api/v1/admin/users/organization).
+    // Kept for backward compatibility; removal is tracked post-SSO (v0.2.0).
     @GetMapping("/organization")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public List<OrganizationMemberResponse> organizationMembers(HttpServletRequest request) {

@@ -12,6 +12,7 @@ import com.cacanode.api.common.exception.custom.ConflictException;
 import com.cacanode.api.common.exception.custom.ResourceNotFoundException;
 import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import com.cacanode.api.tenant.api.DeliveryAvailability;
+import com.cacanode.api.tenant.api.TenantIdentityApi;
 import com.cacanode.api.tenant.api.TenantCredentials;
 import com.cacanode.api.tenant.api.TenantIdentityApi.AcceptedAccount;
 import com.cacanode.api.tenant.api.TenantIdentityApi.InvitationSnapshot;
@@ -53,6 +54,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -380,6 +382,59 @@ public class TenantUserManagementService {
         credentials.setInitialPassword(actorId, userId, newPassword);
     }
 
+    /**
+     * Issue #4: link a pre-SSO password account to a Keycloak identity.
+     * Returns {@link TenantIdentityApi.SsoLinkResult} so callers stay on the
+     * published tenant boundary (see {@code ModularMonolithArchitectureTest}).
+     *
+     * Active path is auto-link by verified email inside the same org: the
+     * account keeps every workspace membership and role, so
+     * {@code recover-owner} and all workspace authorization keep working
+     * unchanged. Unknown emails are rejected (no auto-provisioning); the
+     * subject, once set, is immutable.
+     *
+     * The future TOTP-confirmation branch
+     * ({@code organizations.sso_link_require_otp}) is intentionally not
+     * implemented here: no SMTP code exists and the mail flow is untested.
+     * When that switch turns on, callers must present a
+     * Keycloak-OTP-authenticated session instead (see docs/KEYCLOAK.md).
+     */
+    @Transactional
+    public TenantIdentityApi.SsoLinkResult linkSsoIdentity(
+            UUID orgId, String keycloakSubject, String email, boolean emailVerified) {
+        if (keycloakSubject == null || keycloakSubject.isBlank()) {
+            throw new BadRequestException("SSO identity is missing");
+        }
+        Optional<User> already = userRepository.findByKeycloakSubject(keycloakSubject);
+        if (already.isPresent()) {
+            User linked = already.get();
+            if (!linked.getOrganization().getId().equals(orgId)) {
+                throw new ConflictException("SSO identity is already linked to another account");
+            }
+            return new TenantIdentityApi.SsoLinkResult(linked.getId(), false);
+        }
+        if (!emailVerified) {
+            throw new ConflictException("SSO requires a verified email address");
+        }
+        String normalized = normalizeEmail(email);
+        User user = userRepository.findByEmailIgnoreCase(normalized)
+                .filter(candidate -> candidate.getOrganization().getId().equals(orgId))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "SSO_UNKNOWN_EMAIL: No account exists for this email"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException("User account is disabled");
+        }
+        user.setKeycloakSubject(keycloakSubject);
+        userRepository.save(user);
+        List<WorkspaceMember> memberships = memberRepository.findVisibleByUserId(user.getId());
+        if (!memberships.isEmpty()) {
+            audit(memberships.get(0).getWorkspace().getId(), user.getId(),
+                    LogAction.USER_SSO_LINKED, "user", user.getId(),
+                    Map.of("via", "verified-email"));
+        }
+        return new TenantIdentityApi.SsoLinkResult(user.getId(), true);
+    }
+
     @Transactional(readOnly = true)
     public InvitationSnapshot validateInvitationToken(String rawToken) {
         Invitation invitation = findInvitation(rawToken, false);
@@ -597,6 +652,19 @@ public class TenantUserManagementService {
             throw new ResourceNotFoundException("User not found");
         }
         return user;
+    }
+
+    /**
+     * Issue #2: resolves the organization owning an email for the SSO bridge.
+     * Login emails are globally unique, so at most one organization matches.
+     */
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOrgIdByEmail(String email) {
+        if (email == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmailIgnoreCase(normalizeEmail(email))
+                .map(user -> user.getOrganization().getId());
     }
 
     private OrganizationMemberResponse toOrganizationMember(User user, UUID currentUserId) {

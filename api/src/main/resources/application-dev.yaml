@@ -88,6 +88,12 @@ openapi:
     title: CacaNode API
     version: 1.0.0
 
+sso:
+  enabled: ${SSO_ENABLED:false}
+  issuer-uri: ${SSO_ISSUER_URI:http://localhost:18080/realms/openvie}
+  frontend-client-id: ${SSO_FRONTEND_CLIENT_ID:openvie-frontend}
+  backend-client-id: ${SSO_BACKEND_CLIENT_ID:openvie-backend}
+  backend-client-secret: ${SSO_BACKEND_CLIENT_SECRET:}
 jwt:
   token-key: ${TOKEN_KEY}
   expiry-mins: ${EXPIRY_MINS:15}
