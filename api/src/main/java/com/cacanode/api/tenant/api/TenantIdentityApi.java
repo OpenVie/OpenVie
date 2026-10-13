@@ -71,13 +71,13 @@ public interface TenantIdentityApi {
     AcceptedAccount acceptInvitation(String rawToken, String fullName, String passwordHash);
 
     /**
-     * Issue #4: resolves the organization owning an email for the SSO bridge.
+     * Resolves the organization owning an email for the SSO bridge.
      * Login emails are globally unique, so at most one organization matches.
      */
     Optional<UUID> findOrgIdByEmail(String email);
 
     /**
-     * Issue #4: links a pre-SSO password account to a Keycloak identity by
+     * Links a pre-SSO password account to a Keycloak identity by
      * verified email. Published here so the auth module never reaches past the
      * tenant boundary (see {@code ModularMonolithArchitectureTest}).
      */

@@ -59,7 +59,7 @@ public class User extends BaseEntity implements UserDetails {
     private boolean mustChangePassword = false;
 
     /**
-     * Keycloak `sub` linked by verified email (issue #4). NULL means
+     * Keycloak `sub` linked by verified email. NULL means
      * password-only: the account never completed an SSO login.
      */
     @Column(name = "keycloak_subject", length = 255)

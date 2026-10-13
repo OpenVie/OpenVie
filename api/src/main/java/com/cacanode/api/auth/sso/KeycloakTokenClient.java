@@ -18,7 +18,7 @@ import com.cacanode.api.common.exception.custom.UnauthorizedException;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Issue #2: PKCE code exchange plus ID-token validation over JWKS.
+ * PKCE code exchange plus ID-token validation over JWKS.
  *
  * <p>The decoder is built lazily on first exchange (OIDC discovery hits the
  * network), so environments without Keycloak start and run password login

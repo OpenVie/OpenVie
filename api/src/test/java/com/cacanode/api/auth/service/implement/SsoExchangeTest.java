@@ -42,7 +42,7 @@ import com.cacanode.api.tenant.api.UserStatus;
 import com.cacanode.api.tenant.api.WorkspaceRole;
 
 /**
- * Issue #2: the SSO bridge exchanges a Keycloak code once and then issues the
+ * The SSO bridge exchanges a Keycloak code once and then issues the
  * standard internal credential pair, so downstream authorization is identical
  * to a password login. Unknown realm roles are rejected with 403.
  */

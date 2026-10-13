@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Issue #2: Keycloak SSO bridge configuration (dual mode with password login).
+ * Keycloak SSO bridge configuration (dual mode with password login).
  *
  * <p>Keycloak access tokens are exchanged once for internal workspace-scoped
  * credentials and are never accepted as API credentials themselves, so every

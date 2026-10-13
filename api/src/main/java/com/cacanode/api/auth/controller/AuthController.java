@@ -54,7 +54,7 @@ public class AuthController extends BaseController {
     }
 
     /**
-     * Issue #2/#3 contract: one-time PKCE code exchange for Keycloak SSO.
+     * One-time PKCE code exchange for Keycloak SSO.
      * Returns the standard internal credential pair, so the frontend session
      * handling stays identical to password login.
      */
