@@ -180,12 +180,28 @@
     "fallback": {
       "invalidCredentials": "Invalid email or password"
     },
+    "sso": {
+      "startFailed": "Unable to start single sign-on.",
+      "providerFailed": "The identity provider could not sign you in.",
+      "missingCode": "The identity provider did not return an authorization code.",
+      "invalidState": "This sign-in request is invalid or has expired. Please try again.",
+      "exchangeFailed": "Unable to complete single sign-on.",
+      "unknownAccount": "This account has not been provisioned. Contact your workspace administrator.",
+      "completingTitle": "Completing sign-in",
+      "completingDescription": "We are securely signing you in.",
+      "failedTitle": "Unable to sign in",
+      "failedDescription": "Your local account was not signed in.",
+      "backToLogin": "Back to sign in"
+    },
     "login": {
       "title": "Welcome back",
       "description": "Sign in to your account to continue",
       "rememberMe": "Remember me",
       "signingIn": "Signing in…",
       "signIn": "Sign in",
+      "or": "or",
+      "signInWithSso": "Sign in with SSO",
+      "redirectingToSso": "Redirecting to SSO…",
       "noAccount": "Don't have an account?",
       "createAccount": "Create account",
       "provisioned": "Accounts are provisioned by your workspace administrator."

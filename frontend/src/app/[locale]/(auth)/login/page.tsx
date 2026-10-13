@@ -8,7 +8,7 @@ import { z } from "zod";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
-import { AlertCircle, Eye, EyeOff, Loader2, X } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2, LogIn, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,8 @@ import {
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { authApiErrorMessage, loginApi, registrationStatusApi } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
+import { beginOidcAuthorization } from "@/lib/oidc";
+import { routing } from "@/i18n/routing";
 import {
   consumeAuthDestination,
   rememberAuthDestination,
@@ -40,6 +42,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [canSelfRegister, setCanSelfRegister] = useState<boolean | null>(null);
+  const [isSsoRedirecting, setIsSsoRedirecting] = useState(false);
   const loginSchema = z.object({
     email: z.string().min(1, t("validation.emailRequired")).email(t("validation.invalidEmail")),
     password: z.string().min(1, t("validation.passwordRequired")),
@@ -93,6 +96,22 @@ function LoginContent() {
       router.push(consumeAuthDestination());
     } catch (e) {
       setApiError(authApiErrorMessage(e, t("fallback.invalidCredentials")));
+    }
+  };
+
+  const startSsoLogin = async () => {
+    setApiError(null);
+    setIsSsoRedirecting(true);
+    try {
+      rememberAuthDestination(next);
+      const localePrefix = document.documentElement.lang === routing.defaultLocale
+        ? ""
+        : `/${document.documentElement.lang}`;
+      const redirectUri = `${window.location.origin}${localePrefix}/sso/callback`;
+      window.location.assign(await beginOidcAuthorization(redirectUri));
+    } catch (error) {
+      setApiError(authApiErrorMessage(error, t("sso.startFailed")));
+      setIsSsoRedirecting(false);
     }
   };
 
@@ -212,7 +231,7 @@ function LoginContent() {
 
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isSsoRedirecting}
                 className={cn(
                   "w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white",
                   isSubmitting && "opacity-70",
@@ -228,6 +247,32 @@ function LoginContent() {
                 )}
               </Button>
             </form>
+
+            <div className="my-5 flex items-center gap-3 text-xs text-slate-400" aria-hidden="true">
+              <span className="h-px flex-1 bg-slate-200" />
+              {t("login.or")}
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting || isSsoRedirecting}
+              onClick={startSsoLogin}
+              className="w-full h-10"
+            >
+              {isSsoRedirecting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t("login.redirectingToSso")}
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  {t("login.signInWithSso")}
+                </>
+              )}
+            </Button>
 
             <div className="text-center text-sm text-slate-500 mt-4 space-y-2">
               {canSelfRegister && (

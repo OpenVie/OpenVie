@@ -58,6 +58,7 @@ test("retained routes resolve for both locales", async ({ page }) => {
     "/setup",
     "/register",
     "/change-password",
+    "/sso/callback",
     "/workspaces",
     "/settings",
     "/organization",
@@ -67,6 +68,7 @@ test("retained routes resolve for both locales", async ({ page }) => {
     "/documentation/playground",
     "/vi/login",
     "/vi/setup",
+    "/vi/sso/callback",
     "/vi/documentation",
     "/vi/documentation/playground",
   ]) {

@@ -106,6 +106,23 @@ export async function loginApi(payload: {
   return body as AuthResponse;
 }
 
+/** Completes the public-client Authorization Code + PKCE flow. */
+export async function ssoExchangeApi(payload: {
+  code: string;
+  codeVerifier: string;
+  redirectUri: string;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/sso/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
+  return body as AuthResponse;
+}
+
 export async function logoutApi(): Promise<void> {
   const res = await fetch(`${getApiBase()}/auth/logout`, {
     method: "POST",
