@@ -6,13 +6,14 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 
 type Theme = "light" | "dark"
 
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+}
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [theme, setTheme] = useState<Theme>("light")
-
-  useEffect(() => {
-    setTheme(window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light")
-  }, [])
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
 
   useEffect(() => {
     const root = rootRef.current
