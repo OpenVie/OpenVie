@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, Mail, Plus, Save, Send, Trash2 } from "lucide-react";
+import { AlertCircle, KeyRound, Mail, Plus, Save, Send, Trash2 } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "@/i18n/navigation";
 
 const CHANNEL_TYPES = ["smtp", "sendgrid", "brevo"] as const;
 type ChannelType = (typeof CHANNEL_TYPES)[number];
@@ -47,6 +48,8 @@ type ChannelForm = {
 
 export default function SettingsPage() {
   const t = useTranslations("Settings");
+  const navigation = useTranslations("Navigation");
+  const password = useTranslations("ChangePassword");
   const { request } = useApiClient();
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.orgRole === "ORG_OWNER";
@@ -217,6 +220,11 @@ export default function SettingsPage() {
             <Button type="submit" disabled={orgForm.formState.isSubmitting} size="sm" className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"><Save className="size-4" />{t("save")}</Button>
           </form>
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>{navigation("changePassword")}</CardTitle><CardDescription>{password("description")}</CardDescription></CardHeader>
+        <CardContent><Link href="/change-password" className="ov-change-password-link"><KeyRound className="size-4" />{navigation("changePassword")}</Link></CardContent>
       </Card>
 
       {/* <Card>
