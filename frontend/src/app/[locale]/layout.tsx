@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import Script from "next/script";
 import "../globals.css";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { routing } from "@/i18n/routing";
@@ -37,7 +38,30 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <Script id="openvie-theme" strategy="beforeInteractive">
+          {`try {
+            const theme = localStorage.getItem('openvie.theme');
+            if (theme === 'light' || theme === 'dark') {
+              document.documentElement.dataset.ovTheme = theme;
+              document.documentElement.dataset.theme = theme;
+              const applyTheme = () => {
+                const shell = document.querySelector('.ov-shell');
+                if (!shell) return false;
+                shell.classList.toggle('ov-light', theme === 'light');
+                return true;
+              };
+              if (!applyTheme()) {
+                const observer = new MutationObserver(() => {
+                  if (applyTheme()) observer.disconnect();
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true });
+              }
+            }
+          } catch {}`}
+        </Script>
+      </head>
       <body className="font-sans" suppressHydrationWarning>
         <NextIntlClientProvider messages={messages}>
           <AppProviders>{children}</AppProviders>

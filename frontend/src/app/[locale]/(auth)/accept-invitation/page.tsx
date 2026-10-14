@@ -12,10 +12,6 @@ import { AlertCircle, CheckCircle2, Loader2, Users } from "lucide-react";
 import { acceptInvitationApi, authApiErrorMessage, validateInvitationApi } from "@/lib/auth-api";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import type { InvitationValidation } from "@/types";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { consumeAuthDestination } from "@/lib/auth-redirect";
 
 type FormValues = { fullName: string; password: string; confirmPassword: string };
@@ -59,14 +55,21 @@ function AcceptInvitationContent() {
     }
   };
 
-  return <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10"><Card className="w-full max-w-md shadow-md"><CardHeader className="text-center"><div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-indigo-100">{accepted ? <CheckCircle2 className="size-6 text-green-600" /> : <Users className="size-6 text-indigo-600" />}</div><CardTitle>{accepted ? t("invitation.accepted") : t("invitation.joinTeam")}</CardTitle></CardHeader><CardContent>
-    {validating ? <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500"><Loader2 className="size-4 animate-spin" />{t("invitation.validating")}</div> : accepted ? <p className="py-6 text-center text-sm text-slate-600">{t("invitation.ready")}</p> : pageError && !invitation ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-center text-sm text-red-800"><AlertCircle className="mx-auto mb-2 size-5" />{pageError}</div> : invitation && <>
-      <div className="mb-5 rounded-lg bg-slate-50 p-3 text-sm text-slate-600"><p>{t.rich("invitation.invitedAs", { role: () => <strong>{invitation.role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user")}</strong>, workspace: () => <strong>{invitation.workspaceName}</strong>, organization: () => <strong>{invitation.organizationName}</strong> })}</p><p className="mt-1 text-xs text-slate-500">{invitation.email}</p></div>
-      <form onSubmit={handleSubmit(submit)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="fullName">{t("fullName")}</Label><Input id="fullName" autoComplete="name" {...register("fullName")} />{errors.fullName && <p className="text-xs text-red-600">{errors.fullName.message}</p>}</div><div className="space-y-1.5"><Label htmlFor="password">{t("password")}</Label><Input id="password" type="password" autoComplete="new-password" {...register("password")} />{errors.password && <p className="text-xs text-red-600">{errors.password.message}</p>}</div><div className="space-y-1.5"><Label htmlFor="confirmPassword">{t("confirmPassword")}</Label><Input id="confirmPassword" type="password" autoComplete="new-password" {...register("confirmPassword")} />{errors.confirmPassword && <p className="text-xs text-red-600">{errors.confirmPassword.message}</p>}</div>{pageError && <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />{pageError}</div>}<Button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 text-white hover:bg-indigo-700">{isSubmitting ? <><Loader2 className="size-4 animate-spin" />{t("invitation.creating")}</> : t("invitation.accept")}</Button></form>
+  return <>
+    <div className="ov-auth-card" style={{ maxWidth: 440 }}>
+      <div className="flex flex-col items-center mb-4">
+        <div className="mb-3 flex size-12 items-center justify-center rounded-full" style={{ background: accepted ? 'rgba(200,245,60,.15)' : 'rgba(200,245,60,.15)' }}>{accepted ? <CheckCircle2 className="size-6 text-[#c8f53c]" /> : <Users className="size-6 text-[#c8f53c]" />}</div>
+        <h1>{accepted ? t("invitation.accepted") : t("invitation.joinTeam")}</h1>
+      </div>
+
+    {validating ? <div className="flex items-center justify-center gap-2 py-8 text-sm text-[#a9b3ab]"><Loader2 className="size-4 animate-spin" />{t("invitation.validating")}</div> : accepted ? <p className="py-6 text-center text-sm text-[#a9b3ab]">{t("invitation.ready")}</p> : pageError && !invitation ? <div className="ov-auth-error justify-center flex-col items-center text-center"><AlertCircle className="mx-auto mb-2 size-5" />{pageError}</div> : invitation && <>
+      <div className="mb-5 rounded-lg p-3 text-sm text-[#a9b3ab]" style={{ background: 'rgba(255,255,255,.05)' }}><p>{t.rich("invitation.invitedAs", { role: () => <strong className="text-[#f2f5f0]">{invitation.role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user")}</strong>, workspace: () => <strong className="text-[#f2f5f0]">{invitation.workspaceName}</strong>, organization: () => <strong className="text-[#f2f5f0]">{invitation.organizationName}</strong> })}</p><p className="mt-1 text-xs text-[#8e9992]">{invitation.email}</p></div>
+      <form onSubmit={handleSubmit(submit)} className="space-y-4"><div className="space-y-1.5"><label htmlFor="fullName" className="ov-auth-label">{t("fullName")}</label><input id="fullName" autoComplete="name" className="ov-auth-input" {...register("fullName")} />{errors.fullName && <p className="text-xs text-red-400">{errors.fullName.message}</p>}</div><div className="space-y-1.5"><label htmlFor="password" className="ov-auth-label">{t("password")}</label><input id="password" type="password" autoComplete="new-password" className="ov-auth-input" {...register("password")} />{errors.password && <p className="text-xs text-red-400">{errors.password.message}</p>}</div><div className="space-y-1.5"><label htmlFor="confirmPassword" className="ov-auth-label">{t("confirmPassword")}</label><input id="confirmPassword" type="password" autoComplete="new-password" className="ov-auth-input" {...register("confirmPassword")} />{errors.confirmPassword && <p className="text-xs text-red-400">{errors.confirmPassword.message}</p>}</div>{pageError && <div role="alert" className="ov-auth-error"><AlertCircle className="mt-0.5 size-4 shrink-0" />{pageError}</div>}<button type="submit" disabled={isSubmitting} className="ov-auth-btn">{isSubmitting ? <><Loader2 className="size-4 animate-spin" />{t("invitation.creating")}</> : t("invitation.accept")}</button></form>
     </>}
-  </CardContent></Card></div>;
+  </div>
+  </>;
 }
 
 export default function AcceptInvitationPage() {
-  return <Suspense fallback={<div className="min-h-screen bg-slate-50" />}><AcceptInvitationContent /></Suspense>;
+  return <Suspense fallback={<div className="min-h-screen" />}><AcceptInvitationContent /></Suspense>;
 }
