@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, KeyRound, Plus, Users } from "lucide-react";
+import { AlertCircle, KeyRound, Loader2, Plus, Users } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import {
   createOrganizationUserApi,
@@ -58,6 +58,7 @@ export default function OrganizationPage() {
   const [orgError, setOrgError] = useState<string | null>(null);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<OrganizationMember | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<OrganizationMember | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
@@ -119,15 +120,25 @@ export default function OrganizationPage() {
   };
 
   const changeStatus = async (user: OrganizationMember) => {
-    const status: UserStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (status === "INACTIVE" && !window.confirm(t("confirmDeactivate", { name: user.fullName || user.email }))) return;
+    if (user.status === "ACTIVE") {
+      setDeactivateTarget(user);
+      return;
+    }
+    await performStatusChange(user, "ACTIVE");
+  };
+
+  const performStatusChange = async (user: OrganizationMember, status: UserStatus) => {
     setBusyId(user.id);
     try {
       const updated = await updateOrgUserStatusApi(request, user.id, status);
       setOrgMembers(current => current.map(item => item.id === updated.id ? updated : item));
       toast.success(status === "ACTIVE" ? t("reactivated") : t("deactivated"));
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.status")); }
-    finally { setBusyId(null); }
+      setDeactivateTarget(null);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.status"));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return <div className="space-y-6">
@@ -302,6 +313,38 @@ export default function OrganizationPage() {
             <Button type="submit" disabled={passwordForm.formState.isSubmitting}>{t("setPassword")}</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+
+    {/* Deactivate User Confirmation Dialog */}
+    <Dialog open={deactivateTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setDeactivateTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("deactivate")}</DialogTitle>
+          <DialogDescription>
+            {deactivateTarget && t("confirmDeactivate", { name: deactivateTarget.fullName || deactivateTarget.email })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(busyId)}
+            onClick={() => setDeactivateTarget(null)}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={Boolean(busyId)}
+            onClick={() => {
+              if (deactivateTarget) void performStatusChange(deactivateTarget, "INACTIVE");
+            }}
+          >
+            {busyId === deactivateTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("deactivate")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;
