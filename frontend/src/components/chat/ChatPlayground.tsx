@@ -776,9 +776,7 @@ function Playground() {
           {messages.length === 0 ? (
             <div key={heroAnimationKey} className="ov-chat-empty m-auto flex max-w-[900px] flex-col items-center py-12 text-center">
               <div className="ov-chat-eyebrow ov-up" style={{ animationDelay: ".15s" }}><span />{t("heroEyebrow")}</div>
-              <h2 className="ov-shine ov-up mb-4 text-2xl font-semibold tracking-tight text-slate-900" style={{ animationDelay: ".25s" }}>
-                {t("heroTitleFirst")}<br /><span>{t("heroTitleSecond")}</span>
-              </h2>
+              <HeroHeading line1={t("heroTitleFirst")} line2={t("heroTitleSecond")} />
               <p className="ov-up mb-[34px] text-sm leading-6 text-slate-500 sm:text-base" style={{ animationDelay: ".35s" }}>
                 {t("heroDescription")}
               </p>
@@ -1053,6 +1051,35 @@ function Playground() {
     <AppShell contentClassName="p-0 sm:p-0" mobileNavContent={mobileHistoryPanel}>
       {playgroundContent}
     </AppShell>
+  )
+}
+
+function HeroHeading({ line1, line2 }: { line1: string; line2: string }) {
+  const ref = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    const totalChars = line1.length + line2.length
+    const delay = 250 + 300 + totalChars * 18 + 400
+    const timer = setTimeout(() => ref.current?.classList.add("ov-shine-active"), delay)
+    return () => clearTimeout(timer)
+  }, [line1, line2])
+
+  return (
+    <h2 ref={ref} className="ov-shine mb-4">
+      <span className="ov-slide-up-line block" style={{ "--line-index": 0 } as React.CSSProperties}>
+        {line1.split("").map((char, i) => (
+          <span key={i} className="ov-slide-up-char" style={{ "--char-index": i } as React.CSSProperties}>
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ))}
+      </span>
+      <span className="ov-slide-up-line block" style={{ "--line-index": 1 } as React.CSSProperties}>
+        {line2.split("").map((char, i) => (
+          <span key={i} className="ov-slide-up-char" style={{ "--char-index": i } as React.CSSProperties}>
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ))}
+      </span>
+    </h2>
   )
 }
 
