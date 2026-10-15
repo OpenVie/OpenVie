@@ -15,8 +15,9 @@ const PAGE_TITLE_KEYS = {
   "/accept-invitation": "acceptInvitation",
   "/documents": "documents",
   "/users": "users",
-  "/workspaces": "workspaces",
-  "/settings": "settings",
+  "/admin/organization": "organization",
+  "/admin/workspaces": "workspaces",
+  "/admin/settings": "settings",
 } as const;
 
 export function PageTitle() {

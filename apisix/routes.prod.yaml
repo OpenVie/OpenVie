@@ -73,6 +73,18 @@ routes:
       nodes:
         "api:8080": 1
 
+  # Admin surface (frontend-admin deployment, OIDC openvie-admin).
+  # Priority 5 beats the /* catch-all below without touching API routes.
+  - uri: /admin/*
+    name: edge-admin-web
+    priority: 5
+    enable_websocket: true
+    upstream:
+      type: roundrobin
+      pass_host: node
+      nodes:
+        "frontend-admin:3000": 1
+
   # Web client (Next.js — Tầng 2).
   - uri: /*
     name: edge-web

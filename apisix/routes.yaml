@@ -85,6 +85,18 @@ routes:
       nodes:
         "host.docker.internal:8080": 1
 
+  # Admin surface (Next.js second deployment — :3001, OIDC openvie-admin).
+  # Priority 5 beats the /* catch-all below without touching API routes.
+  - uri: /admin/*
+    name: edge-admin-web
+    priority: 5
+    enable_websocket: true
+    upstream:
+      type: roundrobin
+      pass_host: node
+      nodes:
+        "host.docker.internal:3001": 1
+
   # Web client (Next.js — Tầng 2, Không gian Năng lực số H-P-D-I).
   - uri: /*
     name: edge-web

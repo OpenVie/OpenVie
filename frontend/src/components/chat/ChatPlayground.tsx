@@ -18,13 +18,11 @@ import {
   FileText,
   Loader2,
   Paperclip,
-  Sparkles,
+  Upload,
   Square,
   Plus,
   Trash2,
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   RotateCw,
   Search,
 } from "lucide-react"
@@ -174,9 +172,15 @@ function Playground() {
   const [searchResults, setSearchResults] = useState<PlaygroundSession[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
-  const [historyCollapsed, setHistoryCollapsed] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<PlaygroundSession | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+  const [heroAnimationKey, setHeroAnimationKey] = useState(0)
+
+  useEffect(() => {
+    const replayHeroAnimation = () => setHeroAnimationKey((current) => current + 1)
+    window.addEventListener("openvie:themechange", replayHeroAnimation)
+    return () => window.removeEventListener("openvie:themechange", replayHeroAnimation)
+  }, [])
 
   function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${format.number(bytes)} B`
@@ -678,34 +682,6 @@ function Playground() {
 
   const sendDisabled = !workspace || !message.trim() || !hasCompletedSource || sending
 
-  const historyPanel = (
-    <div className="flex h-full flex-col bg-slate-50">
-      <div className="space-y-2 border-b border-slate-200 p-3">
-        <Button className="w-full justify-start gap-2" variant="outline" disabled={sending} onClick={startNewChat}>
-          <Plus className="size-4" /> {t("newChat")}
-        </Button>
-        <Button className="w-full justify-start gap-2 text-slate-600" variant="ghost" disabled={sending} onClick={() => setSearchDialogOpen(true)}>
-          <Search className="size-4" /> {t("searchChats")}
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {historyLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="mb-2 h-14 animate-pulse rounded-lg bg-slate-200" />) : historyError && history.length === 0 ? (
-          <div className="p-3 text-sm text-red-700"><AlertCircle className="mb-2 size-5" /><p>{historyError}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => void loadHistory({ selectSession: true })}>{t("retry")}</Button></div>
-        ) : history.length === 0 ? (
-          <p className="p-4 text-center text-sm text-slate-500">{t("historyWillAppear")}</p>
-        ) : <>{history.map((item) => (
-          <div key={item.id} className={cn("group mb-1 flex items-start rounded-lg", sessionId === item.id ? "bg-indigo-100 text-indigo-950" : "hover:bg-slate-200")}>
-            <button type="button" disabled={sending} onClick={() => switchSession(item.id)} className="min-w-0 flex-1 px-3 py-2 text-left disabled:cursor-not-allowed">
-              <p className="truncate text-sm font-medium">{item.title}</p>
-              <p className="mt-0.5 text-xs text-slate-500">{format.dateTime(new Date(item.last_activity_at), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
-            </button>
-            <button type="button" disabled={sending || Boolean(deletingSessionId)} onClick={() => requestDeleteSession(item)} className="m-1 rounded-md p-2 text-slate-400 opacity-0 hover:bg-white hover:text-red-600 group-hover:opacity-100 focus:opacity-100" aria-label={t("hideChat", { title: item.title })}><Trash2 className="size-4" /></button>
-          </div>
-        ))}<div ref={desktopSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-600" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-600" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retryOlder")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-400">{t("endHistory")}</p>}</>}
-      </div>
-    </div>
-  )
-
   const mobileHistoryPanel = (
     <div>
       <div className="mb-2 flex items-center justify-between px-2">
@@ -783,41 +759,9 @@ function Playground() {
 
   const playgroundContent = (
     <div
-      className="flex h-[calc(100dvh-3.5rem)] min-h-[32rem] flex-col bg-white"
+      className="ov-chat-surface flex h-[calc(100dvh-4.25rem)] min-h-[32rem] flex-col"
     >
       <div className="flex min-h-0 flex-1">
-        <aside
-            className={cn(
-              "relative hidden shrink-0 border-r border-slate-200 bg-slate-50 transition-[width] duration-300 ease-in-out xl:block",
-              historyCollapsed ? "w-12" : "w-72",
-            )}
-          >
-            <div className="h-full overflow-hidden">
-              <div
-                className={cn(
-                  "h-full w-72 transition-all duration-300 ease-in-out",
-                  historyCollapsed
-                    ? "pointer-events-none -translate-x-3 opacity-0"
-                    : "translate-x-0 opacity-100",
-                )}
-              >
-                {historyPanel}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setHistoryCollapsed((collapsed) => !collapsed)}
-              className="absolute -right-3 top-4 z-10 grid size-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-200 hover:scale-105 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
-              aria-label={historyCollapsed ? t("expandHistory") : t("collapseHistory")}
-              aria-expanded={!historyCollapsed}
-            >
-              {historyCollapsed ? (
-                <ChevronRight className="size-4" />
-              ) : (
-                <ChevronLeft className="size-4" />
-              )}
-            </button>
-          </aside>
         <div className="flex min-w-0 flex-1 flex-col">
 
       <div
@@ -830,16 +774,31 @@ function Playground() {
       >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-8 sm:px-6">
           {messages.length === 0 ? (
-            <div className="m-auto flex max-w-lg flex-col items-center py-12 text-center">
-              <div className="mb-5 grid size-14 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Sparkles className="size-7" />
-              </div>
-              <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
-                {t("emptyTitle")}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-base">
-                {t("emptyDescription")}
+            <div key={heroAnimationKey} className="ov-chat-empty m-auto flex max-w-[900px] flex-col items-center py-12 text-center">
+              <div className="ov-chat-eyebrow ov-up" style={{ animationDelay: ".15s" }}><span />{t("heroEyebrow")}</div>
+              <HeroHeading line1={t("heroTitleFirst")} line2={t("heroTitleSecond")} />
+              <p className="ov-up mb-[34px] text-sm leading-6 text-slate-500 sm:text-base" style={{ animationDelay: ".35s" }}>
+                {t("heroDescription")}
               </p>
+              <div className="ov-upload-stage ov-up w-full" style={{ animationDelay: ".45s" }}>
+                <span className="ov-file-chip ov-file-chip-pdf">PDF</span>
+                <span className="ov-file-chip ov-file-chip-xlsx">XLSX</span>
+                <span className="ov-file-chip ov-file-chip-docx">DOCX</span>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="ov-chat-dropzone flex w-full items-center justify-center gap-4 text-left"
+                >
+                  <svg className="ov-upload-border" aria-hidden="true"><rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="23" /></svg>
+                  <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#c8f53c] text-[#07090c]">
+                    <Upload className="size-6" strokeWidth={2.4} />
+                  </span>
+                  <span>
+                    <span className="ov-dropzone-title block text-lg font-bold">{t("heroDropTitle")}</span>
+                    <span className="ov-dropzone-description mt-1 block text-sm">{t("heroDropDescription")}</span>
+                  </span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-1 flex-col justify-end gap-5 py-4">
@@ -885,8 +844,8 @@ function Playground() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-slate-100 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-5">
-        <form onSubmit={submitMessage} className="mx-auto w-full max-w-3xl">
+      <div className="ov-chat-composer-area shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-5">
+        <form onSubmit={submitMessage} className="mx-auto w-full max-w-[720px]">
           {activeUploads.length > 0 && (
             <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
               {activeUploads.map((source) => (
@@ -924,12 +883,12 @@ function Playground() {
             </div>
           )}
 
-          <div className="relative rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100">
+          <div className={cn("ov-chat-composer relative rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              rows={2}
+              rows={messages.length === 0 ? 1 : 2}
               placeholder={
                 hasCompletedSource
                   ? t("questionPlaceholder")
@@ -1089,9 +1048,38 @@ function Playground() {
   )
 
   return (
-    <AppShell contentClassName="p-0" mobileNavContent={mobileHistoryPanel}>
+    <AppShell contentClassName="p-0 sm:p-0" mobileNavContent={mobileHistoryPanel}>
       {playgroundContent}
     </AppShell>
+  )
+}
+
+function HeroHeading({ line1, line2 }: { line1: string; line2: string }) {
+  const ref = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    const totalChars = line1.length + line2.length
+    const delay = 250 + 300 + totalChars * 18 + 400
+    const timer = setTimeout(() => ref.current?.classList.add("ov-shine-active"), delay)
+    return () => clearTimeout(timer)
+  }, [line1, line2])
+
+  return (
+    <h2 ref={ref} className="ov-shine mb-4">
+      <span className="ov-slide-up-line block" style={{ "--line-index": 0 } as React.CSSProperties}>
+        {line1.split("").map((char, i) => (
+          <span key={i} className="ov-slide-up-char" style={{ "--char-index": i } as React.CSSProperties}>
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ))}
+      </span>
+      <span className="ov-slide-up-line block" style={{ "--line-index": 1 } as React.CSSProperties}>
+        {line2.split("").map((char, i) => (
+          <span key={i} className="ov-slide-up-char" style={{ "--char-index": i } as React.CSSProperties}>
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ))}
+      </span>
+    </h2>
   )
 }
 

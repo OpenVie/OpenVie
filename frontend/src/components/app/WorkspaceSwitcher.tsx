@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranslations } from "next-intl"
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
+import { ChevronDown, Loader2 } from "lucide-react"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { listWorkspacesApi, switchWorkspaceApi } from "@/lib/auth-api"
 import type { WorkspaceSummary } from "@/types"
@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
+let workspaceCache: { accessToken: string; workspaces: WorkspaceSummary[] } | null = null
+
+function cachedWorkspaces(accessToken: string | null) {
+  return accessToken && workspaceCache?.accessToken === accessToken
+    ? workspaceCache.workspaces
+    : []
+}
+
 /**
  * Active-workspace picker. Switching re-issues the session token scoped to
  * the chosen workspace, then reloads the route so every workspace-scoped
@@ -27,7 +35,7 @@ export function WorkspaceSwitcher() {
   const user = useAuthStore((s) => s.user)
   const accessToken = useAuthStore((s) => s.accessToken)
   const setAuth = useAuthStore((s) => s.setAuth)
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(() => cachedWorkspaces(accessToken))
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
 
@@ -36,7 +44,9 @@ export function WorkspaceSwitcher() {
     let active = true
     listWorkspacesApi(accessToken)
       .then((list) => {
-        if (active) setWorkspaces(list)
+        if (!active) return
+        workspaceCache = { accessToken, workspaces: list }
+        setWorkspaces(list)
       })
       .catch(() => {
         if (active) setWorkspaces([])
@@ -75,22 +85,21 @@ export function WorkspaceSwitcher() {
         render={
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            className="ov-workspace-trigger"
             aria-label={t("label")}
           />
         }
       >
-        {switching ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <Check className="size-4 opacity-60" />
-        )}
         <span className="min-w-0 flex-1 truncate text-left">
           {activeWorkspace?.name ?? user.activeWorkspaceId}
         </span>
-        <ChevronsUpDown className="size-4 shrink-0 opacity-60" />
+        {switching ? (
+          <Loader2 className="size-3.5 shrink-0 animate-spin" />
+        ) : (
+          <ChevronDown className="size-3.5 shrink-0" strokeWidth={2.2} />
+        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="ov-workspace-menu w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t("workspaces")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -105,7 +114,7 @@ export function WorkspaceSwitcher() {
               )}
             >
               <span className="truncate">{workspace.name}</span>
-              <span className="ml-2 text-xs text-slate-400">
+              <span className="ml-2 text-xs text-[#a9b3ab]">
                 {workspace.role === "WORKSPACE_ADMIN" ? t("admin") : t("member")}
               </span>
             </DropdownMenuItem>

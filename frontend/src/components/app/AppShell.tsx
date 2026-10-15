@@ -1,18 +1,28 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import Image from "next/image"
 import { useTranslations } from "next-intl"
-import { Loader2, LogOut, Menu, X } from "lucide-react"
+import { LogOut, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun } from "lucide-react"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { logoutApi } from "@/lib/auth-api"
-import { appNavigation, visibleNavigation } from "@/components/app/navigation"
+import { visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
+import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { withNext } from "@/lib/auth-redirect"
 import { cn } from "@/lib/utils"
+import { AppLoadingScreen } from "@/components/app/AppLoadingScreen"
 
 function initialsFrom(fullName: string | undefined): string {
   if (!fullName?.trim()) return "?"
@@ -29,21 +39,30 @@ type AppShellProps = {
   mobileNavContent?: ReactNode
 }
 
+type Theme = "light" | "dark"
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+}
+
 export function AppShell({ children, contentClassName, mobileNavContent }: AppShellProps) {
   const t = useTranslations("Navigation")
+  const chat = useTranslations("Chat")
   const pathname = usePathname()
   const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const languageMenuStyle: CSSProperties = liquidGlassMenuStyle(theme)
+  const mainAreaRef = useRef<HTMLDivElement>(null)
+  const navigationRef = useRef<HTMLElement>(null)
+  const [navIndicator, setNavIndicator] = useState({ top: 0, left: 0, width: 0, height: 0, visible: false })
   const navItems = visibleNavigation(user?.orgRole)
   const primaryNavigation = navItems.filter((item) => item.placement !== "footer")
   const footerNavigation = navItems.filter((item) => item.placement === "footer")
-  const pageTitle =
-    appNavigation.find(
-      (item) => item.href === pathname || (item.href !== "/" && pathname.startsWith(`${item.href}/`)),
-    )?.labelKey ?? "chat"
-
   async function handleLogout() {
     try {
       await logoutApi()
@@ -54,34 +73,116 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
     router.push("/")
   }
 
+  useEffect(() => {
+    function placeNavigationIndicator() {
+      const navigation = navigationRef.current
+      const activeItem = navigation?.querySelector<HTMLElement>("[data-ov-nav-active='true']")
+      if (!navigation || !activeItem) return
+      setNavIndicator({
+        top: activeItem.offsetTop,
+        left: activeItem.offsetLeft,
+        width: activeItem.offsetWidth,
+        height: activeItem.offsetHeight,
+        visible: true,
+      })
+    }
+
+    const frame = window.requestAnimationFrame(placeNavigationIndicator)
+    window.addEventListener("resize", placeNavigationIndicator)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize", placeNavigationIndicator)
+    }
+  }, [pathname, sidebarCollapsed])
+
+  useEffect(() => {
+    document.documentElement.dataset.ovTheme = theme
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem("openvie.theme", theme)
+    window.dispatchEvent(new Event("openvie:themechange"))
+  }, [theme])
+
+  useEffect(() => {
+    const mainArea = mainAreaRef.current
+    if (!mainArea || !window.matchMedia("(hover: hover)").matches) return
+
+    const spotlight = mainArea.querySelector<HTMLElement>(".ov-spotlight")
+    if (!spotlight) return
+
+    function moveSpotlight(event: PointerEvent) {
+      const bounds = mainArea!.getBoundingClientRect()
+      spotlight!.style.transform = `translate(${event.clientX - bounds.left - 280}px, ${event.clientY - bounds.top - 280}px)`
+      spotlight!.classList.add("ov-spotlight-visible")
+    }
+    function hideSpotlight() {
+      spotlight!.classList.remove("ov-spotlight-visible")
+    }
+
+    mainArea.addEventListener("pointermove", moveSpotlight)
+    mainArea.addEventListener("pointerleave", hideSpotlight)
+    return () => {
+      mainArea.removeEventListener("pointermove", moveSpotlight)
+      mainArea.removeEventListener("pointerleave", hideSpotlight)
+    }
+  }, [])
+
   return (
-    <div className="min-h-dvh bg-slate-100">
+    <div className={cn("ov-shell min-h-dvh", theme === "light" && "ov-light")}>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-slate-900 text-white transition-transform duration-200 xl:translate-x-0",
+          "ov-sidebar fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col transition-transform duration-200 xl:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarCollapsed && "ov-sidebar-collapsed",
         )}
       >
-        <div className="flex h-14 items-center border-b border-slate-700 px-4">
-          <Link href="/" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
-            <Image src="/logo.png" alt="OpenVie Logo" width={28} height={28} />
-            <span className="text-lg font-bold">OpenVie</span>
+        <div className="flex items-center px-3 pb-3 pt-1">
+          <Link href="/" className="ov-brand" onClick={() => setSidebarOpen(false)}>
+            <span className="ov-brand-mark"><Image src="/images/openvie-logo.svg" alt="OpenVie Logo" width={34} height={34} /></span>
+            <span>OpenVie</span>
           </Link>
           <button
             type="button"
-            className="ml-auto rounded-md p-1 text-slate-300 hover:bg-slate-800 xl:hidden"
+            className="ov-mobile-sidebar-close ov-icon-button ml-auto"
             onClick={() => setSidebarOpen(false)}
             aria-label={t("closeNavigation")}
           >
-            <X className="size-5" />
+            <PanelLeftClose className="size-5" />
+          </button>
+          <button
+            type="button"
+            className="ov-sidebar-collapse ov-icon-button ml-auto hidden xl:grid"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            aria-label={sidebarCollapsed ? "Show navigation labels" : "Hide navigation labels"}
+          >
+            {sidebarCollapsed ? (
+              <>
+                <Image className="ov-sidebar-expand-logo" src="/images/openvie-logo.svg" alt="" width={34} height={34} />
+                <PanelLeftOpen className="ov-sidebar-expand-icon size-5" />
+              </>
+            ) : <PanelLeftClose className="size-5" />}
           </button>
         </div>
 
-        <div className="border-b border-slate-700 px-3 py-2">
+        <Link href="/" className="ov-new-chat" onClick={() => setSidebarOpen(false)} aria-label={chat("newChat")}>
+          <Plus className="size-4 shrink-0" />
+          <span className="ov-new-chat-label">{chat("newChat")}</span>
+        </Link>
+
+        <div className="ov-workspace-container px-1 pb-3 pt-1">
           <WorkspaceSwitcher />
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        <nav ref={navigationRef} className="scrollbar-hidden ov-navigation flex-1 overflow-y-auto px-1">
+          <span
+            aria-hidden="true"
+            className={cn("ov-navigation-indicator", navIndicator.visible && "ov-navigation-indicator-visible")}
+            style={{
+              "--ov-indicator-top": `${navIndicator.top}px`,
+              "--ov-indicator-left": `${navIndicator.left}px`,
+              "--ov-indicator-width": `${navIndicator.width}px`,
+              "--ov-indicator-height": `${navIndicator.height}px`,
+            } as CSSProperties}
+          />
           {primaryNavigation.map(({ href, labelKey, icon: Icon }) => {
             const isActive = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
             return (
@@ -90,20 +191,21 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
                 href={href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  "ov-navigation-link flex items-center gap-3",
                   isActive
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                    ? "ov-navigation-link-active"
+                    : "",
                 )}
+                data-ov-nav-active={isActive}
               >
                 <Icon className="size-4" />
-                {t(labelKey)}
+                <span className="ov-nav-label">{t(labelKey)}</span>
               </Link>
             )
           })}
           {mobileNavContent && (
             <div
-              className="mt-3 border-t border-slate-700 pt-3 xl:hidden"
+              className="mt-3 border-t border-white/10 pt-3 xl:hidden"
               onClick={(event) => {
                 const target = event.target as HTMLElement
                 if (target.closest("button, a")) setSidebarOpen(false)
@@ -112,51 +214,39 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
               {mobileNavContent}
             </div>
           )}
+          <div className="ov-recent">
+            <p>Recent</p>
+            <span>{chat("historyWillAppear")}</span>
+          </div>
         </nav>
 
         {footerNavigation.map(({ href, labelKey, icon: Icon }) => (
-          <div key={href} className="border-t border-slate-700 px-3 py-3">
-            <Link
-              href={href}
-              onClick={() => setSidebarOpen(false)}
-              className="group flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2.5 transition-colors hover:border-indigo-500/70 hover:bg-slate-800"
-            >
-              <span className="grid size-8 shrink-0 place-items-center rounded-md bg-indigo-500/15 text-indigo-300 transition-colors group-hover:bg-indigo-500/25 group-hover:text-indigo-200">
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-slate-100">{t(labelKey)}</span>
-              </span>
-            </Link>
-          </div>
+          <Link key={href} href={href} onClick={() => setSidebarOpen(false)} className="ov-docs-link">
+            <Icon className="size-4" /> <span className="ov-docs-label">{t(labelKey)}</span>
+          </Link>
         ))}
 
-        <div className="border-t border-slate-700 p-3">
-          <div className="mb-1 flex items-center gap-3 px-3 py-2">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-600 text-xs font-medium">
-              {initialsFrom(user?.fullName)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user?.fullName ?? t("user")}</p>
-              <p className="truncate text-xs text-slate-400">{user?.email ?? ""}</p>
-            </div>
-          </div>
-          <Link
-            href="/change-password"
-            onClick={() => setSidebarOpen(false)}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-          >
-            <span className="size-4 text-center text-xs">••</span>
-            {t("changePassword")}
-          </Link>
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-          >
-            <LogOut className="size-4" />
-            {t("logout")}
-          </button>
+        <div className="ov-user-menu">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<button type="button" className="ov-account-trigger" aria-label={t("user")} />}
+            >
+              <span className="ov-avatar">{initialsFrom(user?.fullName)}</span>
+              <span className="ov-account-copy min-w-0 flex-1 text-left">
+                <span className="block truncate text-sm font-bold">{user?.fullName ?? t("user")}</span>
+                <span className="block truncate text-xs text-[#a9b3ab]">{user?.email ?? ""}</span>
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="ov-account-menu w-56">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-[#a9b3ab]">{user?.email ?? t("user")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => void handleLogout()} className="gap-2 text-[#f2f5f0]">
+                  <LogOut className="size-4" />
+                  {t("logout")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 
@@ -169,20 +259,31 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
         />
       )}
 
-      <div className="min-h-dvh xl:ml-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 xl:hidden"
-            aria-label={t("openNavigation")}
-          >
-            <Menu className="size-5" />
-          </button>
-          <h1 className="font-semibold text-slate-800">{t(pageTitle)}</h1>
-          <LanguageSwitcher className="ml-auto" />
+      <div ref={mainAreaRef} className={cn("ov-app-content min-h-dvh transition-[margin] duration-[380ms]", sidebarCollapsed ? "xl:ml-[76px]" : "xl:ml-[260px]")}>
+        <div className="ov-background-grid" aria-hidden="true" />
+        <div className="ov-aurora" aria-hidden="true"><i /><i /><i /><i /></div>
+        <div className="ov-spotlight" aria-hidden="true" />
+        <header className="ov-topbar sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-8">
+          <div className="ov-topbar-controls ml-auto">
+            <button
+              type="button"
+              className="ov-topbar-control"
+              onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            >
+              {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
+              <span>{theme === "light" ? "Dark" : "Light"}</span>
+            </button>
+            <span className="ov-topbar-divider" aria-hidden="true" />
+            <LanguageSwitcher
+              className="ov-topbar-control"
+              menuClassName="ov-language-menu"
+              menuStyle={languageMenuStyle}
+              variant="dark"
+            />
+          </div>
         </header>
-        <main className={cn("p-4 sm:p-6", contentClassName)}>{children}</main>
+        <main className={cn("ov-main p-4 sm:p-8", contentClassName)}>{children}</main>
       </div>
     </div>
   )
@@ -201,11 +302,7 @@ export function ProtectedAppShell({ children }: { children: ReactNode }) {
   }, [router, status])
 
   if (status === "rehydrating") {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-slate-100">
-        <Loader2 className="size-8 animate-spin text-indigo-600" aria-label={common("loading")} />
-      </div>
-    )
+    return <AppLoadingScreen label={common("loading")} />
   }
 
   if (status === "unauthenticated") {
@@ -216,10 +313,9 @@ export function ProtectedAppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Soft admin boundary: same login gate as {@link ProtectedAppShell} plus an
- * `ORG_OWNER` requirement. Used by the `(admin)` route-group layout; after the
- * Keycloak hard split this maps to the `openvie-admin` client + gateway check
- * on `/api/v1/admin/*`.
+ * Admin boundary: same login gate as {@link ProtectedAppShell} plus an
+ * `ORG_OWNER` requirement. Used by the `(admin)` route-group layout served at
+ * `/admin/*` by the `frontend-admin` deployment (OIDC client `openvie-admin`).
  */
 export function ProtectedAdminShell({ children }: { children: ReactNode }) {
   const common = useTranslations("Common")
@@ -236,11 +332,7 @@ export function ProtectedAdminShell({ children }: { children: ReactNode }) {
   }, [router, status])
 
   if (status === "rehydrating") {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-slate-100">
-        <Loader2 className="size-8 animate-spin text-indigo-600" aria-label={common("loading")} />
-      </div>
-    )
+    return <AppLoadingScreen label={common("loading")} />
   }
 
   if (status === "unauthenticated") {
