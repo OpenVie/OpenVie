@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
+let workspaceCache: { accessToken: string; workspaces: WorkspaceSummary[] } | null = null
+
+function cachedWorkspaces(accessToken: string | null) {
+  return accessToken && workspaceCache?.accessToken === accessToken
+    ? workspaceCache.workspaces
+    : []
+}
+
 /**
  * Active-workspace picker. Switching re-issues the session token scoped to
  * the chosen workspace, then reloads the route so every workspace-scoped
@@ -27,7 +35,7 @@ export function WorkspaceSwitcher() {
   const user = useAuthStore((s) => s.user)
   const accessToken = useAuthStore((s) => s.accessToken)
   const setAuth = useAuthStore((s) => s.setAuth)
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(() => cachedWorkspaces(accessToken))
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
 
@@ -36,7 +44,9 @@ export function WorkspaceSwitcher() {
     let active = true
     listWorkspacesApi(accessToken)
       .then((list) => {
-        if (active) setWorkspaces(list)
+        if (!active) return
+        workspaceCache = { accessToken, workspaces: list }
+        setWorkspaces(list)
       })
       .catch(() => {
         if (active) setWorkspaces([])

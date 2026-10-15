@@ -10,6 +10,7 @@ import { logoutApi } from "@/lib/auth-api"
 import { visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
+import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +56,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const languageMenuStyle: CSSProperties = liquidGlassMenuStyle(theme)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef<HTMLElement>(null)
   const [navIndicator, setNavIndicator] = useState({ top: 0, left: 0, width: 0, height: 0, visible: false })
@@ -135,7 +137,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
       >
         <div className="flex items-center px-3 pb-3 pt-1">
           <Link href="/" className="ov-brand" onClick={() => setSidebarOpen(false)}>
-            <span className="ov-brand-mark"><Image src="/logo.png" alt="OpenVie Logo" width={34} height={34} /></span>
+            <span className="ov-brand-mark"><Image src="/images/openvie-logo.svg" alt="OpenVie Logo" width={34} height={34} /></span>
             <span>OpenVie</span>
           </Link>
           <button
@@ -154,7 +156,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
           >
             {sidebarCollapsed ? (
               <>
-                <Image className="ov-sidebar-expand-logo" src="/logo.png" alt="" width={34} height={34} />
+                <Image className="ov-sidebar-expand-logo" src="/images/openvie-logo.svg" alt="" width={34} height={34} />
                 <PanelLeftOpen className="ov-sidebar-expand-icon size-5" />
               </>
             ) : <PanelLeftClose className="size-5" />}
@@ -262,16 +264,24 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
         <div className="ov-aurora" aria-hidden="true"><i /><i /><i /><i /></div>
         <div className="ov-spotlight" aria-hidden="true" />
         <header className="ov-topbar sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-8">
-          <button
-            type="button"
-            className="ov-theme-toggle ml-auto"
-            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
-            aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-          >
-            {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
-            <span>{theme === "light" ? "Dark" : "Light"}</span>
-          </button>
-          <LanguageSwitcher className="ov-language-switcher" variant="dark" />
+          <div className="ov-topbar-controls ml-auto">
+            <button
+              type="button"
+              className="ov-topbar-control"
+              onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            >
+              {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
+              <span>{theme === "light" ? "Dark" : "Light"}</span>
+            </button>
+            <span className="ov-topbar-divider" aria-hidden="true" />
+            <LanguageSwitcher
+              className="ov-topbar-control"
+              menuClassName="ov-language-menu"
+              menuStyle={languageMenuStyle}
+              variant="dark"
+            />
+          </div>
         </header>
         <main className={cn("ov-main p-4 sm:p-8", contentClassName)}>{children}</main>
       </div>

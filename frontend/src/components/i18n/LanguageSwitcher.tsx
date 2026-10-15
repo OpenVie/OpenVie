@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useTransition } from "react";
+import { useTransition, type CSSProperties } from "react";
 import { Check, Globe2 } from "lucide-react";
 import {
   DropdownMenu,
@@ -16,6 +16,8 @@ import { BEFORE_LOCALE_CHANGE_EVENT } from "@/hooks/useLocaleChangeDraft";
 
 type LanguageSwitcherProps = {
   className?: string;
+  menuClassName?: string;
+  menuStyle?: CSSProperties;
   variant?: "light" | "dark";
   showName?: boolean;
 };
@@ -27,7 +29,9 @@ const localeLabels: Record<AppLocale, "english" | "vietnamese"> = {
 
 export function LanguageSwitcher({
   className,
-  variant = "light",
+  menuClassName,
+  menuStyle,
+
   showName = false,
 }: LanguageSwitcherProps) {
   const locale = useLocale() as AppLocale;
@@ -45,8 +49,6 @@ export function LanguageSwitcher({
     startTransition(() => router.replace(destination, { locale: nextLocale }));
   }
 
-  const dark = variant === "dark";
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -56,10 +58,7 @@ export function LanguageSwitcher({
             disabled={isPending}
             aria-label={t("language")}
             className={cn(
-              "inline-flex h-9 items-center justify-center gap-2 rounded-md border px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
-              dark
-                ? "border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700"
-                : "border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-50",
+              "inline-flex h-auto items-center justify-center gap-1.5 rounded-md border-none px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
               className,
             )}
           />
@@ -68,7 +67,12 @@ export function LanguageSwitcher({
         <Globe2 className="size-4" aria-hidden="true" />
         <span>{showName ? t(localeLabels[locale]) : locale.toUpperCase()}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className={cn("w-44", menuClassName)}
+        style={menuStyle}
+      >
         {(["en", "vi"] as const).map((option) => (
           <DropdownMenuItem
             key={option}

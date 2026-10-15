@@ -364,7 +364,49 @@ html[data-ov-theme="light"] .ov-loading-screen {
 .ov-topbar { min-height: 68px; padding: 16px clamp(16px, 3vw, 36px) 0; background: transparent; }
 .ov-icon-button { display: grid; place-items: center; border-radius: 9px; padding: 7px; color: #c7cfc8; transition: background 160ms ease, color 160ms ease; }
 .ov-icon-button:hover { background: rgb(255 255 255 / .08); color: #fff; }
-.ov-language-switcher { border-color: rgb(255 255 255 / .12) !important; background: rgb(255 255 255 / .05) !important; color: #dce3db !important; }
+.ov-topbar-controls { display: inline-flex; align-items: center; border: 1px solid rgb(255 255 255 / .1); border-radius: 999px; background: rgb(255 255 255 / .04); backdrop-filter: blur(12px); }
+.ov-topbar-control { display: inline-flex; align-items: center; gap: 6px; border: none !important; border-radius: 999px; padding: 7px 14px; background: transparent !important; color: #c7cfc8; font-size: 13px; font-weight: 600; transition: color .18s, background .18s; cursor: pointer; }
+.ov-topbar-control:hover { color: #f2f5f0; background: rgb(255 255 255 / .08) !important; }
+.ov-topbar-divider { width: 1px; height: 16px; background: rgb(255 255 255 / .12); flex-shrink: 0; }
+.ov-language-menu { position: relative; isolation: isolate; border-radius: 16px !important; overflow: hidden; }
+.ov-language-menu::before { position: absolute; z-index: 0; inset: 0; border-radius: inherit; background: linear-gradient(180deg, rgb(255 255 255 / .12) 0%, transparent 50%); content: ""; pointer-events: none; }
+.ov-language-menu::after { position: absolute; z-index: 0; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / .15); content: ""; pointer-events: none; }
+.ov-language-menu [data-slot="dropdown-menu-item"] { position: relative; z-index: 1; border-radius: 10px; color: inherit !important; transition: background .15s, color .15s; }
+.ov-language-menu [data-slot="dropdown-menu-item"]:focus { background: rgb(255 255 255 / .12) !important; backdrop-filter: blur(8px); }
+.ov-language-menu [data-slot="dropdown-menu-item"] svg { color: #c8f53c !important; }
+
+/* Documentation shares the OpenVie visual system used by the application shell. */
+.ov-docs-shell { --ov-docs-bg: #07090c; --ov-docs-surface: rgb(255 255 255 / .045); --ov-docs-surface-strong: rgb(255 255 255 / .075); --ov-docs-border: rgb(255 255 255 / .13); --ov-docs-text: #f2f5f0; --ov-docs-muted: #a9b3ab; --ov-docs-code: #d9ff68; position: relative; isolation: isolate; min-height: 100dvh; overflow: hidden; background-color: var(--ov-docs-bg); background-image: linear-gradient(rgb(255 255 255 / .035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / .035) 1px, transparent 1px); background-size: 56px 56px; color: var(--ov-docs-text); }
+.ov-docs-shell::after { position: fixed; z-index: 0; top: -220px; right: -160px; width: 640px; height: 640px; border-radius: 50%; background: radial-gradient(closest-side, rgb(200 245 60 / .16), transparent); content: ""; filter: blur(12px); pointer-events: none; }
+.ov-docs-shell > :not(.fixed) { position: relative; z-index: 1; }
+.ov-docs-shell.ov-docs-light { --ov-docs-bg: #f5f6f0; --ov-docs-surface: rgb(255 255 255 / .46); --ov-docs-surface-strong: rgb(255 255 255 / .65); --ov-docs-border: rgb(16 24 14 / .12); --ov-docs-text: #17201b; --ov-docs-muted: #5c685f; --ov-docs-code: #527400; background-image: linear-gradient(rgb(16 24 14 / .04) 1px, transparent 1px), linear-gradient(90deg, rgb(16 24 14 / .04) 1px, transparent 1px); }
+.ov-docs-light::after { background: radial-gradient(closest-side, rgb(200 245 60 / .38), transparent); }
+.ov-docs-header { border-color: var(--ov-docs-border) !important; background: color-mix(in srgb, var(--ov-docs-bg) 74%, transparent) !important; backdrop-filter: blur(18px) saturate(140%); }
+.ov-docs-theme, .ov-docs-language { height: 36px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--ov-docs-border) !important; border-radius: 999px; background: var(--ov-docs-surface) !important; padding: 0 13px; color: var(--ov-docs-text) !important; font-size: 13.5px; font-weight: 600; transition: transform .2s, background .2s, border-color .2s; }
+.ov-docs-theme:hover, .ov-docs-language:hover { transform: translateY(-1px); border-color: #c8f53c !important; background: var(--ov-docs-surface-strong) !important; }
+.ov-docs-shell [class~="border-slate-200"], .ov-docs-shell [class~="border-slate-300"] { border-color: var(--ov-docs-border) !important; }
+.ov-docs-shell [class~="text-slate-950"], .ov-docs-shell [class~="text-slate-900"], .ov-docs-shell [class~="text-slate-800"] { color: var(--ov-docs-text) !important; }
+.ov-docs-shell [class~="text-slate-700"], .ov-docs-shell [class~="text-slate-600"], .ov-docs-shell [class~="text-slate-500"], .ov-docs-shell [class~="text-slate-400"] { color: var(--ov-docs-muted) !important; }
+.ov-docs-shell [class~="bg-white"], .ov-docs-shell [class~="bg-slate-50"], .ov-docs-shell [class~="bg-slate-100"] { background-color: var(--ov-docs-surface) !important; }
+.ov-docs-shell [class~="rounded-lg"][class~="border"], .ov-docs-shell [class~="rounded-xl"][class~="border"] { background: var(--ov-docs-surface) !important; box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 14px 28px -24px rgb(0 0 0 / .55); }
+.ov-docs-shell [class~="bg-indigo-50"] { background-color: rgb(200 245 60 / .12) !important; }
+.ov-docs-shell [class~="text-indigo-600"], .ov-docs-shell [class~="text-indigo-700"] { color: #8bbd00 !important; }
+.ov-docs-shell [class~="bg-indigo-600"] { background-color: #c8f53c !important; color: #10150f !important; }
+.ov-docs-shell [class~="hover:bg-indigo-700"]:hover { background-color: #d9ff68 !important; }
+.ov-docs-shell [class~="hover:border-indigo-300"]:hover { border-color: #c8f53c !important; }
+.ov-docs-shell [class~="hover:bg-slate-100"]:hover, .ov-docs-shell [class~="hover:bg-slate-50"]:hover { background-color: rgb(200 245 60 / .1) !important; }
+.ov-docs-shell [class~="border-blue-200"], .ov-docs-shell [class~="border-emerald-200"], .ov-docs-shell [class~="border-amber-200"], .ov-docs-shell [class~="border-violet-200"] { border-color: rgb(200 245 60 / .45) !important; }
+.ov-docs-shell [class~="bg-blue-50"], .ov-docs-shell [class~="bg-emerald-50"], .ov-docs-shell [class~="bg-amber-50"], .ov-docs-shell [class~="bg-violet-50"] { background-color: rgb(200 245 60 / .09) !important; }
+.ov-docs-shell [class~="text-blue-950"], .ov-docs-shell [class~="text-emerald-950"], .ov-docs-shell [class~="text-amber-950"], .ov-docs-shell [class~="text-violet-950"] { color: var(--ov-docs-text) !important; }
+.ov-docs-shell [class~="text-blue-950"] svg, .ov-docs-shell [class~="text-emerald-950"] svg, .ov-docs-shell [class~="text-amber-950"] svg, .ov-docs-shell [class~="text-violet-950"] svg { color: #c8f53c; }
+.ov-docs-shell code { display: inline-flex; align-items: center; margin: 0 .15em; border: 1px solid rgb(200 245 60 / .38); border-radius: 6px; background: linear-gradient(135deg, rgb(200 245 60 / .16), rgb(255 255 255 / .035)); box-shadow: inset 0 1px 0 rgb(255 255 255 / .14), 0 3px 10px rgb(0 0 0 / .12); padding: .06rem .38rem; color: var(--ov-docs-code); font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: .84em; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
+
+@keyframes ov-docs-outline-chase { to { --ov-docs-outline-angle: 360deg; } }
+@property --ov-docs-outline-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.ov-docs-action { position: relative; isolation: isolate; }
+.ov-docs-action::after { position: absolute; z-index: 2; inset: -2px; border-radius: inherit; background: conic-gradient(from var(--ov-docs-outline-angle), transparent 0deg 16deg, rgb(255 255 255 / .92) 38deg 66deg, transparent 92deg 180deg, #c8f53c 206deg 238deg, transparent 266deg 360deg); content: ""; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); padding: 1px; pointer-events: none; opacity: 0; transition: opacity .18s ease; }
+.ov-docs-action:hover::after, .ov-docs-action:focus-visible::after, .ov-docs-action:active::after { animation: ov-docs-outline-chase 1.35s linear infinite; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .ov-docs-action:hover::after, .ov-docs-action:focus-visible::after, .ov-docs-action:active::after { animation: none; } }
 
 .ov-main {
   position: relative;
@@ -433,12 +475,17 @@ html[data-ov-theme="light"] .ov-loading-screen {
 
 .ov-chat-surface { background: transparent; }
 .ov-chat-history { background: rgb(255 255 255 / .025); }
-.ov-chat-empty h2 { margin: 0; max-width: 900px; font-size: clamp(36px, 5.2vw, 58px); font-weight: 800; letter-spacing: -.035em; line-height: 1.1; }
+.ov-chat-empty h2 { margin: 0; max-width: 900px; font-size: clamp(30px, 4.6vw, 56px); font-weight: 800; letter-spacing: -.035em; line-height: 1.15; }
+.ov-slide-up-line { display: block; overflow: hidden; white-space: nowrap; }
+.ov-slide-up-char { display: inline-block; opacity: 0; transform: translateY(110%); animation: ov-char-up .4s cubic-bezier(.19,1,.22,1) forwards; animation-delay: calc(.25s + var(--line-index, 0) * .3s + var(--char-index, 0) * .018s); }
 .ov-chat-empty > p { max-width: 540px; font-size: 16.5px; line-height: 1.6; }
 .ov-chat-eyebrow { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 24px; border: 1px solid rgb(255 255 255 / .1); border-radius: 999px; padding: 7px 14px; background: rgb(255 255 255 / .05); color: #c7cfc8; font-size: 12.5px; font-weight: 600; }
 .ov-chat-eyebrow span { width: 8px; height: 8px; border-radius: 50%; background: #c8f53c; box-shadow: 0 0 0 0 rgb(200 245 60 / .5); animation: ov-pulse 2s infinite; }
 .ov-up { animation: ov-up .8s cubic-bezier(.2,.7,.2,1) both; }
-.ov-shell .ov-chat-empty .ov-shine { background: linear-gradient(100deg, #f2f5f0 30%, #c8f53c 50%, #f2f5f0 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent !important; animation: ov-shine 7s linear infinite; }
+.ov-shell .ov-chat-empty .ov-shine { color: #f2f5f0; }
+.ov-shell .ov-chat-empty .ov-shine-active { background: linear-gradient(100deg, #f2f5f0 30%, #c8f53c 50%, #f2f5f0 70%); background-size: 200% 100%; background-position: 100% 0; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: ov-shine-in .6s ease forwards, ov-shine 7s linear 0.6s infinite; }
+.ov-shine-active .ov-slide-up-char { animation: none; opacity: 1; transform: none; filter: none; }
+.ov-shine-active .ov-slide-up-line { overflow: visible; }
 .ov-upload-stage { position: relative; width: min(720px, 100%) !important; }
 .ov-chat-dropzone { min-height: 150px; border: 0; border-radius: 24px; padding: 24px; background: rgb(255 255 255 / .035); transition: transform 180ms ease, background 180ms ease; }
 .ov-chat-dropzone:hover { transform: scale(1.01); background: rgb(200 245 60 / .07); }
@@ -462,6 +509,11 @@ html[data-ov-theme="light"] .ov-loading-screen {
   to { opacity: 1; transform: none; filter: none; }
 }
 
+@keyframes ov-char-up {
+  from { opacity: 0; transform: translateY(100%); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
 @keyframes ov-grid { to { background-position: 0 56px; } }
 @keyframes ov-orb { 0%, 100% { transform: translate(-50%, 0) scale(1); opacity: .5; } 50% { transform: translate(-50%, 24px) scale(1.2); opacity: .8; } }
 @keyframes ov-aurora-a { 0%,100% { transform: translate(0,0) scale(1); opacity: .12; } 25% { transform: translate(22vw,16vh) scale(1.3); opacity: .42; } 50% { transform: translate(38vw,2vh) scale(.9); opacity: .18; } 75% { transform: translate(10vw,34vh) scale(1.15); opacity: .4; } }
@@ -471,6 +523,7 @@ html[data-ov-theme="light"] .ov-loading-screen {
 @keyframes ov-ants { to { stroke-dashoffset: -48; } }
 @keyframes ov-bob { 0%, 100% { transform: translateY(0) rotate(var(--ov-rotate)); } 50% { transform: translateY(-12px) rotate(calc(var(--ov-rotate) + 3deg)); } }
 @keyframes ov-shine { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+@keyframes ov-shine-in { from { background-position: 100% 0; } to { background-position: -200% 0; } }
 
 @keyframes ov-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgb(200 245 60 / .5); }
@@ -529,9 +582,10 @@ html[data-theme="light"] {
 .ov-light .ov-docs-link:hover { border-color: #8bbd00; background: #f2f7e7; }
 .ov-light .ov-icon-button { color: #526057; }
 .ov-light .ov-icon-button:hover { background: #edf1e9; color: #17201b; }
-.ov-light .ov-language-switcher, .ov-light .ov-theme-toggle { border-color: #cfd8cb !important; background: rgb(255 255 255 / .75) !important; color: #39443b !important; }
-.ov-theme-toggle { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(255 255 255 / .12); border-radius: 999px; padding: 9px 16px; background: rgb(255 255 255 / .05); color: #dce3db; font-size: 13.5px; font-weight: 600; transition: color .2s, background .2s, border-color .2s; }
-.ov-theme-toggle:hover { transform: translateY(-1px); border-color: #c8f53c; background: rgb(255 255 255 / .1); }
+.ov-light .ov-topbar-controls { border-color: rgb(16 24 14 / .1); background: rgb(255 255 255 / .6); backdrop-filter: blur(12px); }
+.ov-light .ov-topbar-control { color: #4b564e; }
+.ov-light .ov-topbar-control:hover { color: #10150f; background: rgb(16 24 14 / .06) !important; }
+.ov-light .ov-topbar-divider { background: rgb(16 24 14 / .1); }
 
 .ov-light .ov-background-grid { background-image: linear-gradient(rgb(105 88 34 / .07) 1px, transparent 1px), linear-gradient(90deg, rgb(105 88 34 / .07) 1px, transparent 1px); }
 .ov-light .ov-background-orb { background: radial-gradient(closest-side, rgb(233 202 77 / .38), transparent); opacity: .72; }
@@ -559,7 +613,7 @@ html[data-theme="light"] {
 .ov-light .ov-change-password-link { border-color: #cfd8cb; color: #39443b; }
 .ov-light .ov-change-password-link:hover { border-color: #8bbd00; background: #f2f7e7; }
 .ov-light .ov-chat-composer { border-color: #cfd8cb !important; }
-.ov-light .ov-chat-empty .ov-shine { background-image: linear-gradient(100deg, #fff 30%, #c8f53c 50%, #fff 70%); background-size: 200% 100%; text-shadow: 0 2px 2px rgb(44 34 7 / .38), 0 5px 18px rgb(44 34 7 / .28); }
+.ov-light .ov-chat-empty .ov-shine { color: #10150f; }
 .ov-light .ov-chat-eyebrow { border-color: #d2dacd; background: rgb(255 255 255 / .7); color: #526057; }
 .ov-light .ov-chat-eyebrow span { background: #8bbd00; }
 .ov-light .ov-chat-dropzone { background: rgb(255 255 255 / .65); }
@@ -602,7 +656,7 @@ html[data-theme="light"] {
 .ov-light .ov-docs-link:hover { border-color: #c8f53c; background: rgb(16 24 14 / .07); }
 .ov-light .ov-icon-button { color: #4b564e; }
 .ov-light .ov-icon-button:hover { background: rgb(16 24 14 / .07); color: #10150f; }
-.ov-light .ov-language-switcher, .ov-light .ov-theme-toggle { border-color: rgb(16 24 14 / .12) !important; background: transparent !important; color: #4b564e !important; }
+
 .ov-light .ov-background-grid { background-image: linear-gradient(rgb(16 24 14 / .04) 1px, transparent 1px), linear-gradient(90deg, rgb(16 24 14 / .04) 1px, transparent 1px); }
 .ov-light .ov-background-orb { background: radial-gradient(closest-side, #c8f53c, transparent); opacity: 1; }
 .ov-light.ov-shell .bg-white, .ov-light.ov-shell .bg-slate-50 { background-color: rgb(16 24 14 / .04) !important; }
@@ -626,13 +680,14 @@ html[data-theme="light"] {
 .ov-light .ov-change-password-link { border-color: rgb(16 24 14 / .16); color: #2a352d; }
 .ov-light .ov-change-password-link:hover { border-color: #c8f53c; background: rgb(16 24 14 / .07); }
 .ov-light .ov-chat-composer { border-color: rgb(16 24 14 / .14) !important; }
-.ov-light .ov-chat-empty .ov-shine {
+.ov-light .ov-chat-empty .ov-shine-active {
   background-image: linear-gradient(100deg, #10150f 30%, #10150f 42%, #8bbd00 47%, #c8f53c 50%, #8bbd00 53%, #10150f 58%, #10150f 70%);
   background-size: 200% 100%;
+  background-position: 100% 0;
   -webkit-background-clip: text;
   background-clip: text;
-  color: transparent !important;
-  animation: ov-shine 7s linear infinite;
+  -webkit-text-fill-color: transparent;
+  animation: ov-shine-in .6s ease forwards, ov-shine 7s linear 0.6s infinite;
   text-shadow: none;
 }
 .ov-light .ov-chat-eyebrow { border-color: rgb(16 24 14 / .1); background: rgb(16 24 14 / .05); color: #2a352d; }
@@ -1126,7 +1181,7 @@ html[data-theme="light"] [data-slot="select-item"]:focus {
   display: grid;
   place-items: center;
   color: transparent;
-  background-image: url("/logo.png");
+  background-image: url("/images/openvie-logo.svg");
   background-position: center;
   background-repeat: no-repeat;
   background-size: 46px;
