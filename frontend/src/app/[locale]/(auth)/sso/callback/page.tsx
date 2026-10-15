@@ -77,41 +77,39 @@ function SsoCallbackContent() {
   }, [code, providerError, router, searchParams, setAuth, state, t]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-md shadow-md bg-white">
-        <CardHeader className="items-center text-center">
-          <Image src="/logo.png" alt="" width={32} height={32} className="mb-2" />
-          <CardTitle>{error ? t("sso.failedTitle") : t("sso.completingTitle")}</CardTitle>
-          <CardDescription>
-            {error ? t("sso.failedDescription") : t("sso.completingDescription")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-center">
-          {error ? (
-            <>
-              <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-sm text-red-800">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                <p>{error}</p>
-              </div>
-              <Link
-                href="/login"
-                className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-              >
-                {t("sso.backToLogin")}
-              </Link>
-            </>
-          ) : (
-            <Loader2 className="mx-auto size-7 animate-spin text-indigo-600" aria-label={t("loading")} />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <Card className="w-full max-w-md shadow-md bg-white">
+      <CardHeader className="items-center text-center">
+        <Image src="/images/openvie-logo.svg" alt="" width={32} height={32} className="mb-2" />
+        <CardTitle>{error ? t("sso.failedTitle") : t("sso.completingTitle")}</CardTitle>
+        <CardDescription>
+          {error ? t("sso.failedDescription") : t("sso.completingDescription")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="text-center">
+        {error ? (
+          <>
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-sm text-red-800">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <p>{error}</p>
+            </div>
+            <Link
+              href="/login"
+              className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+            >
+              {t("sso.backToLogin")}
+            </Link>
+          </>
+        ) : (
+          <Loader2 className="mx-auto size-7 animate-spin text-indigo-600" aria-label={t("loading")} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 export default function SsoCallbackPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+    <Suspense fallback={null}>
       <SsoCallbackContent />
     </Suspense>
   );
