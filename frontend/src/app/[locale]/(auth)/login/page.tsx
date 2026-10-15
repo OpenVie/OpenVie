@@ -8,7 +8,6 @@ import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
 import { AlertCircle, Eye, EyeOff, Loader2, LogIn, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { authApiErrorMessage, loginApi, registrationStatusApi } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";

@@ -24,9 +24,9 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/users",
-      "/organization",
-      "/workspaces",
-      "/settings",
+      "/admin/organization",
+      "/admin/workspaces",
+      "/admin/settings",
       "/documentation",
     ]);
   });
@@ -52,10 +52,12 @@ describe("application navigation", () => {
 
   it("keeps the admin boundary in sync with owner-only destinations", () => {
     expect(adminNavigation.map((item) => item.href).sort()).toEqual([...ADMIN_PATHS].sort());
-    expect(isAdminPath("/organization")).toBe(true);
-    expect(isAdminPath("/workspaces")).toBe(true);
-    expect(isAdminPath("/settings")).toBe(true);
-    expect(isAdminPath("/vi/settings")).toBe(true);
+    expect(isAdminPath("/admin/organization")).toBe(true);
+    expect(isAdminPath("/admin/workspaces")).toBe(true);
+    expect(isAdminPath("/admin/settings")).toBe(true);
+    expect(isAdminPath("/vi/admin/settings")).toBe(true);
+    expect(isAdminPath("/organization")).toBe(false);
+    expect(isAdminPath("/settings")).toBe(false);
     expect(isAdminPath("/documents")).toBe(false);
     expect(isAdminPath("/users")).toBe(false);
     expect(isAdminPath(undefined)).toBe(false);
