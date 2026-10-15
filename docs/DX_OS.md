@@ -29,7 +29,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 
 | Dịch vụ lõi | Hiện trạng kiểm chứng | Trạng thái | Việc cần làm |
 | --- | --- | --- | --- |
-| **Định danh, SSO** | Mật khẩu + JWT, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), xoay vòng token | **Chưa đạt** (chưa có SSO/OIDC/MFA) | Tích hợp Keycloak làm IdP và cấu hình Resource Server |
+| **Định danh, SSO** | Keycloak OIDC IdP (Authorization Code + PKCE S256), Spring Boot SSO exchange (`/api/v1/auth/sso/exchange`), mật khẩu + JWT, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), xoay vòng token | **Đạt** | Xem [KEYCLOAK.md](KEYCLOAK.md) và [DEVELOPMENT §5](DEVELOPMENT.md#kiểm-tra-đăng-nhập-sso-qua-apisix) |
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (20 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
 | **Quản trị dữ liệu phi cấu trúc** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), hấp thụ đa định dạng | **Đạt** | Chưa có OCR / âm thanh / video |
@@ -52,7 +52,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 ### 6. Bảy lớp công nghệ tham chiếu
 
 - **Lớp 1 (Trải nghiệm):** Next.js + Tailwind CSS (*Một phần*).
-- **Lớp 2 (Biên mạng & An toàn):** Apache APISIX, Spring Security JWT (*Một phần* - thiếu IdP/WAF).
+- **Lớp 2 (Biên mạng & An toàn):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Một phần* - thiếu WAF).
 - **Lớp 3 (Tác nghiệp & Trạng thái):** PostgreSQL, RabbitMQ, gRPC (*Một phần*).
 - **Lớp 4 (Tự động hóa & DevSecOps):** GitHub Actions CI (*Một phần* - thiếu BPMN).
 - **Lớp 5 (Dữ liệu hội tụ & Sổ cái):** RabbitMQ, SeaweedFS (*Một phần* - thiếu Lakehouse).
@@ -84,7 +84,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 
 | Core Service | Delivered Implementation | Status | Roadmap |
 | --- | --- | --- | --- |
-| **Identity & SSO** | Password + JWT, 3-role RBAC (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), token rotation | **Not Met** (no SSO/OIDC/MFA) | Integrate Keycloak as IdP |
+| **Identity & SSO** | Keycloak OIDC IdP (Authorization Code flow + PKCE S256), Spring Boot SSO token exchange (`/api/v1/auth/sso/exchange`), password + JWT, 3-role RBAC (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), token rotation | **Achieved** | See [KEYCLOAK.md](KEYCLOAK.md) and [DEVELOPMENT §5](DEVELOPMENT.md#verifying-sso-login-through-apisix) |
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Structured Data** | PostgreSQL 16 + Flyway (20 business tables with tenant scoping) | **Achieved** | — |
 | **Unstructured Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), asynchronous multi-format ingestion | **Achieved** | OCR / audio / video not delivered |
@@ -107,7 +107,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 ### 6. Seven Reference Technology Layers
 
 - **Layer 1 (Experience):** Next.js, React, Tailwind CSS (*Partial*).
-- **Layer 2 (Perimeter & Security):** Apache APISIX, Spring Security JWT (*Partial* - missing IdP/WAF).
+- **Layer 2 (Perimeter & Security):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Partial* - missing WAF).
 - **Layer 3 (Operations & State):** PostgreSQL, RabbitMQ, gRPC (*Partial*).
 - **Layer 4 (Automation & DevSecOps):** GitHub Actions CI (*Partial* - missing BPMN).
 - **Layer 5 (Hyperconverged Data & Ledger):** RabbitMQ, SeaweedFS (*Partial* - missing Lakehouse).
