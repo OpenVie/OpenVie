@@ -45,6 +45,44 @@ routes:
       nodes:
         "host.docker.internal:8080": 1
 
+  # Keycloak OIDC realm authentication endpoints (SSO login, token, discovery).
+  # Rate limit matches edge-auth to protect authentication flows from brute force.
+  - uri: /realms/*
+    name: edge-keycloak-realms
+    priority: 20
+    plugins:
+      limit-req:
+        key: remote_addr
+        rate: 10
+        burst: 20
+        nodelay: true
+        rejected_code: 429
+        rejected_msg: "rate limit exceeded at the edge"
+    upstream:
+      type: roundrobin
+      pass_host: pass
+      nodes:
+        "keycloak:8080": 1
+
+  # Keycloak static theme assets (CSS, JS, images, fonts).
+  - uri: /resources/*
+    name: edge-keycloak-resources
+    priority: 20
+    upstream:
+      type: roundrobin
+      pass_host: pass
+      nodes:
+        "keycloak:8080": 1
+
+  # Keycloak client JavaScript adapter.
+  - uri: /js/*
+    name: edge-keycloak-js
+    priority: 20
+    upstream:
+      type: roundrobin
+      pass_host: pass
+      nodes:
+        "keycloak:8080": 1
   # Soft admin boundary (Keycloak-ready): owner-only API surface. Same Spring
   # upstream as edge-api today; kept on its own route so the edge can
   # throttle/authorize it independently. After the hard split the `openvie-admin`
@@ -52,6 +90,7 @@ routes:
   # (20) and edge-api (10) so /api/v1/admin/* never falls into the generic API
   # route. NOTE: local Next.js dev needs no change — next.config.ts rewrites
   # /api/v1/:path* which already covers this prefix.
+
   - uri: /api/v1/admin/*
     name: edge-admin-api
     priority: 15

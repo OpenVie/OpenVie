@@ -47,13 +47,17 @@ docker compose ps
 ```
 *Dịch vụ khởi động:* PostgreSQL (15432), Redis (16379), RabbitMQ (15673/25672), Qdrant (16333), Kuzu Graph (8010), SeaweedFS S3/Filer (18333/18888).
 
-*Chạy cả APISIX trên môi trường phát triển:* `dev-infra` cố ý bỏ gateway để nhẹ.
-Muốn test qua gateway y như production (APISIX `:8088`), chạy full compose dev:
+*Khởi động Keycloak và APISIX để kiểm thử SSO / Gateway:*
+`dev-infra` mặc định bỏ qua Keycloak và Gateway để tiết kiệm tài nguyên. Để kiểm thử tính năng SSO và định tuyến qua gateway:
+```bash
+docker compose up -d keycloak-db keycloak apisix
+```
+Hoặc khởi động toàn bộ hạ tầng phát triển cùng một lệnh:
 ```bash
 docker compose up -d
 docker compose --profile reranker up -d  # kèm TEI Reranker (:8082), tùy chọn
 ```
-Lệnh này dựng thêm APISIX (route `/api/v1/*` → Spring `:8080`, `/*` → Next.js `:3000` trên host qua `host.docker.internal`).
+Lệnh này khởi chạy thêm Keycloak (`:18080`, tự động nạp realm `openvie` từ `keycloak/realm/openvie-realm.json`) và APISIX Gateway (`:8088`, định tuyến `/realms/*`, `/resources/*`, `/js/*` → Keycloak, `/api/v1/*` → Spring Boot `:8080`, `/admin/*` → `:3001`, `/*` → Next.js `:3000`).
 
 #### Bước 4: Cài đặt Ollama và tải mô hình
 Tải và cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal):
@@ -176,21 +180,59 @@ Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật t
 | **Python AI** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Web Frontend** | `npm --prefix frontend run lint` và `npm --prefix frontend run typecheck` |
 
-### Kiểm tra đăng nhập SSO qua APISIX
+### Hướng dẫn chạy và kiểm tra đăng nhập SSO cục bộ (Local SSO Run & First-Run Checks)
 
-Sau khi đã hoàn thành setup ban đầu, tạo một người dùng có cùng email trong Keycloak và
-OpenVie. Bật `SSO_ENABLED=true` cho Spring API, giữ `NEXT_PUBLIC_OIDC_ISSUER` trỏ tới
-realm Keycloak, sau đó chạy full compose để có gateway `:8088`.
+Hệ thống hỗ trợ đăng nhập một lần (Single Sign-On - SSO) qua giao thức OIDC (Authorization Code flow kèm PKCE S256) tích hợp với Keycloak. Để kiểm thử luồng SSO từ một bản clone mới (fresh clone):
 
-1. Mở `http://localhost:8088/login` và chọn **Đăng nhập với SSO**.
-2. Đăng nhập ở Keycloak, kiểm tra browser quay về callback rồi vào ứng dụng qua `:8088`.
-3. Tải lại trang; session phải được khôi phục bằng refresh cookie.
-4. Đăng xuất; tải lại trang phải quay về login. Keycloak SSO session không bị kết thúc bởi
-   logout cục bộ này.
+#### Bước A: Khởi động dịch vụ Keycloak
+1. Khởi động Keycloak và cơ sở dữ liệu Keycloak (hoặc khởi động toàn bộ stack với APISIX):
+   ```bash
+   docker compose up -d keycloak-db keycloak apisix
+   ```
+   *Lưu ý:* Keycloak tự động nhập cấu hình realm `openvie` từ thư mục `keycloak/realm/openvie-realm.json` (chứa sẵn client `openvie-frontend`, `openvie-admin`, `openvie-backend`).
+2. Xác minh Keycloak đã sẵn sàng:
+   ```bash
+   curl --fail http://localhost:18080/realms/openvie/.well-known/openid-configuration
+   ```
 
-Tài khoản SSO chưa có trong OpenVie bị từ chối (`SSO_UNKNOWN_EMAIL`) theo contract hiện tại;
-frontend không tự provision tài khoản dù self-registration có bật.
+#### Bước B: Cấu hình biến môi trường
+1. Trong `api/.env`:
+   ```ini
+   SSO_ENABLED=true
+   SSO_ISSUER_URI=http://localhost:18080/realms/openvie
+   SSO_FRONTEND_CLIENT_ID=openvie-frontend
+   SSO_BACKEND_CLIENT_ID=openvie-backend
+   ```
+2. Trong `frontend/.env.local`:
+   ```ini
+   NEXT_PUBLIC_OIDC_ISSUER=http://localhost:18080/realms/openvie
+   NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-frontend
+   ```
+   *(Nếu truy cập qua APISIX cổng 8088, có thể đặt issuer thành `http://localhost:8088/realms/openvie`).*
+3. Khởi chạy các ứng dụng trên host theo Bước 6 (Spring API `:8080`, Python `:18000`, Frontend `:3000`).
 
+#### Bước C: Chuẩn bị tài khoản người dùng
+1. **Thiết lập tài khoản trong OpenVie:** Mở trình duyệt tại `http://localhost:3000` (hoặc `http://localhost:8088`). Hoàn thành trang `/setup` ban đầu để tạo tổ chức và tài khoản Chủ sở hữu với email (ví dụ: `owner@example.com`).
+2. **Tạo người dùng tương ứng trong Keycloak:**
+   - Mở Keycloak Admin Console: `http://localhost:18080` (đăng nhập: `admin` / `change-me-keycloak-admin`).
+   - Chọn realm **openvie** ở menu thả xuống góc trên bên trái.
+   - Vào mục **Users** -> nhấn **Add user**:
+     - **Username:** `owner` (hoặc `owner@example.com`)
+     - **Email:** `owner@example.com` *(bắt buộc phải trùng khớp với email đã tạo trong OpenVie)*
+     - **Email verified:** bật **On**
+     - Nhấn **Create**.
+   - Chuyển sang tab **Credentials** -> nhấn **Set password**:
+     - **Password:** ví dụ `Password123!`
+     - **Temporary:** tắt **Off**
+     - Nhấn **Save**.
+
+#### Bước D: Thực hiện kiểm tra đăng nhập SSO (First-run checks)
+1. **Đăng nhập:** Mở `http://localhost:3000/login` (hoặc `http://localhost:8088/login`), nhấn nút **Đăng nhập với SSO**.
+2. **Xác thực IdP:** Trình duyệt chuyển hướng đến giao diện đăng nhập Keycloak. Điền thông tin `owner@example.com` và mật khẩu `Password123!`.
+3. **Trao đổi Token (Token Exchange):** Sau khi xác thực, Keycloak chuyển hướng về `/sso/callback?code=...&state=...`. Frontend tiêu thụ giao dịch PKCE một lần và gọi `POST /api/v1/auth/sso/exchange`. Spring API xác thực token từ Keycloak, liên kết danh tính SSO, cấp Access Token và Refresh Token cookie. Trình duyệt tự động chuyển vào màn hình chính.
+4. **Khôi phục phiên (Session Rehydration):** Nhấn tải lại trang (F5) — phiên làm việc được tự động khôi phục nhờ refresh cookie.
+5. **Đăng xuất (Logout):** Nhấn Đăng xuất — ứng dụng xóa phiên cục bộ và đưa về trang đăng nhập.
+6. **Kiểm tra xử lý từ chối (Error handling):** Thử đăng nhập bằng một tài khoản Keycloak có email chưa từng được tạo trong OpenVie — hệ thống sẽ từ chối với mã lỗi `SSO_UNKNOWN_EMAIL` ("Tài khoản chưa được đăng ký trong hệ thống"). Frontend không tự động provision tài khoản.
 ### 6. Xử lý sự cố thường gặp
 
 - **Cổng bị chiếm (Address already in use):** Kiểm tra tiến trình ngầm bằng `lsof -i :18000` hoặc `lsof -i :50051` và đóng chúng trước khi chạy `make dev`.
@@ -245,15 +287,17 @@ docker compose ps
 ```
 *Services started:* PostgreSQL (15432), Redis (16379), RabbitMQ (15673/25672), Qdrant (16333), Kuzu Graph (8010), SeaweedFS (18333/18888).
 
-*Running APISIX in development as well:* `dev-infra` skips the gateway on purpose
-to stay light. To test through the gateway exactly like production (APISIX
-`:8088`), start the full dev compose instead:
+*Starting Keycloak & APISIX for SSO / Gateway verification:*
+`dev-infra` skips Keycloak and the gateway by default to save system resources. To run and test SSO flows and gateway routing:
+```bash
+docker compose up -d keycloak-db keycloak apisix
+```
+Or start the complete development infrastructure:
 ```bash
 docker compose up -d
 docker compose --profile reranker up -d  # plus TEI Reranker (:8082), optional
 ```
-This additionally brings up APISIX (routes `/api/v1/*` → host Spring `:8080`,
-`/*` → host Next.js `:3000` via `host.docker.internal`).
+This brings up Keycloak (`:18080`, automatically importing realm `openvie` from `keycloak/realm/openvie-realm.json`) and the APISIX Gateway (`:8088`, routing `/realms/*`, `/resources/*`, `/js/*` → Keycloak, `/api/v1/*` → host Spring `:8080`, `/admin/*` → `:3001`, `/*` → host Next.js `:3000`).
 
 ### Step 4: Install Ollama and prepare models
 Download and install Ollama natively on the host (for GPU/Metal acceleration):
@@ -377,22 +421,59 @@ Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 | **Python** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Frontend** | `npm --prefix frontend run lint` && `npm --prefix frontend run typecheck` |
 
-### Verifying SSO login through APISIX
+### Local SSO Run & First-Run Verification Guide
 
-After initial setup, create a user with the same email in Keycloak and OpenVie. Enable
-`SSO_ENABLED=true` for the Spring API, keep `NEXT_PUBLIC_OIDC_ISSUER` pointed at the
-Keycloak realm, then start full compose so the `:8088` gateway is available.
+OpenVie supports Single Sign-On (SSO) via OIDC (Authorization Code flow with PKCE S256) integrated with Keycloak. Follow these steps to verify the SSO workflow on a fresh clone:
 
-1. Open `http://localhost:8088/login` and choose **Sign in with SSO**.
-2. Sign in at Keycloak and confirm the browser returns through the callback into the app via
-   `:8088`.
-3. Refresh the page; the refresh cookie must restore the application session.
-4. Sign out; refreshing must return to login. This local logout does not end the Keycloak SSO
-   session.
+#### Step A: Start Keycloak Services
+1. Start Keycloak and its dedicated database (or start the full stack including APISIX):
+   ```bash
+   docker compose up -d keycloak-db keycloak apisix
+   ```
+   *Note:* Keycloak automatically imports the `openvie` realm from `keycloak/realm/openvie-realm.json` (pre-configured with `openvie-frontend`, `openvie-admin`, and `openvie-backend` clients).
+2. Verify Keycloak is ready:
+   ```bash
+   curl --fail http://localhost:18080/realms/openvie/.well-known/openid-configuration
+   ```
 
-An SSO identity without a pre-existing OpenVie account is rejected with `SSO_UNKNOWN_EMAIL`.
-The frontend never auto-provisions an account, even when self-registration is enabled.
+#### Step B: Configure Environment Variables
+1. In `api/.env`:
+   ```ini
+   SSO_ENABLED=true
+   SSO_ISSUER_URI=http://localhost:18080/realms/openvie
+   SSO_FRONTEND_CLIENT_ID=openvie-frontend
+   SSO_BACKEND_CLIENT_ID=openvie-backend
+   ```
+2. In `frontend/.env.local`:
+   ```ini
+   NEXT_PUBLIC_OIDC_ISSUER=http://localhost:18080/realms/openvie
+   NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-frontend
+   ```
+   *(If accessing via the APISIX gateway on port 8088, set the issuer to `http://localhost:8088/realms/openvie`).*
+3. Start the host applications per Step 6 (Spring API `:8080`, Python `:18000`, Frontend `:3000`).
 
+#### Step C: Prepare Matching Accounts
+1. **Initialize OpenVie:** Navigate to `http://localhost:3000` (or `http://localhost:8088`). Complete `/setup` to create the initial organization and owner account (e.g. `owner@example.com`).
+2. **Create Corresponding Keycloak User:**
+   - Open Keycloak Admin Console at `http://localhost:18080` (credentials: `admin` / `change-me-keycloak-admin`).
+   - Select the **openvie** realm from the top-left dropdown.
+   - Go to **Users** -> click **Add user**:
+     - **Username:** `owner` (or `owner@example.com`)
+     - **Email:** `owner@example.com` *(must match the email registered in OpenVie)*
+     - **Email verified:** toggle **On**
+     - Click **Create**.
+   - Navigate to the **Credentials** tab -> click **Set password**:
+     - **Password:** e.g. `Password123!`
+     - **Temporary:** toggle **Off**
+     - Click **Save**.
+
+#### Step D: Run SSO First-Run Checks
+1. **Sign In:** Open `http://localhost:3000/login` (or `http://localhost:8088/login`), click **Sign in with SSO**.
+2. **IdP Authentication:** Browser redirects to Keycloak's login screen. Enter `owner@example.com` and `Password123!`.
+3. **Token Exchange:** Keycloak redirects back to `/sso/callback?code=...&state=...`. The frontend validates the one-time PKCE transaction and calls `POST /api/v1/auth/sso/exchange`. Spring API validates the token, links the SSO identity, issues an Access Token, and sets a secure Refresh Token cookie. Browser enters the dashboard.
+4. **Session Rehydration:** Refresh the page (F5) — the session is smoothly restored via the refresh cookie.
+5. **Sign Out:** Click Sign out — the application clears local session and returns to login.
+6. **Rejection Handling:** Attempting to log in with a Keycloak account whose email is not registered in OpenVie is rejected with `SSO_UNKNOWN_EMAIL`. The frontend never auto-provisions accounts.
 ## 6. Troubleshooting
 
 - **Port conflicts:** Terminate existing processes on 18000 or 50051 before starting `make dev`.
