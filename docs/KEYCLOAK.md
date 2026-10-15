@@ -84,8 +84,8 @@ Sau khi khởi động các dịch vụ ở môi trường phát triển, hãy x
 curl --fail http://localhost:18080/realms/openvie/.well-known/openid-configuration
 
 Kết quả mong đợi: Trả về một tệp cấu hình JSON của OpenID Provider với nhà phát hành (issuer) là http://localhost:18080/realms/openvie. URL tương đương trên môi trường production phải sử dụng tên miền HTTPS công khai đã được cấu hình.
-## Hợp đồng tích hợp cho issue #3 (Frontend OIDC, không sửa FE ở nhánh này)
-Nhánh này chỉ làm backend. Frontend (#3) tích hợp qua đúng một endpoint mới, mọi thứ khác (shape `AuthResponse`, cookie refresh, switch-workspace, session rehydrate) giữ nguyên như login password:
+## Hợp đồng tích hợp SSO (Frontend OIDC & Backend Exchange)
+Quy trình tích hợp OIDC giữa Frontend (`openvie-frontend`, `openvie-admin`), Spring Boot backend (`api/`) và Keycloak:
 * `POST /api/v1/auth/sso/exchange` với body `{ "code", "codeVerifier", "redirectUri" }` (Authorization Code + PKCE S256 cho client public `openvie-frontend`; backend đổi code bằng đúng client này + `code_verifier`, không dùng secret — Keycloak từ chối khi client đổi code khác client nhận code. Secret của `openvie-backend` dành cho machine-to-machine tương lai, đọc từ env phía server, không commit).
 * Thành công → `200` + `AuthResponse` chuẩn (gồm `user.orgRole`, `user.workspaceRole`, `activeWorkspaceId`) + cookie refresh như `/login`. Guard `(admin)` và menu đọc các field này nên SSO xong FE phải nạp `user` đầy đủ, không chỉ giữ token.
 * Lỗi: `404 SSO_UNKNOWN_EMAIL` (email chưa tồn tại — không tự provision), `401 SSO_UNLINKED` (đã có sub lạ/không link được), `403 SSO_ROLE_UNKNOWN` (role Keycloak lạ), `409 SSO_OTP_REQUIRED` (dành riêng tương lai khi org bật xác nhận TOTP; hiện chưa dùng).
