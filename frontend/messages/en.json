@@ -577,6 +577,8 @@
     "visibilityUpdated": "Visibility set to {visibility}",
     "refresh": "Refresh",
     "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
     "creating": "Creating...",
     "empty": "No workspaces yet",
     "table": {

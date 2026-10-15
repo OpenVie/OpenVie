@@ -653,6 +653,262 @@ html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-label"]
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-separator"] { background: rgb(16 24 14 / .1); }
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-item"]:focus { background: rgb(200 245 60 / .16); color: #3a6b08; }
 
+/* Custom theme-aware dialog popups */
+[data-slot="dialog-overlay"] {
+  background: rgb(0 0 0 / .65) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-overlay"],
+html[data-theme="light"] [data-slot="dialog-overlay"] {
+  background: rgb(16 24 14 / .35) !important;
+}
+
+[data-slot="dialog-content"] {
+  border: 1px solid rgb(255 255 255 / .12) !important;
+  border-radius: 20px !important;
+  background: #12161a !important;
+  color: #f2f5f0 !important;
+  box-shadow: 0 24px 60px -15px rgb(0 0 0 / .7) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"],
+html[data-theme="light"] [data-slot="dialog-content"] {
+  border-color: rgb(16 24 14 / .12) !important;
+  background: #ffffff !important;
+  color: #10150f !important;
+  box-shadow: 0 24px 60px -15px rgb(16 24 14 / .2) !important;
+}
+
+[data-slot="dialog-title"] {
+  color: #f2f5f0 !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-title"],
+html[data-theme="light"] [data-slot="dialog-title"] {
+  color: #10150f !important;
+}
+
+[data-slot="dialog-description"] {
+  color: #a9b3ab !important;
+  font-size: 13.5px !important;
+  line-height: 1.5 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-description"],
+html[data-theme="light"] [data-slot="dialog-description"] {
+  color: #5c685f !important;
+}
+
+[data-slot="dialog-footer"] {
+  border-top: 1px solid rgb(255 255 255 / .08) !important;
+  background: rgb(255 255 255 / .02) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-footer"],
+html[data-theme="light"] [data-slot="dialog-footer"] {
+  border-top-color: rgb(16 24 14 / .08) !important;
+  background: rgb(16 24 14 / .02) !important;
+}
+
+[data-slot="dialog-content"] [data-slot="input"] {
+  min-height: 40px !important;
+  border: 1px solid rgb(255 255 255 / .13) !important;
+  border-radius: 12px !important;
+  background: rgb(255 255 255 / .05) !important;
+  color: #f2f5f0 !important;
+  font-size: 13.5px !important;
+  transition: border-color .2s !important;
+}
+
+[data-slot="dialog-content"] [data-slot="input"]:focus {
+  border-color: #c8f53c !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="input"],
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="input"] {
+  border-color: rgb(16 24 14 / .14) !important;
+  background: #ffffff !important;
+  color: #10150f !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="input"]:focus,
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="input"]:focus {
+  border-color: #8bbd00 !important;
+}
+
+[data-slot="dialog-content"] [data-slot="label"] {
+  color: #dce3db !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="label"],
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="label"] {
+  color: #2a352d !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"] {
+  min-height: 38px !important;
+  border-radius: 999px !important;
+  padding: 9px 18px !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  transition: transform .2s, box-shadow .2s, background .2s, border-color .2s !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]) {
+  background: #c8f53c !important;
+  color: #07090c !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover {
+  transform: translateY(-1px) !important;
+  background: #c8f53c !important;
+  box-shadow: 0 10px 25px -8px #c8f53c !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"][data-variant="outline"] {
+  border: 1px solid rgb(255 255 255 / .16) !important;
+  background: transparent !important;
+  color: #dce3db !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"][data-variant="outline"]:hover {
+  border-color: #c8f53c !important;
+  background: rgb(255 255 255 / .07) !important;
+  color: #ffffff !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"][data-variant="destructive"] {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+[data-slot="dialog-content"] [data-slot="button"][data-variant="destructive"]:hover {
+  background: #b91c1c !important;
+  box-shadow: 0 10px 25px -8px rgba(220, 38, 38, .5) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]),
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]) {
+  background: #b8ef27 !important;
+  color: #132000 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover,
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover {
+  box-shadow: 0 10px 25px -8px #8bbd00 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="button"][data-variant="outline"],
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="button"][data-variant="outline"] {
+  border-color: rgb(16 24 14 / .16) !important;
+  color: #2a352d !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="button"][data-variant="outline"]:hover,
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="button"][data-variant="outline"]:hover {
+  border-color: #8bbd00 !important;
+  background: #f2f7e7 !important;
+  color: #17201b !important;
+}
+
+[data-slot="dialog-close"] {
+  color: #8e9992 !important;
+}
+
+[data-slot="dialog-close"]:hover {
+  color: #f2f5f0 !important;
+  background: rgb(255 255 255 / .08) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-close"],
+html[data-theme="light"] [data-slot="dialog-close"] {
+  color: #647069 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-close"]:hover,
+html[data-theme="light"] [data-slot="dialog-close"]:hover {
+  color: #10150f !important;
+  background: rgb(16 24 14 / .07) !important;
+}
+
+[data-slot="dialog-content"] .bg-indigo-600 {
+  background-color: #c8f53c !important;
+  color: #07090c !important;
+}
+
+[data-slot="dialog-content"] .hover\:bg-indigo-700:hover {
+  background-color: #d9ff68 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] .bg-indigo-600,
+html[data-theme="light"] [data-slot="dialog-content"] .bg-indigo-600 {
+  background-color: #b8ef27 !important;
+  color: #132000 !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] .hover\:bg-indigo-700:hover,
+html[data-theme="light"] [data-slot="dialog-content"] .hover\:bg-indigo-700:hover {
+  background-color: #8bbd00 !important;
+}
+
+[data-slot="dialog-content"] [data-slot="select-trigger"] {
+  min-height: 40px !important;
+  border: 1px solid rgb(255 255 255 / .13) !important;
+  border-radius: 12px !important;
+  background: rgb(255 255 255 / .05) !important;
+  color: #f2f5f0 !important;
+  font-size: 13.5px !important;
+}
+
+[data-slot="dialog-content"] [data-slot="select-trigger"]:hover,
+[data-slot="dialog-content"] [data-slot="select-trigger"]:focus {
+  border-color: #c8f53c !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="select-trigger"],
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="select-trigger"] {
+  border-color: rgb(16 24 14 / .14) !important;
+  background: #ffffff !important;
+  color: #10150f !important;
+}
+
+html[data-ov-theme="light"] [data-slot="dialog-content"] [data-slot="select-trigger"]:hover,
+html[data-theme="light"] [data-slot="dialog-content"] [data-slot="select-trigger"]:focus {
+  border-color: #8bbd00 !important;
+}
+
+[data-slot="select-content"] {
+  border: 1px solid rgb(255 255 255 / .14) !important;
+  border-radius: 12px !important;
+  background: #12161a !important;
+  color: #f2f5f0 !important;
+  box-shadow: 0 12px 30px -10px rgb(0 0 0 / .6) !important;
+}
+
+[data-slot="select-item"]:focus {
+  background: rgb(200 245 60 / .16) !important;
+  color: #c8f53c !important;
+}
+
+html[data-ov-theme="light"] [data-slot="select-content"],
+html[data-theme="light"] [data-slot="select-content"] {
+  border-color: rgb(16 24 14 / .14) !important;
+  background: #ffffff !important;
+  color: #10150f !important;
+  box-shadow: 0 12px 30px -10px rgb(0 0 0 / .18) !important;
+}
+
+html[data-ov-theme="light"] [data-slot="select-item"]:focus,
+html[data-theme="light"] [data-slot="select-item"]:focus {
+  background: rgb(200 245 60 / .16) !important;
+  color: #3a6b08 !important;
+}
+
 @media (max-width: 1279px) {
   .ov-sidebar { width: 260px; }
   .ov-sidebar-collapse { display: none !important; }

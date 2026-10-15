@@ -577,6 +577,8 @@
     "visibilityUpdated": "Hiển thị đặt thành {visibility}",
     "refresh": "Tải lại",
     "retry": "Thử lại",
+    "cancel": "Hủy",
+    "save": "Lưu",
     "creating": "Đang tạo...",
     "empty": "Chưa có không gian làm việc",
     "table": {

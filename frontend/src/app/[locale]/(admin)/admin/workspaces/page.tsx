@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { Archive, AlertCircle, Building2, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { Archive, AlertCircle, Building2, Eye, EyeOff, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +36,9 @@ export default function WorkspacesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<WorkspaceView | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<WorkspaceView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const schema = z.object({
@@ -71,16 +74,30 @@ export default function WorkspacesPage() {
     } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.create")); }
   };
 
-  const rename = async (workspace: WorkspaceView) => {
-    const name = window.prompt(t("renamePrompt", { name: workspace.name }), workspace.name);
-    if (!name || name.trim() === workspace.name) return;
-    setBusyId(workspace.id);
+  const openRename = (workspace: WorkspaceView) => {
+    setRenameTarget(workspace);
+    setRenameValue(workspace.name);
+  };
+
+  const onConfirmRename = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!renameTarget) return;
+    const name = renameValue.trim();
+    if (!name || name === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    setBusyId(renameTarget.id);
     try {
-      const updated = await renameWorkspaceApi(request, workspace.id, name.trim());
+      const updated = await renameWorkspaceApi(request, renameTarget.id, name);
       setWorkspaces(current => current.map(item => item.id === updated.id ? updated : item));
       toast.success(t("renamed"));
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.rename")); }
-    finally { setBusyId(null); }
+      setRenameTarget(null);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.rename"));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const toggleVisibility = async (workspace: WorkspaceView) => {
@@ -94,15 +111,23 @@ export default function WorkspacesPage() {
     finally { setBusyId(null); }
   };
 
-  const archive = async (workspace: WorkspaceView) => {
-    if (!window.confirm(t("confirmArchive", { name: workspace.name }))) return;
-    setBusyId(workspace.id);
+  const openArchive = (workspace: WorkspaceView) => {
+    setArchiveTarget(workspace);
+  };
+
+  const onConfirmArchive = async () => {
+    if (!archiveTarget) return;
+    setBusyId(archiveTarget.id);
     try {
-      await archiveWorkspaceApi(request, workspace.id);
-      toast.success(t("archived", { name: workspace.name }));
+      await archiveWorkspaceApi(request, archiveTarget.id);
+      toast.success(t("archived", { name: archiveTarget.name }));
+      setArchiveTarget(null);
       await load();
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.archive")); }
-    finally { setBusyId(null); }
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.archive"));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
@@ -128,17 +153,87 @@ export default function WorkspacesPage() {
           <TableCell className="text-sm text-slate-500">{workspace.memberCount}</TableCell>
           <TableCell className="text-sm text-slate-500">{formatDate(workspace.createdAt)}</TableCell>
           <TableCell className="space-x-2 text-right">
-            <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => void rename(workspace)}>{t("rename")}</Button>
+            <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>{t("rename")}</Button>
             <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
               {workspace.visibility === "PUBLIC" ? <EyeOff className="mr-1 size-3.5" /> : <Eye className="mr-1 size-3.5" />}
               {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
             </Button>
-            {!workspace.isDefault && workspace.status !== "ARCHIVED" && <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} onClick={() => void archive(workspace)}><Archive className="mr-1 size-3.5" />{t("archive")}</Button>}
+            {!workspace.isDefault && workspace.status !== "ARCHIVED" && <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} onClick={() => openArchive(workspace)}><Archive className="mr-1 size-3.5" />{t("archive")}</Button>}
           </TableCell>
         </TableRow>)}
       </TableBody>
     </Table>}</Card>
 
     <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-slate-500">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
+
+    {/* Rename Workspace Dialog */}
+    <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRenameTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("rename")}</DialogTitle>
+          <DialogDescription>
+            {renameTarget && t("renamePrompt", { name: renameTarget.name })}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onConfirmRename} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="renameInput">{t("name")}</Label>
+            <Input
+              id="renameInput"
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder={t("namePlaceholder")}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={Boolean(busyId)}
+              onClick={() => setRenameTarget(null)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="submit"
+              disabled={Boolean(busyId) || !renameValue.trim()}
+            >
+              {busyId === renameTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    {/* Archive Workspace Dialog */}
+    <Dialog open={archiveTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setArchiveTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("archive")}</DialogTitle>
+          <DialogDescription>
+            {archiveTarget && t("confirmArchive", { name: archiveTarget.name })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(busyId)}
+            onClick={() => setArchiveTarget(null)}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={Boolean(busyId)}
+            onClick={() => void onConfirmArchive()}
+          >
+            {busyId === archiveTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("archive")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>;
 }
