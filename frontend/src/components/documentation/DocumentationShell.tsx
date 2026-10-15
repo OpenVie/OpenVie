@@ -164,7 +164,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div className="min-h-dvh bg-white text-slate-900">
+    <div className="ov-docs-shell min-h-dvh bg-white text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-3 px-4 sm:px-6">
           <button type="button" onClick={() => setMobileOpen(true)} className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label={t("openNavigation")}><Menu className="size-5" /></button>

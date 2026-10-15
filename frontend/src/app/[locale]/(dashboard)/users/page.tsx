@@ -76,6 +76,9 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   // Invitation UI disabled: const [showInvite, setShowInvite] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  // Role select state lives outside react-hook-form: the compiler skips
+  // memoizing components that call form.watch() in render.
+  const [addMemberRole, setAddMemberRole] = useState<WorkspaceRole>("MEMBER");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const isOwner = authUser?.orgRole === "ORG_OWNER";
@@ -137,9 +140,10 @@ export default function UsersPage() {
 
   const onAddMember = async (values: AddMemberForm) => {
     try {
-      await addMemberToWorkspaceApi(request, values.email, values.role);
+      await addMemberToWorkspaceApi(request, values.email, addMemberRole);
       toast.success(t("memberAdded"));
       addMemberForm.reset();
+      setAddMemberRole("MEMBER");
       setShowAddMember(false);
       await loadDirectory();
     } catch (cause) {
@@ -203,6 +207,7 @@ export default function UsersPage() {
             onClick={() => {
               setShowAddMember(true);
               addMemberForm.reset({ role: "MEMBER" });
+              setAddMemberRole("MEMBER");
             }}
             className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
           >
@@ -389,9 +394,9 @@ export default function UsersPage() {
           <div className="space-y-1.5">
             <Label>{t("role")}</Label>
             <Select
-              value={addMemberForm.watch("role")}
+              value={addMemberRole}
               disabled={!isAdmin}
-              onValueChange={value => addMemberForm.setValue("role", value as WorkspaceRole)}
+              onValueChange={value => setAddMemberRole(value as WorkspaceRole)}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>

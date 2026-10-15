@@ -83,6 +83,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --ov-scrollbar-track: transparent;
+  --ov-scrollbar-track-hover: rgb(255 255 255 / 0.04);
+  --ov-scrollbar-thumb: rgb(255 255 255 / 0.2);
+  --ov-scrollbar-thumb-hover: rgb(200 245 60 / 0.65);
+  --ov-scrollbar-thumb-active: #c8f53c;
 }
 
 .ov-shell {
@@ -103,6 +108,11 @@
   --border: rgb(255 255 255 / 0.12);
   --input: rgb(255 255 255 / 0.13);
   --ring: #c8f53c;
+  --ov-scrollbar-track: transparent;
+  --ov-scrollbar-track-hover: rgb(255 255 255 / 0.04);
+  --ov-scrollbar-thumb: rgb(255 255 255 / 0.2);
+  --ov-scrollbar-thumb-hover: rgb(200 245 60 / 0.65);
+  --ov-scrollbar-thumb-active: #c8f53c;
   min-height: 100dvh;
   background: #07090c;
   color: #f2f5f0;
@@ -161,13 +171,14 @@ html[data-ov-theme="light"] .ov-loading-screen {
 .ov-account-copy {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   transition: max-width .18s ease, opacity .14s ease, transform .18s cubic-bezier(.2,.7,.2,1);
 }
 .ov-brand { max-width: 180px; }
-.ov-new-chat-label { max-width: 120px; }
-.ov-nav-label { max-width: 160px; }
-.ov-docs-label { max-width: 140px; }
+.ov-new-chat-label { max-width: 180px; }
+.ov-nav-label { max-width: 180px; }
+.ov-docs-label { max-width: 170px; }
 .ov-account-copy { max-width: 180px; }
 .ov-workspace-container,
 .ov-recent {
@@ -272,7 +283,7 @@ html[data-ov-theme="light"] .ov-loading-screen {
 
 .ov-new-chat {
   margin: 4px 1px 8px;
-  padding: 11px 18px;
+  padding: 11px 16px;
   background: #c8f53c;
   color: #07090c;
 }
@@ -322,6 +333,7 @@ html[data-ov-theme="light"] .ov-loading-screen {
 .ov-navigation-link > svg,
 .ov-docs-link > svg,
 .ov-new-chat > svg {
+  flex-shrink: 0;
   transition: transform .24s cubic-bezier(.2,.7,.2,1);
   transform-origin: center;
 }
@@ -483,8 +495,22 @@ html[data-ov-theme="light"] .ov-loading-screen {
   --border: rgb(16 24 14 / .13);
   --input: rgb(16 24 14 / .13);
   --ring: #c8f53c;
+  --ov-scrollbar-track: transparent;
+  --ov-scrollbar-track-hover: rgb(16 24 14 / 0.04);
+  --ov-scrollbar-thumb: rgb(16 24 14 / 0.2);
+  --ov-scrollbar-thumb-hover: rgb(139 189 0 / 0.65);
+  --ov-scrollbar-thumb-active: #8bbd00;
   background: #f5f6f0;
-  color: #10150f;
+}
+.ov-light,
+.ov-docs-shell,
+html[data-ov-theme="light"],
+html[data-theme="light"] {
+  --ov-scrollbar-track: transparent;
+  --ov-scrollbar-track-hover: rgb(16 24 14 / 0.04);
+  --ov-scrollbar-thumb: rgb(16 24 14 / 0.2);
+  --ov-scrollbar-thumb-hover: rgb(139 189 0 / 0.65);
+  --ov-scrollbar-thumb-active: #8bbd00;
 }
 
 .ov-light .ov-sidebar { background: rgb(255 255 255 / .78); border-color: #dce3d8; color: #17201b; }
@@ -689,13 +715,56 @@ html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-item"]:
   }
 }
 
+/* Custom themed scrollbars */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ov-scrollbar-thumb) var(--ov-scrollbar-track);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ov-scrollbar-track, transparent);
+}
+
+::-webkit-scrollbar-track:hover {
+  background: var(--ov-scrollbar-track-hover, transparent);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--ov-scrollbar-thumb, rgb(255 255 255 / 0.2));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ov-scrollbar-thumb-hover, rgb(200 245 60 / 0.65));
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--ov-scrollbar-thumb-active, #c8f53c);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .scrollbar-hidden {
   -ms-overflow-style: none;
-  scrollbar-width: none;
+  scrollbar-width: none !important;
 }
 
 .scrollbar-hidden::-webkit-scrollbar {
-  display: none;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 @keyframes chat-dot-pulse {

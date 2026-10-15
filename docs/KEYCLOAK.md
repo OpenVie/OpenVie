@@ -41,6 +41,7 @@ Realm: openvie
 | Client ID | Loại (Type) | Mục đích (Purpose) |
 |---|---|---|
 | openvie-frontend | Public OIDC client | Đăng nhập trên trình duyệt sử dụng luồng Authorization Code flow kết hợp PKCE S256 |
+| openvie-admin | Public OIDC client | Mặt quản trị (`/admin/*`, port 3001): Authorization Code flow kết hợp PKCE S256, tách khỏi app chính |
 | openvie-backend | Confidential OIDC client | Cấu hình cơ sở cho client dịch vụ phía máy chủ (server-side); mã bí mật (secret) của client này không được ghi cứng (hardcode) trong tệp JSON của realm |
 
 Các vai trò (roles) trong Realm được thiết lập sẵn cho việc ánh xạ danh tính sau này:
@@ -57,6 +58,16 @@ Client frontend sau khi nhập sẽ bao gồm các mẫu redirect URI cơ sở s
 * https://example.com* — URL giữ chỗ cho môi trường production; hãy thay thế bằng URL ứng dụng thực tế trước khi nhập cấu hình lần đầu trên production
 
 Các web origin tương ứng là http://localhost:3000, http://localhost:8088, và https://example.com. Hãy thay thế URL giữ chỗ của môi trường production trong cả hai danh sách cho phép bằng origin chính xác của production. Tệp JSON của realm là nguồn chân lý duy nhất (source of truth); việc chỉ thay đổi tệp .env sẽ không ghi đè lại các redirect URI đã được nhập trước đó.
+
+Client admin (`openvie-admin`) sau khi nhập bao gồm:
+* http://localhost:3001/* — Mặt quản trị Next.js chạy trực tiếp tại máy local
+* http://localhost:8088/admin/* — Mặt quản trị qua APISIX gateway
+* https://example.com/admin/* — URL giữ chỗ production
+
+> **Lưu ý realm đã nhập từ trước:** quá trình import realm có tính lũy đẳng và
+> không ghi đè realm hiện có, nên các realm dev tạo trước bản này **chưa có**
+> client `openvie-admin`. Tạo thủ công trên admin console theo đúng redirect
+> URIs trên, hoặc xóa volume `keycloak_db_data` để nhập lại từ đầu.
 URL của nhà phát hành (issuer URL) cho môi trường phát triển local là:
 http://localhost:18080/realms/openvie
 Đối với môi trường production sẽ là:

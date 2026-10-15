@@ -55,8 +55,8 @@ Lệnh trên tự động khởi chạy:
 1. Hạ tầng dữ liệu: Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS (S3), Kuzu Graph.
 2. Dịch vụ AI & Ingestion: Python FastAPI + gRPC (:50051) + worker tài liệu.
 3. Dịch vụ Nghiệp vụ: Spring Boot API (:8080) tự động migrate Flyway database khi khởi động.
-4. Giao diện người dùng: Next.js Web Console (:3000).
-5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API và Web.
+4. Giao diện người dùng: Next.js Web Console (:3000) + mặt quản trị `frontend-admin` (`/admin/*`, OIDC client `openvie-admin`).
+5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API, Web và mặt quản trị.
 
 Cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal) **trước** khi tải mô hình:
 - **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`, chạy như service systemd.
@@ -127,7 +127,9 @@ curl --fail http://127.0.0.1:8088/apisix/status
 APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/apisix/status`: Probe sức khỏe nội bộ.
 - `/api/v1/auth/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 5 r/s (burst 10).
+- `/api/v1/admin/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 20 r/s (burst 40); Spring vẫn enforce `ORG_OWNER` trên từng request.
 - `/api/v1/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
+- `/admin/*`: Trỏ tới mặt quản trị `frontend-admin` (OIDC client `openvie-admin`).
 - `/*`: Trỏ tới Web client Next.js (`:3000`).
 *Lưu ý:* Các cổng gRPC (`:50051`), Qdrant, Redis, Postgres không được định tuyến qua gateway này.
 
@@ -182,7 +184,8 @@ This containerizes and orchestrates:
 1. Data services: Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph.
 2. AI & Ingestion: Python FastAPI + gRPC (:50051) + embedded document worker.
 3. Business API: Spring Boot (:8080) with automatic Flyway database migrations.
-4. Frontend: Next.js production server (:3000).
+4. Frontend: Next.js production server (:3000) plus the `frontend-admin`
+   surface (`/admin/*`, OIDC client `openvie-admin`).
 5. Edge Gateway: Apache APISIX (:8088 or configured `APISIX_PORT`).
 
 Install native Ollama on the host for GPU/Metal hardware acceleration **before**
@@ -254,6 +257,8 @@ curl --fail http://127.0.0.1:8088/apisix/status
 APISIX operates standalone on port `8088`:
 - `/apisix/status`: Gateway health probe.
 - `/api/v1/auth/*`: Spring Boot (:8080), rate-limited at 5 r/s (burst 10).
+- `/api/v1/admin/*`: Spring Boot (:8080), rate-limited at 20 r/s (burst 40); Spring still enforces `ORG_OWNER` per request.
 - `/api/v1/*`: Spring Boot (:8080), rate-limited at 50 r/s (burst 100).
+- `/admin/*`: `frontend-admin` surface (OIDC client `openvie-admin`).
 - `/*`: Next.js web application (:3000).
 *Note:* Internal endpoints (`:50051`, Qdrant, Redis, Postgres) are not routed through the gateway.

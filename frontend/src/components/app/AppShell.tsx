@@ -162,7 +162,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
         </div>
 
         <Link href="/" className="ov-new-chat" onClick={() => setSidebarOpen(false)} aria-label={chat("newChat")}>
-          <Plus className="size-4" />
+          <Plus className="size-4 shrink-0" />
           <span className="ov-new-chat-label">{chat("newChat")}</span>
         </Link>
 
@@ -303,10 +303,9 @@ export function ProtectedAppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Soft admin boundary: same login gate as {@link ProtectedAppShell} plus an
- * `ORG_OWNER` requirement. Used by the `(admin)` route-group layout; after the
- * Keycloak hard split this maps to the `openvie-admin` client + gateway check
- * on `/api/v1/admin/*`.
+ * Admin boundary: same login gate as {@link ProtectedAppShell} plus an
+ * `ORG_OWNER` requirement. Used by the `(admin)` route-group layout served at
+ * `/admin/*` by the `frontend-admin` deployment (OIDC client `openvie-admin`).
  */
 export function ProtectedAdminShell({ children }: { children: ReactNode }) {
   const common = useTranslations("Common")

@@ -35,11 +35,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
+  useEffect(() => {
+    document.documentElement.dataset.ovTheme = theme
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem("openvie.theme", theme)
+  }, [theme])
+
   function changeTheme(nextTheme: Theme) {
     setTheme(nextTheme)
-    document.documentElement.dataset.ovTheme = nextTheme
-    document.documentElement.dataset.theme = nextTheme
-    window.localStorage.setItem("openvie.theme", nextTheme)
     window.dispatchEvent(new Event("openvie:themechange"))
   }
 
