@@ -36,6 +36,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | Cấu hình bản self-hosted hoặc lập kế hoạch kiểm chứng và phục hồi | [Triển khai](DEPLOYMENT.md) |
 | Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | Self-host, đánh giá giấy phép, hay xuất bản nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
+| Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
 | Đối chiếu repo với kiến trúc DX-OS / Open-Core và không gian H-P-D-I | [Ánh xạ DX-OS](DX_OS.md) |
 
 ## Cái gì nằm ở đâu
@@ -114,6 +115,7 @@ Start with the guide for your task.
 | Configure a self-hosted release or plan verification and recovery | [Deployment](DEPLOYMENT.md) |
 | Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
+| Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
 | Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
 
 ## What belongs where

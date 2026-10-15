@@ -31,8 +31,14 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 Tạo các khóa bí mật ngẫu nhiên bằng `openssl rand -hex 32` cho:
-`TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`.
+`TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`, `KEYCLOAK_ADMIN_PASSWORD`, `KEYCLOAK_DB_PASSWORD`.
 
+*Khóa bí mật và thiết lập SSO / Keycloak:*
+- `KEYCLOAK_ADMIN_PASSWORD`: Mật khẩu quản trị Keycloak console (tối thiểu 16 ký tự ngẫu nhiên).
+- `KEYCLOAK_DB_PASSWORD`: Mật khẩu cơ sở dữ liệu PostgreSQL độc lập của Keycloak.
+- `SSO_BACKEND_CLIENT_SECRET`: Lấy mã bí mật của confidential client `openvie-backend` từ Keycloak Admin Console (tab *Credentials*) sau lần import realm đầu tiên, cấu hình vào `.env.production`. Tuyệt đối không commit mã này.
+- `KEYCLOAK_PUBLIC_URL` và `SSO_ISSUER_URI`: URL HTTPS công khai (ví dụ: `https://auth.example.com` hoặc `https://app.example.com/realms/openvie`).
+- **Kiến trúc TLS & Reverse Proxy cho Keycloak:** Keycloak trong container chỉ lắng nghe trên cổng nội bộ `127.0.0.1:${KEYCLOAK_PORT:-18080}:8080` (hoặc thông qua APISIX edge gateway trên các route `/realms/*`, `/resources/*`, `/js/*`). Tuyệt đối không mở HTTP trực tiếp ra internet công cộng; việc chấm dứt mã hóa TLS (TLS termination, HTTPS) bắt buộc do reverse proxy phía trước đảm nhận. Proxy phải chuyển tiếp đầy đủ `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port` (`KC_PROXY_HEADERS: xforwarded` đã được bật sẵn). Trước khi khởi chạy lần đầu trên production, mở `keycloak/realm/openvie-realm.json` và thay thế URL giữ chỗ `https://example.com*` trong redirect URIs và web origins của `openvie-frontend` và `openvie-admin` bằng tên miền production thực tế.
 *Các thiết lập quan trọng:*
 - `CORS_ORIGINS`, `INVITATION_LINK`, và các biến `NEXT_PUBLIC_*` phải trỏ đúng domain/IP người dùng truy cập.
 - Ngân sách phản hồi: `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction có ngân sách độc lập `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
@@ -126,6 +132,8 @@ curl --fail http://127.0.0.1:8088/apisix/status
 
 APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/apisix/status`: Probe sức khỏe nội bộ.
+- `/realms/*`: Trỏ tới Keycloak OIDC realm authentication, giới hạn 10 r/s (burst 20) bảo vệ chống brute-force.
+- `/resources/*`, `/js/*`: Trỏ tới Keycloak static theme và client JS assets.
 - `/api/v1/auth/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 5 r/s (burst 10).
 - `/api/v1/admin/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 20 r/s (burst 40); Spring vẫn enforce `ORG_OWNER` trên từng request.
 - `/api/v1/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
@@ -160,7 +168,14 @@ cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 Generate unique 32-byte cryptographic secrets via `openssl rand -hex 32` for:
-`TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`.
+`TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`, `KEYCLOAK_ADMIN_PASSWORD`, `KEYCLOAK_DB_PASSWORD`.
+
+*Keycloak & SSO production secrets:*
+- `KEYCLOAK_ADMIN_PASSWORD`: Strong password for the Keycloak admin console (≥16 random bytes).
+- `KEYCLOAK_DB_PASSWORD`: Dedicated PostgreSQL database password for Keycloak.
+- `SSO_BACKEND_CLIENT_SECRET`: Copy the confidential client secret for `openvie-backend` from the Keycloak Admin Console (*Credentials* tab) after the first realm import into `.env.production`. Never commit this secret.
+- `KEYCLOAK_PUBLIC_URL` & `SSO_ISSUER_URI`: Public HTTPS realm URLs (e.g. `https://auth.example.com` or `https://app.example.com/realms/openvie`).
+- **TLS & Reverse Proxy Architecture for Keycloak:** Keycloak binds to host-local loopback `127.0.0.1:${KEYCLOAK_PORT:-18080}:8080` (or through the APISIX edge gateway routes `/realms/*`, `/resources/*`, `/js/*`). Never expose Keycloak's HTTP port directly to the public internet; TLS termination (HTTPS) must be handled by an operator-controlled reverse proxy (APISIX, Cloudflare, Nginx, or Caddy). The reverse proxy must forward `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, and `X-Forwarded-Port` (`KC_PROXY_HEADERS: xforwarded` is enabled). Before initial production import, edit `keycloak/realm/openvie-realm.json` to replace the `https://example.com*` placeholder in redirect URIs and web origins with your actual production domain.
 
 Ensure `CORS_ORIGINS`, `INVITATION_LINK`, and `NEXT_PUBLIC_*` match your public domain. Answer generation uses `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction retains its independent `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
 
@@ -256,6 +271,8 @@ curl --fail http://127.0.0.1:8088/apisix/status
 
 APISIX operates standalone on port `8088`:
 - `/apisix/status`: Gateway health probe.
+- `/realms/*`: Keycloak OIDC realm authentication, rate-limited at 10 r/s (burst 20) matching auth brute-force protection.
+- `/resources/*`, `/js/*`: Keycloak static theme and JavaScript assets.
 - `/api/v1/auth/*`: Spring Boot (:8080), rate-limited at 5 r/s (burst 10).
 - `/api/v1/admin/*`: Spring Boot (:8080), rate-limited at 20 r/s (burst 40); Spring still enforces `ORG_OWNER` per request.
 - `/api/v1/*`: Spring Boot (:8080), rate-limited at 50 r/s (burst 100).
