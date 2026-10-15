@@ -18,7 +18,7 @@ export async function getTenantWorkspaceApi(
   return readJsonOrThrow<TenantWorkspace>(res);
 }
 
-// ─── Organization-owner workspace administration (/workspaces) ───────────────
+// ─── Organization-owner workspace administration (API: /api/v1/admin/workspaces) ─
 // Soft admin boundary: these calls go through `/api/v1/admin/*` (backend
 // alias, gateway-rate-limited separately). `getTenantWorkspaceApi` above stays
 // on the canonical base — chat/documents are not admin-only.

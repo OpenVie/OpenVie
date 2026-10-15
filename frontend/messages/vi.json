@@ -35,6 +35,7 @@
     "documents": "Tài liệu",
     "documentDetails": "Chi tiết tài liệu",
     "users": "Thành viên",
+    "organization": "Tổ chức",
     "workspaces": "Không gian làm việc",
     "settings": "Cài đặt",
     "changePassword": "Đổi mật khẩu",
@@ -180,12 +181,28 @@
     "fallback": {
       "invalidCredentials": "Email hoặc mật khẩu không đúng"
     },
+    "sso": {
+      "startFailed": "Không thể bắt đầu đăng nhập một lần.",
+      "providerFailed": "Nhà cung cấp định danh không thể đăng nhập cho bạn.",
+      "missingCode": "Nhà cung cấp định danh không trả về mã ủy quyền.",
+      "invalidState": "Yêu cầu đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.",
+      "exchangeFailed": "Không thể hoàn tất đăng nhập một lần.",
+      "unknownAccount": "Tài khoản này chưa được cấp phát. Hãy liên hệ quản trị viên không gian làm việc.",
+      "completingTitle": "Đang hoàn tất đăng nhập",
+      "completingDescription": "Chúng tôi đang đăng nhập an toàn cho bạn.",
+      "failedTitle": "Không thể đăng nhập",
+      "failedDescription": "Tài khoản cục bộ của bạn chưa được đăng nhập.",
+      "backToLogin": "Quay lại đăng nhập"
+    },
     "login": {
       "title": "Chào mừng trở lại",
       "description": "Đăng nhập vào tài khoản để tiếp tục",
       "rememberMe": "Ghi nhớ tôi",
       "signingIn": "Đang đăng nhập…",
       "signIn": "Đăng nhập",
+      "or": "hoặc",
+      "signInWithSso": "Đăng nhập với SSO",
+      "redirectingToSso": "Đang chuyển đến SSO…",
       "noAccount": "Chưa có tài khoản?",
       "createAccount": "Tạo tài khoản",
       "provisioned": "Tài khoản do quản trị viên không gian làm việc cấp phát."
@@ -224,6 +241,12 @@
     "collapseHistory": "Thu gọn lịch sử trò chuyện",
     "emptyTitle": "Trò chuyện với tài liệu của bạn",
     "emptyDescription": "Tải tài liệu số hoặc bảng tính lên, chờ lập chỉ mục rồi đặt câu hỏi kèm trích dẫn.",
+    "heroEyebrow": "Tự lưu trữ · Ưu tiên tiếng Việt · Apache 2.0",
+    "heroTitleFirst": "Hỏi tài liệu của bạn.",
+    "heroTitleSecond": "Nhận câu trả lời kèm trích dẫn.",
+    "heroDescription": "Tải tài liệu hoặc bảng tính lên, chờ lập chỉ mục rồi đặt câu hỏi.",
+    "heroDropTitle": "Kéo thả tệp vào đây",
+    "heroDropDescription": "hoặc nhấp để chọn · PDF, DOCX, XLSX, CSV",
     "workspaceLoading": "Không gian làm việc vẫn đang tải.",
     "waitForIndexing": "Hãy chờ ít nhất một tài liệu hoàn tất lập chỉ mục.",
     "uploadBeforeQuestion": "Hãy tải lên một tài liệu số hoặc bảng tính được hỗ trợ trước khi đặt câu hỏi.",
@@ -554,6 +577,8 @@
     "visibilityUpdated": "Hiển thị đặt thành {visibility}",
     "refresh": "Tải lại",
     "retry": "Thử lại",
+    "cancel": "Hủy",
+    "save": "Lưu",
     "creating": "Đang tạo...",
     "empty": "Chưa có không gian làm việc",
     "table": {

@@ -1,22 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { authApiErrorMessage, changePasswordApi, logoutApi } from "@/lib/auth-api";
 import { useRouter } from "@/i18n/navigation";
@@ -75,120 +64,111 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Image src="/logo.png" alt="" className="w-8 h-8" width={32} height={32} />
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-              OpenVie
-            </span>
-          </div>
+    <>
+      <div className="ov-auth-brand">
+        <div className="ov-auth-brand-mark">
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" stroke="currentColor" strokeWidth="3" /><circle cx="16" cy="16" r="5" fill="currentColor" /></svg>
         </div>
-
-        <Card className="shadow-md bg-white">
-          <CardHeader>
-            <CardTitle>{tc("title")}</CardTitle>
-            <CardDescription>
-              {forced ? tc("forcedDescription") : tc("description")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="currentPassword">{tc("current")}</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  disabled={isSubmitting}
-                  {...register("currentPassword", { onChange: () => setApiError(null) })}
-                />
-                {errors.currentPassword && (
-                  <p className="text-red-600 text-xs">{errors.currentPassword.message}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="newPassword">{tc("new")}</Label>
-                <div className="relative">
-                  <Input
-                    id="newPassword"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    disabled={isSubmitting}
-                    className="pr-10"
-                    {...register("newPassword", { onChange: () => setApiError(null) })}
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    disabled={isSubmitting}
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 p-1 rounded-md disabled:opacity-50"
-                    aria-label={showPassword ? t("hidePassword") : t("showPassword")}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                {errors.newPassword && (
-                  <p className="text-red-600 text-xs">{errors.newPassword.message}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="confirmPassword">{t("confirmPassword")}</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={isSubmitting}
-                  {...register("confirmPassword", { onChange: () => setApiError(null) })}
-                />
-                {errors.confirmPassword && (
-                  <p className="text-red-600 text-xs">{errors.confirmPassword.message}</p>
-                )}
-              </div>
-
-              {apiError && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p className="flex-1">{apiError}</p>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className={cn(
-                  "w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white",
-                  isSubmitting && "opacity-70",
-                )}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {tc("submitting")}
-                  </>
-                ) : (
-                  tc("submit")
-                )}
-              </Button>
-              {!forced && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => router.push("/")}
-                >
-                  {tc("cancel")}
-                </Button>
-              )}
-            </form>
-          </CardContent>
-        </Card>
+        <span>OpenVie</span>
       </div>
-    </div>
+
+      <div className="ov-auth-card" style={{ marginTop: 24 }}>
+        <h1>{tc("title")}</h1>
+        <p className="ov-auth-subtitle">
+          {forced ? tc("forcedDescription") : tc("description")}
+        </p>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="currentPassword" className="ov-auth-label">{tc("current")}</label>
+            <input
+              id="currentPassword"
+              type="password"
+              autoComplete="current-password"
+              disabled={isSubmitting}
+              className="ov-auth-input"
+              {...register("currentPassword", { onChange: () => setApiError(null) })}
+            />
+            {errors.currentPassword && (
+              <p className="text-red-400 text-xs">{errors.currentPassword.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="newPassword" className="ov-auth-label">{tc("new")}</label>
+            <div className="relative">
+              <input
+                id="newPassword"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                disabled={isSubmitting}
+                className="ov-auth-input pr-10"
+                {...register("newPassword", { onChange: () => setApiError(null) })}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                disabled={isSubmitting}
+                onClick={() => setShowPassword((v) => !v)}
+                className="ov-auth-eye"
+                aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {errors.newPassword && (
+              <p className="text-red-400 text-xs">{errors.newPassword.message}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="confirmPassword" className="ov-auth-label">{t("confirmPassword")}</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              disabled={isSubmitting}
+              className="ov-auth-input"
+              {...register("confirmPassword", { onChange: () => setApiError(null) })}
+            />
+            {errors.confirmPassword && (
+              <p className="text-red-400 text-xs">{errors.confirmPassword.message}</p>
+            )}
+          </div>
+
+          {apiError && (
+            <div role="alert" className="ov-auth-error">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="flex-1">{apiError}</p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={cn(
+              "ov-auth-btn",
+              isSubmitting && "opacity-70",
+            )}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {tc("submitting")}
+              </>
+            ) : (
+              tc("submit")
+            )}
+          </button>
+          {!forced && (
+            <button
+              type="button"
+              className="ov-auth-btn-outline"
+              onClick={() => router.push("/")}
+            >
+              {tc("cancel")}
+            </button>
+          )}
+        </form>
+      </div>
+    </>
   );
 }

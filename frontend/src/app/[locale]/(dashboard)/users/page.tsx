@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, UserPlus, Users } from "lucide-react";
+import { AlertCircle, Loader2, UserPlus, Users } from "lucide-react";
 // Invitation UI is intentionally disabled; retain these imports for its re-enable path.
 // import { Mail, RefreshCw } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
@@ -76,6 +76,10 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   // Invitation UI disabled: const [showInvite, setShowInvite] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  // Role select state lives outside react-hook-form: the compiler skips
+  // memoizing components that call form.watch() in render.
+  const [addMemberRole, setAddMemberRole] = useState<WorkspaceRole>("MEMBER");
+  const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const isOwner = authUser?.orgRole === "ORG_OWNER";
@@ -137,9 +141,10 @@ export default function UsersPage() {
 
   const onAddMember = async (values: AddMemberForm) => {
     try {
-      await addMemberToWorkspaceApi(request, values.email, values.role);
+      await addMemberToWorkspaceApi(request, values.email, addMemberRole);
       toast.success(t("memberAdded"));
       addMemberForm.reset();
+      setAddMemberRole("MEMBER");
       setShowAddMember(false);
       await loadDirectory();
     } catch (cause) {
@@ -158,15 +163,19 @@ export default function UsersPage() {
     finally { setBusyId(null); }
   };
 
-  const removeMember = async (member: TeamMember) => {
-    if (!window.confirm(t("confirmRemove", { name: member.fullName || member.email }))) return;
-    setBusyId(member.id);
+  const confirmRemoveMember = async () => {
+    if (!removeTarget) return;
+    setBusyId(removeTarget.id);
     try {
-      await removeWorkspaceMemberApi(request, member.id);
+      await removeWorkspaceMemberApi(request, removeTarget.id);
       toast.success(t("memberRemoved"));
+      setRemoveTarget(null);
       await loadDirectory();
-    } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.remove")); }
-    finally { setBusyId(null); }
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.remove"));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   /*
@@ -203,6 +212,7 @@ export default function UsersPage() {
             onClick={() => {
               setShowAddMember(true);
               addMemberForm.reset({ role: "MEMBER" });
+              setAddMemberRole("MEMBER");
             }}
             className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
           >
@@ -289,7 +299,7 @@ export default function UsersPage() {
                           variant="outline"
                           disabled={busyId === member.id || protectedAction}
                           title={t("removeFromWorkspaceHint")}
-                          onClick={() => void removeMember(member)}
+                          onClick={() => setRemoveTarget(member)}
                         >
                           {t("removeFromWorkspace")}
                         </Button>
@@ -389,9 +399,9 @@ export default function UsersPage() {
           <div className="space-y-1.5">
             <Label>{t("role")}</Label>
             <Select
-              value={addMemberForm.watch("role")}
+              value={addMemberRole}
               disabled={!isAdmin}
-              onValueChange={value => addMemberForm.setValue("role", value as WorkspaceRole)}
+              onValueChange={value => setAddMemberRole(value as WorkspaceRole)}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -405,6 +415,36 @@ export default function UsersPage() {
             <Button type="submit" disabled={addMemberForm.formState.isSubmitting}>{t("addMember")}</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+
+    {/* Remove Member Confirmation Dialog */}
+    <Dialog open={removeTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRemoveTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("removeFromWorkspace")}</DialogTitle>
+          <DialogDescription>
+            {removeTarget && t("confirmRemove", { name: removeTarget.fullName || removeTarget.email })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(busyId)}
+            onClick={() => setRemoveTarget(null)}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={Boolean(busyId)}
+            onClick={() => void confirmRemoveMember()}
+          >
+            {busyId === removeTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("removeFromWorkspace")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>;

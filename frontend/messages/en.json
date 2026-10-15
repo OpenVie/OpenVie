@@ -35,6 +35,7 @@
     "documents": "Documents",
     "documentDetails": "Document Details",
     "users": "Team Members",
+    "organization": "Organization",
     "workspaces": "Workspaces",
     "settings": "Settings",
     "changePassword": "Change Password",
@@ -180,12 +181,28 @@
     "fallback": {
       "invalidCredentials": "Invalid email or password"
     },
+    "sso": {
+      "startFailed": "Unable to start single sign-on.",
+      "providerFailed": "The identity provider could not sign you in.",
+      "missingCode": "The identity provider did not return an authorization code.",
+      "invalidState": "This sign-in request is invalid or has expired. Please try again.",
+      "exchangeFailed": "Unable to complete single sign-on.",
+      "unknownAccount": "This account has not been provisioned. Contact your workspace administrator.",
+      "completingTitle": "Completing sign-in",
+      "completingDescription": "We are securely signing you in.",
+      "failedTitle": "Unable to sign in",
+      "failedDescription": "Your local account was not signed in.",
+      "backToLogin": "Back to sign in"
+    },
     "login": {
       "title": "Welcome back",
       "description": "Sign in to your account to continue",
       "rememberMe": "Remember me",
       "signingIn": "Signing in…",
       "signIn": "Sign in",
+      "or": "or",
+      "signInWithSso": "Sign in with SSO",
+      "redirectingToSso": "Redirecting to SSO…",
       "noAccount": "Don't have an account?",
       "createAccount": "Create account",
       "provisioned": "Accounts are provisioned by your workspace administrator."
@@ -224,6 +241,12 @@
     "collapseHistory": "Collapse chat history",
     "emptyTitle": "Chat with your documents",
     "emptyDescription": "Upload a digital document or spreadsheet, wait for indexing, then ask questions with citations.",
+    "heroEyebrow": "Self-hosted · Vietnamese-first · Apache 2.0",
+    "heroTitleFirst": "Ask your documents.",
+    "heroTitleSecond": "Get answers with citations.",
+    "heroDescription": "Upload a document or spreadsheet, wait for indexing, then ask questions.",
+    "heroDropTitle": "Drag and drop files here",
+    "heroDropDescription": "or click to browse · PDF, DOCX, XLSX, CSV",
     "workspaceLoading": "Workspace is still loading.",
     "waitForIndexing": "Wait for at least one document to finish indexing.",
     "uploadBeforeQuestion": "Upload a supported digital document or spreadsheet before asking a question.",
@@ -554,6 +577,8 @@
     "visibilityUpdated": "Visibility set to {visibility}",
     "refresh": "Refresh",
     "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
     "creating": "Creating...",
     "empty": "No workspaces yet",
     "table": {

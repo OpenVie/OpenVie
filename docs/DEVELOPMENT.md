@@ -105,6 +105,26 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 # Terminal 3: Next.js Frontend (:3000)
 npm --prefix frontend run dev
 ```
+Mặt quản trị (`/admin/*`: organization, workspaces, settings, yêu cầu
+`ORG_OWNER`) chạy chung trên dev server `:3000` — ví dụ
+`http://localhost:3000/admin/organization`. Lý do: `next dev` chỉ cho phép
+một instance mỗi thư mục (lockfile `.next/dev`), nên không thể chạy song song
+`:3000` + `:3001` từ cùng source.
+
+Muốn test đúng OIDC client `openvie-admin` trên dev server duy nhất, restart
+với env khác (rồi đổi lại khi xong):
+```bash
+NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run dev
+```
+Sự tách biệt `:3001` + client riêng chỉ có hiệu lực ở production
+(service `frontend-admin` trong compose) và qua gateway `:8088/admin/*`.
+Qua APISIX dev (`:8088`), route `edge-admin-web` trỏ `:3001` — muốn test
+gateway ở local thì chạy mặt quản trị bằng production build:
+```bash
+NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run build
+PORT=3001 npm --prefix frontend run start
+```
+(lưu ý build này ghi đè `.next`, chạy xong build lại dev bình thường).
 
 `make -C api dev` sinh mã Java/gRPC từ `proto/` vào `api/target/protobuf/`
 trước khi biên dịch. Đường dẫn này tách khỏi `generated-sources` để mã protobuf
@@ -155,6 +175,21 @@ Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật t
 | **Java API** | `make -C api test` hoặc `make -C api verify` |
 | **Python AI** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Web Frontend** | `npm --prefix frontend run lint` và `npm --prefix frontend run typecheck` |
+
+### Kiểm tra đăng nhập SSO qua APISIX
+
+Sau khi đã hoàn thành setup ban đầu, tạo một người dùng có cùng email trong Keycloak và
+OpenVie. Bật `SSO_ENABLED=true` cho Spring API, giữ `NEXT_PUBLIC_OIDC_ISSUER` trỏ tới
+realm Keycloak, sau đó chạy full compose để có gateway `:8088`.
+
+1. Mở `http://localhost:8088/login` và chọn **Đăng nhập với SSO**.
+2. Đăng nhập ở Keycloak, kiểm tra browser quay về callback rồi vào ứng dụng qua `:8088`.
+3. Tải lại trang; session phải được khôi phục bằng refresh cookie.
+4. Đăng xuất; tải lại trang phải quay về login. Keycloak SSO session không bị kết thúc bởi
+   logout cục bộ này.
+
+Tài khoản SSO chưa có trong OpenVie bị từ chối (`SSO_UNKNOWN_EMAIL`) theo contract hiện tại;
+frontend không tự provision tài khoản dù self-registration có bật.
 
 ### 6. Xử lý sự cố thường gặp
 
@@ -270,6 +305,25 @@ make -C rag-chatbot-fastapi dev PYTHON=python3.11
 # Terminal 3: Next.js frontend (:3000)
 npm --prefix frontend run dev
 ```
+The admin surface (`/admin/*` pages: organization, workspaces, settings,
+requiring `ORG_OWNER`) runs on the same `:3000` dev server — e.g.
+`http://localhost:3000/admin/organization`. Reason: `next dev` allows a single
+instance per directory (`.next/dev` lockfile), so `:3000` + `:3001` cannot run
+in parallel from one source tree.
+
+To test the `openvie-admin` OIDC client on the single dev server, restart with
+a different env (and switch back afterwards):
+```bash
+NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run dev
+```
+The `:3001` separation only takes effect in production (the `frontend-admin`
+service in compose) and through the `:8088/admin/*` gateway route. To test the
+gateway locally, serve the admin surface from a production build:
+```bash
+NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run build
+PORT=3001 npm --prefix frontend run start
+```
+(note: this overwrites `.next`; rebuild normally afterwards).
 
 `make -C api dev` generates Java/gRPC code from `proto/` into
 `api/target/protobuf/` before compilation. This directory stays separate from
@@ -322,6 +376,22 @@ Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 | **Java** | `make -C api test` or `make -C api verify` |
 | **Python** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Frontend** | `npm --prefix frontend run lint` && `npm --prefix frontend run typecheck` |
+
+### Verifying SSO login through APISIX
+
+After initial setup, create a user with the same email in Keycloak and OpenVie. Enable
+`SSO_ENABLED=true` for the Spring API, keep `NEXT_PUBLIC_OIDC_ISSUER` pointed at the
+Keycloak realm, then start full compose so the `:8088` gateway is available.
+
+1. Open `http://localhost:8088/login` and choose **Sign in with SSO**.
+2. Sign in at Keycloak and confirm the browser returns through the callback into the app via
+   `:8088`.
+3. Refresh the page; the refresh cookie must restore the application session.
+4. Sign out; refreshing must return to login. This local logout does not end the Keycloak SSO
+   session.
+
+An SSO identity without a pre-existing OpenVie account is rejected with `SSO_UNKNOWN_EMAIL`.
+The frontend never auto-provisions an account, even when self-registration is enabled.
 
 ## 6. Troubleshooting
 

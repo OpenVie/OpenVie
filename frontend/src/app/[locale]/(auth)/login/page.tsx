@@ -1,27 +1,18 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Link, useRouter } from "@/i18n/navigation";
-import { AlertCircle, Eye, EyeOff, Loader2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { AlertCircle, Eye, EyeOff, Loader2, LogIn, X } from "lucide-react";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { authApiErrorMessage, loginApi, registrationStatusApi } from "@/lib/auth-api";
 import { cn } from "@/lib/utils";
+import { beginOidcAuthorization } from "@/lib/oidc";
+import { routing } from "@/i18n/routing";
 import {
   consumeAuthDestination,
   rememberAuthDestination,
@@ -40,6 +31,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [canSelfRegister, setCanSelfRegister] = useState<boolean | null>(null);
+  const [isSsoRedirecting, setIsSsoRedirecting] = useState(false);
   const loginSchema = z.object({
     email: z.string().min(1, t("validation.emailRequired")).email(t("validation.invalidEmail")),
     password: z.string().min(1, t("validation.passwordRequired")),
@@ -96,171 +88,192 @@ function LoginContent() {
     }
   };
 
+  const startSsoLogin = async () => {
+    setApiError(null);
+    setIsSsoRedirecting(true);
+    try {
+      rememberAuthDestination(next);
+      const localePrefix = document.documentElement.lang === routing.defaultLocale
+        ? ""
+        : `/${document.documentElement.lang}`;
+      const redirectUri = `${window.location.origin}${localePrefix}/sso/callback`;
+      window.location.assign(await beginOidcAuthorization(redirectUri));
+    } catch (error) {
+      setApiError(authApiErrorMessage(error, t("sso.startFailed")));
+      setIsSsoRedirecting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Image src="/logo.png"
-              alt=""
-              className="w-8 h-8"
-              width={32}
-              height={32}
+    <>
+      <div className="ov-auth-brand">
+        <div className="ov-auth-brand-mark">
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" stroke="currentColor" strokeWidth="3" /><circle cx="16" cy="16" r="5" fill="currentColor" /></svg>
+        </div>
+        <span>OpenVie</span>
+      </div>
+      <p className="ov-auth-tagline">{t("tagline")}</p>
+
+      <div className="ov-auth-card">
+        <h1>{t("login.title")}</h1>
+        <p className="ov-auth-subtitle">{t("login.description")}</p>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="ov-auth-label">{t("email")}</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="you@company.com"
+              disabled={isSubmitting}
+              aria-invalid={!!errors.email}
+              className="ov-auth-input"
+              {...register("email", { onChange: () => setApiError(null) })}
             />
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-              OpenVie
-            </span>
+            {errors.email && (
+              <p className="text-red-400 text-xs">{errors.email.message}</p>
+            )}
           </div>
-          <p className="text-slate-500 text-sm">{t("tagline")}</p>
+
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="ov-auth-label">{t("password")}</label>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                disabled={isSubmitting}
+                className="ov-auth-input pr-10"
+                aria-invalid={!!errors.password}
+                {...register("password", {
+                  onChange: () => setApiError(null),
+                })}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                disabled={isSubmitting}
+                onClick={() => setShowPassword((v) => !v)}
+                className="ov-auth-eye"
+                aria-label={
+                  showPassword ? t("hidePassword") : t("showPassword")
+                }
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            {errors.password && (
+              <p className="text-red-400 text-xs">
+                {errors.password.message}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              disabled={isSubmitting}
+              className="ov-auth-checkbox"
+              {...register("rememberMe", {
+                onChange: () => setApiError(null),
+              })}
+            />
+            <label
+              htmlFor="rememberMe"
+              className="text-sm cursor-pointer text-[#a9b3ab]"
+            >
+              {t("login.rememberMe")}
+            </label>
+          </div>
+
+          {apiError && (
+            <div role="alert" className="ov-auth-error">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="flex-1">{apiError}</p>
+              <button
+                type="button"
+                onClick={() => setApiError(null)}
+                className="text-red-400 hover:text-red-200 p-0.5 rounded"
+                aria-label={t("dismissError")}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting || isSsoRedirecting}
+            className={cn(
+              "ov-auth-btn",
+              isSubmitting && "opacity-70",
+            )}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {t("login.signingIn")}
+              </>
+            ) : (
+              t("login.signIn")
+            )}
+          </button>
+        </form>
+
+        <div className="ov-auth-divider" aria-hidden="true">
+          <span />
+          {t("login.or")}
+          <span />
         </div>
 
-        <Card className="shadow-md bg-white">
-          <CardHeader>
-            <CardTitle>{t("login.title")}</CardTitle>
-            <CardDescription>{t("login.description")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">{t("email")}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@company.com"
-                  disabled={isSubmitting}
-                  aria-invalid={!!errors.email}
-                  {...register("email", { onChange: () => setApiError(null) })}
-                />
-                {errors.email && (
-                  <p className="text-red-600 text-xs">{errors.email.message}</p>
-                )}
-              </div>
+        <button
+          type="button"
+          disabled={isSubmitting || isSsoRedirecting}
+          onClick={startSsoLogin}
+          className="ov-auth-btn-outline"
+        >
+          {isSsoRedirecting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {t("login.redirectingToSso")}
+            </>
+          ) : (
+            <>
+              <LogIn className="w-4 h-4" />
+              {t("login.signInWithSso")}
+            </>
+          )}
+        </button>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="password">{t("password")}</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    disabled={isSubmitting}
-                    className="pr-10"
-                    aria-invalid={!!errors.password}
-                    {...register("password", {
-                      onChange: () => setApiError(null),
-                    })}
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    disabled={isSubmitting}
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 p-1 rounded-md disabled:opacity-50"
-                    aria-label={
-                      showPassword ? t("hidePassword") : t("showPassword")
-                    }
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="text-red-600 text-xs">
-                    {errors.password.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  id="rememberMe"
-                  type="checkbox"
-                  disabled={isSubmitting}
-                  className="rounded border-slate-300 size-4 accent-indigo-600"
-                  {...register("rememberMe", {
-                    onChange: () => setApiError(null),
-                  })}
-                />
-                <Label
-                  htmlFor="rememberMe"
-                  className="font-normal text-sm cursor-pointer"
-                >
-                  {t("login.rememberMe")}
-                </Label>
-              </div>
-
-              {apiError && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p className="flex-1">{apiError}</p>
-                  <button
-                    type="button"
-                    onClick={() => setApiError(null)}
-                    className="text-red-700 hover:text-red-900 p-0.5 rounded"
-                    aria-label={t("dismissError")}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className={cn(
-                  "w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white",
-                  isSubmitting && "opacity-70",
-                )}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("login.signingIn")}
-                  </>
-                ) : (
-                  t("login.signIn")
-                )}
-              </Button>
-            </form>
-
-            <div className="text-center text-sm text-slate-500 mt-4 space-y-2">
-              {canSelfRegister && (
-                <p>
-                  {t("login.noAccount")}{" "}
-                  <Link
-                    href="/register"
-                    className="text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
-                  >
-                    {t("login.createAccount")}
-                  </Link>
-                </p>
-              )}
-              {canSelfRegister === false && <p>{t("login.provisioned")}</p>}
-              <p>
-                <Link
-                  href="/documentation"
-                  className="text-indigo-600 hover:text-indigo-700 underline underline-offset-4"
-                >
-                  {tNav("documentation")}
-                </Link>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="ov-auth-footer">
+          {canSelfRegister && (
+            <p>
+              {t("login.noAccount")}{" "}
+              <Link href="/register" className="ov-auth-link">
+                {t("login.createAccount")}
+              </Link>
+            </p>
+          )}
+          {canSelfRegister === false && <p>{t("login.provisioned")}</p>}
+          <p>
+            <Link href="/documentation" className="ov-auth-link">
+              {tNav("documentation")}
+            </Link>
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+    <Suspense fallback={<div className="min-h-screen" />}>
       <LoginContent />
     </Suspense>
   );

@@ -15,13 +15,11 @@ export function getApiBase(): string {
 }
 
 /**
- * Soft admin boundary (Keycloak-ready).
+ * Admin API base.
  *
  * Owner-only calls go through `/api/v1/admin/*` (aliased by the backend next
- * to the canonical paths). The gateway can rate-limit and authorize this
- * prefix independently; after the hard split it maps to the `openvie-admin`
- * client. Falls back to the canonical base when the env already points at a
- * versioned root that cannot take the extra segment (kept simple: suffix it).
+ * to the canonical paths). The gateway rate-limits this prefix independently;
+ * Spring still enforces `ORG_OWNER` per request.
  */
 export function getAdminApiBase(): string {
   return `${getApiBase()}/admin`;
@@ -103,6 +101,23 @@ export async function loginApi(payload: {
   if (!res.ok) {
     throw authApiError(body);
   }
+  return body as AuthResponse;
+}
+
+/** Completes the public-client Authorization Code + PKCE flow. */
+export async function ssoExchangeApi(payload: {
+  code: string;
+  codeVerifier: string;
+  redirectUri: string;
+}): Promise<AuthResponse> {
+  const res = await fetch(`${getApiBase()}/auth/sso/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJsonSafe(res);
+  if (!res.ok) throw authApiError(body);
   return body as AuthResponse;
 }
 

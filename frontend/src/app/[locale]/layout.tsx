@@ -37,7 +37,14 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        {/* Applies the stored theme before first paint. External (src) scripts are
+            hoisted and deduplicated by React 19; an inline script rendered from the
+            root layout is re-created on the client, which logs "Encountered a script
+            tag while rendering React component". */}
+        <script id="openvie-theme" src="/theme-init.js" async suppressHydrationWarning />
+      </head>
       <body className="font-sans" suppressHydrationWarning>
         <NextIntlClientProvider messages={messages}>
           <AppProviders>{children}</AppProviders>
