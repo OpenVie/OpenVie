@@ -5,7 +5,6 @@ import Image from "next/image";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { Link, useRouter } from "@/i18n/navigation";
 import { authApiErrorMessage, ssoExchangeApi } from "@/lib/auth-api";
@@ -77,33 +76,33 @@ function SsoCallbackContent() {
   }, [code, providerError, router, searchParams, setAuth, state, t]);
 
   return (
-    <Card className="w-full max-w-md shadow-md bg-white">
-      <CardHeader className="items-center text-center">
-        <Image src="/images/openvie-logo.svg" alt="" width={32} height={32} className="mb-2" />
-        <CardTitle>{error ? t("sso.failedTitle") : t("sso.completingTitle")}</CardTitle>
-        <CardDescription>
+    <section className="ov-auth-card ov-sso-card" aria-live="polite">
+      <header>
+        <Image src="/images/openvie-logo.svg" alt="" width={42} height={42} className="ov-sso-logo" priority />
+        <h1>{error ? t("sso.failedTitle") : t("sso.completingTitle")}</h1>
+        <p className="ov-auth-subtitle">
           {error ? t("sso.failedDescription") : t("sso.completingDescription")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="text-center">
+        </p>
+      </header>
+      <div>
         {error ? (
           <>
-            <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-sm text-red-800">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <div role="alert" className="ov-auth-error text-left">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <p>{error}</p>
             </div>
             <Link
               href="/login"
-              className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-[#c8f53c] px-4 text-sm font-semibold text-[#07090c] transition-colors hover:bg-[#d9ff68]"
+              className="ov-auth-btn mt-5"
             >
               {t("sso.backToLogin")}
             </Link>
           </>
         ) : (
-          <Loader2 className="mx-auto size-7 animate-spin text-[#c8f53c]" aria-label={t("loading")} />
+          <Loader2 className="mx-auto size-7 animate-spin text-primary" aria-label={t("loading")} />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 

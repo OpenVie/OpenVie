@@ -42,7 +42,7 @@ export default async function DocumentationOverviewPage({ params }: PageProps) {
     </DocSection>
     <DocSection id="quickstarts" title={sections.quickstarts}>
       <div className="grid gap-4 sm:grid-cols-2">
-        {quickstarts.map(({ icon: Icon, title, text, href }) => <Link key={title} href={href} className="rounded-xl border border-slate-200 p-5 hover:border-[#c8f53c] hover:bg-[#c8f53c]/10"><Icon className="size-5 text-[#8bbd00] dark:text-[#c8f53c]" /><h3 className="mt-3 font-semibold text-slate-950">{title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{text}</p></Link>)}
+        {quickstarts.map(({ icon: Icon, title, text, href }) => <Link key={title} href={href} className="rounded-xl border border-slate-200 p-5 hover:border-primary/30 hover:bg-primary/5"><Icon className="size-5 text-primary" /><h3 className="mt-3 font-semibold text-slate-950">{title}</h3><p className="mt-1 text-sm leading-6 text-slate-600">{text}</p></Link>)}
       </div>
     </DocSection>
     <DocSection id="start-paths" title={sections["start-paths"]}>

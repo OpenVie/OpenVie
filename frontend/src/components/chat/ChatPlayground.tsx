@@ -126,11 +126,11 @@ function sourceFromDocument(document: Document): SourceDocument {
 
 function statusClass(status: SourceStatus): string {
   const classes: Record<SourceStatus, string> = {
-    UPLOADING: "bg-slate-100 text-slate-600",
-    PENDING: "bg-amber-100 text-amber-800",
-    PROCESSING: "bg-blue-100 text-blue-800",
-    COMPLETED: "bg-emerald-100 text-emerald-800",
-    FAILED: "bg-red-100 text-red-800",
+    UPLOADING: "ov-source-status-uploading",
+    PENDING: "ov-source-status-pending",
+    PROCESSING: "ov-source-status-processing",
+    COMPLETED: "ov-source-status-completed",
+    FAILED: "ov-source-status-failed",
   }
   return classes[status]
 }
@@ -175,6 +175,7 @@ function Playground() {
   const [deleteTarget, setDeleteTarget] = useState<PlaygroundSession | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [heroAnimationKey, setHeroAnimationKey] = useState(0)
+  const [recentUploadIds, setRecentUploadIds] = useState<string[]>([])
 
   useEffect(() => {
     const replayHeroAnimation = () => setHeroAnimationKey((current) => current + 1)
@@ -195,12 +196,36 @@ function Playground() {
       source.status === "PENDING" ||
       source.status === "PROCESSING",
   )
-  const activeUploads = sources.filter(
-    (source) =>
-      source.status === "UPLOADING" ||
-      source.status === "PENDING" ||
-      source.status === "PROCESSING",
-  )
+  const recentUploads = sources.filter((source) => recentUploadIds.includes(source.localId))
+  const sourceProcessList = recentUploads.length > 0 ? (
+    <div className="ov-source-process-list" aria-live="polite">
+      {recentUploads.map((source) => {
+        const inProgress = source.status === "UPLOADING" || source.status === "PENDING" || source.status === "PROCESSING"
+        return (
+          <div key={source.localId} className="ov-source-process-card" title={source.errorMessage ?? source.fileName}>
+            <div className="ov-source-process-icon">
+              {inProgress ? <Loader2 className="size-5 animate-spin" /> : source.status === "FAILED" ? <AlertCircle className="size-5" /> : <FileText className="size-5" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-bold text-foreground">{source.fileName}</p>
+                <span className={cn("ov-source-process-status", statusClass(source.status))}>
+                  <i aria-hidden="true" />{t(`status.${source.status}`)}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {formatBytes(source.fileSizeBytes)}
+                {source.status === "COMPLETED" ? ` · ${t("readyToAnswer")}` : source.status === "FAILED" && source.errorMessage ? ` · ${source.errorMessage}` : ""}
+              </p>
+              <div className="ov-source-process-track" aria-hidden="true">
+                <span className={cn("ov-source-process-progress", inProgress && "ov-source-process-progress-active", source.status === "COMPLETED" && "ov-source-process-progress-ready", source.status === "FAILED" && "ov-source-process-progress-failed")} />
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  ) : null
 
   const loadHistory = useCallback(async ({
     append = false,
@@ -622,10 +647,10 @@ function Playground() {
       return
     }
 
-    for (const file of files) {
+    await Promise.all(files.map(async (file) => {
       if (!isSupportedFile(file)) {
         toast.error(`${file.name} is not supported. Use PDF, DOCX, TXT, Markdown, HTML, XLSX, or CSV.`)
-        continue
+        return
       }
 
       const localId = makeId()
@@ -641,6 +666,7 @@ function Playground() {
         uploadedAt: new Date().toISOString(),
       }
       setSources((current) => [...current, pendingSource])
+      setRecentUploadIds((current) => [...current, localId])
 
       try {
         const uploaded = await uploadDocumentApi(request, file, workspace.knowledgeBase.id)
@@ -669,7 +695,7 @@ function Playground() {
         )
         toast.error(errorMessage)
       }
-    }
+    }))
   }
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
@@ -685,14 +711,14 @@ function Playground() {
   const mobileHistoryPanel = (
     <div>
       <div className="mb-2 flex items-center justify-between px-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("chats")}
         </p>
         <button
           type="button"
           disabled={sending}
           onClick={startNewChat}
-          className="rounded-md p-1.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-50"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
           aria-label={t("startNewChat")}
         >
           <Plus className="size-4" />
@@ -702,35 +728,35 @@ function Playground() {
         type="button"
         disabled={sending}
         onClick={() => setSearchDialogOpen(true)}
-        className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-50"
+        className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
       >
         <Search className="size-4" /> {t("searchChats")}
       </button>
       <div className="max-h-[min(48dvh,28rem)] overflow-y-auto">
         {historyLoading ? (
           Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="mx-1 mb-2 h-12 animate-pulse rounded-md bg-slate-800" />
+            <div key={index} className="mx-1 mb-2 h-12 animate-pulse rounded-md bg-muted" />
           ))
         ) : historyError && history.length === 0 ? (
-          <div className="px-2 py-3 text-sm text-red-300">
+          <div className="px-2 py-3 text-sm text-destructive">
             <p>{historyError}</p>
             <button
               type="button"
-              className="mt-2 text-xs font-medium text-white underline underline-offset-4"
+              className="mt-2 text-xs font-medium text-foreground underline underline-offset-4"
               onClick={() => void loadHistory({ selectSession: true })}
             >
               {t("retry")}
             </button>
           </div>
         ) : history.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-slate-400">{t("noChats")}</p>
+          <p className="px-2 py-3 text-sm text-muted-foreground">{t("noChats")}</p>
         ) : (
           <>{history.map((item) => (
             <div
               key={item.id}
               className={cn(
                 "group mb-1 flex items-center rounded-md",
-                sessionId === item.id ? "bg-[#c8f53c] text-[#07090c]" : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                sessionId === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               <button
@@ -745,13 +771,13 @@ function Playground() {
                 type="button"
                 disabled={sending || Boolean(deletingSessionId)}
                 onClick={() => requestDeleteSession(item)}
-                className="mr-1 rounded-md p-1.5 text-slate-400 opacity-70 transition-colors hover:bg-slate-700 hover:text-red-300 focus:opacity-100"
+                className="mr-1 rounded-md p-1.5 text-muted-foreground opacity-70 transition-colors hover:bg-muted hover:text-destructive focus:opacity-100"
                 aria-label={t("hideChat", { title: item.title })}
               >
                 <Trash2 className="size-3.5" />
               </button>
             </div>
-          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-[#c8f53c]" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-300" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-500">{t("endHistory")}</p>}</>
+          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-primary" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-destructive" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-muted-foreground">{t("endHistory")}</p>}</>
         )}
       </div>
     </div>
@@ -772,12 +798,12 @@ function Playground() {
           followLatestRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64
         }}
       >
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-8 sm:px-6">
+        <div className={cn("mx-auto flex w-full max-w-3xl flex-col px-4 sm:px-6", messages.length === 0 ? "h-full py-3 sm:py-4" : "min-h-full py-8")}>
           {messages.length === 0 ? (
-            <div key={heroAnimationKey} className="ov-chat-empty m-auto flex max-w-[900px] flex-col items-center py-12 text-center">
+            <div key={heroAnimationKey} className={cn("ov-chat-empty my-auto flex w-full max-w-[900px] flex-col items-center py-4 text-center sm:py-6", recentUploads.length > 0 && "ov-chat-empty-with-uploads")}>
               <div className="ov-chat-eyebrow ov-up" style={{ animationDelay: ".15s" }}><span />{t("heroEyebrow")}</div>
               <HeroHeading line1={t("heroTitleFirst")} line2={t("heroTitleSecond")} />
-              <p className="ov-up mb-[34px] text-sm leading-6 text-slate-500 sm:text-base" style={{ animationDelay: ".35s" }}>
+              <p className="ov-up mb-[34px] text-sm leading-6 text-muted-foreground sm:text-base" style={{ animationDelay: ".35s" }}>
                 {t("heroDescription")}
               </p>
               <div className="ov-upload-stage ov-up w-full" style={{ animationDelay: ".45s" }}>
@@ -799,6 +825,7 @@ function Playground() {
                   </span>
                 </button>
               </div>
+              {sourceProcessList}
             </div>
           ) : (
             <div className="flex flex-1 flex-col justify-end gap-5 py-4">
@@ -808,23 +835,23 @@ function Playground() {
                   className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}
                 >
                   {item.role === "user" ? (
-                    <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[#c8f53c] px-4 py-3 text-sm leading-6 text-[#07090c] sm:max-w-[75%]">
+                    <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground sm:max-w-[75%]">
                       {item.content}
                     </div>
                   ) : item.loading ? (
                     <div className="w-full py-2" aria-busy="true">
-                      <div role="status" className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+                      <div role="status" className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
                         <span>{item.content ? t("responding") : t("thinking")}</span>
                         <span className="inline-flex gap-1" aria-hidden="true">
-                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
-                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
-                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-primary" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-primary" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-primary" />
                         </span>
                       </div>
                       {item.content && (
-                        <div className="chat-preview-enter whitespace-pre-wrap break-words text-sm leading-7 text-slate-800 sm:text-[15px]">
+                        <div className="chat-preview-enter whitespace-pre-wrap break-words text-sm leading-7 text-foreground sm:text-[15px]">
                           {item.content}
-                          <span aria-hidden="true" className="chat-live-cursor ml-1 inline-block h-4 w-0.5 translate-y-0.5 rounded-full bg-[#c8f53c]" />
+                          <span aria-hidden="true" className="chat-live-cursor ml-1 inline-block h-4 w-0.5 translate-y-0.5 rounded-full bg-primary" />
                         </div>
                       )}
                     </div>
@@ -846,44 +873,9 @@ function Playground() {
 
       <div className="ov-chat-composer-area shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-5">
         <form onSubmit={submitMessage} className="mx-auto w-full max-w-[720px]">
-          {activeUploads.length > 0 && (
-            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-              {activeUploads.map((source) => (
-                <div
-                  key={source.localId}
-                  className="flex min-w-0 max-w-72 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-2 pl-2.5 pr-1.5"
-                  title={source.errorMessage ?? source.fileName}
-                >
-                  <div className="grid size-8 shrink-0 place-items-center rounded-md bg-white text-[#3a6b08] dark:text-[#c8f53c] shadow-sm">
-                    {source.status === "UPLOADING" || source.status === "PROCESSING" ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <FileText className="size-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-slate-800">
-                      {source.fileName}
-                    </p>
-                    <p className="truncate text-[11px] text-slate-500">
-                      {formatBytes(source.fileSizeBytes)}
-                      {source.status === "COMPLETED" ? ` · ${t("readyToAnswer")}` : ""}
-                    </p>
-                    <span
-                      className={cn(
-                        "mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        statusClass(source.status),
-                      )}
-                    >
-                      {t(`status.${source.status}`)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {messages.length > 0 && sourceProcessList}
 
-          <div className={cn("ov-chat-composer relative rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-[#c8f53c] focus-within:ring-2 focus-within:ring-[#c8f53c]/20", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
+          <div className={cn("ov-chat-composer relative rounded-2xl border border-border bg-card p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -894,7 +886,7 @@ function Playground() {
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
-              className="block max-h-36 min-h-14 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400"
+              className="block max-h-36 min-h-14 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
               aria-label={t("message")}
             />
             <div className="flex h-9 items-center justify-between gap-2">
@@ -904,7 +896,7 @@ function Playground() {
                   disabled={sending}
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(
-                    "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
                     sending && "cursor-not-allowed opacity-50",
                   )}
                 >
@@ -925,12 +917,12 @@ function Playground() {
                 disabled={!sending && sendDisabled}
                 onClick={sending ? cancelMessage : undefined}
                 className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
+                  "grid size-9 shrink-0 place-items-center rounded-lg text-white transition-colors",
                   sending
-                    ? "bg-slate-900 text-white hover:bg-slate-700"
-                    : "bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]",
+                    ? "bg-foreground text-background hover:bg-foreground/80"
+                    : "bg-primary text-primary-foreground hover:bg-primary/80",
                   !sending && sendDisabled &&
-                    "cursor-not-allowed bg-slate-200 text-slate-400 hover:bg-slate-200",
+                    "cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted",
                 )}
                 aria-label={sending ? t("cancelResponse") : t("sendMessage")}
               >
@@ -938,7 +930,7 @@ function Playground() {
               </button>
             </div>
           </div>
-          <p className="mt-2 text-center text-[11px] text-slate-400">
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
             {t("uploadNotice")}
           </p>
         </form>
@@ -1098,7 +1090,7 @@ export default function ChatPlayground() {
   if (status !== "authenticated") {
     return (
       <div className="grid min-h-dvh place-items-center bg-white">
-        <Loader2 className="size-8 animate-spin text-[#c8f53c]" aria-label={t("loading")} />
+        <Loader2 className="size-8 animate-spin text-primary" aria-label={t("loading")} />
       </div>
     )
   }
