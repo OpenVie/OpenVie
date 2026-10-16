@@ -12,6 +12,7 @@ import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
 import { transitionTheme } from "@/lib/theme-transition"
+import { requestNewChat } from "@/lib/chat-events"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -175,7 +176,15 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
           </button>
         </div>
 
-        <Link href="/" className="ov-new-chat" onClick={() => setSidebarOpen(false)} aria-label={chat("newChat")}>
+        <Link
+          href="/"
+          className="ov-new-chat"
+          onClick={() => {
+            requestNewChat()
+            setSidebarOpen(false)
+          }}
+          aria-label={chat("newChat")}
+        >
           <Plus className="size-4 shrink-0" />
           <span className="ov-new-chat-label">{chat("newChat")}</span>
         </Link>
@@ -215,9 +224,9 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
               </Link>
             )
           })}
-          {mobileNavContent && (
+          {mobileNavContent ? (
             <div
-              className="mt-3 border-t border-white/10 pt-3 xl:hidden"
+              className="mt-3 border-t border-white/10 pt-3"
               onClick={(event) => {
                 const target = event.target as HTMLElement
                 if (target.closest("button, a")) setSidebarOpen(false)
@@ -225,11 +234,12 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
             >
               {mobileNavContent}
             </div>
+          ) : (
+            <div className="ov-recent">
+              <p>Recent</p>
+              <span>{chat("historyWillAppear")}</span>
+            </div>
           )}
-          <div className="ov-recent">
-            <p>Recent</p>
-            <span>{chat("historyWillAppear")}</span>
-          </div>
         </nav>
 
         {footerNavigation.map(({ href, labelKey, icon: Icon }) => (
