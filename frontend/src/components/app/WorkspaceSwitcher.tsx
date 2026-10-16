@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl"
 import { ChevronDown, Loader2 } from "lucide-react"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { listWorkspacesApi, switchWorkspaceApi } from "@/lib/auth-api"
+import { WORKSPACES_CHANGED_EVENT } from "@/lib/workspace-events"
 import type { WorkspaceSummary } from "@/types"
 import {
   DropdownMenu,
@@ -42,17 +43,27 @@ export function WorkspaceSwitcher() {
   useEffect(() => {
     if (!accessToken) return
     let active = true
-    listWorkspacesApi(accessToken)
-      .then((list) => {
-        if (!active) return
-        workspaceCache = { accessToken, workspaces: list }
-        setWorkspaces(list)
-      })
-      .catch(() => {
-        if (active) setWorkspaces([])
-      })
+    const refreshWorkspaces = () => {
+      listWorkspacesApi(accessToken)
+        .then((list) => {
+          if (!active) return
+          workspaceCache = { accessToken, workspaces: list }
+          setWorkspaces(list)
+        })
+        .catch(() => {
+          if (active) setWorkspaces([])
+        })
+    }
+    const handleWorkspacesChanged = () => {
+      workspaceCache = null
+      refreshWorkspaces()
+    }
+
+    refreshWorkspaces()
+    window.addEventListener(WORKSPACES_CHANGED_EVENT, handleWorkspacesChanged)
     return () => {
       active = false
+      window.removeEventListener(WORKSPACES_CHANGED_EVENT, handleWorkspacesChanged)
     }
   }, [accessToken])
 

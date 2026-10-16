@@ -58,7 +58,7 @@ export function LanguageSwitcher({
             disabled={isPending}
             aria-label={t("language")}
             className={cn(
-              "inline-flex h-auto items-center justify-center gap-1.5 rounded-md border-none px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c8f53c]",
+              "ov-language-trigger inline-flex h-auto items-center justify-center gap-1.5 rounded-md border-none bg-transparent px-2.5 text-sm font-medium transition-colors focus-visible:outline-none",
               className,
             )}
           />
@@ -70,17 +70,20 @@ export function LanguageSwitcher({
       <DropdownMenuContent
         align="end"
         sideOffset={8}
-        className={cn("w-44", menuClassName)}
+        className={cn("ov-language-menu w-44", menuClassName)}
         style={menuStyle}
       >
         {(["en", "vi"] as const).map((option) => (
           <DropdownMenuItem
             key={option}
             onClick={() => changeLocale(option)}
-            className="min-h-9 cursor-pointer justify-between px-2.5"
+            className={cn(
+              "min-h-9 cursor-pointer justify-between px-2.5",
+              option === locale && "ov-language-menu-item-active",
+            )}
           >
             <span>{t(localeLabels[option])}</span>
-            {option === locale ? <Check className="size-4 text-[#c8f53c]" aria-hidden="true" /> : null}
+            {option === locale ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

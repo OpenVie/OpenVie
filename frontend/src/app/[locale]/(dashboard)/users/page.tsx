@@ -43,9 +43,9 @@ function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("Users");
   const active = status === "ACTIVE";
   const pending = status === "PENDING";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-    active ? "bg-green-100 text-green-800" : pending ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"
-  }`}>{status === "ACTIVE" ? t("statuses.active") : status === "PENDING" ? t("statuses.pending") : t("statuses.inactive")}</span>;
+  return <span className={`ov-member-status ${
+    active ? "ov-member-status-active" : pending ? "ov-member-status-pending" : "ov-member-status-inactive"
+  }`}><i aria-hidden="true" />{status === "ACTIVE" ? t("statuses.active") : status === "PENDING" ? t("statuses.pending") : t("statuses.inactive")}</span>;
 }
 
 function TableSkeleton() {
@@ -204,7 +204,7 @@ export default function UsersPage() {
       </div>
       <div className="flex items-center gap-2">
         {/* Invite user button commented out so it can be re-enabled later:
-        {isAdmin && <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"><UserPlus className="size-4" />{t("inviteUser")}</Button>}
+        {isAdmin && <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5"><UserPlus className="size-4" />{t("inviteUser")}</Button>}
         */}
         {canAddMember && (
           <Button
@@ -214,7 +214,7 @@ export default function UsersPage() {
               addMemberForm.reset({ role: "MEMBER" });
               setAddMemberRole("MEMBER");
             }}
-            className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
+            className="gap-1.5"
           >
             <UserPlus className="size-4" />
             {t("addToWorkspace")}
@@ -259,7 +259,7 @@ export default function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-9">
-                        <AvatarFallback className="bg-[#c8f53c]/15 text-xs text-[#3a6b08] dark:text-[#c8f53c]">
+                        <AvatarFallback className="bg-primary/15 text-xs text-primary">
                           {initials(member.fullName || member.email)}
                         </AvatarFallback>
                       </Avatar>
@@ -279,7 +279,7 @@ export default function UsersPage() {
                         disabled={busyId === member.id || protectedAction}
                         onValueChange={value => void changeRole(member, value as WorkspaceRole)}
                       >
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
                           <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
@@ -315,8 +315,8 @@ export default function UsersPage() {
               <TableRow key={`invite-${invitation.id}`}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-full bg-amber-50">
-                      <Mail className="size-4 text-amber-600" />
+                    <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
+                      <Mail className="size-4 text-primary" />
                     </div>
                     <div>
                       <p className="font-medium text-slate-800">{t("pendingInvitation")}</p>

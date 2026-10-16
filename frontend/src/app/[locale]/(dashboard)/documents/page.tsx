@@ -57,17 +57,17 @@ function StatusBadge({
   const t = useTranslations("Documents");
   if (uploadState === "UPLOADING") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
         <Loader2 className="size-3 animate-spin" /> {t("statuses.uploading")}
       </span>
     );
   }
 
   const classes: Record<DocumentStatus, string> = {
-    PENDING: "bg-yellow-100 text-yellow-800",
-    PROCESSING: "bg-blue-100 text-blue-800",
-    COMPLETED: "bg-green-100 text-green-800",
-    FAILED: "bg-red-100 text-red-800",
+    PENDING: "bg-muted text-foreground",
+    PROCESSING: "bg-muted text-foreground",
+    COMPLETED: "bg-primary/15 text-foreground",
+    FAILED: "bg-destructive/15 text-destructive",
   };
   const labels: Record<DocumentStatus, string> = {
     PENDING: t("statuses.pending"), PROCESSING: t("statuses.processing"),
@@ -77,8 +77,8 @@ function StatusBadge({
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${classes[status]}`}>
       {status === "PENDING" && (
         <span className="relative flex size-2" aria-hidden="true">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-yellow-500 opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-yellow-600" />
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+          <span className="relative inline-flex size-2 rounded-full bg-primary" />
         </span>
       )}
       {status === "PROCESSING" && (
@@ -346,11 +346,11 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-slate-800">{t("title")}</h2>
+    <div className="ov-documents-page">
+      <div className="ov-documents-header flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-foreground">{t("title")}</h2>
         <Button
-          className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
+          className="gap-1.5"
           size="sm"
           disabled={!workspace || loading}
           onClick={() => fileInputRef.current?.click()}
@@ -375,23 +375,24 @@ export default function DocumentsPage() {
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        className={`rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
+        className={`ov-documents-dropzone relative overflow-hidden rounded-2xl border-0 p-6 text-center transition-colors ${
           isDragging
-            ? "border-[#c8f53c] bg-[#c8f53c]/10"
-            : "border-slate-300 bg-slate-50 hover:border-[#c8f53c]"
+            ? "bg-primary/10"
+            : "bg-muted/40 hover:bg-primary/5"
         }`}
       >
-        <Cloud className="mx-auto mb-3 h-10 w-10 text-slate-400" />
-        <p className="text-sm font-medium text-slate-700">{t("dropFiles")}</p>
-        <p className="mt-1 text-xs text-slate-400">{t("fileHelp")}</p>
+        <svg className="ov-upload-border" aria-hidden="true"><rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="15" /></svg>
+        <Cloud className="relative mx-auto mb-3 h-10 w-10 text-primary" />
+        <p className="relative text-sm font-medium text-foreground">{t("dropFiles")}</p>
+        <p className="relative mt-1 text-xs text-muted-foreground">{t("fileHelp")}</p>
       </div>
 
       <FilterPanel>
-        <UrlSearchField key={urlQuery} initialValue={urlQuery} onDebouncedChange={(value) => update({ q: value || null })} placeholder={t("searchFilenames")} />
-        <FilterSelect label={t("indexingStatus")} value={statusFilter} onChange={(value) => update({ status: value === "all" ? null : value })}><option value="all">{t("allStatuses")}</option><option value="PENDING">{t("statuses.pending")}</option><option value="PROCESSING">{t("statuses.processing")}</option><option value="COMPLETED">{t("statuses.completed")}</option><option value="FAILED">{t("statuses.failed")}</option></FilterSelect>
-        <FilterSelect label={t("fileType")} value={typeFilter} onChange={(value) => update({ type: value === "all" ? null : value })}><option value="all">{t("allTypes")}</option>{["PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV"].map((value) => <option key={value}>{value}</option>)}</FilterSelect>
+        <UrlSearchField key={urlQuery} initialValue={urlQuery} onDebouncedChange={(value) => update({ q: value || null })} placeholder={t("searchFilenames")} label={t("search")} />
+        <FilterSelect label={t("indexingStatus")} value={statusFilter} onChange={(value) => update({ status: value === "all" ? null : value })} width={140}><option value="all">{t("allStatuses")}</option><option value="PENDING">{t("statuses.pending")}</option><option value="PROCESSING">{t("statuses.processing")}</option><option value="COMPLETED">{t("statuses.completed")}</option><option value="FAILED">{t("statuses.failed")}</option></FilterSelect>
+        <FilterSelect label={t("fileType")} value={typeFilter} onChange={(value) => update({ type: value === "all" ? null : value })} width={120}><option value="all">{t("allTypes")}</option>{["PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV"].map((value) => <option key={value}>{value}</option>)}</FilterSelect>
         <DateRangeFields prefix={t("uploaded")} from={uploadedFrom} to={uploadedTo} onFromChange={(value) => update({ from: value || null })} onToChange={(value) => update({ to: value || null })} />
-        <FilterSelect label={t("sort")} value={sortValue} onChange={(value) => update({ sort: value === "uploaded-desc" ? null : value })}><option value="uploaded-desc">{t("sortOptions.newest")}</option><option value="uploaded-asc">{t("sortOptions.oldest")}</option><option value="filename-asc">{t("sortOptions.filenameAsc")}</option><option value="filename-desc">{t("sortOptions.filenameDesc")}</option><option value="size-desc">{t("sortOptions.largest")}</option><option value="size-asc">{t("sortOptions.smallest")}</option></FilterSelect>
+        <FilterSelect label={t("sort")} value={sortValue} onChange={(value) => update({ sort: value === "uploaded-desc" ? null : value })} width={156}><option value="uploaded-desc">{t("sortOptions.newest")}</option><option value="uploaded-asc">{t("sortOptions.oldest")}</option><option value="filename-asc">{t("sortOptions.filenameAsc")}</option><option value="filename-desc">{t("sortOptions.filenameDesc")}</option><option value="size-desc">{t("sortOptions.largest")}</option><option value="size-asc">{t("sortOptions.smallest")}</option></FilterSelect>
         <ClearFiltersButton disabled={!hasFilters} onClick={clear} />
       </FilterPanel>
       <ResultsSummary total={total} refreshing={refreshing} />
@@ -401,9 +402,9 @@ export default function DocumentsPage() {
           <TableSkeleton />
         ) : displayDocuments.length === 0 ? (
           <CardContent className="py-16 text-center">
-            <FileText className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-            <p className="font-medium text-slate-500">{hasFilters ? t("noMatches") : t("empty")}</p>
-            <p className="mt-1 text-sm text-slate-400">{t("emptyDescription")}</p>
+            <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <p className="font-medium text-muted-foreground">{hasFilters ? t("noMatches") : t("empty")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("emptyDescription")}</p>
           </CardContent>
         ) : (
           <div className="overflow-x-auto"><Table>
@@ -422,7 +423,7 @@ export default function DocumentsPage() {
               {displayDocuments.map((doc) => (
                 <TableRow
                   key={doc.localId ?? doc.id}
-                  className={!doc.uploadState ? "cursor-pointer hover:bg-slate-50" : undefined}
+                  className={!doc.uploadState ? "cursor-pointer hover:bg-muted/50" : undefined}
                   tabIndex={!doc.uploadState ? 0 : undefined}
                   role={!doc.uploadState ? "link" : undefined}
                   onClick={() => {
@@ -435,7 +436,7 @@ export default function DocumentsPage() {
                     }
                   }}
                 >
-                  <TableCell className="font-medium text-slate-800">{doc.fileName}</TableCell>
+                  <TableCell className="font-medium">{doc.fileName}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs uppercase">
                       {doc.fileType}
@@ -444,13 +445,13 @@ export default function DocumentsPage() {
                   <TableCell>
                     <StatusBadge status={doc.status} uploadState={doc.uploadState} />
                   </TableCell>
-                  <TableCell className="text-sm text-slate-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {formatBytes(doc.fileSizeBytes)}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {formatDate(doc.uploadedAt)}
                   </TableCell>
-                  <TableCell className="max-w-xs text-sm text-slate-500">
+                  <TableCell className="max-w-xs text-sm text-muted-foreground">
                     {doc.status === "COMPLETED"
                       ? t("readyToAnswer")
                       : doc.status === "FAILED"
@@ -462,7 +463,7 @@ export default function DocumentsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-slate-400 hover:text-red-600"
+                        className="text-muted-foreground hover:text-destructive"
                         aria-label={t("deleteFile", { fileName: doc.fileName })}
                         disabled={Boolean(doc.uploadState) || deletingId === doc.id || doc.status === "PENDING" || doc.status === "PROCESSING"}
                         onClick={(event) => {
@@ -490,7 +491,7 @@ export default function DocumentsPage() {
             <DialogDescription>{t("filesSelected", { count: pendingFiles.length })}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-muted p-3 text-sm text-foreground">
               {pendingFiles.map((file) => <p key={`${file.name}-${file.size}`} className="truncate">{file.name}</p>)}
             </div>
           </div>
@@ -511,7 +512,7 @@ export default function DocumentsPage() {
           <DialogHeader>
             <DialogTitle>{t("deleteTitle")}</DialogTitle>
             <DialogDescription>
-              <span className="font-medium text-slate-700">{deleteTarget?.fileName}</span> {t("deleteDescription")}
+              <span className="font-medium text-foreground">{deleteTarget?.fileName}</span> {t("deleteDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

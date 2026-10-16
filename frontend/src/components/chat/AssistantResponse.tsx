@@ -32,7 +32,7 @@ function InlineMarkdown({
         <Link
           key={`${token}-${index}`}
           href={documentViewerHref(citation.document_id, [citation])}
-          className="mx-0.5 inline-flex translate-y-[-1px] items-center rounded-md bg-[#c8f53c]/15 px-1.5 py-0.5 text-xs font-semibold text-[#3a6b08] dark:text-[#c8f53c] no-underline transition-colors hover:bg-[#c8f53c]/25"
+          className="mx-0.5 inline-flex translate-y-[-1px] items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary no-underline transition-colors hover:bg-primary/20"
           title={t("openSourceIn", { source: citation.source_name })}
         >
           {citation.id}
@@ -44,7 +44,7 @@ function InlineMarkdown({
     }
     if (token.startsWith("`") && token.endsWith("`")) {
       return (
-        <code key={index} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-800">
+        <code key={index} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground">
           {token.slice(1, -1)}
         </code>
       );
@@ -59,7 +59,7 @@ function InlineMarkdown({
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="font-medium text-[#3a6b08] dark:text-[#c8f53c] underline underline-offset-2"
+          className="font-medium text-primary underline underline-offset-2"
         >
           {link[1]}
         </a>
@@ -91,9 +91,9 @@ function markdownBlocks(content: string, citations: Map<string, ChatCitation>): 
       }
       index += 1;
       blocks.push(
-        <div key={`code-${index}`} className="my-4 overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
-          {language && <div className="border-b border-slate-800 px-4 py-2 text-xs text-slate-400">{language}</div>}
-          <pre className="overflow-x-auto p-4 text-sm leading-6 text-slate-100"><code>{code.join("\n")}</code></pre>
+        <div key={`code-${index}`} className="ov-code-block my-4 overflow-hidden rounded-xl border">
+          {language && <div className="ov-code-block-label border-b px-4 py-2 text-xs">{language}</div>}
+          <pre className="ov-code-block-content overflow-x-auto p-4 text-sm leading-6"><code>{code.join("\n")}</code></pre>
         </div>,
       );
       continue;
@@ -147,7 +147,7 @@ function markdownBlocks(content: string, citations: Map<string, ChatCitation>): 
         index += 1;
       }
       blocks.push(
-        <blockquote key={`quote-${index}`} className="my-4 border-l-4 border-[#c8f53c]/50 pl-4 text-slate-600">
+        <blockquote key={`quote-${index}`} className="my-4 border-l-4 border-primary/30 pl-4 text-muted-foreground">
           <InlineMarkdown text={quote.join(" ")} citations={citations} />
         </blockquote>,
       );
@@ -163,10 +163,10 @@ function markdownBlocks(content: string, citations: Map<string, ChatCitation>): 
       }
       const rows = tableLines.map(splitTableRow);
       blocks.push(
-        <div key={`table-${index}`} className="my-4 overflow-x-auto rounded-lg border border-slate-200">
+        <div key={`table-${index}`} className="my-4 overflow-x-auto rounded-lg border border-border">
           <table className="w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50"><tr>{rows[0]?.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-slate-200 px-3 py-2 font-semibold"><InlineMarkdown text={cell} citations={citations} /></th>)}</tr></thead>
-            <tbody>{rows.slice(1).map((row, rowIndex) => <tr key={rowIndex} className="border-b border-slate-100 last:border-0">{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2"><InlineMarkdown text={cell} citations={citations} /></td>)}</tr>)}</tbody>
+            <thead className="bg-muted"><tr>{rows[0]?.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-border px-3 py-2 font-semibold"><InlineMarkdown text={cell} citations={citations} /></th>)}</tr></thead>
+            <tbody>{rows.slice(1).map((row, rowIndex) => <tr key={rowIndex} className="border-b border-border/60 last:border-0">{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2"><InlineMarkdown text={cell} citations={citations} /></td>)}</tr>)}</tbody>
           </table>
         </div>,
       );
@@ -182,7 +182,7 @@ function markdownBlocks(content: string, citations: Map<string, ChatCitation>): 
       index += 1;
     }
     blocks.push(
-      <p key={`p-${index}`} className="my-3 leading-7 text-slate-800">
+      <p key={`p-${index}`} className="my-3 leading-7 text-foreground">
         <InlineMarkdown text={paragraph.join(" ")} citations={citations} />
       </p>,
     );
@@ -211,26 +211,26 @@ export function AssistantResponse({
   );
 
   return (
-    <div className={error ? "rounded-xl bg-red-50 px-4 py-3 text-red-700" : "text-slate-900"}>
+    <div className={error ? "rounded-xl bg-destructive/10 px-4 py-3 text-destructive" : "text-foreground"}>
       <div className="text-sm sm:text-[15px]">{markdownBlocks(content, citationsById)}</div>
       {grouped.length > 0 && (
-        <div className="chat-sources-enter mt-6 border-t border-slate-200 pt-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("sources")}</p>
+        <div className="chat-sources-enter mt-6 border-t border-border pt-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("sources")}</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {grouped.map(([documentId, documentCitations]) => (
               <Link
                 key={documentId}
                 href={documentViewerHref(documentId, documentCitations)}
-                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-[#c8f53c]/50 hover:bg-[#c8f53c]/10"
+                className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-[#3a6b08] dark:group-hover:text-[#c8f53c]">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground group-hover:bg-card group-hover:text-primary">
                   <FileText className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-slate-800">{documentCitations[0]?.source_name}</span>
-                  <span className="block text-xs text-slate-500">{t("openCitedSource")}</span>
+                  <span className="block truncate text-sm font-medium text-foreground">{documentCitations[0]?.source_name}</span>
+                  <span className="block text-xs text-muted-foreground">{t("openCitedSource")}</span>
                 </span>
-                <ExternalLink className="size-4 shrink-0 text-slate-400 group-hover:text-[#3a6b08] dark:group-hover:text-[#c8f53c]" />
+                <ExternalLink className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
               </Link>
             ))}
           </div>

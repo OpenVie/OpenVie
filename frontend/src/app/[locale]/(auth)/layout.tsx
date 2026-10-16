@@ -1,18 +1,44 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 import { Moon, Sun } from "lucide-react"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
-import { useTheme } from "@/hooks/useTheme"
+import { transitionTheme } from "@/lib/theme-transition"
+
+type Theme = "light" | "dark"
+const AUTH_THEME_EVENT = "openvie:auth-themechange"
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+}
+
+function subscribeToThemeChange(onStoreChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === "openvie.theme") onStoreChange()
+  }
+  window.addEventListener(AUTH_THEME_EVENT, onStoreChange)
+  window.addEventListener("storage", onStorage)
+  return () => {
+    window.removeEventListener(AUTH_THEME_EVENT, onStoreChange)
+    window.removeEventListener("storage", onStorage)
+  }
+}
+
+function serverThemeSnapshot(): Theme {
+  return "light"
+}
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const { theme, toggleTheme } = useTheme()
+  // The server snapshot keeps hydration deterministic; the browser then reads
+  // the saved preference without rendering different initial markup.
+  const theme = useSyncExternalStore(subscribeToThemeChange, readStoredTheme, serverThemeSnapshot)
 
   useEffect(() => {
     const root = rootRef.current
     const spotlight = root?.querySelector<HTMLElement>(".ov-auth-spotlight")
-    if (!root || !spotlight || !window.matchMedia?.("(hover: hover)")?.matches) return
+    if (!root || !spotlight || !window.matchMedia("(hover: hover)").matches) return
 
     function moveSpotlight(event: PointerEvent) {
       const bounds = root!.getBoundingClientRect()
@@ -29,6 +55,19 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
+  useEffect(() => {
+    document.documentElement.dataset.ovTheme = theme
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
+  function changeTheme(nextTheme: Theme) {
+    transitionTheme(() => {
+      window.localStorage.setItem("openvie.theme", nextTheme)
+      window.dispatchEvent(new Event(AUTH_THEME_EVENT))
+    })
+    window.dispatchEvent(new Event("openvie:themechange"))
+  }
+
   return (
     <div ref={rootRef} className="ov-auth-page">
       <div className="ov-background-grid ov-auth-grid" aria-hidden="true" />
@@ -43,7 +82,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <button
           type="button"
           className="ov-auth-theme"
-          onClick={toggleTheme}
+          onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
           aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
         >
           {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
