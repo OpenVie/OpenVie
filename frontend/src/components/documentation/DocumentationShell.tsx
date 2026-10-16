@@ -8,7 +8,6 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
-import { useTheme } from "@/hooks/useTheme"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import type { AppLocale } from "@/i18n/routing"
 import {
@@ -18,8 +17,15 @@ import {
   type DocumentationPage,
 } from "@/lib/documentation"
 import { cn } from "@/lib/utils"
+import { transitionTheme } from "@/lib/theme-transition"
 
 type SearchResult = { href: string; pageTitle: string; title: string; description: string }
+type Theme = "light" | "dark"
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+}
 
 function buildSearchResults(query: string, pages: DocumentationPage[]): SearchResult[] {
   const needle = normalizeDocumentationSearch(query.trim())
@@ -58,7 +64,7 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
   if (!open) return null
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-950/55 px-4 pt-[10vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-start justify-center bg-black/55 px-4 pt-[10vh] backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={t("searchDialog")}
@@ -66,7 +72,7 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-2xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-xl border border-[var(--ov-docs-border)] bg-[var(--ov-docs-bg)] shadow-2xl"
         onKeyDown={(event) => {
           if (event.key !== "Tab") return
           const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('input, button, a[href]')
@@ -77,8 +83,8 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
           else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
         }}
       >
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4">
-          <Search className="size-5 text-slate-400" aria-hidden="true" />
+        <div className="flex items-center gap-3 border-b border-[var(--ov-docs-border)] px-4">
+          <Search className="size-5 text-[var(--ov-docs-muted)]" aria-hidden="true" />
           <input
             autoFocus
             value={query}
@@ -90,9 +96,9 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
               if (event.key === "Enter" && results[activeIndex]) { router.push(results[activeIndex].href); closeDialog() }
             }}
             placeholder={t("searchPlaceholder")}
-            className="h-14 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400"
+            className="h-14 min-w-0 flex-1 bg-transparent text-base text-[var(--ov-docs-text)] outline-none placeholder:text-[var(--ov-docs-muted)]"
           />
-          <button type="button" onClick={closeDialog} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label={t("closeSearch")}><X className="size-5" /></button>
+          <button type="button" onClick={closeDialog} className="rounded p-1 text-[var(--ov-docs-muted)] hover:bg-[var(--ov-docs-surface)] hover:text-[var(--ov-docs-text)]" aria-label={t("closeSearch")}><X className="size-5" /></button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {results.map((result, index) => (
@@ -101,15 +107,15 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
               href={result.href}
               onClick={closeDialog}
               onMouseEnter={() => setActiveIndex(index)}
-              className={cn("block rounded-lg px-3 py-3", index === activeIndex ? "bg-[#c8f53c]/15" : "hover:bg-slate-50")}
+              className={cn("block rounded-lg px-3 py-3", index === activeIndex ? "bg-primary/10" : "hover:bg-[var(--ov-docs-surface)]")}
             >
-              <span className="block text-sm font-semibold text-slate-900">{result.title}</span>
-              <span className="mt-0.5 block text-xs text-slate-500">{result.pageTitle} · {result.description}</span>
+              <span className="block text-sm font-semibold text-[var(--ov-docs-text)]">{result.title}</span>
+              <span className="mt-0.5 block text-xs text-[var(--ov-docs-muted)]">{result.pageTitle} · {result.description}</span>
             </Link>
           ))}
-          {results.length === 0 && <p className="px-4 py-10 text-center text-sm text-slate-500">{t("noResults", { query })}</p>}
+          {results.length === 0 && <p className="px-4 py-10 text-center text-sm text-[var(--ov-docs-muted)]">{t("noResults", { query })}</p>}
         </div>
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">{t("keyboardHelp")}</div>
+        <div className="border-t border-[var(--ov-docs-border)] bg-[var(--ov-docs-surface)] px-4 py-2 text-xs text-[var(--ov-docs-muted)]">{t("keyboardHelp")}</div>
       </div>
     </div>
   )
@@ -122,7 +128,7 @@ function DocsNavigation({ pages, pathname, onNavigate }: { pages: DocumentationP
     <nav aria-label={t("navigation")} className="space-y-6">
       {getDocumentationGroups(locale).map((group) => (
         <div key={group.id}>
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{group.title}</p>
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-[var(--ov-docs-muted)]">{group.title}</p>
           <div className="space-y-1">
             {pages.filter((page) => page.group === group.id).map((page) => (
               <Link
@@ -130,7 +136,7 @@ function DocsNavigation({ pages, pathname, onNavigate }: { pages: DocumentationP
                 href={page.href}
                 onClick={onNavigate}
                 aria-current={pathname === page.href ? "page" : undefined}
-                className={cn("block rounded-md px-3 py-2 text-sm transition-colors", pathname === page.href ? "bg-[#c8f53c]/15 font-semibold text-[#8bbd00] dark:text-[#c8f53c]" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950")}
+                className={cn("block rounded-md px-3 py-2 text-sm transition-colors", pathname === page.href ? "bg-primary/10 font-semibold text-primary" : "text-[var(--ov-docs-muted)] hover:bg-[var(--ov-docs-surface)] hover:text-[var(--ov-docs-text)]")}
               >
                 {page.title}
               </Link>
@@ -155,7 +161,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
   const next = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const { theme, toggleTheme } = useTheme()
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -166,22 +172,33 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", shortcut)
   }, [])
 
+  useEffect(() => {
+    document.documentElement.dataset.ovTheme = theme
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem("openvie.theme", theme)
+    window.dispatchEvent(new Event("openvie:themechange"))
+  }, [theme])
+
+  function changeTheme(nextTheme: Theme) {
+    transitionTheme(() => setTheme(nextTheme))
+  }
+
   return (
-    <div className={cn("ov-docs-shell min-h-dvh", theme === "light" && "ov-docs-light")} suppressHydrationWarning>
-      <header className="ov-docs-header sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div className={cn("ov-docs-shell min-h-dvh", theme === "light" && "ov-docs-light")}>
+      <header className="ov-docs-header sticky top-0 z-50 border-b border-[var(--ov-docs-border)] bg-[var(--ov-docs-bg)]/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-3 px-4 sm:px-6">
-          <button type="button" onClick={() => setMobileOpen(true)} className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label={t("openNavigation")}><Menu className="size-5" /></button>
+          <button type="button" onClick={() => setMobileOpen(true)} className="rounded-md p-2 text-[var(--ov-docs-muted)] hover:bg-[var(--ov-docs-surface)] lg:hidden" aria-label={t("openNavigation")}><Menu className="size-5" /></button>
           <Link href="/documentation" className="flex shrink-0 items-center gap-2">
             <Image src="/images/openvie-logo.svg" alt="OpenVie" width={28} height={28} />
-            <span className="font-bold">OpenVie</span><span className="hidden border-l border-slate-300 pl-2 text-sm text-slate-500 sm:inline">{t("docs")}</span>
+            <span className="font-bold">OpenVie</span><span className="hidden border-l border-[var(--ov-docs-border)] pl-2 text-sm text-[var(--ov-docs-muted)] sm:inline">{t("docs")}</span>
           </Link>
-          <button type="button" onClick={() => setSearchOpen(true)} className="ov-docs-action mx-auto flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 hover:border-slate-300 hover:bg-white">
-            <Search className="size-4" /><span className="truncate">{t("search")}</span><kbd className="ml-auto hidden rounded border bg-white px-1.5 py-0.5 font-sans text-[10px] text-slate-400 sm:inline">⌘K</kbd>
+          <button type="button" onClick={() => setSearchOpen(true)} className="ov-docs-action mx-auto flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-[var(--ov-docs-border)] bg-[var(--ov-docs-surface)] px-3 text-sm text-[var(--ov-docs-muted)] hover:border-primary/40 hover:bg-[var(--ov-docs-surface-strong)]">
+            <Search className="size-4" /><span className="truncate">{t("search")}</span><kbd className="ml-auto hidden rounded border border-[var(--ov-docs-border)] bg-[var(--ov-docs-surface-strong)] px-1.5 py-0.5 font-sans text-[10px] text-[var(--ov-docs-muted)] sm:inline">⌘K</kbd>
           </button>
           <button
             type="button"
             className="ov-docs-action ov-docs-theme hidden sm:inline-flex"
-            onClick={toggleTheme}
+            onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
             aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
           >
             {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
@@ -193,36 +210,36 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
             menuStyle={liquidGlassMenuStyle(theme)}
           />
           <nav className="hidden shrink-0 items-center gap-1 text-sm md:flex" aria-label={t("headerNavigation")}>
-            {authStatus === "unauthenticated" && <Link href="/login" className="rounded-md px-3 py-2 text-slate-600 hover:bg-slate-100">{t("login")}</Link>}
-            {authStatus === "authenticated" && user && <span className="max-w-36 truncate rounded-md bg-slate-100 px-3 py-2 text-slate-600" title={user.fullName}>{user.fullName}</span>}
-            {authStatus === "rehydrating" && <span className="h-9 w-20 animate-pulse rounded-md bg-slate-100" aria-label={t("checkingSession")} />}
-            <Link href="/" className="ov-docs-action flex items-center gap-2 rounded-md bg-[#c8f53c] px-3 py-2 font-semibold text-[#07090c] hover:bg-[#d9ff68]"><MessageSquare className="size-4" />{t("chat")}</Link>
+            {authStatus === "unauthenticated" && <Link href="/login" className="rounded-md px-3 py-2 text-[var(--ov-docs-muted)] hover:bg-[var(--ov-docs-surface)]">{t("login")}</Link>}
+            {authStatus === "authenticated" && user && <span className="max-w-36 truncate rounded-md bg-[var(--ov-docs-surface)] px-3 py-2 text-[var(--ov-docs-muted)]" title={user.fullName}>{user.fullName}</span>}
+            {authStatus === "rehydrating" && <span className="h-9 w-20 animate-pulse rounded-md bg-[var(--ov-docs-surface)]" aria-label={t("checkingSession")} />}
+            <Link href="/" className="ov-docs-action flex items-center gap-2 rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground hover:bg-primary/80"><MessageSquare className="size-4" />{t("chat")}</Link>
           </nav>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-[1500px] grid-cols-1 lg:grid-cols-[250px_minmax(0,760px)] lg:gap-10 lg:px-6 xl:grid-cols-[250px_minmax(0,760px)_220px]">
-        <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] overflow-y-auto border-r border-slate-200 py-8 pr-6 lg:block"><DocsNavigation pages={pages} pathname={pathname} /></aside>
+        <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] overflow-y-auto border-r border-[var(--ov-docs-border)] py-8 pr-6 lg:block"><DocsNavigation pages={pages} pathname={pathname} /></aside>
         <main className="min-w-0 px-5 py-10 sm:px-8 lg:px-0 lg:py-12">
           {children}
-          <nav className="mt-12 grid gap-3 border-t border-slate-200 pt-8 sm:grid-cols-2" aria-label={t("previousNextNavigation")}>
-            {previous ? <Link href={previous.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 hover:border-[#c8f53c]"><span className="flex items-center gap-2 text-xs text-slate-500"><ArrowLeft className="size-3.5" />{t("previous")}</span><span className="mt-1 block font-semibold text-slate-900">{previous.title}</span></Link> : <span />}
-            {next && <Link href={next.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 text-right hover:border-[#c8f53c]"><span className="flex items-center justify-end gap-2 text-xs text-slate-500">{t("next")}<ArrowRight className="size-3.5" /></span><span className="mt-1 block font-semibold text-slate-900">{next.title}</span></Link>}
+          <nav className="mt-12 grid gap-3 border-t border-[var(--ov-docs-border)] pt-8 sm:grid-cols-2" aria-label={t("previousNextNavigation")}>
+            {previous ? <Link href={previous.href} className="ov-docs-action rounded-lg border border-[var(--ov-docs-border)] p-4 hover:border-primary/30"><span className="flex items-center gap-2 text-xs text-[var(--ov-docs-muted)]"><ArrowLeft className="size-3.5" />{t("previous")}</span><span className="mt-1 block font-semibold text-[var(--ov-docs-text)]">{previous.title}</span></Link> : <span />}
+            {next && <Link href={next.href} className="ov-docs-action rounded-lg border border-[var(--ov-docs-border)] p-4 text-right hover:border-primary/30"><span className="flex items-center justify-end gap-2 text-xs text-[var(--ov-docs-muted)]">{t("next")}<ArrowRight className="size-3.5" /></span><span className="mt-1 block font-semibold text-[var(--ov-docs-text)]">{next.title}</span></Link>}
           </nav>
         </main>
         <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] py-12 xl:block">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("onThisPage")}</p>
-          <nav className="border-l border-slate-200" aria-label={t("onThisPage")}>
-            {current.sections.map((section) => <Link key={section.id} href={`#${section.id}`} className="block border-l border-transparent px-4 py-1.5 text-sm leading-5 text-slate-500 hover:border-[#c8f53c] hover:text-[#8bbd00] dark:hover:text-[#c8f53c]">{section.title}</Link>)}
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--ov-docs-muted)]">{t("onThisPage")}</p>
+          <nav className="border-l border-[var(--ov-docs-border)]" aria-label={t("onThisPage")}>
+            {current.sections.map((section) => <Link key={section.id} href={`#${section.id}`} className="block border-l border-transparent px-4 py-1.5 text-sm leading-5 text-[var(--ov-docs-muted)] hover:border-primary hover:text-primary">{section.title}</Link>)}
           </nav>
         </aside>
       </div>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-[60] lg:hidden">
-          <button type="button" className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} aria-label={t("closeNavigation")} />
-          <aside className="relative h-full w-[min(86vw,330px)] overflow-y-auto bg-white p-5 shadow-xl">
-            <div className="mb-6 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><BookOpen className="size-5 text-[#8bbd00] dark:text-[#c8f53c]" />{t("documentation")}</span><button type="button" onClick={() => setMobileOpen(false)} className="rounded p-1.5 hover:bg-slate-100" aria-label={t("closeNavigation")}><X className="size-5" /></button></div>
+          <button type="button" className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} aria-label={t("closeNavigation")} />
+          <aside className="relative h-full w-[min(86vw,330px)] overflow-y-auto bg-[var(--ov-docs-bg)] p-5 text-[var(--ov-docs-text)] shadow-xl">
+            <div className="mb-6 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><BookOpen className="size-5 text-primary" />{t("documentation")}</span><button type="button" onClick={() => setMobileOpen(false)} className="rounded p-1.5 hover:bg-[var(--ov-docs-surface)]" aria-label={t("closeNavigation")}><X className="size-5" /></button></div>
             <LanguageSwitcher
               className="mb-6 w-full justify-start"
               menuClassName="ov-language-menu"
@@ -230,7 +247,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
               showName
             />
             <DocsNavigation pages={pages} pathname={pathname} onNavigate={() => setMobileOpen(false)} />
-            <div className="mt-8 grid gap-2 border-t pt-5 text-sm">{authStatus === "unauthenticated" && <Link href="/login">{t("login")}</Link>}{authStatus === "authenticated" && user && <p className="truncate text-slate-500">{t("signedInAs", { name: user.fullName })}</p>}<Link href="/" className="font-medium text-[#8bbd00] dark:text-[#c8f53c]">{t("chat")}</Link></div>
+            <div className="mt-8 grid gap-2 border-t border-[var(--ov-docs-border)] pt-5 text-sm">{authStatus === "unauthenticated" && <Link href="/login">{t("login")}</Link>}{authStatus === "authenticated" && user && <p className="truncate text-[var(--ov-docs-muted)]">{t("signedInAs", { name: user.fullName })}</p>}<Link href="/" className="font-medium text-primary">{t("chat")}</Link></div>
           </aside>
         </div>
       )}

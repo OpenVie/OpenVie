@@ -28,7 +28,7 @@ export default async function GettingStartedPage({ params }: PageProps) {
       <Step title={t("askTitle")}>{t("askText")}</Step>
     </Steps>
     <DocSection id="upload" title={sections.upload}>
-      <p>{t.rich("uploadBody", { link: (chunks) => <Link className="text-[#3a6b08] dark:text-[#c8f53c] underline" href="/documents">{chunks}</Link>, strong: (chunks) => <strong>{chunks}</strong> })}</p>
+      <p>{t.rich("uploadBody", { link: (chunks) => <Link className="text-primary underline" href="/documents">{chunks}</Link>, strong: (chunks) => <strong>{chunks}</strong> })}</p>
       <Callout type="warning">{t.rich("uploadWarning", { code: (chunks) => <code>{chunks}</code> })}</Callout>
     </DocSection>
     <DocSection id="index" title={sections.index}>

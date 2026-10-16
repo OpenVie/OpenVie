@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import Image from "next/image"
 import { useTranslations } from "next-intl"
-import { LogOut, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun } from "lucide-react"
+import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun } from "lucide-react"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { logoutApi } from "@/lib/auth-api"
@@ -11,6 +11,7 @@ import { visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
+import { transitionTheme } from "@/lib/theme-transition"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +23,6 @@ import {
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { withNext } from "@/lib/auth-redirect"
 import { cn } from "@/lib/utils"
-import { useTheme } from "@/hooks/useTheme"
 import { AppLoadingScreen } from "@/components/app/AppLoadingScreen"
 
 function initialsFrom(fullName: string | undefined): string {
@@ -40,6 +40,13 @@ type AppShellProps = {
   mobileNavContent?: ReactNode
 }
 
+type Theme = "light" | "dark"
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+}
+
 export function AppShell({ children, contentClassName, mobileNavContent }: AppShellProps) {
   const t = useTranslations("Navigation")
   const chat = useTranslations("Chat")
@@ -49,7 +56,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const { theme, toggleTheme } = useTheme()
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
   const languageMenuStyle: CSSProperties = liquidGlassMenuStyle(theme)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef<HTMLElement>(null)
@@ -83,11 +90,28 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
 
     const frame = window.requestAnimationFrame(placeNavigationIndicator)
     window.addEventListener("resize", placeNavigationIndicator)
+    const navigation = navigationRef.current
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(placeNavigationIndicator)
+    if (navigation) resizeObserver?.observe(navigation)
     return () => {
       window.cancelAnimationFrame(frame)
       window.removeEventListener("resize", placeNavigationIndicator)
+      resizeObserver?.disconnect()
     }
   }, [pathname, sidebarCollapsed])
+
+  useEffect(() => {
+    document.documentElement.dataset.ovTheme = theme
+    document.documentElement.dataset.theme = theme
+    window.localStorage.setItem("openvie.theme", theme)
+    window.dispatchEvent(new Event("openvie:themechange"))
+  }, [theme])
+
+  function changeTheme(nextTheme: Theme) {
+    transitionTheme(() => setTheme(nextTheme))
+  }
 
   useEffect(() => {
     const mainArea = mainAreaRef.current
@@ -114,11 +138,12 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   }, [])
 
   return (
-    <div className={cn("ov-shell min-h-dvh", theme === "light" && "ov-light")} suppressHydrationWarning>
+    <div className={cn("ov-shell min-h-dvh", theme === "light" && "ov-light")}>
       <aside
         className={cn(
           "ov-sidebar fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col transition-transform duration-200 xl:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarOpen && "ov-mobile-sidebar-open",
           sidebarCollapsed && "ov-sidebar-collapsed",
         )}
       >
@@ -155,7 +180,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
           <span className="ov-new-chat-label">{chat("newChat")}</span>
         </Link>
 
-        <div className="ov-workspace-container px-1 pb-3 pt-1">
+        <div className="ov-workspace-container pb-3 pt-1">
           <WorkspaceSwitcher />
         </div>
 
@@ -221,13 +246,13 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
               <span className="ov-avatar">{initialsFrom(user?.fullName)}</span>
               <span className="ov-account-copy min-w-0 flex-1 text-left">
                 <span className="block truncate text-sm font-bold">{user?.fullName ?? t("user")}</span>
-                <span className="block truncate text-xs text-[#a9b3ab]">{user?.email ?? ""}</span>
+                <span className="block truncate text-xs text-muted-foreground">{user?.email ?? ""}</span>
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="ov-account-menu w-56">
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="text-[#a9b3ab]">{user?.email ?? t("user")}</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => void handleLogout()} className="gap-2 text-[#f2f5f0]">
+                <DropdownMenuLabel className="ov-account-menu-label">{user?.email ?? t("user")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => void handleLogout()} className="gap-2">
                   <LogOut className="size-4" />
                   {t("logout")}
                 </DropdownMenuItem>
@@ -240,7 +265,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
       {sidebarOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-30 bg-black/50 xl:hidden"
+          className="ov-mobile-sidebar-backdrop fixed inset-0 z-30 bg-black/50 xl:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-label={t("closeNavigation")}
         />
@@ -251,11 +276,19 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
         <div className="ov-aurora" aria-hidden="true"><i /><i /><i /><i /></div>
         <div className="ov-spotlight" aria-hidden="true" />
         <header className="ov-topbar sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-8">
+          <button
+            type="button"
+            className="ov-mobile-nav-toggle ov-icon-button xl:hidden"
+            onClick={() => setSidebarOpen(true)}
+            aria-label={t("openNavigation")}
+          >
+            <Menu className="size-5" />
+          </button>
           <div className="ov-topbar-controls ml-auto">
             <button
               type="button"
               className="ov-topbar-control"
-              onClick={toggleTheme}
+              onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
               aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
             >
               {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
@@ -272,6 +305,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
         </header>
         <main className={cn("ov-main p-4 sm:p-8", contentClassName)}>{children}</main>
       </div>
+
     </div>
   )
 }
