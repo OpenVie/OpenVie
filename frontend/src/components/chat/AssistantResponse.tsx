@@ -32,7 +32,7 @@ function InlineMarkdown({
         <Link
           key={`${token}-${index}`}
           href={documentViewerHref(citation.document_id, [citation])}
-          className="mx-0.5 inline-flex translate-y-[-1px] items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 no-underline transition-colors hover:bg-indigo-100"
+          className="mx-0.5 inline-flex translate-y-[-1px] items-center rounded-md bg-[#c8f53c]/15 px-1.5 py-0.5 text-xs font-semibold text-[#3a6b08] dark:text-[#c8f53c] no-underline transition-colors hover:bg-[#c8f53c]/25"
           title={t("openSourceIn", { source: citation.source_name })}
         >
           {citation.id}
@@ -59,7 +59,7 @@ function InlineMarkdown({
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="font-medium text-indigo-700 underline underline-offset-2"
+          className="font-medium text-[#3a6b08] dark:text-[#c8f53c] underline underline-offset-2"
         >
           {link[1]}
         </a>
@@ -147,7 +147,7 @@ function markdownBlocks(content: string, citations: Map<string, ChatCitation>): 
         index += 1;
       }
       blocks.push(
-        <blockquote key={`quote-${index}`} className="my-4 border-l-4 border-indigo-200 pl-4 text-slate-600">
+        <blockquote key={`quote-${index}`} className="my-4 border-l-4 border-[#c8f53c]/50 pl-4 text-slate-600">
           <InlineMarkdown text={quote.join(" ")} citations={citations} />
         </blockquote>,
       );
@@ -221,16 +221,16 @@ export function AssistantResponse({
               <Link
                 key={documentId}
                 href={documentViewerHref(documentId, documentCitations)}
-                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
+                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-[#c8f53c]/50 hover:bg-[#c8f53c]/10"
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-indigo-600">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-[#3a6b08] dark:group-hover:text-[#c8f53c]">
                   <FileText className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-slate-800">{documentCitations[0]?.source_name}</span>
                   <span className="block text-xs text-slate-500">{t("openCitedSource")}</span>
                 </span>
-                <ExternalLink className="size-4 shrink-0 text-slate-400 group-hover:text-indigo-600" />
+                <ExternalLink className="size-4 shrink-0 text-slate-400 group-hover:text-[#3a6b08] dark:group-hover:text-[#c8f53c]" />
               </Link>
             ))}
           </div>

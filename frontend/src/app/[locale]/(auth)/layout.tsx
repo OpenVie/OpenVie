@@ -1,24 +1,18 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Moon, Sun } from "lucide-react"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
-
-type Theme = "light" | "dark"
-
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
-}
+import { useTheme } from "@/hooks/useTheme"
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     const root = rootRef.current
     const spotlight = root?.querySelector<HTMLElement>(".ov-auth-spotlight")
-    if (!root || !spotlight || !window.matchMedia("(hover: hover)").matches) return
+    if (!root || !spotlight || !window.matchMedia?.("(hover: hover)")?.matches) return
 
     function moveSpotlight(event: PointerEvent) {
       const bounds = root!.getBoundingClientRect()
@@ -35,17 +29,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
-  useEffect(() => {
-    document.documentElement.dataset.ovTheme = theme
-    document.documentElement.dataset.theme = theme
-    window.localStorage.setItem("openvie.theme", theme)
-  }, [theme])
-
-  function changeTheme(nextTheme: Theme) {
-    setTheme(nextTheme)
-    window.dispatchEvent(new Event("openvie:themechange"))
-  }
-
   return (
     <div ref={rootRef} className="ov-auth-page">
       <div className="ov-background-grid ov-auth-grid" aria-hidden="true" />
@@ -60,7 +43,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <button
           type="button"
           className="ov-auth-theme"
-          onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
+          onClick={toggleTheme}
           aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
         >
           {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}

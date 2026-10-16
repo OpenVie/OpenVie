@@ -461,7 +461,7 @@ html[data-ov-theme="light"] .ov-loading-screen {
 .ov-shell [data-slot="button"][data-variant="outline"]:hover { border-color: #c8f53c; background: rgb(255 255 255 / .07); color: #fff; }
 .ov-shell [data-slot="select-trigger"], .ov-shell [data-slot="input"] { min-height: 40px; border-color: rgb(255 255 255 / .13); border-radius: 12px; background: rgb(255 255 255 / .04); color: #dce3db; font-size: 13.5px; transition: border-color .2s; }
 .ov-shell [data-slot="select-trigger"]:hover, .ov-shell [data-slot="input"]:focus { border-color: #c8f53c; }
-.ov-shell [data-slot="table-cell"] { padding: 18px 26px; color: #e6ebe4; font-size: 14.5px; }
+.ov-shell [data-slot="table-cell"] { padding: 18px 26px; color: var(--card-foreground, #e6ebe4); font-size: 14.5px; }
 .ov-shell [data-slot="table-head"] { height: auto; padding: 20px 26px 16px; }
 .ov-shell [data-slot="avatar-fallback"] { border: 1px solid rgb(200 245 60 / .5); background: #1b2218 !important; color: #c8f53c !important; }
 
@@ -603,6 +603,7 @@ html[data-theme="light"] {
 .ov-light .ov-shell [data-slot="card"] { border-color: #dce3d8; background: rgb(255 255 255 / .82); box-shadow: 0 10px 35px -28px rgb(33 52 37 / .45); }
 .ov-light .ov-shell [data-slot="table-row"]:hover { background: #f2f8e5; }
 .ov-light .ov-shell [data-slot="table-head"] { color: #718077; }
+.ov-light .ov-shell [data-slot="table-cell"] { color: #17201b; }
 .ov-light .ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]) { background: #b8ef27; color: #132000; }
 .ov-light .ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover { box-shadow: 0 10px 30px -10px #8bbd00; }
 .ov-light .ov-shell [data-slot="button"][data-variant="outline"] { border-color: #cfd8cb; color: #39443b; }
@@ -632,6 +633,7 @@ html[data-theme="light"] {
 .ov-light.ov-shell [data-slot="card"] { border-color: #dce3d8; background: rgb(255 255 255 / .82); box-shadow: 0 10px 35px -28px rgb(33 52 37 / .45); }
 .ov-light.ov-shell [data-slot="table-row"]:hover { background: #f2f8e5; }
 .ov-light.ov-shell [data-slot="table-head"] { color: #718077; }
+.ov-light.ov-shell [data-slot="table-cell"] { color: #17201b; }
 .ov-light.ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]) { background: #b8ef27; color: #132000; }
 .ov-light.ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover { box-shadow: 0 10px 30px -10px #8bbd00; }
 .ov-light.ov-shell [data-slot="button"][data-variant="outline"] { border-color: #cfd8cb; color: #39443b; }
@@ -670,6 +672,7 @@ html[data-theme="light"] {
 .ov-light.ov-shell [data-slot="card"] { border-color: rgb(16 24 14 / .1); background: rgb(16 24 14 / .04); box-shadow: none; }
 .ov-light.ov-shell [data-slot="table-row"]:hover { background: rgb(200 245 60 / .05); }
 .ov-light.ov-shell [data-slot="table-head"] { color: #5c685f; }
+.ov-light.ov-shell [data-slot="table-cell"] { color: #10150f; }
 .ov-light.ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]) { background: #c8f53c; color: #07090c; }
 .ov-light.ov-shell [data-slot="button"]:not([data-variant="outline"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover { box-shadow: 0 10px 30px -10px #c8f53c; }
 .ov-light.ov-shell [data-slot="button"][data-variant="outline"] { border-color: rgb(16 24 14 / .16); color: #2a352d; }
@@ -707,6 +710,8 @@ html[data-ov-theme="light"] .ov-workspace-menu { border-color: rgb(16 24 14 / .1
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-label"] { color: #5c685f; }
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-separator"] { background: rgb(16 24 14 / .1); }
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-item"]:focus { background: rgb(200 245 60 / .16); color: #3a6b08; }
+html[data-ov-theme="light"] [data-slot="table-cell"],
+html[data-theme="light"] [data-slot="table-cell"] { color: #10150f; }
 
 /* Custom theme-aware dialog popups */
 [data-slot="dialog-overlay"] {

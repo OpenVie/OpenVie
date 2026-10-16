@@ -730,7 +730,7 @@ function Playground() {
               key={item.id}
               className={cn(
                 "group mb-1 flex items-center rounded-md",
-                sessionId === item.id ? "bg-indigo-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                sessionId === item.id ? "bg-[#c8f53c] text-[#07090c]" : "text-slate-300 hover:bg-slate-800 hover:text-white",
               )}
             >
               <button
@@ -751,7 +751,7 @@ function Playground() {
                 <Trash2 className="size-3.5" />
               </button>
             </div>
-          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-indigo-300" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-300" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-500">{t("endHistory")}</p>}</>
+          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-[#c8f53c]" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-red-300" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-slate-500">{t("endHistory")}</p>}</>
         )}
       </div>
     </div>
@@ -808,7 +808,7 @@ function Playground() {
                   className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}
                 >
                   {item.role === "user" ? (
-                    <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-indigo-600 px-4 py-3 text-sm leading-6 text-white sm:max-w-[75%]">
+                    <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[#c8f53c] px-4 py-3 text-sm leading-6 text-[#07090c] sm:max-w-[75%]">
                       {item.content}
                     </div>
                   ) : item.loading ? (
@@ -816,15 +816,15 @@ function Playground() {
                       <div role="status" className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500">
                         <span>{item.content ? t("responding") : t("thinking")}</span>
                         <span className="inline-flex gap-1" aria-hidden="true">
-                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
-                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
-                          <span className="chat-thinking-dot size-1 rounded-full bg-indigo-400" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
+                          <span className="chat-thinking-dot size-1 rounded-full bg-[#c8f53c]" />
                         </span>
                       </div>
                       {item.content && (
                         <div className="chat-preview-enter whitespace-pre-wrap break-words text-sm leading-7 text-slate-800 sm:text-[15px]">
                           {item.content}
-                          <span aria-hidden="true" className="chat-live-cursor ml-1 inline-block h-4 w-0.5 translate-y-0.5 rounded-full bg-indigo-400" />
+                          <span aria-hidden="true" className="chat-live-cursor ml-1 inline-block h-4 w-0.5 translate-y-0.5 rounded-full bg-[#c8f53c]" />
                         </div>
                       )}
                     </div>
@@ -854,7 +854,7 @@ function Playground() {
                   className="flex min-w-0 max-w-72 shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-2 pl-2.5 pr-1.5"
                   title={source.errorMessage ?? source.fileName}
                 >
-                  <div className="grid size-8 shrink-0 place-items-center rounded-md bg-white text-indigo-600 shadow-sm">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-md bg-white text-[#3a6b08] dark:text-[#c8f53c] shadow-sm">
                     {source.status === "UPLOADING" || source.status === "PROCESSING" ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
@@ -883,7 +883,7 @@ function Playground() {
             </div>
           )}
 
-          <div className={cn("ov-chat-composer relative rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
+          <div className={cn("ov-chat-composer relative rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-[#c8f53c] focus-within:ring-2 focus-within:ring-[#c8f53c]/20", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -925,10 +925,10 @@ function Playground() {
                 disabled={!sending && sendDisabled}
                 onClick={sending ? cancelMessage : undefined}
                 className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-lg text-white transition-colors",
+                  "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
                   sending
-                    ? "bg-slate-900 hover:bg-slate-700"
-                    : "bg-indigo-600 hover:bg-indigo-700",
+                    ? "bg-slate-900 text-white hover:bg-slate-700"
+                    : "bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]",
                   !sending && sendDisabled &&
                     "cursor-not-allowed bg-slate-200 text-slate-400 hover:bg-slate-200",
                 )}
@@ -1098,7 +1098,7 @@ export default function ChatPlayground() {
   if (status !== "authenticated") {
     return (
       <div className="grid min-h-dvh place-items-center bg-white">
-        <Loader2 className="size-8 animate-spin text-indigo-600" aria-label={t("loading")} />
+        <Loader2 className="size-8 animate-spin text-[#c8f53c]" aria-label={t("loading")} />
       </div>
     )
   }

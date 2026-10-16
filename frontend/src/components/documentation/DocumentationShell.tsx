@@ -8,6 +8,7 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
+import { useTheme } from "@/hooks/useTheme"
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import type { AppLocale } from "@/i18n/routing"
 import {
@@ -19,12 +20,6 @@ import {
 import { cn } from "@/lib/utils"
 
 type SearchResult = { href: string; pageTitle: string; title: string; description: string }
-type Theme = "light" | "dark"
-
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
-}
 
 function buildSearchResults(query: string, pages: DocumentationPage[]): SearchResult[] {
   const needle = normalizeDocumentationSearch(query.trim())
@@ -106,7 +101,7 @@ function SearchDialog({ open, onClose, pages }: { open: boolean; onClose: () => 
               href={result.href}
               onClick={closeDialog}
               onMouseEnter={() => setActiveIndex(index)}
-              className={cn("block rounded-lg px-3 py-3", index === activeIndex ? "bg-indigo-50" : "hover:bg-slate-50")}
+              className={cn("block rounded-lg px-3 py-3", index === activeIndex ? "bg-[#c8f53c]/15" : "hover:bg-slate-50")}
             >
               <span className="block text-sm font-semibold text-slate-900">{result.title}</span>
               <span className="mt-0.5 block text-xs text-slate-500">{result.pageTitle} · {result.description}</span>
@@ -135,7 +130,7 @@ function DocsNavigation({ pages, pathname, onNavigate }: { pages: DocumentationP
                 href={page.href}
                 onClick={onNavigate}
                 aria-current={pathname === page.href ? "page" : undefined}
-                className={cn("block rounded-md px-3 py-2 text-sm transition-colors", pathname === page.href ? "bg-indigo-50 font-semibold text-indigo-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950")}
+                className={cn("block rounded-md px-3 py-2 text-sm transition-colors", pathname === page.href ? "bg-[#c8f53c]/15 font-semibold text-[#8bbd00] dark:text-[#c8f53c]" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950")}
               >
                 {page.title}
               </Link>
@@ -160,7 +155,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
   const next = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const { theme, toggleTheme } = useTheme()
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -171,15 +166,8 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", shortcut)
   }, [])
 
-  useEffect(() => {
-    document.documentElement.dataset.ovTheme = theme
-    document.documentElement.dataset.theme = theme
-    window.localStorage.setItem("openvie.theme", theme)
-    window.dispatchEvent(new Event("openvie:themechange"))
-  }, [theme])
-
   return (
-    <div className={cn("ov-docs-shell min-h-dvh", theme === "light" && "ov-docs-light")}>
+    <div className={cn("ov-docs-shell min-h-dvh", theme === "light" && "ov-docs-light")} suppressHydrationWarning>
       <header className="ov-docs-header sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-3 px-4 sm:px-6">
           <button type="button" onClick={() => setMobileOpen(true)} className="rounded-md p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label={t("openNavigation")}><Menu className="size-5" /></button>
@@ -193,7 +181,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             className="ov-docs-action ov-docs-theme hidden sm:inline-flex"
-            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+            onClick={toggleTheme}
             aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
           >
             {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
@@ -208,7 +196,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
             {authStatus === "unauthenticated" && <Link href="/login" className="rounded-md px-3 py-2 text-slate-600 hover:bg-slate-100">{t("login")}</Link>}
             {authStatus === "authenticated" && user && <span className="max-w-36 truncate rounded-md bg-slate-100 px-3 py-2 text-slate-600" title={user.fullName}>{user.fullName}</span>}
             {authStatus === "rehydrating" && <span className="h-9 w-20 animate-pulse rounded-md bg-slate-100" aria-label={t("checkingSession")} />}
-            <Link href="/" className="ov-docs-action flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-2 font-medium text-white hover:bg-indigo-700"><MessageSquare className="size-4" />{t("chat")}</Link>
+            <Link href="/" className="ov-docs-action flex items-center gap-2 rounded-md bg-[#c8f53c] px-3 py-2 font-semibold text-[#07090c] hover:bg-[#d9ff68]"><MessageSquare className="size-4" />{t("chat")}</Link>
           </nav>
         </div>
       </header>
@@ -218,14 +206,14 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
         <main className="min-w-0 px-5 py-10 sm:px-8 lg:px-0 lg:py-12">
           {children}
           <nav className="mt-12 grid gap-3 border-t border-slate-200 pt-8 sm:grid-cols-2" aria-label={t("previousNextNavigation")}>
-            {previous ? <Link href={previous.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 hover:border-indigo-300"><span className="flex items-center gap-2 text-xs text-slate-500"><ArrowLeft className="size-3.5" />{t("previous")}</span><span className="mt-1 block font-semibold text-slate-900">{previous.title}</span></Link> : <span />}
-            {next && <Link href={next.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 text-right hover:border-indigo-300"><span className="flex items-center justify-end gap-2 text-xs text-slate-500">{t("next")}<ArrowRight className="size-3.5" /></span><span className="mt-1 block font-semibold text-slate-900">{next.title}</span></Link>}
+            {previous ? <Link href={previous.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 hover:border-[#c8f53c]"><span className="flex items-center gap-2 text-xs text-slate-500"><ArrowLeft className="size-3.5" />{t("previous")}</span><span className="mt-1 block font-semibold text-slate-900">{previous.title}</span></Link> : <span />}
+            {next && <Link href={next.href} className="ov-docs-action rounded-lg border border-slate-200 p-4 text-right hover:border-[#c8f53c]"><span className="flex items-center justify-end gap-2 text-xs text-slate-500">{t("next")}<ArrowRight className="size-3.5" /></span><span className="mt-1 block font-semibold text-slate-900">{next.title}</span></Link>}
           </nav>
         </main>
         <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] py-12 xl:block">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("onThisPage")}</p>
           <nav className="border-l border-slate-200" aria-label={t("onThisPage")}>
-            {current.sections.map((section) => <Link key={section.id} href={`#${section.id}`} className="block border-l border-transparent px-4 py-1.5 text-sm leading-5 text-slate-500 hover:border-indigo-500 hover:text-indigo-700">{section.title}</Link>)}
+            {current.sections.map((section) => <Link key={section.id} href={`#${section.id}`} className="block border-l border-transparent px-4 py-1.5 text-sm leading-5 text-slate-500 hover:border-[#c8f53c] hover:text-[#8bbd00] dark:hover:text-[#c8f53c]">{section.title}</Link>)}
           </nav>
         </aside>
       </div>
@@ -234,7 +222,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-[60] lg:hidden">
           <button type="button" className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} aria-label={t("closeNavigation")} />
           <aside className="relative h-full w-[min(86vw,330px)] overflow-y-auto bg-white p-5 shadow-xl">
-            <div className="mb-6 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><BookOpen className="size-5 text-indigo-600" />{t("documentation")}</span><button type="button" onClick={() => setMobileOpen(false)} className="rounded p-1.5 hover:bg-slate-100" aria-label={t("closeNavigation")}><X className="size-5" /></button></div>
+            <div className="mb-6 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><BookOpen className="size-5 text-[#8bbd00] dark:text-[#c8f53c]" />{t("documentation")}</span><button type="button" onClick={() => setMobileOpen(false)} className="rounded p-1.5 hover:bg-slate-100" aria-label={t("closeNavigation")}><X className="size-5" /></button></div>
             <LanguageSwitcher
               className="mb-6 w-full justify-start"
               menuClassName="ov-language-menu"
@@ -242,7 +230,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
               showName
             />
             <DocsNavigation pages={pages} pathname={pathname} onNavigate={() => setMobileOpen(false)} />
-            <div className="mt-8 grid gap-2 border-t pt-5 text-sm">{authStatus === "unauthenticated" && <Link href="/login">{t("login")}</Link>}{authStatus === "authenticated" && user && <p className="truncate text-slate-500">{t("signedInAs", { name: user.fullName })}</p>}<Link href="/" className="font-medium text-indigo-700">{t("chat")}</Link></div>
+            <div className="mt-8 grid gap-2 border-t pt-5 text-sm">{authStatus === "unauthenticated" && <Link href="/login">{t("login")}</Link>}{authStatus === "authenticated" && user && <p className="truncate text-slate-500">{t("signedInAs", { name: user.fullName })}</p>}<Link href="/" className="font-medium text-[#8bbd00] dark:text-[#c8f53c]">{t("chat")}</Link></div>
           </aside>
         </div>
       )}

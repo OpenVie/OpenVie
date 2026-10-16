@@ -184,12 +184,12 @@ function SpreadsheetTable({
       }}
       className={cn(
         "min-w-0 scroll-mt-32 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300",
-        summaryFocused && "border-indigo-300 ring-4 ring-indigo-100",
+        summaryFocused && "border-[#c8f53c] ring-4 ring-[#c8f53c]/20",
       )}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
-          <Table2 className="size-4 text-indigo-500" />
+          <Table2 className="size-4 text-[#c8f53c]" />
           {metadataUnit.sheet_name ?? t("spreadsheetTable")}
         </span>
         {summary?.cell_range && (
@@ -225,8 +225,8 @@ function SpreadsheetTable({
                   key={identifier}
                   ref={(element) => registerUnit(identifier, element)}
                   className={cn(
-                    "odd:bg-white even:bg-slate-50/80 hover:bg-indigo-50/60",
-                    focused && "ring-2 ring-inset ring-indigo-400 [&>td]:bg-indigo-100",
+                    "odd:bg-white even:bg-slate-50/80 hover:bg-[#c8f53c]/10",
+                    focused && "ring-2 ring-inset ring-[#c8f53c] [&>td]:bg-[#c8f53c]/15",
                   )}
                 >
                   <td className="whitespace-nowrap border-r border-t border-slate-200 px-3 py-2.5 font-mono text-[11px] font-semibold text-slate-500 sm:px-4 sm:py-3 sm:text-xs">
@@ -314,7 +314,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
         <UnitMetadata unit={unit} />
         <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <Table2 className="size-4 text-indigo-500" /> {t("indexedTable")}
+            <Table2 className="size-4 text-[#c8f53c]" /> {t("indexedTable")}
           </div>
           <div className="max-w-full overflow-x-auto overscroll-x-contain">
             <table className="min-w-max border-separate border-spacing-0 text-left text-xs sm:min-w-full sm:text-sm">
@@ -335,7 +335,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
                 {body.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
-                    className="odd:bg-white even:bg-slate-50/80 hover:bg-indigo-50/60"
+                    className="odd:bg-white even:bg-slate-50/80 hover:bg-[#c8f53c]/10"
                   >
                     {header.map((_, cellIndex) => (
                       <td
@@ -391,7 +391,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <blockquote className="border-l-4 border-indigo-200 pl-4 text-[15px] italic leading-7 text-slate-600">{unit.text}</blockquote>
+        <blockquote className="border-l-4 border-[#c8f53c]/50 pl-4 text-[15px] italic leading-7 text-slate-600">{unit.text}</blockquote>
       </div>
     );
   }
@@ -534,7 +534,7 @@ export default function DocumentViewerPage() {
   }
 
   if (loading) {
-    return <div className="grid min-h-[24rem] place-items-center"><Loader2 className="size-8 animate-spin text-indigo-600" /></div>;
+    return <div className="grid min-h-[24rem] place-items-center"><Loader2 className="size-8 animate-spin text-[#c8f53c]" /></div>;
   }
 
   if (!document || error && document === null) {
@@ -571,19 +571,19 @@ export default function DocumentViewerPage() {
       </div>
 
       {citationUnits.length > 0 && (
-        <div className="sticky top-[4.25rem] z-10 flex items-center justify-between gap-1 rounded-xl border border-indigo-200 bg-indigo-50/95 p-1.5 shadow-sm backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
+        <div className="sticky top-[4.25rem] z-10 flex items-center justify-between gap-1 rounded-xl border border-[#c8f53c]/30 bg-[#c8f53c]/15 p-1.5 shadow-sm backdrop-blur sm:gap-3 sm:px-3 sm:py-2">
           <Button variant="ghost" size="sm" className="px-2 sm:px-3" disabled={selectedCitation === 0} onClick={() => setCitationSelection({ focusKey, index: Math.max(0, selectedCitation - 1) })}><ChevronLeft className="size-4" /><span className="hidden sm:inline">{t("previous")}</span></Button>
-          <p className="whitespace-nowrap text-xs font-semibold text-indigo-900 sm:text-sm">{t("citationOf", { current: selectedCitation + 1, total: citationUnits.length })}</p>
+          <p className="whitespace-nowrap text-xs font-semibold text-slate-800 dark:text-[#c8f53c] sm:text-sm">{t("citationOf", { current: selectedCitation + 1, total: citationUnits.length })}</p>
           <Button variant="ghost" size="sm" className="px-2 sm:px-3" disabled={selectedCitation === citationUnits.length - 1} onClick={() => setCitationSelection({ focusKey, index: Math.min(citationUnits.length - 1, selectedCitation + 1) })}><span className="hidden sm:inline">{t("next")}</span><ChevronRight className="size-4" /></Button>
         </div>
       )}
 
       {document.status === "PENDING" || document.status === "PROCESSING" ? (
-        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><Loader2 className="mb-4 size-8 animate-spin text-indigo-600" /><h3 className="font-semibold text-slate-900">{document.status === "PENDING" ? t("waitingToIndex") : t("indexingDocument")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{t("viewerSoon")}</p></CardContent></Card>
+        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><Loader2 className="mb-4 size-8 animate-spin text-[#c8f53c]" /><h3 className="font-semibold text-slate-900">{document.status === "PENDING" ? t("waitingToIndex") : t("indexingDocument")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{t("viewerSoon")}</p></CardContent></Card>
       ) : document.status === "FAILED" ? (
         <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><FileText className="mb-4 size-9 text-red-400" /><h3 className="font-semibold text-slate-900">{t("indexingFailed")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{document.errorMessage ?? t("indexingFailedDescription")}</p></CardContent></Card>
       ) : !unitsLoaded ? (
-        <div className="grid min-h-[22rem] place-items-center"><Loader2 className="size-8 animate-spin text-indigo-600" /></div>
+        <div className="grid min-h-[22rem] place-items-center"><Loader2 className="size-8 animate-spin text-[#c8f53c]" /></div>
       ) : (
         <Card>
           <CardContent className="min-w-0 p-2 sm:p-8">
@@ -610,7 +610,7 @@ export default function DocumentViewerPage() {
                     ref={(element) => registerUnit(identifier, element)}
                     className={cn(
                       "min-w-0 scroll-mt-32 rounded-xl border border-transparent px-2 py-3 transition-all duration-300 sm:px-4 sm:py-4",
-                      focused && "border-indigo-300 bg-indigo-50 ring-4 ring-indigo-100",
+                      focused && "border-[#c8f53c] bg-[#c8f53c]/10 ring-4 ring-[#c8f53c]/20",
                     )}
                   >
                     <IndexedUnit unit={unit} />

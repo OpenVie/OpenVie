@@ -94,13 +94,13 @@ function SsoCallbackContent() {
             </div>
             <Link
               href="/login"
-              className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-indigo-600 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+              className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-[#c8f53c] px-4 text-sm font-semibold text-[#07090c] transition-colors hover:bg-[#d9ff68]"
             >
               {t("sso.backToLogin")}
             </Link>
           </>
         ) : (
-          <Loader2 className="mx-auto size-7 animate-spin text-indigo-600" aria-label={t("loading")} />
+          <Loader2 className="mx-auto size-7 animate-spin text-[#c8f53c]" aria-label={t("loading")} />
         )}
       </CardContent>
     </Card>

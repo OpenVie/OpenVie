@@ -350,7 +350,7 @@ export default function DocumentsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-slate-800">{t("title")}</h2>
         <Button
-          className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
+          className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
           size="sm"
           disabled={!workspace || loading}
           onClick={() => fileInputRef.current?.click()}
@@ -377,8 +377,8 @@ export default function DocumentsPage() {
         onDrop={handleDrop}
         className={`rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
           isDragging
-            ? "border-indigo-500 bg-indigo-50"
-            : "border-slate-300 bg-slate-50 hover:border-indigo-400"
+            ? "border-[#c8f53c] bg-[#c8f53c]/10"
+            : "border-slate-300 bg-slate-50 hover:border-[#c8f53c]"
         }`}
       >
         <Cloud className="mx-auto mb-3 h-10 w-10 text-slate-400" />
@@ -435,7 +435,7 @@ export default function DocumentsPage() {
                     }
                   }}
                 >
-                  <TableCell className="font-medium">{doc.fileName}</TableCell>
+                  <TableCell className="font-medium text-slate-800">{doc.fileName}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs uppercase">
                       {doc.fileType}

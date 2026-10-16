@@ -16,7 +16,7 @@ export function DocArticle({ title, description, children }: { title: string; de
   return (
     <article className="min-w-0 pb-10">
       <header className="mb-10 border-b border-slate-200 pb-8">
-        <p className="mb-3 text-sm font-semibold text-indigo-600">{t("eyebrow")}</p>
+        <p className="mb-3 text-sm font-semibold text-[#8bbd00] dark:text-[#c8f53c]">{t("eyebrow")}</p>
         <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{localized?.title ?? title}</h1>
         <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">{localized?.description ?? description}</p>
       </header>
@@ -44,7 +44,7 @@ export function Steps({ children }: { children: ReactNode }) {
 export function Step({ title, children }: { title: string; children: ReactNode }) {
   return (
     <li className="relative [counter-increment:step]">
-      <span className="absolute -left-[2.72rem] grid size-6 place-items-center rounded-full bg-indigo-600 text-xs font-semibold text-white before:content-[counter(step)]" />
+      <span className="absolute -left-[2.72rem] grid size-6 place-items-center rounded-full bg-[#c8f53c] text-xs font-semibold text-[#07090c] before:content-[counter(step)]" />
       <h3 className="font-semibold text-slate-950">{title}</h3>
       <div className="mt-1 text-slate-600">{children}</div>
     </li>
@@ -88,7 +88,7 @@ export function ParameterTable({ parameters }: { parameters: Parameter[] }) {
         <tbody className="divide-y divide-slate-200 bg-white">
           {parameters.map((parameter) => (
             <tr key={parameter.name} className="align-top">
-              <td className="px-4 py-3 font-mono text-xs font-semibold text-indigo-700">{parameter.name}</td>
+              <td className="px-4 py-3 font-mono text-xs font-semibold text-[#3a6b08] dark:text-[#c8f53c]">{parameter.name}</td>
               <td className="px-4 py-3 font-mono text-xs text-slate-600">{parameter.type}</td>
               <td className="px-4 py-3 text-slate-600">{parameter.required ? t("yes") : t("no")}</td>
               <td className="px-4 py-3 text-slate-600">{parameter.description}</td>
@@ -109,8 +109,8 @@ export function RelatedLinks({ links }: { links: Array<{ href: string; title: st
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {links.map((link) => (
-        <Link key={link.href} href={link.href} className="group rounded-lg border border-slate-200 p-4 transition hover:border-indigo-300 hover:bg-indigo-50/40">
-          <span className="flex items-center gap-2 font-semibold text-slate-900 group-hover:text-indigo-700">{link.title}<ExternalLink className="size-3.5" /></span>
+        <Link key={link.href} href={link.href} className="group rounded-lg border border-slate-200 p-4 transition hover:border-[#c8f53c] hover:bg-[#c8f53c]/10">
+          <span className="flex items-center gap-2 font-semibold text-slate-900 group-hover:text-[#3a6b08] dark:group-hover:text-[#c8f53c]">{link.title}<ExternalLink className="size-3.5" /></span>
           <span className="mt-1 block text-sm leading-6 text-slate-600">{link.description}</span>
         </Link>
       ))}
@@ -119,5 +119,5 @@ export function RelatedLinks({ links }: { links: Array<{ href: string; title: st
 }
 
 export function BulletList({ children }: { children: ReactNode }) {
-  return <ul className="list-disc space-y-2 pl-6 marker:text-indigo-500">{children}</ul>
+  return <ul className="list-disc space-y-2 pl-6 marker:text-[#c8f53c]">{children}</ul>
 }

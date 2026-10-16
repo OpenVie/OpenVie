@@ -70,7 +70,7 @@ export function FilterSelect({
     <label className="min-w-36 space-y-1 text-xs font-medium text-slate-500">
       <span>{label}</span>
       <select
-        className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+        className="h-10 w-full rounded-md border border-slate-200 bg-white px-2 text-sm font-normal text-slate-700 outline-none focus:border-[#c8f53c] focus:ring-2 focus:ring-[#c8f53c]/20"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -133,7 +133,7 @@ export function ResultsSummary({ total, refreshing }: { total: number; refreshin
   return (
     <p className="text-sm text-slate-500" aria-live="polite">
       {t("results", { count: total, formattedCount: format.number(total) })}
-      {refreshing ? <span className="ml-2 text-indigo-500">{t("refreshing")}</span> : null}
+      {refreshing ? <span className="ml-2 text-[#3a6b08] dark:text-[#c8f53c]">{t("refreshing")}</span> : null}
     </p>
   );
 }
