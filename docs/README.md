@@ -32,6 +32,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | --- | --- |
 | Chạy cục bộ, hiểu cấu hình, chạy kiểm tra | [Phát triển cục bộ](DEVELOPMENT.md) |
 | Hiểu quyền sở hữu service, lưu trữ, bảo mật, chuỗi runtime | [Kiến trúc](ARCHITECTURE.md) |
+| Hiểu quyết định chọn workflow engine | [ADR-0001: Flowable thay cho n8n](adr/ADR-0001-workflow-engine-flowable.md) |
 | Sửa parsing tài liệu, đánh chỉ mục, model, truy hồi | [Hấp thụ và truy hồi](RETRIEVAL.md) |
 | Cấu hình bản self-hosted hoặc lập kế hoạch kiểm chứng và phục hồi | [Triển khai](DEPLOYMENT.md) |
 | Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
