@@ -80,9 +80,9 @@ export default function SettingsPage() {
                 <Label htmlFor="allowSelfRegistration" className="font-medium">{t("organization.selfRegistration")}</Label>
                 <p className="mt-0.5 text-sm text-slate-500">{t("organization.selfRegistrationHint")}</p>
               </div>
-              <input id="allowSelfRegistration" type="checkbox" className="rounded border-slate-300 size-5 accent-indigo-600" {...orgForm.register("allowSelfRegistration")} />
+              <input id="allowSelfRegistration" type="checkbox" className="rounded border-slate-300 size-5 accent-[#c8f53c]" {...orgForm.register("allowSelfRegistration")} />
             </div>
-            <Button type="submit" disabled={orgForm.formState.isSubmitting} size="sm" className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"><Save className="size-4" />{t("save")}</Button>
+            <Button type="submit" disabled={orgForm.formState.isSubmitting} size="sm" className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"><Save className="size-4" />{t("save")}</Button>
           </form>
         </CardContent>
       </Card>

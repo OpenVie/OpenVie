@@ -22,6 +22,7 @@ import {
 import { Link, usePathname, useRouter } from "@/i18n/navigation"
 import { withNext } from "@/lib/auth-redirect"
 import { cn } from "@/lib/utils"
+import { useTheme } from "@/hooks/useTheme"
 import { AppLoadingScreen } from "@/components/app/AppLoadingScreen"
 
 function initialsFrom(fullName: string | undefined): string {
@@ -39,13 +40,6 @@ type AppShellProps = {
   mobileNavContent?: ReactNode
 }
 
-type Theme = "light" | "dark"
-
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
-}
-
 export function AppShell({ children, contentClassName, mobileNavContent }: AppShellProps) {
   const t = useTranslations("Navigation")
   const chat = useTranslations("Chat")
@@ -55,7 +49,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const { theme, toggleTheme } = useTheme()
   const languageMenuStyle: CSSProperties = liquidGlassMenuStyle(theme)
   const mainAreaRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef<HTMLElement>(null)
@@ -96,13 +90,6 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   }, [pathname, sidebarCollapsed])
 
   useEffect(() => {
-    document.documentElement.dataset.ovTheme = theme
-    document.documentElement.dataset.theme = theme
-    window.localStorage.setItem("openvie.theme", theme)
-    window.dispatchEvent(new Event("openvie:themechange"))
-  }, [theme])
-
-  useEffect(() => {
     const mainArea = mainAreaRef.current
     if (!mainArea || !window.matchMedia("(hover: hover)").matches) return
 
@@ -127,7 +114,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
   }, [])
 
   return (
-    <div className={cn("ov-shell min-h-dvh", theme === "light" && "ov-light")}>
+    <div className={cn("ov-shell min-h-dvh", theme === "light" && "ov-light")} suppressHydrationWarning>
       <aside
         className={cn(
           "ov-sidebar fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col transition-transform duration-200 xl:translate-x-0",
@@ -268,7 +255,7 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
             <button
               type="button"
               className="ov-topbar-control"
-              onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+              onClick={toggleTheme}
               aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
             >
               {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}

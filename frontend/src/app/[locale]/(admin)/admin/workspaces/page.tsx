@@ -137,7 +137,7 @@ export default function WorkspacesPage() {
       <div><h2 className="text-xl font-semibold text-slate-800">{t("title")}</h2><p className="mt-1 text-sm text-slate-500">{t("description")}</p></div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => void load()}><RefreshCw className="mr-1 size-4" />{t("refresh")}</Button>
-        <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"><Plus className="size-4" />{t("create")}</Button>
+        <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"><Plus className="size-4" />{t("create")}</Button>
       </div>
     </div>
 
@@ -164,7 +164,7 @@ export default function WorkspacesPage() {
       </TableBody>
     </Table>}</Card>
 
-    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-slate-500">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting} className="bg-indigo-600 text-white hover:bg-indigo-700">{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
+    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-slate-500">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting} className="bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]">{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
 
     {/* Rename Workspace Dialog */}
     <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRenameTarget(null); }}>

@@ -204,7 +204,7 @@ export default function UsersPage() {
       </div>
       <div className="flex items-center gap-2">
         {/* Invite user button commented out so it can be re-enabled later:
-        {isAdmin && <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"><UserPlus className="size-4" />{t("inviteUser")}</Button>}
+        {isAdmin && <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"><UserPlus className="size-4" />{t("inviteUser")}</Button>}
         */}
         {canAddMember && (
           <Button
@@ -214,7 +214,7 @@ export default function UsersPage() {
               addMemberForm.reset({ role: "MEMBER" });
               setAddMemberRole("MEMBER");
             }}
-            className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
+            className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
           >
             <UserPlus className="size-4" />
             {t("addToWorkspace")}
@@ -259,7 +259,7 @@ export default function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-9">
-                        <AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">
+                        <AvatarFallback className="bg-[#c8f53c]/15 text-xs text-[#3a6b08] dark:text-[#c8f53c]">
                           {initials(member.fullName || member.email)}
                         </AvatarFallback>
                       </Avatar>

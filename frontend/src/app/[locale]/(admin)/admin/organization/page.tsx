@@ -153,7 +153,7 @@ export default function OrganizationPage() {
           setShowCreateUser(true);
           createUserForm.reset();
         }}
-        className="gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700"
+        className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
       >
         <Plus className="size-4" />
         {t("createUser")}
@@ -194,7 +194,7 @@ export default function OrganizationPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-9">
-                        <AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">
+                        <AvatarFallback className="bg-[#c8f53c]/15 text-xs text-[#3a6b08] dark:text-[#c8f53c]">
                           {initials(user.fullName || user.email)}
                         </AvatarFallback>
                       </Avatar>

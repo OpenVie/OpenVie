@@ -58,7 +58,7 @@ export function LanguageSwitcher({
             disabled={isPending}
             aria-label={t("language")}
             className={cn(
-              "inline-flex h-auto items-center justify-center gap-1.5 rounded-md border-none px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+              "inline-flex h-auto items-center justify-center gap-1.5 rounded-md border-none px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c8f53c]",
               className,
             )}
           />
@@ -80,7 +80,7 @@ export function LanguageSwitcher({
             className="min-h-9 cursor-pointer justify-between px-2.5"
           >
             <span>{t(localeLabels[option])}</span>
-            {option === locale ? <Check className="size-4 text-indigo-600" aria-hidden="true" /> : null}
+            {option === locale ? <Check className="size-4 text-[#c8f53c]" aria-hidden="true" /> : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
