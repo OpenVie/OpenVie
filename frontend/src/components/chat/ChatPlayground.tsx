@@ -60,6 +60,7 @@ import {
 import { getTenantWorkspaceApi } from "@/lib/workspace-api"
 import type { ChatCitation, Document, DocumentStatus, PlaygroundSession, TenantWorkspace } from "@/types"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { consumeNewChatRequest, NEW_CHAT_EVENT } from "@/lib/chat-events"
 
 type SourceStatus = DocumentStatus | "UPLOADING"
 
@@ -282,7 +283,7 @@ function Playground() {
         if (cancelled) return
         const restored = readPersistedPlaygroundState(playgroundStateKey(tenantWorkspace))
         setWorkspace(tenantWorkspace)
-        setSessionId(restored.sessionId)
+        setSessionId(consumeNewChatRequest() ? null : restored.sessionId)
         canPersistStateRef.current = true
       })
       .catch((error) => {
@@ -493,13 +494,33 @@ function Playground() {
     return session.id
   }
 
-  function startNewChat() {
+  const cancelMessage = useCallback(() => {
+    const controller = activeChatAbortRef.current
+    if (!controller) return
+    activeChatAbortRef.current = null
+    controller.abort()
+    setMessages((current) => current.map((item): ChatMessage =>
+      item.loading ? { id: item.id, role: "assistant", content: t("canceled") } : item,
+    ))
+    setSending(false)
+  }, [t])
+
+  const startNewChat = useCallback(() => {
     cancelMessage()
     followLatestRef.current = true
     setSessionId(null)
     setMessages([])
     setMessage("")
-  }
+  }, [cancelMessage])
+
+  useEffect(() => {
+    const onNewChat = () => {
+      consumeNewChatRequest()
+      startNewChat()
+    }
+    window.addEventListener(NEW_CHAT_EVENT, onNewChat)
+    return () => window.removeEventListener(NEW_CHAT_EVENT, onNewChat)
+  }, [startNewChat])
 
   function switchSession(nextSessionId: string) {
     if (nextSessionId === sessionId) return
@@ -560,12 +581,17 @@ function Playground() {
 
     const abortController = new AbortController()
     activeChatAbortRef.current = abortController
+    let historyRefreshed = false
     const isActive = () =>
       activeChatAbortRef.current === abortController && !abortController.signal.aborted
     const streamOptions = {
       signal: abortController.signal,
       onContent: (preview: string) => {
         if (!isActive()) return
+        if (!historyRefreshed) {
+          historyRefreshed = true
+          void loadHistory()
+        }
         setMessages((current) => current.map((item) =>
           item.id === assistantId ? { ...item, content: preview, citations: undefined } : item,
         ))
@@ -621,17 +647,6 @@ function Playground() {
         setSending(false)
       }
     }
-  }
-
-  function cancelMessage() {
-    const controller = activeChatAbortRef.current
-    if (!controller) return
-    activeChatAbortRef.current = null
-    controller.abort()
-    setMessages((current) => current.map((item): ChatMessage =>
-      item.loading ? { id: item.id, role: "assistant", content: t("canceled") } : item,
-    ))
-    setSending(false)
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
