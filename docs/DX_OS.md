@@ -33,7 +33,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (20 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
 | **Quản trị dữ liệu phi cấu trúc** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), hấp thụ đa định dạng | **Đạt** | Chưa có OCR / âm thanh / video |
-| **Động cơ luồng công việc (Workflow)** | Chưa có trong repo (`flowable`/`camunda`/`n8n` = 0) | **Chưa đạt** | Tích hợp Flowable hoặc n8n cho bài toán phê duyệt |
+| **Động cơ luồng công việc (Workflow)** | Chưa có trong repo (`flowable`/`camunda`/`n8n` = 0) | **Chưa đạt** | Tích hợp Flowable OSS cho bài toán phê duyệt (xem ADR-0001) |
 
 ### 4. Đánh nhãn H-P-D-I cho giao diện Tầng 2
 
@@ -88,7 +88,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Structured Data** | PostgreSQL 16 + Flyway (20 business tables with tenant scoping) | **Achieved** | — |
 | **Unstructured Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), asynchronous multi-format ingestion | **Achieved** | OCR / audio / video not delivered |
-| **Workflow Engine** | None in repo (`flowable`/`camunda`/`n8n` = 0) | **Not Met** | Add Flowable (BPMN) or n8n |
+| **Workflow Engine** | None in repo (`flowable`/`camunda`/`n8n` = 0) | **Not Met** | Add Flowable OSS (BPMN; see [ADR-0001] (adr/ADR-0001-workflow-engine-flowable.md))  |
 
 ### 4. H-P-D-I Capability Labeling (Tier 2)
 
