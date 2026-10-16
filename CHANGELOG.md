@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
+### Added
+
+- **Keycloak OIDC Single Sign-On (SSO)**:
+  - Keycloak 26 identity provider provisioned in development (`docker-compose.yml`) and production (`docker-compose.prod.yml`) Compose stacks with dedicated PostgreSQL persistence.
+  - Pre-configured `openvie` realm (`keycloak/realm/openvie-realm.json`) with public OIDC client (`openvie-web`), PKCE support (`S256`), and standard identity claims (email, name, preferred_username, sub).
+  - Reverse-proxy routes on APISIX edge gateway for Keycloak endpoints (`/realms/*`, `/resources/*`, `/js/*`, `/robots.txt`) with upstream host forwarding and WebSocket upgrade support.
+  - Spring Boot SSO bridge: `POST /api/v1/auth/sso/exchange` endpoint exchanging PKCE authorization code for OpenVie JWT access and refresh tokens.
+  - Automatic identity linking: associates Keycloak identity (`keycloak_subject`) with existing OpenVie user accounts when verified email matches, preserving assigned roles (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`).
+  - Database schema migration (`V4__sso_identity_link.sql`) adding `keycloak_subject` to `users` and `sso_auto_provision`, `sso_email_domains` to `organizations`.
+  - Frontend PKCE client flow (`src/lib/oidc.ts`) and callback route (`/sso/callback`) with state verification, code exchange, and workspace navigation.
+  - "Continue with SSO" login option on authentication page alongside standard password authentication.
+  - Comprehensive Keycloak architecture, deployment, and configuration guide in `docs/KEYCLOAK.md`.
+
+- **Dedicated Admin Surface (`ORG_OWNER`)**:
+  - Isolated `(admin)` route group protected by `ProtectedAdminShell` enforcing `ORG_OWNER` role on all `/admin/*` routes.
+  - Organization administration console at `/admin/organization` for organization-level profile, member roles, security, and SSO configurations.
+  - Workspace management moved to `/admin/workspaces` for centralized workspace administration across the organization.
+  - Organization settings console at `/admin/settings`.
+  - Backend `AdminUserController` (`/api/v1/admin/users/*`) restricting organization-level member management and invitations to `ORG_OWNER`.
+  - Dual-mode navigation separating workspace operations from organization governance.
+  - Backwards-compatible Next.js redirects from legacy `/organization`, `/workspaces`, and `/settings` routes to `/admin/*`.
+
+- **Theme Engine & UI Modernization**:
+  - Theme system supporting Light, Dark, and System modes with custom `useTheme` hook, local storage persistence, and media query synchronization.
+  - Synchronous `public/theme-init.js` injection to eliminate theme flash (FOUC) during SSR hydration.
+  - Modernized visual styling transitioning from indigo accents to an emerald/green color palette across all views.
+  - Accessible theme toggle controls across application shells and settings.
+  - Liquid glass dropdown menus and enhanced glassmorphism styling for navigation menus.
+  - Vector SVG branding (`openvie-logo.svg`, `icon.svg`) replacing raster favicon.
+  - `AppLoadingScreen` transition component for smoother authentication and workspace navigation state changes.
+  - Interactive confirmation dialogs for destructive user actions (member removal, role adjustments, workspace deletion).
+
+### Changed
+
+- User management endpoint `/api/v1/users` is now strictly workspace-scoped, delegating organization-level user administration to `/api/v1/admin/users`.
+- App shells, workspace switcher, and documentation components refactored to consume theme tokens and responsive layouts.
+- Bilingual localization dictionaries (`messages/en.json`, `messages/vi.json`) expanded for SSO flows, admin navigation, theme toggles, and confirmation modals.
+- MVP Roadmap in `README.md` updated to mark `v0.2.0` (Keycloak SSO) as released.
+
+### Fixed
+
+- Authentication layout theme initialization avoids redundant React state updates and hydration warnings.
+- Member role updates in user management table operate cleanly outside form submit lifecycles.
+
 ## [0.1.1] - 2026-10-07
 
 ### Added
