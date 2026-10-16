@@ -162,7 +162,7 @@ là kiểm chứng end-to-end thành công.
 | Phiên bản | Phạm vi | Tiêu chí xong (Done) |
 | --- | --- | --- |
 | `v0.1.x` (đã phát hành) | Nền tảng RAG self-host: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, xác thực mật khẩu + JWT, streaming SSE | Cài được từ clone mới, hấp thụ tài liệu có quyền, chat có trích dẫn, từ chối khi thiếu bằng chứng |
-| `v0.2.0` — Keycloak SSO | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật |
+| `v0.2.0` (đã phát hành) — Keycloak SSO | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật |
 | `v0.3.0` — Workflow BPMN | Tích hợp động cơ workflow (Flowable hoặc n8n) cho một luồng phê duyệt e-Office minh họa trong không gian `[P]`; API + UI hộp thư phê duyệt | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật |
 
 Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milestone chia nhỏ thành issue có tiêu chí nghiệm thu riêng.
@@ -344,7 +344,7 @@ integration checks as successful end-to-end verification.
 | Version | Scope | Done criteria |
 | --- | --- | --- |
 | `v0.1.x` (released) | Self-hosted RAG platform: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, password + JWT auth, SSE streaming | Fresh-clone install, authorized ingestion, cited chat, abstention without evidence |
-| `v0.2.0` — Keycloak SSO | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated |
+| `v0.2.0` (released) — Keycloak SSO | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated |
 | `v0.3.0` — BPMN workflow | Workflow engine (Flowable or n8n) for one e-Office approval flow demo in the `[P]` space; approval inbox API + UI | Approval flow demonstrable, durable state, operations docs updated |
 
 Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone is broken into issues with their own acceptance criteria.
