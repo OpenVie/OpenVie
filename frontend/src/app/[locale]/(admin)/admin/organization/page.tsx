@@ -31,9 +31,7 @@ const initials = (name: string) => name.split(" ").filter(Boolean).map(part => p
 function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("Users");
   const active = status === "ACTIVE";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-    active ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-600"
-  }`}>{active ? t("statuses.active") : t("statuses.inactive")}</span>;
+  return <span className={`ov-member-status ${active ? "ov-member-status-active" : "ov-member-status-inactive"}`}><i aria-hidden="true" />{active ? t("statuses.active") : t("statuses.inactive")}</span>;
 }
 
 function TableSkeleton() {
@@ -153,7 +151,7 @@ export default function OrganizationPage() {
           setShowCreateUser(true);
           createUserForm.reset();
         }}
-        className="gap-1.5 bg-[#c8f53c] text-[#07090c] hover:bg-[#d9ff68]"
+        className="gap-1.5"
       >
         <Plus className="size-4" />
         {t("createUser")}
@@ -194,7 +192,7 @@ export default function OrganizationPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="size-9">
-                        <AvatarFallback className="bg-[#c8f53c]/15 text-xs text-[#3a6b08] dark:text-[#c8f53c]">
+                        <AvatarFallback className="bg-primary/15 text-xs text-primary">
                           {initials(user.fullName || user.email)}
                         </AvatarFallback>
                       </Avatar>
