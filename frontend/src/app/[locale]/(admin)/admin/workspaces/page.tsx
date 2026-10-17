@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { Archive, AlertCircle, Building2, Eye, EyeOff, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Archive, AlertCircle, Building2, Eye, EyeOff, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -139,37 +139,85 @@ export default function WorkspacesPage() {
 
   return <div className="space-y-6">
     <div className="flex items-center justify-between gap-4">
-      <div><h2 className="text-xl font-semibold text-slate-800">{t("title")}</h2><p className="mt-1 text-sm text-slate-500">{t("description")}</p></div>
+      <div><h2 className="text-xl font-semibold text-foreground">{t("title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("description")}</p></div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => void load()}><RefreshCw className="mr-1 size-4" />{t("refresh")}</Button>
         <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5"><Plus className="size-4" />{t("create")}</Button>
       </div>
     </div>
 
-    {error && <div role="alert" className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><span className="flex items-center gap-2"><AlertCircle className="size-4" />{error}</span><Button size="sm" variant="outline" onClick={() => void load()}>{t("retry")}</Button></div>}
+    {error && <div role="alert" className="flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"><span className="flex items-center gap-2"><AlertCircle className="size-4" />{error}</span><Button size="sm" variant="outline" onClick={() => void load()}>{t("retry")}</Button></div>}
 
-    <Card>{loading ? <div className="space-y-4 p-5">{Array.from({ length: 3 }).map((_, index) => <div key={index} className="flex items-center gap-4"><Skeleton className="size-8 rounded-full" /><Skeleton className="h-5 flex-1" /><Skeleton className="h-5 w-28" /></div>)}</div> : workspaces.length === 0 ? <CardContent className="py-16 text-center"><Building2 className="mx-auto mb-3 size-10 text-slate-300" /><p className="font-medium text-slate-500">{t("empty")}</p></CardContent> : <Table>
-      <TableHeader><TableRow><TableHead>{t("table.name")}</TableHead><TableHead>{t("table.slug")}</TableHead><TableHead>{t("table.visibility")}</TableHead><TableHead>{t("table.members")}</TableHead><TableHead>{t("table.created")}</TableHead><TableHead className="text-right">{t("table.actions")}</TableHead></TableRow></TableHeader>
+    <Card>{loading ? <div className="space-y-4 p-5">{Array.from({ length: 3 }).map((_, index) => <div key={index} className="flex items-center gap-4"><Skeleton className="size-8 rounded-full" /><Skeleton className="h-5 flex-1" /><Skeleton className="h-5 w-28" /></div>)}</div> : workspaces.length === 0 ? <CardContent className="py-16 text-center"><Building2 className="mx-auto mb-3 size-10 text-muted-foreground opacity-50" /><p className="font-medium text-muted-foreground">{t("empty")}</p></CardContent> : <>
+      <div className="divide-y divide-border sm:hidden">
+        {workspaces.map(workspace => (
+          <div key={`workspace-mobile-${workspace.id}`} className="p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-sm font-medium text-foreground">{workspace.name}</p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {workspace.isDefault && <Badge variant="secondary">{t("default")}</Badge>}
+                {workspace.status === "ARCHIVED" && <Badge variant="secondary">{t("archivedBadge")}</Badge>}
+                <Badge variant={workspace.visibility === "PUBLIC" ? "default" : "outline"}>
+                  {workspace.visibility === "PUBLIC" ? t("public") : t("private")}
+                </Badge>
+              </div>
+            </div>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {formatDate(workspace.createdAt)} · {workspace.memberCount} {t("table.members").toLowerCase()}
+            </p>
+            <div className="mt-2.5 flex flex-wrap justify-end gap-2">
+              <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
+                <Pencil className="size-3.5" />
+                {t("rename")}
+              </Button>
+              <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
+                {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
+              </Button>
+              {!workspace.isDefault && workspace.status !== "ARCHIVED" && (
+                <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}>
+                  <Archive className="size-3.5" />
+                  {t("archive")}
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden sm:block">
+      <Table>
+      <TableHeader><TableRow><TableHead>{t("table.name")}</TableHead><TableHead className="hidden sm:table-cell">{t("table.slug")}</TableHead><TableHead>{t("table.visibility")}</TableHead><TableHead>{t("table.members")}</TableHead><TableHead className="hidden sm:table-cell">{t("table.created")}</TableHead><TableHead className="text-right">{t("table.actions")}</TableHead></TableRow></TableHeader>
       <TableBody>
         {workspaces.map(workspace => <TableRow key={workspace.id}>
-          <TableCell><span className="font-medium text-slate-800">{workspace.name}</span>{workspace.isDefault && <Badge variant="secondary" className="ml-2">{t("default")}</Badge>}{workspace.status === "ARCHIVED" && <Badge variant="secondary" className="ml-2">{t("archivedBadge")}</Badge>}</TableCell>
-          <TableCell className="text-sm text-slate-500">{workspace.slug}</TableCell>
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <span className="max-w-40 truncate font-medium text-foreground sm:max-w-none">{workspace.name}</span>
+              {workspace.isDefault && <Badge variant="secondary" className="ml-2">{t("default")}</Badge>}
+              {workspace.status === "ARCHIVED" && <Badge variant="secondary" className="ml-2">{t("archivedBadge")}</Badge>}
+            </div>
+          </TableCell>
+          <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">{workspace.slug}</TableCell>
           <TableCell><Badge variant={workspace.visibility === "PUBLIC" ? "default" : "outline"}>{workspace.visibility === "PUBLIC" ? t("public") : t("private")}</Badge></TableCell>
-          <TableCell className="text-sm text-slate-500">{workspace.memberCount}</TableCell>
-          <TableCell className="text-sm text-slate-500">{formatDate(workspace.createdAt)}</TableCell>
+          <TableCell className="text-sm text-muted-foreground">{workspace.memberCount}</TableCell>
+          <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">{formatDate(workspace.createdAt)}</TableCell>
           <TableCell className="space-x-2 text-right">
-            <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>{t("rename")}</Button>
+            <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
+              <Pencil className="size-3.5" />
+              {t("rename")}
+            </Button>
             <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
-              {workspace.visibility === "PUBLIC" ? <EyeOff className="mr-1 size-3.5" /> : <Eye className="mr-1 size-3.5" />}
+              {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
               {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
             </Button>
-            {!workspace.isDefault && workspace.status !== "ARCHIVED" && <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} onClick={() => openArchive(workspace)}><Archive className="mr-1 size-3.5" />{t("archive")}</Button>}
+            {!workspace.isDefault && workspace.status !== "ARCHIVED" && <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}><Archive className="size-3.5" />{t("archive")}</Button>}
           </TableCell>
         </TableRow>)}
       </TableBody>
-    </Table>}</Card>
+    </Table>
+      </div>
+    </>}</Card>
 
-    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-slate-500">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
+    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
 
     {/* Rename Workspace Dialog */}
     <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRenameTarget(null); }}>

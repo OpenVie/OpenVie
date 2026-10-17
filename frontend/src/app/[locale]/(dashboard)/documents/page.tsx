@@ -407,7 +407,60 @@ export default function DocumentsPage() {
             <p className="mt-1 text-sm text-muted-foreground">{t("emptyDescription")}</p>
           </CardContent>
         ) : (
-          <div className="overflow-x-auto"><Table>
+          <>
+          <div className="divide-y divide-border sm:hidden">
+            {displayDocuments.map((doc) => (
+              <div
+                key={`doc-mobile-${doc.localId ?? doc.id}`}
+                className={!doc.uploadState ? "cursor-pointer p-3 hover:bg-muted/40" : "p-3"}
+                tabIndex={!doc.uploadState ? 0 : undefined}
+                role={!doc.uploadState ? "link" : undefined}
+                onClick={() => {
+                  if (!doc.uploadState) router.push(`/documents/${doc.id}`);
+                }}
+                onKeyDown={(event) => {
+                  if (!doc.uploadState && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    router.push(`/documents/${doc.id}`);
+                  }
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium text-foreground">{doc.fileName}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Badge variant="secondary" className="text-xs uppercase">{doc.fileType}</Badge>
+                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        aria-label={t("deleteFile", { fileName: doc.fileName })}
+                        disabled={Boolean(doc.uploadState) || deletingId === doc.id || doc.status === "PENDING" || doc.status === "PROCESSING"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(doc);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {deletingId === doc.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <StatusBadge status={doc.status} uploadState={doc.uploadState} />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatBytes(doc.fileSizeBytes)} · {formatDate(doc.uploadedAt)} · {doc.status === "COMPLETED"
+                    ? t("readyToAnswer")
+                    : doc.status === "FAILED"
+                      ? doc.errorMessage ?? t("indexingFailed")
+                      : t("waitingForIndexing")}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block"><Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t("table.fileName")}</TableHead>
@@ -436,7 +489,7 @@ export default function DocumentsPage() {
                     }
                   }}
                 >
-                  <TableCell className="font-medium">{doc.fileName}</TableCell>
+                  <TableCell className="font-medium"><span className="block max-w-44 truncate sm:max-w-none">{doc.fileName}</span></TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs uppercase">
                       {doc.fileType}
@@ -480,6 +533,7 @@ export default function DocumentsPage() {
               ))}
             </TableBody>
           </Table></div>
+          </>
         )}
         {!loading && <PaginationControls page={page} size={size} total={total} onPageChange={(value) => update({ page: value === 1 ? null : value }, false)} onSizeChange={(value) => update({ size: value === 20 ? null : value })} />}
       </Card>

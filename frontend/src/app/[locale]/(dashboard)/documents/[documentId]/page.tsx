@@ -183,17 +183,17 @@ function SpreadsheetTable({
         if (summaryIdentifier) registerUnit(summaryIdentifier, element);
       }}
       className={cn(
-        "min-w-0 scroll-mt-32 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300",
+        "min-w-0 scroll-mt-32 overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-300",
         summaryFocused && "border-primary/50 ring-4 ring-primary/20",
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-muted/40 px-4 py-3">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
           <Table2 className="size-4 text-primary" />
           {metadataUnit.sheet_name ?? t("spreadsheetTable")}
         </span>
         {summary?.cell_range && (
-          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 shadow-sm ring-1 ring-slate-200">
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
             {summary.cell_range}
           </span>
         )}
@@ -201,15 +201,15 @@ function SpreadsheetTable({
       <div className="max-w-full overflow-x-auto overscroll-x-contain">
         <table className="min-w-max border-separate border-spacing-0 text-left text-xs sm:min-w-full sm:text-sm">
           <thead>
-            <tr className="bg-slate-800 text-white">
-              <th scope="col" className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 font-semibold sm:px-4 sm:py-3">
+            <tr className="bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <th scope="col" className="whitespace-nowrap border-b border-border px-3 py-2.5 font-semibold sm:px-4 sm:py-3">
                 {t("cellsHeader")}
               </th>
               {columns.map((column) => (
                 <th
                   key={column}
                   scope="col"
-                  className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 font-semibold last:border-r-0 sm:px-4 sm:py-3"
+                  className="whitespace-nowrap border-b border-border px-3 py-2.5 font-semibold sm:px-4 sm:py-3"
                 >
                   {column}
                 </th>
@@ -225,17 +225,17 @@ function SpreadsheetTable({
                   key={identifier}
                   ref={(element) => registerUnit(identifier, element)}
                   className={cn(
-                    "odd:bg-white even:bg-slate-50/80 hover:bg-primary/10",
+                    "transition-colors hover:bg-muted/60",
                     focused && "ring-2 ring-inset ring-primary [&>td]:bg-primary/15",
                   )}
                 >
-                  <td className="whitespace-nowrap border-r border-t border-slate-200 px-3 py-2.5 font-mono text-[11px] font-semibold text-slate-500 sm:px-4 sm:py-3 sm:text-xs">
+                  <td className="whitespace-nowrap border-t border-border px-3 py-2.5 font-mono text-[11px] font-semibold text-muted-foreground sm:px-4 sm:py-3 sm:text-xs">
                     {unit.cell_range ?? rowIndex + 1}
                   </td>
                   {columns.map((column) => (
                     <td
                       key={column}
-                      className="max-w-64 border-r border-t border-slate-200 px-3 py-2.5 align-top leading-5 text-slate-700 last:border-r-0 sm:max-w-md sm:px-4 sm:py-3 sm:leading-6"
+                      className="max-w-64 border-t border-border px-3 py-2.5 align-top leading-5 text-foreground first:font-medium sm:max-w-md sm:px-4 sm:py-3 sm:leading-6"
                     >
                       {values.get(column) || "—"}
                     </td>
@@ -261,7 +261,7 @@ function UnitMetadata({ unit }: { unit: DocumentUnit }) {
   return (
     <div className="mb-3 flex flex-wrap gap-2">
       {labels.map((label) => (
-        <span key={label} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+        <span key={label} className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
           {label}
         </span>
       ))}
@@ -281,7 +281,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
           role="heading"
           aria-level={depth + 1}
           className={cn(
-            "font-semibold tracking-tight text-slate-900",
+            "font-semibold tracking-tight text-foreground",
             depth === 1 ? "text-xl sm:text-2xl" : depth === 2 ? "text-lg sm:text-xl" : "text-base sm:text-lg",
           )}
         >
@@ -295,11 +295,11 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <div className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
+        <div className="min-w-0 overflow-hidden rounded-xl border bg-[#05070a]">
+          <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2 text-xs text-[#a9b3ab]">
             <Code2 className="size-3.5" /> {t("code")}
           </div>
-          <pre className="max-w-full overflow-x-auto p-3 font-mono text-xs leading-5 text-slate-100 sm:p-4 sm:text-sm sm:leading-6"><code>{unit.text}</code></pre>
+          <pre className="max-w-full overflow-x-auto p-3 font-mono text-xs leading-5 text-[#f2f5f0] sm:p-4 sm:text-sm sm:leading-6"><code>{unit.text}</code></pre>
         </div>
       </div>
     );
@@ -312,19 +312,19 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <Table2 className="size-4 text-primary" /> {t("indexedTable")}
           </div>
           <div className="max-w-full overflow-x-auto overscroll-x-contain">
             <table className="min-w-max border-separate border-spacing-0 text-left text-xs sm:min-w-full sm:text-sm">
               <thead>
-                <tr className="bg-slate-800 text-white">
+                <tr className="bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {header.map((cell, cellIndex) => (
                     <th
                       key={cellIndex}
                       scope="col"
-                      className="whitespace-nowrap border-r border-slate-700 px-3 py-2.5 font-semibold last:border-r-0 sm:px-4 sm:py-3"
+                      className="whitespace-nowrap border-b border-border px-3 py-2.5 font-semibold sm:px-4 sm:py-3"
                     >
                       {cell || t("column", { number: cellIndex + 1 })}
                     </th>
@@ -335,12 +335,12 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
                 {body.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
-                    className="odd:bg-white even:bg-slate-50/80 hover:bg-primary/10"
+                    className="transition-colors hover:bg-muted/60"
                   >
                     {header.map((_, cellIndex) => (
                       <td
                         key={cellIndex}
-                        className="max-w-64 border-r border-t border-slate-200 px-3 py-2.5 align-top leading-5 text-slate-700 first:font-medium last:border-r-0 sm:max-w-md sm:px-4 sm:py-3 sm:leading-6"
+                        className="max-w-64 border-t border-border px-3 py-2.5 align-top leading-5 text-foreground first:font-medium sm:max-w-md sm:px-4 sm:py-3 sm:leading-6"
                       >
                         {row[cellIndex] || "—"}
                       </td>
@@ -359,16 +359,16 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <dl className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <dl className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           {spreadsheetFields(unit.text, t("value")).map(([label, value], index) => (
             <div
               key={`${label}-${index}`}
-              className="grid border-b border-slate-100 last:border-b-0 sm:grid-cols-[minmax(9rem,0.35fr)_1fr]"
+              className="grid border-b border-border last:border-b-0 sm:grid-cols-[minmax(9rem,0.35fr)_1fr]"
             >
-              <dt className="bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:border-r sm:border-slate-200">
+              <dt className="bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:border-r sm:border-border">
                 {label}
               </dt>
-              <dd className="px-4 py-3 text-sm leading-6 text-slate-700">{value || "—"}</dd>
+              <dd className="px-4 py-3 text-sm leading-6 text-foreground">{value || "—"}</dd>
             </div>
           ))}
         </dl>
@@ -380,7 +380,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <ul className="list-disc pl-6 text-[15px] leading-7 text-slate-700">
+        <ul className="list-disc pl-6 text-[15px] leading-7 text-foreground">
           {unit.text.split(/\n|•/).filter(Boolean).map((item, index) => <li key={index}>{item.trim()}</li>)}
         </ul>
       </div>
@@ -391,7 +391,7 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     return (
       <div>
         <UnitMetadata unit={unit} />
-        <blockquote className="border-l-4 border-primary/30 pl-4 text-[15px] italic leading-7 text-slate-600">{unit.text}</blockquote>
+        <blockquote className="border-l-4 border-primary/30 pl-4 text-[15px] italic leading-7 text-muted-foreground">{unit.text}</blockquote>
       </div>
     );
   }
@@ -400,16 +400,16 @@ function IndexedUnit({ unit }: { unit: DocumentUnit }) {
     <div>
       <UnitMetadata unit={unit} />
       {blockType === "page" && (
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <FileText className="size-3.5" /> {t("indexedPage")}
         </div>
       )}
       {blockType === "sheet" && (
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Sheet className="size-3.5" /> {t("indexedSheet")}
         </div>
       )}
-      <p className="whitespace-pre-wrap text-[15px] leading-7 text-slate-700">{unit.text}</p>
+      <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground">{unit.text}</p>
     </div>
   );
 }
@@ -539,7 +539,7 @@ export default function DocumentViewerPage() {
 
   if (!document || error && document === null) {
     return (
-      <Card><CardContent className="py-16 text-center"><p className="font-medium text-slate-800">{t("unavailable")}</p><p className="mt-2 text-sm text-slate-500">{error}</p><Button variant="outline" className="mt-5" onClick={goBack}><ArrowLeft className="size-4" /> {t("backToDocuments")}</Button></CardContent></Card>
+      <Card><CardContent className="py-16 text-center"><p className="font-medium text-foreground">{t("unavailable")}</p><p className="mt-2 text-sm text-muted-foreground">{error}</p><Button variant="outline" className="mt-5" onClick={goBack}><ArrowLeft className="size-4" /> {t("backToDocuments")}</Button></CardContent></Card>
     );
   }
 
@@ -554,8 +554,8 @@ export default function DocumentViewerPage() {
       <div className="grid min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
         <Button variant="ghost" size="sm" className="w-fit" onClick={goBack}><ArrowLeft className="size-4" /> {t("back")}</Button>
         <div className="min-w-0">
-          <h2 className="break-words text-lg font-semibold leading-tight text-slate-900 sm:truncate sm:text-xl">{document.fileName}</h2>
-          <p className="mt-1 flex flex-wrap gap-x-1.5 text-xs leading-5 text-slate-500 sm:text-sm">
+          <h2 className="break-words text-lg font-semibold leading-tight text-foreground sm:truncate sm:text-xl">{document.fileName}</h2>
+          <p className="mt-1 flex flex-wrap gap-x-1.5 text-xs leading-5 text-muted-foreground sm:text-sm">
             <span>{document.fileType}</span><span aria-hidden="true">·</span>
             <span>{formatBytes(document.fileSizeBytes)}</span><span aria-hidden="true">·</span>
             <span>{t("uploaded", { date: formatDate(document.uploadedAt) })}</span>
@@ -579,9 +579,9 @@ export default function DocumentViewerPage() {
       )}
 
       {document.status === "PENDING" || document.status === "PROCESSING" ? (
-        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><Loader2 className="mb-4 size-8 animate-spin text-primary" /><h3 className="font-semibold text-slate-900">{document.status === "PENDING" ? t("waitingToIndex") : t("indexingDocument")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{t("viewerSoon")}</p></CardContent></Card>
+        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><Loader2 className="mb-4 size-8 animate-spin text-primary" /><h3 className="font-semibold text-foreground">{document.status === "PENDING" ? t("waitingToIndex") : t("indexingDocument")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t("viewerSoon")}</p></CardContent></Card>
       ) : document.status === "FAILED" ? (
-        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><FileText className="mb-4 size-9 text-red-400" /><h3 className="font-semibold text-slate-900">{t("indexingFailed")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{document.errorMessage ?? t("indexingFailedDescription")}</p></CardContent></Card>
+        <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><FileText className="mb-4 size-9 text-red-400" /><h3 className="font-semibold text-foreground">{t("indexingFailed")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{document.errorMessage ?? t("indexingFailedDescription")}</p></CardContent></Card>
       ) : !unitsLoaded ? (
         <div className="grid min-h-[22rem] place-items-center"><Loader2 className="size-8 animate-spin text-primary" /></div>
       ) : (

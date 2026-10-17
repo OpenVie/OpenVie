@@ -9,6 +9,7 @@ import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { logoutApi } from "@/lib/auth-api"
 import { visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
+import { ChatHistoryPanel } from "@/components/chat/ChatHistoryPanel"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
 import { transitionTheme } from "@/lib/theme-transition"
@@ -38,7 +39,6 @@ function initialsFrom(fullName: string | undefined): string {
 type AppShellProps = {
   children: ReactNode
   contentClassName?: string
-  mobileNavContent?: ReactNode
 }
 
 type Theme = "light" | "dark"
@@ -48,7 +48,7 @@ function readStoredTheme(): Theme {
   return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
 }
 
-export function AppShell({ children, contentClassName, mobileNavContent }: AppShellProps) {
+export function AppShell({ children, contentClassName }: AppShellProps) {
   const t = useTranslations("Navigation")
   const chat = useTranslations("Chat")
   const pathname = usePathname()
@@ -224,22 +224,15 @@ export function AppShell({ children, contentClassName, mobileNavContent }: AppSh
               </Link>
             )
           })}
-          {mobileNavContent ? (
-            <div
-              className="mt-3 border-t border-white/10 pt-3"
-              onClick={(event) => {
-                const target = event.target as HTMLElement
-                if (target.closest("button, a")) setSidebarOpen(false)
-              }}
-            >
-              {mobileNavContent}
-            </div>
-          ) : (
-            <div className="ov-recent">
-              <p>Recent</p>
-              <span>{chat("historyWillAppear")}</span>
-            </div>
-          )}
+          <div
+            className="ov-history-slot mt-3 border-t border-white/10 pt-3"
+            onClick={(event) => {
+              const target = event.target as HTMLElement
+              if (target.closest("button, a")) setSidebarOpen(false)
+            }}
+          >
+            <ChatHistoryPanel />
+          </div>
         </nav>
 
         {footerNavigation.map(({ href, labelKey, icon: Icon }) => (
@@ -375,7 +368,7 @@ export function ProtectedAdminShell({ children }: { children: ReactNode }) {
       <AppShell>
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
         >
           {navigation("adminOnly")}
         </div>

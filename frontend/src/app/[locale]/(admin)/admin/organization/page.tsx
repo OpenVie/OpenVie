@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, KeyRound, Loader2, Plus, Users } from "lucide-react";
+import { AlertCircle, KeyRound, Loader2, Plus, UserCheck, UserX, Users } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import {
   createOrganizationUserApi,
@@ -142,8 +142,8 @@ export default function OrganizationPage() {
   return <div className="space-y-6">
     <div className="flex items-center justify-between gap-4">
       <div>
-        <h2 className="text-xl font-semibold text-slate-800">{t("tabs.organization")}</h2>
-        <p className="mt-1 text-sm text-slate-500">{t("organizationDescription")}</p>
+        <h2 className="text-xl font-semibold text-foreground">{t("tabs.organization")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t("organizationDescription")}</p>
       </div>
       <Button
         size="sm"
@@ -159,7 +159,7 @@ export default function OrganizationPage() {
     </div>
 
     {orgError && (
-      <div role="alert" className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+      <div role="alert" className="flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
         <span className="flex items-center gap-2"><AlertCircle className="size-4" />{orgError}</span>
         <Button size="sm" variant="outline" onClick={() => void loadOrgMembers()}>{t("retry")}</Button>
       </div>
@@ -170,17 +170,67 @@ export default function OrganizationPage() {
         <TableSkeleton />
       ) : orgMembers.length === 0 ? (
         <CardContent className="py-16 text-center">
-          <Users className="mx-auto mb-3 size-10 text-slate-300" />
-          <p className="font-medium text-slate-500">{t("empty")}</p>
+          <Users className="mx-auto mb-3 size-10 text-muted-foreground opacity-50" />
+          <p className="font-medium text-muted-foreground">{t("empty")}</p>
         </CardContent>
       ) : (
+        <>
+        <div className="divide-y divide-border sm:hidden">
+          {orgMembers.map(user => {
+            const isOwnerRow = user.orgRole === "ORG_OWNER";
+            return (
+              <div key={`org-user-mobile-${user.id}`} className="p-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-8 shrink-0">
+                    <AvatarFallback className="bg-primary/15 text-xs text-primary">
+                      {initials(user.fullName || user.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {user.fullName || t("unnamed")}
+                      {user.currentUser && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t("you")}</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                  </div>
+                  <StatusBadge status={user.status} />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isOwnerRow ? t("orgRoles.owner") : t("orgRoles.member")} · {formatDate(user.createdAt)}
+                </p>
+                <div className="mt-2.5 flex flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busyId === user.id || user.currentUser}
+                    title={t("setPasswordHint")}
+                    onClick={() => { setPasswordTarget(user); passwordForm.reset(); }}
+                  >
+                    <KeyRound className="size-3.5" />
+                    {t("setPassword")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busyId === user.id || (user.status === "ACTIVE" && (user.currentUser || isOwnerRow))}
+                    onClick={() => void changeStatus(user)}
+                  >
+                    {user.status === "ACTIVE" ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}
+                    {user.status === "ACTIVE" ? t("deactivate") : t("reactivate")}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("table.member")}</TableHead>
               <TableHead>{t("orgRole")}</TableHead>
               <TableHead>{t("table.status")}</TableHead>
-              <TableHead>{t("table.joinedExpires")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("table.joinedExpires")}</TableHead>
               <TableHead className="text-right">{t("table.actions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -196,12 +246,12 @@ export default function OrganizationPage() {
                           {initials(user.fullName || user.email)}
                         </AvatarFallback>
                       </Avatar>
-                      <div>
-                        <p className="font-medium text-slate-800">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {user.fullName || t("unnamed")}
-                          {user.currentUser && <span className="ml-2 text-xs font-normal text-slate-400">{t("you")}</span>}
+                          {user.currentUser && <span className="ml-2 text-xs font-normal text-muted-foreground">{t("you")}</span>}
                         </p>
-                        <p className="text-sm text-slate-500">{user.email}</p>
+                        <p className="max-w-44 truncate text-sm text-muted-foreground sm:max-w-none">{user.email}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -211,7 +261,7 @@ export default function OrganizationPage() {
                     </span>
                   </TableCell>
                   <TableCell><StatusBadge status={user.status} /></TableCell>
-                  <TableCell className="text-sm text-slate-500">{formatDate(user.createdAt)}</TableCell>
+                  <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">{formatDate(user.createdAt)}</TableCell>
                   <TableCell className="space-x-2 text-right">
                     <Button
                       size="sm"
@@ -220,7 +270,8 @@ export default function OrganizationPage() {
                       title={t("setPasswordHint")}
                       onClick={() => { setPasswordTarget(user); passwordForm.reset(); }}
                     >
-                      <KeyRound className="mr-1 size-3.5" />{t("setPassword")}
+                      <KeyRound className="size-3.5" />
+                      {t("setPassword")}
                     </Button>
                     <Button
                       size="sm"
@@ -228,6 +279,7 @@ export default function OrganizationPage() {
                       disabled={busyId === user.id || (user.status === "ACTIVE" && (user.currentUser || isOwnerRow))}
                       onClick={() => void changeStatus(user)}
                     >
+                      {user.status === "ACTIVE" ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}
                       {user.status === "ACTIVE" ? t("deactivate") : t("reactivate")}
                     </Button>
                   </TableCell>
@@ -236,6 +288,8 @@ export default function OrganizationPage() {
             })}
           </TableBody>
         </Table>
+        </div>
+        </>
       )}
     </Card>
 
@@ -256,7 +310,7 @@ export default function OrganizationPage() {
               {...createUserForm.register("email")}
             />
             {createUserForm.formState.errors.email && (
-              <p className="text-xs text-red-600">{createUserForm.formState.errors.email.message}</p>
+              <p className="text-xs text-destructive">{createUserForm.formState.errors.email.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -267,7 +321,7 @@ export default function OrganizationPage() {
               {...createUserForm.register("fullName")}
             />
             {createUserForm.formState.errors.fullName && (
-              <p className="text-xs text-red-600">{createUserForm.formState.errors.fullName.message}</p>
+              <p className="text-xs text-destructive">{createUserForm.formState.errors.fullName.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -280,7 +334,7 @@ export default function OrganizationPage() {
               {...createUserForm.register("password")}
             />
             {createUserForm.formState.errors.password && (
-              <p className="text-xs text-red-600">{createUserForm.formState.errors.password.message}</p>
+              <p className="text-xs text-destructive">{createUserForm.formState.errors.password.message}</p>
             )}
           </div>
           <DialogFooter>
@@ -294,17 +348,17 @@ export default function OrganizationPage() {
     <Dialog open={passwordTarget !== null} onOpenChange={open => { if (!open) setPasswordTarget(null); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{t("setPasswordTitle", { name: passwordTarget?.fullName || passwordTarget?.email || "" })}</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-500">{t("setPasswordNote")}</p>
+        <p className="text-sm text-muted-foreground">{t("setPasswordNote")}</p>
         <form onSubmit={passwordForm.handleSubmit(onSetPassword)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="memberPassword">{t("newPassword")}</Label>
             <Input id="memberPassword" type="password" autoComplete="new-password" {...passwordForm.register("password")} />
-            {passwordForm.formState.errors.password && <p className="text-xs text-red-600">{passwordForm.formState.errors.password.message}</p>}
+            {passwordForm.formState.errors.password && <p className="text-xs text-destructive">{passwordForm.formState.errors.password.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirmPassword">{t("confirmPassword")}</Label>
             <Input id="confirmPassword" type="password" autoComplete="new-password" {...passwordForm.register("confirmPassword")} />
-            {passwordForm.formState.errors.confirmPassword && <p className="text-xs text-red-600">{passwordForm.formState.errors.confirmPassword.message}</p>}
+            {passwordForm.formState.errors.confirmPassword && <p className="text-xs text-destructive">{passwordForm.formState.errors.confirmPassword.message}</p>}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setPasswordTarget(null)}>{t("cancel")}</Button>

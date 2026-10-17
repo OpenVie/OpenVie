@@ -20,25 +20,12 @@ import {
   Paperclip,
   Upload,
   Square,
-  Plus,
-  Trash2,
   AlertCircle,
-  RotateCw,
-  Search,
 } from "lucide-react"
 import { AppShell } from "@/components/app/AppShell"
 import { AssistantResponse } from "@/components/chat/AssistantResponse"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { useApiClient } from "@/hooks/useApiClient"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import {
   fileTypeFromName,
@@ -55,12 +42,17 @@ import {
   getChatMessagesApi,
   submitChatMessageApi,
   listPlaygroundSessionsApi,
-  hidePlaygroundSessionApi,
 } from "@/lib/chat-api"
 import { getTenantWorkspaceApi } from "@/lib/workspace-api"
-import type { ChatCitation, Document, DocumentStatus, PlaygroundSession, TenantWorkspace } from "@/types"
-import { useDebouncedValue } from "@/hooks/useDebouncedValue"
-import { consumeNewChatRequest, NEW_CHAT_EVENT } from "@/lib/chat-events"
+import type { ChatCitation, Document, DocumentStatus, TenantWorkspace } from "@/types"
+import {
+  consumeNewChatRequest,
+  consumePendingSessionSelect,
+  NEW_CHAT_EVENT,
+  notifyActiveChatSession,
+  notifyChatHistoryChanged,
+  subscribeToSessionSelect,
+} from "@/lib/chat-events"
 
 type SourceStatus = DocumentStatus | "UPLOADING"
 
@@ -149,32 +141,12 @@ function Playground() {
   const activeChatAbortRef = useRef<AbortController | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const followLatestRef = useRef(true)
-  const historyAbortRef = useRef<AbortController | null>(null)
-  const searchAbortRef = useRef<AbortController | null>(null)
-  const historyRequestRef = useRef(0)
-  const historyNextCursorRef = useRef<string | null>(null)
-  const historyLoadingMoreRef = useRef(false)
-  const desktopSentinelRef = useRef<HTMLDivElement>(null)
-  const mobileSentinelRef = useRef<HTMLDivElement>(null)
   const [workspace, setWorkspace] = useState<TenantWorkspace | null>(null)
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [sources, setSources] = useState<SourceDocument[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const [history, setHistory] = useState<PlaygroundSession[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyError, setHistoryError] = useState<string | null>(null)
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
-  const [historyNextCursor, setHistoryNextCursor] = useState<string | null>(null)
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false)
-  const [chatSearch, setChatSearch] = useState("")
-  const debouncedChatSearch = useDebouncedValue(chatSearch, 300)
-  const [searchResults, setSearchResults] = useState<PlaygroundSession[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<PlaygroundSession | null>(null)
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [heroAnimationKey, setHeroAnimationKey] = useState(0)
   const [recentUploadIds, setRecentUploadIds] = useState<string[]>([])
 
@@ -228,52 +200,6 @@ function Playground() {
     </div>
   ) : null
 
-  const loadHistory = useCallback(async ({
-    append = false,
-    selectSession = false,
-  }: { append?: boolean; selectSession?: boolean } = {}) => {
-    if (append && (!historyNextCursorRef.current || historyLoadingMoreRef.current)) return
-    const requestId = ++historyRequestRef.current
-    if (!append) {
-      historyAbortRef.current?.abort()
-      historyNextCursorRef.current = null
-      setHistoryNextCursor(null)
-    }
-    const controller = new AbortController()
-    historyAbortRef.current = controller
-    if (append) {
-      historyLoadingMoreRef.current = true
-      setHistoryLoadingMore(true)
-    }
-    else setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const result = await listPlaygroundSessionsApi(request, {
-        limit: 30,
-        cursor: append ? historyNextCursorRef.current : null,
-        signal: controller.signal,
-      })
-      if (requestId !== historyRequestRef.current || controller.signal.aborted) return
-      setHistory((current) => {
-        const combined = append ? [...current, ...result.items] : result.items
-        return Array.from(new Map(combined.map((item) => [item.id, item])).values())
-      })
-      setHistoryNextCursor(result.nextCursor)
-      historyNextCursorRef.current = result.nextCursor
-      if (!append && selectSession) {
-        setSessionId((current) => current ?? result.items[0]?.id ?? null)
-      }
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) setHistoryError(error instanceof Error ? error.message : t("fallback.loadChats"))
-    } finally {
-      if (requestId === historyRequestRef.current) {
-        setHistoryLoading(false)
-        setHistoryLoadingMore(false)
-        historyLoadingMoreRef.current = false
-      }
-    }
-  }, [request, t])
-
   useEffect(() => {
     canPersistStateRef.current = false
 
@@ -283,8 +209,21 @@ function Playground() {
         if (cancelled) return
         const restored = readPersistedPlaygroundState(playgroundStateKey(tenantWorkspace))
         setWorkspace(tenantWorkspace)
-        setSessionId(consumeNewChatRequest() ? null : restored.sessionId)
+        const nextSessionId = consumeNewChatRequest()
+          ? null
+          : consumePendingSessionSelect() ?? restored.sessionId
+        setSessionId(nextSessionId)
         canPersistStateRef.current = true
+        if (!nextSessionId) {
+          // No chat was requested explicitly: continue the most recent one.
+          listPlaygroundSessionsApi(request, { limit: 1 })
+            .then((result) => {
+              if (!cancelled) setSessionId((current) => current ?? result.items[0]?.id ?? null)
+            })
+            .catch(() => {
+              // The sidebar shows its own reload affordance; start blank instead.
+            })
+        }
       })
       .catch((error) => {
         if (!cancelled) {
@@ -296,54 +235,6 @@ function Playground() {
       cancelled = true
     }
   }, [request, t])
-
-  useEffect(() => {
-    if (!workspace) return
-    historyNextCursorRef.current = null
-    const timer = window.setTimeout(() => void loadHistory({ selectSession: true }), 0)
-    return () => {
-      window.clearTimeout(timer)
-      historyAbortRef.current?.abort()
-    }
-  }, [workspace, loadHistory])
-
-  useEffect(() => {
-    if (!historyNextCursor || historyLoading || historyLoadingMore) return
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadHistory({ append: true })
-    }, { rootMargin: "160px" })
-    if (desktopSentinelRef.current) observer.observe(desktopSentinelRef.current)
-    if (mobileSentinelRef.current) observer.observe(mobileSentinelRef.current)
-    return () => observer.disconnect()
-  }, [historyLoading, historyLoadingMore, historyNextCursor, loadHistory])
-
-  useEffect(() => {
-    if (!searchDialogOpen) return
-    searchAbortRef.current?.abort()
-    const controller = new AbortController()
-    searchAbortRef.current = controller
-    const timer = window.setTimeout(() => {
-      setSearchLoading(true)
-      setSearchError(null)
-      void listPlaygroundSessionsApi(request, {
-        limit: 30,
-        q: debouncedChatSearch.trim() || undefined,
-        signal: controller.signal,
-      }).then((result) => {
-        if (!controller.signal.aborted) setSearchResults(result.items)
-      }).catch((error) => {
-        if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) {
-          setSearchError(error instanceof Error ? error.message : t("fallback.searchChats"))
-        }
-      }).finally(() => {
-        if (!controller.signal.aborted) setSearchLoading(false)
-      })
-    }, 0)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [debouncedChatSearch, request, searchDialogOpen, t])
 
   useEffect(() => {
     if (!workspace) return
@@ -522,39 +413,34 @@ function Playground() {
     return () => window.removeEventListener(NEW_CHAT_EVENT, onNewChat)
   }, [startNewChat])
 
-  function switchSession(nextSessionId: string) {
+  const switchSession = useCallback((nextSessionId: string) => {
     if (nextSessionId === sessionId) return
     cancelMessage()
     followLatestRef.current = true
     setMessages([])
     setSessionId(nextSessionId)
-  }
+  }, [cancelMessage, sessionId])
 
-  function requestDeleteSession(item: PlaygroundSession) {
-    if (sending || deletingSessionId) return
-    setDeleteTarget(item)
-  }
-
-  async function confirmDeleteSession() {
-    const item = deleteTarget
-    if (!item || sending || deletingSessionId) return
-    setDeletingSessionId(item.id)
-    try {
-      await hidePlaygroundSessionApi(request, item.id)
-      const remaining = history.filter((candidate) => candidate.id !== item.id)
-      setHistory(remaining)
-      setSearchResults((current) => current.filter((candidate) => candidate.id !== item.id))
-      setDeleteTarget(null)
-      if (sessionId === item.id) {
+  useEffect(() => {
+    const onSessionSelect = (nextSessionId: string | null) => {
+      if (nextSessionId === null) {
+        // The open chat was hidden and nothing remained in the history.
+        cancelMessage()
+        followLatestRef.current = true
         setMessages([])
-        setSessionId(remaining[0]?.id ?? null)
+        setSessionId(null)
+        return
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("fallback.hideChat"))
-    } finally {
-      setDeletingSessionId(null)
+      switchSession(nextSessionId)
     }
-  }
+    return subscribeToSessionSelect(onSessionSelect)
+  }, [cancelMessage, switchSession])
+
+  // Keep the sidebar chat list in step with the conversation being viewed.
+  useEffect(() => {
+    notifyActiveChatSession(sessionId)
+    return () => notifyActiveChatSession(null)
+  }, [sessionId])
 
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault()
@@ -590,7 +476,7 @@ function Playground() {
         if (!isActive()) return
         if (!historyRefreshed) {
           historyRefreshed = true
-          void loadHistory()
+          notifyChatHistoryChanged()
         }
         setMessages((current) => current.map((item) =>
           item.id === assistantId ? { ...item, content: preview, citations: undefined } : item,
@@ -628,7 +514,7 @@ function Playground() {
           ? { id: assistantId, role: "assistant", content: response.content, citations: response.citations }
           : item,
       ))
-      await loadHistory()
+      notifyChatHistoryChanged()
     } catch (error) {
       if (!isActive()) return
       const errorMessage = error instanceof ChatMessageTimeoutError
@@ -723,91 +609,16 @@ function Playground() {
 
   const sendDisabled = !workspace || !message.trim() || !hasCompletedSource || sending
 
-  const mobileHistoryPanel = (
-    <div>
-      <div className="mb-2 flex items-center justify-between px-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {t("chats")}
-        </p>
-        <button
-          type="button"
-          disabled={sending}
-          onClick={startNewChat}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-          aria-label={t("startNewChat")}
-        >
-          <Plus className="size-4" />
-        </button>
-      </div>
-      <button
-        type="button"
-        disabled={sending}
-        onClick={() => setSearchDialogOpen(true)}
-        className="mx-1 mb-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-      >
-        <Search className="size-4" /> {t("searchChats")}
-      </button>
-      <div className="max-h-[min(48dvh,28rem)] overflow-y-auto">
-        {historyLoading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="mx-1 mb-2 h-12 animate-pulse rounded-md bg-muted" />
-          ))
-        ) : historyError && history.length === 0 ? (
-          <div className="px-2 py-3 text-sm text-destructive">
-            <p>{historyError}</p>
-            <button
-              type="button"
-              className="mt-2 text-xs font-medium text-foreground underline underline-offset-4"
-              onClick={() => void loadHistory({ selectSession: true })}
-            >
-              {t("retry")}
-            </button>
-          </div>
-        ) : history.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-muted-foreground">{t("noChats")}</p>
-        ) : (
-          <>{history.map((item) => (
-            <div
-              key={item.id}
-              className={cn(
-                "group mb-1 flex items-center rounded-md",
-                sessionId === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <button
-                type="button"
-                disabled={sending}
-                onClick={() => switchSession(item.id)}
-                className="min-w-0 flex-1 px-3 py-2 text-left disabled:opacity-50"
-              >
-                <p className="truncate text-sm font-medium">{item.title}</p>
-              </button>
-              <button
-                type="button"
-                disabled={sending || Boolean(deletingSessionId)}
-                onClick={() => requestDeleteSession(item)}
-                className="mr-1 rounded-md p-1.5 text-muted-foreground opacity-70 transition-colors hover:bg-muted hover:text-destructive focus:opacity-100"
-                aria-label={t("hideChat", { title: item.title })}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
-          ))}<div ref={mobileSentinelRef} className="h-1" />{historyLoadingMore && <Loader2 className="mx-auto my-3 size-4 animate-spin text-primary" />}{historyError && <button type="button" className="mx-auto my-3 flex items-center gap-1 text-xs text-destructive" onClick={() => void loadHistory({ append: true })}><RotateCw className="size-3" /> {t("retry")}</button>}{!historyNextCursor && !historyError && <p className="py-3 text-center text-xs text-muted-foreground">{t("endHistory")}</p>}</>
-        )}
-      </div>
-    </div>
-  )
-
   const playgroundContent = (
     <div
-      className="ov-chat-surface flex h-[calc(100dvh-4.25rem)] min-h-[32rem] flex-col"
+      className="ov-chat-surface flex h-[calc(100dvh-4.25rem)] flex-col"
     >
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
 
       <div
         ref={chatScrollRef}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="ov-chat-scroll min-h-0 flex-1 overflow-y-auto"
         onScroll={(event) => {
           const element = event.currentTarget
           followLatestRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 64
@@ -890,7 +701,7 @@ function Playground() {
         <form onSubmit={submitMessage} className="mx-auto w-full max-w-[720px]">
           {messages.length > 0 && sourceProcessList}
 
-          <div className={cn("ov-chat-composer relative rounded-2xl border border-border bg-card p-2 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
+          <div className={cn("ov-chat-composer relative rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:p-2", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -901,7 +712,7 @@ function Playground() {
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
-              className="block max-h-36 min-h-14 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+              className="block max-h-36 min-h-16 w-full resize-none bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:min-h-14 sm:px-2 sm:py-1.5 sm:text-sm"
               aria-label={t("message")}
             />
             <div className="flex h-9 items-center justify-between gap-2">
@@ -911,7 +722,7 @@ function Playground() {
                   disabled={sending}
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(
-                    "flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+                    "flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:px-2.5 sm:text-sm",
                     sending && "cursor-not-allowed opacity-50",
                   )}
                 >
@@ -952,110 +763,11 @@ function Playground() {
       </div>
         </div>
       </div>
-
-      <Dialog
-        open={searchDialogOpen}
-        onOpenChange={(open) => {
-          setSearchDialogOpen(open)
-          if (!open) {
-            searchAbortRef.current?.abort()
-            setChatSearch("")
-            setSearchError(null)
-          }
-        }}
-      >
-        <DialogContent className="max-w-xl gap-0 overflow-hidden p-0">
-          <DialogHeader className="sr-only">
-            <DialogTitle>{t("searchChats")}</DialogTitle>
-            <DialogDescription>{t("searchDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="relative border-b border-slate-200">
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-slate-400" />
-            <input
-              autoFocus
-              aria-label={t("searchChats")}
-              value={chatSearch}
-              maxLength={200}
-              onChange={(event) => setChatSearch(event.target.value)}
-              placeholder={t("searchChats")}
-              className="h-14 w-full bg-white pl-12 pr-12 text-base text-slate-900 outline-none placeholder:text-slate-400"
-            />
-            {searchLoading && <Loader2 className="absolute right-4 top-1/2 size-4 -translate-y-1/2 animate-spin text-slate-400" />}
-          </div>
-          <div className="max-h-[min(65dvh,32rem)] min-h-52 overflow-y-auto p-2">
-            {searchError ? (
-              <div className="grid min-h-48 place-items-center px-5 text-center">
-                <div><AlertCircle className="mx-auto mb-2 size-5 text-red-500" /><p className="text-sm text-red-700">{searchError}</p></div>
-              </div>
-            ) : !searchLoading && searchResults.length === 0 ? (
-              <div className="grid min-h-48 place-items-center px-5 text-center">
-                <div><Search className="mx-auto mb-3 size-7 text-slate-300" /><p className="text-sm font-medium text-slate-600">{chatSearch.trim() ? t("noChatsFound") : t("noChats")}</p>{chatSearch.trim() && <p className="mt-1 text-xs text-slate-400">{t("tryDifferentSearch")}</p>}</div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {!chatSearch.trim() && <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{t("recent")}</p>}
-                {searchResults.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      switchSession(item.id)
-                      setSearchDialogOpen(false)
-                      setChatSearch("")
-                    }}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500"><Search className="size-4" /></span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{item.title}</span><span className="mt-0.5 block text-xs text-slate-400">{format.dateTime(new Date(item.last_activity_at), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} · {t("messageCount", { count: item.message_count })}</span></span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open && !deletingSessionId) setDeleteTarget(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("deleteTitle")}</DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-slate-700">{deleteTarget?.title}</span> {t("deleteDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={Boolean(deletingSessionId)}
-              onClick={() => setDeleteTarget(null)}
-            >
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={Boolean(deletingSessionId)}
-              onClick={() => void confirmDeleteSession()}
-            >
-              {deletingSessionId ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Trash2 className="size-4" />
-              )}
-              {t("deleteChat")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 
   return (
-    <AppShell contentClassName="p-0 sm:p-0" mobileNavContent={mobileHistoryPanel}>
+    <AppShell contentClassName="ov-main-chat p-0 sm:p-0">
       {playgroundContent}
     </AppShell>
   )

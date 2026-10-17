@@ -44,7 +44,7 @@ function InlineMarkdown({
     }
     if (token.startsWith("`") && token.endsWith("`")) {
       return (
-        <code key={index} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground">
+        <code key={index} className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground">
           {token.slice(1, -1)}
         </code>
       );
@@ -211,7 +211,7 @@ export function AssistantResponse({
   );
 
   return (
-    <div className={error ? "rounded-xl bg-destructive/10 px-4 py-3 text-destructive" : "text-foreground"}>
+    <div className={error ? "break-words rounded-xl bg-destructive/10 px-4 py-3 text-destructive" : "break-words text-foreground"}>
       <div className="text-sm sm:text-[15px]">{markdownBlocks(content, citationsById)}</div>
       {grouped.length > 0 && (
         <div className="chat-sources-enter mt-6 border-t border-border pt-4">
@@ -221,7 +221,7 @@ export function AssistantResponse({
               <Link
                 key={documentId}
                 href={documentViewerHref(documentId, documentCitations)}
-                className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
+                className="group flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
               >
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground group-hover:bg-card group-hover:text-primary">
                   <FileText className="size-4" />

@@ -8,6 +8,7 @@ const allowedDevOrigins = process.env.NEXT_DEV_ALLOWED_ORIGINS
   .filter(Boolean) ?? [];
 
 const nextConfig: NextConfig = {
+  devIndicators: false, // The floating "N" dev badge confused phone QA; app UI must be the only chrome.
   allowedDevOrigins: ["127.0.0.1", ...allowedDevOrigins],
   reactCompiler: true,
   async redirects() {
