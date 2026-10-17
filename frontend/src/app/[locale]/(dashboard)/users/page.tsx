@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, Loader2, UserPlus, Users } from "lucide-react";
+import { AlertCircle, Loader2, UserMinus, UserPlus, Users } from "lucide-react";
 // Invitation UI is intentionally disabled; retain these imports for its re-enable path.
 // import { Mail, RefreshCw } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
@@ -199,8 +199,8 @@ export default function UsersPage() {
   return <div className="space-y-6">
     <div className="flex items-center justify-between gap-4">
       <div>
-        <h2 className="text-xl font-semibold text-slate-800">{t("title")}</h2>
-        <p className="mt-1 text-sm text-slate-500">{t("description")}</p>
+        <h2 className="text-xl font-semibold text-foreground">{t("title")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
       <div className="flex items-center gap-2">
         {/* Invite user button commented out so it can be re-enabled later:
@@ -224,7 +224,7 @@ export default function UsersPage() {
     </div>
 
     {error && (
-      <div role="alert" className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+      <div role="alert" className="flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
         <span className="flex items-center gap-2"><AlertCircle className="size-4" />{error}</span>
         <Button size="sm" variant="outline" onClick={() => void loadDirectory()}>{t("retry")}</Button>
       </div>
@@ -235,18 +235,68 @@ export default function UsersPage() {
         <TableSkeleton />
       ) : directory.members.length === 0 ? (
         <CardContent className="py-16 text-center">
-          <Users className="mx-auto mb-3 size-10 text-slate-300" />
-          <p className="font-medium text-slate-500">{t("empty")}</p>
-          {canAddMember && <p className="mt-1 text-sm text-slate-400">{t("emptyDescription")}</p>}
+          <Users className="mx-auto mb-3 size-10 text-muted-foreground opacity-50" />
+          <p className="font-medium text-muted-foreground">{t("empty")}</p>
+          {canAddMember && <p className="mt-1 text-sm text-muted-foreground">{t("emptyDescription")}</p>}
         </CardContent>
       ) : (
+        <>
+        <div className="divide-y divide-border sm:hidden">
+          {directory.members.map(member => {
+            const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
+            const protectedAction = member.currentUser || finalAdmin;
+            return (
+              <div key={`member-mobile-${member.id}`} className="p-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-8 shrink-0">
+                    <AvatarFallback className="bg-primary/15 text-xs text-primary">
+                      {initials(member.fullName || member.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {member.fullName || t("unnamed")}
+                      {member.currentUser && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t("you")}</span>}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                  </div>
+                  <StatusBadge status={member.status} />
+                </div>
+                <div className="mt-2.5 flex items-center justify-between gap-2">
+                  {isAdmin ? (
+                    <Select
+                      value={member.workspaceRole}
+                      disabled={busyId === member.id || protectedAction}
+                      onValueChange={value => void changeRole(member, value as WorkspaceRole)}
+                    >
+                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
+                        <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{roleLabel(member.workspaceRole)}</span>
+                  )}
+                  {isAdmin && canRemoveMember && (
+                    <Button size="sm" variant="outline" disabled={busyId === member.id || protectedAction} title={t("removeFromWorkspaceHint")} onClick={() => setRemoveTarget(member)}>
+                      <UserMinus className="size-3.5" />
+                      {t("removeFromWorkspace")}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("table.member")}</TableHead>
               <TableHead>{t("table.role")}</TableHead>
               <TableHead>{t("table.status")}</TableHead>
-              <TableHead>{t("table.joinedExpires")}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t("table.joinedExpires")}</TableHead>
               {isAdmin && <TableHead className="text-right">{t("table.actions")}</TableHead>}
             </TableRow>
           </TableHeader>
@@ -263,12 +313,12 @@ export default function UsersPage() {
                           {initials(member.fullName || member.email)}
                         </AvatarFallback>
                       </Avatar>
-                      <div>
-                        <p className="font-medium text-slate-800">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {member.fullName || t("unnamed")}
-                          {member.currentUser && <span className="ml-2 text-xs font-normal text-slate-400">{t("you")}</span>}
+                          {member.currentUser && <span className="ml-2 text-xs font-normal text-muted-foreground">{t("you")}</span>}
                         </p>
-                        <p className="text-sm text-slate-500">{member.email}</p>
+                        <p className="max-w-44 truncate text-sm text-muted-foreground sm:max-w-none">{member.email}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -290,7 +340,7 @@ export default function UsersPage() {
                     )}
                   </TableCell>
                   <TableCell><StatusBadge status={member.status} /></TableCell>
-                  <TableCell className="text-sm text-slate-500">{formatDate(member.joinedAt)}</TableCell>
+                  <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">{formatDate(member.joinedAt)}</TableCell>
                   {isAdmin && (
                     <TableCell className="space-x-2 text-right">
                       {canRemoveMember && (
@@ -301,6 +351,7 @@ export default function UsersPage() {
                           title={t("removeFromWorkspaceHint")}
                           onClick={() => setRemoveTarget(member)}
                         >
+                          <UserMinus className="size-3.5" />
                           {t("removeFromWorkspace")}
                         </Button>
                       )}
@@ -319,14 +370,14 @@ export default function UsersPage() {
                       <Mail className="size-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium text-slate-800">{t("pendingInvitation")}</p>
-                      <p className="text-sm text-slate-500">{invitation.email}</p>
+                      <p className="font-medium text-foreground">{t("pendingInvitation")}</p>
+                      <p className="text-sm text-muted-foreground">{invitation.email}</p>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm">{roleLabel(invitation.role)}</TableCell>
                 <TableCell><StatusBadge status={invitation.status} /></TableCell>
-                <TableCell className="text-sm text-slate-500">{t("expires", { date: formatDate(invitation.expiresAt) })}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{t("expires", { date: formatDate(invitation.expiresAt) })}</TableCell>
                 {isAdmin && (
                   <TableCell className="space-x-2 text-right">
                     <Button size="sm" variant="outline" disabled={busyId === invitation.id} onClick={() => void resend(invitation.id)}>
@@ -344,6 +395,8 @@ export default function UsersPage() {
             */}
           </TableBody>
         </Table>
+        </div>
+        </>
       )}
     </Card>
 
@@ -393,7 +446,7 @@ export default function UsersPage() {
               {...addMemberForm.register("email")}
             />
             {addMemberForm.formState.errors.email && (
-              <p className="text-xs text-red-600">{addMemberForm.formState.errors.email.message}</p>
+              <p className="text-xs text-destructive">{addMemberForm.formState.errors.email.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
