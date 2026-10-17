@@ -171,6 +171,8 @@ Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milesto
 - [Keycloak OIDC baseline](docs/KEYCLOAK.md) — cấu hình realm, client ID, redirect URI và chạy kiểm thử.
 
 - [ADR-0001: Flowable workflow engine](docs/adr/ADR-0001-workflow-engine-flowable.md) — quyết định chọn Flowable thay cho n8n trong v0.3.0.
+- [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, dữ liệu demo, worker và hướng dẫn chạy thử.
+
 - [Mục lục tài liệu](docs/README.md) — chọn guide theo việc cần làm.
 - [Hấp thụ, model, truy hồi](docs/RETRIEVAL.md).
 - [Triển khai và self-hosting](docs/DEPLOYMENT.md).
@@ -351,6 +353,10 @@ integration checks as successful end-to-end verification.
 Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone is broken into issues with their own acceptance criteria.
 
 ## Further reading
+- [Keycloak OIDC baseline](docs/KEYCLOAK.md) — realm/client setup and verification.
+- [ADR-0001: Flowable workflow engine](docs/adr/ADR-0001-workflow-engine-flowable.md) — decision to use Flowable instead of n8n for v0.3.0.
+- [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, demo data, worker, and run instructions.
+
 
 - [Documentation index](docs/README.md) — choose a guide by task.
 - [Ingestion, models, and retrieval](docs/RETRIEVAL.md).
