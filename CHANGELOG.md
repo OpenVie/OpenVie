@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-18
+
+### Added
+
+- **Sidebar Chat History & Session Management**:
+  - `ChatHistoryPanel` rendered by `AppShell` on every page: lists, debounced search, and hiding of chat sessions with a confirmation dialog, plus a last-loaded snapshot cache keyed by user.
+  - Session logic extracted from `ChatPlayground` into `src/lib/chat-events.ts`: event bus for new-chat requests, session selection, active-session notification, and history invalidation.
+  - `sessionStorage` handoff (`openvie.chat.pending-new`, `openvie.chat.pending-session`) so a new chat or a session selection started from another route is applied when the chat surface mounts.
+
+- **Accessible List Controls**:
+  - `FilterSelect` reimplemented as a keyboard-operable custom listbox; the native page-size `<select>` replaced by a `PageSizePicker` menu.
+  - Locale-aware `DatePicker` with day/month/year views, minimum-date constraint, and "Clear"/"Today" footer, replacing native date inputs in `DateRangeFields`.
+
+- **Responsive List Surfaces**:
+  - Mobile card layouts for document lists, workspace members, workspaces, and workspace users, with tables rendering from `sm` upward only.
+
+- **Theme & Shell Polish**:
+  - `src/lib/theme-transition.ts` cross-fades theme changes through the View Transitions API, falling back to an immediate update under `prefers-reduced-motion` or unsupported browsers.
+  - Toasts follow the active theme via `ThemeToaster` and the `openvie:themechange` event; the auth layout reads the stored theme with `useSyncExternalStore` for deterministic hydration.
+  - Mobile sidebar drawer: explicit topbar toggle, slide-in animation with staggered items, and a blurred backdrop.
+  - Animated dashed upload drop-zone border (`ov-upload-border`) on the documents page.
+
+- **Workflow Engine Decision Record**:
+  - `docs/adr/ADR-0001-workflow-engine-flowable.md` selecting Flowable OSS (Apache-2.0) over n8n Community (Sustainable Use License) for the v0.3.0 e-Office approval flow, covering evaluation criteria, consequences, remaining spikes, and references; linked from `README.md`, `docs/README.md`, and the DX/OS capability tables.
+
+### Changed
+
+- Components migrated from hard-coded slate/indigo utilities to design tokens (`bg-primary`, `text-muted-foreground`, `border-border`, `bg-muted`, …), removing the indigo compatibility overrides and consolidating light-theme rules.
+- Dialog portals re-declare the app token palette so Tailwind utilities inside portaled dialogs follow the active theme; dialog surfaces use themed glass panels with a blurred overlay.
+- Liquid glass dropdowns are now near-opaque surfaces with reduced blur for legibility over dense content.
+- Tables use `text-xs` and tighter cell padding on small screens.
+- Chat answers render on theme tokens, wrap long unbroken tokens, and use themed code-block surfaces.
+- Workspace switcher drops its cached workspace list and refetches when `openvie:workspaceschange` is announced by admin create/rename/visibility/archive actions.
+- Bilingual dictionaries updated: the `historyWillAppear` placeholder is removed, `listControls.today` and `documents.search` are added.
+- Next.js `devIndicators` disabled so the dev badge no longer overlaps the app shell during phone QA.
+
+### Fixed
+
+- Chat switching works again: selecting a session or requesting a new chat from another route is applied on arrival, and the history panel highlights the open session.
+- Navigation indicator repositions when the sidebar or its contents resize (`ResizeObserver`), not only on window resize and path changes.
+- SSO callback screen uses the shared auth card styles, so its error state and spinner follow the theme instead of inlined colors.
+- Auth pages replace the fixed `100dvh` clipping container with a scrollable page so the card stays reachable on short viewports.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added
