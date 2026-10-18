@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from app.contracts.document_ingestion_v1 import DocumentIngestRequestedEvent
-from app.generated import cacanode_ai_v1_pb2 as pb
+from app.generated import openvie_ai_v1_pb2 as pb
 from app.modules.ingestion.api.event import status_event
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-18
+
+### Changed
+
+- **Unified OpenVie Technical Naming & Packaging**:
+  - Relocated Java API packages from `com.cacanode.api` to `com.openvie.api` across all 266 Java source files (`src/main/java` and `src/test/java`).
+  - Updated Maven `groupId` to `com.openvie` and `finalName` to `openvie-api` in `api/pom.xml`.
+  - Renamed Protobuf package from `cacanode.ai.v1` to `openvie.ai.v1`, `java_package` to `com.openvie.ai.v1`, and outer class to `OpenVieAiProto` in `proto/openvie_ai_v1.proto` (renamed from `cacanode_ai_v1.proto`).
+  - Regenerated Python gRPC/Protobuf bindings (`openvie_ai_v1_pb2*`) and updated all transports, clients, and tests in `rag-chatbot-fastapi`.
+  - Renamed RabbitMQ exchanges and queues across Spring and FastAPI to `openvie.ingestion.v1`, `openvie.dlx.v1`, `openvie.document.ingestion.v1`, `openvie.document.status.v1`, and their corresponding DLQs.
+  - Renamed Prometheus metrics catalog in `rag-chatbot-fastapi` from `cacanode_*` to `openvie_*` (`openvie_ai_*`, `openvie_cache_*`, `openvie_redis_*`, `openvie_semantic_answer_cache_*`) and in Spring `CacheMetrics` to `openvie.cache.*` and `openvie.redis.*`.
+  - Updated SeaweedFS S3 default bucket to `openvie` and Kuzu database path to `./data/kuzu/openvie.kuzu`.
+  - Standardized Docker Compose definitions (`docker-compose.yml`, `docker-compose.prod.yml`) and `.env` templates to `POSTGRES_DB: openvie`, `POSTGRES_USER: openvie`, `SEAWEEDFS_BUCKET: openvie`, and `openvie.kuzu`.
+  - Updated JSON Schema contract identifiers (`contracts/document-ingestion/v1/`) to `https://openvie.local/...`.
+  - Updated default development credentials in `TenantCredentialService` and `SetupFlowTest` to `OpenVie@123`.
+  - Updated OpenAPI service titles in `application-dev.yaml` and `application-test.yaml` to `OpenVie API`.
+
+### Removed
+
+- Removed legacy `cacanode_ai_v1_pb2*` Python generated files from `rag-chatbot-fastapi/app/generated/`.
+- Removed stale `cacanode_ai_api.egg-info/` distribution metadata.
+
 ## [0.2.1] - 2026-10-18
 
 ### Added

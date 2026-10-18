@@ -7,7 +7,7 @@ from contextlib import suppress
 
 import grpc
 
-from app.generated import cacanode_ai_v1_pb2 as pb
+from app.generated import openvie_ai_v1_pb2 as pb
 from app.modules.generation.api import (
     Citation,
     GenerationApi,

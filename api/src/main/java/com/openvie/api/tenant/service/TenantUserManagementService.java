@@ -1,0 +1,912 @@
+package com.openvie.api.tenant.service;
+
+import com.openvie.api.common.cache.BusinessCache;
+import com.openvie.api.common.cache.BusinessCacheInvalidationPublisher;
+import com.openvie.api.common.cache.CacheKeyFactory;
+import com.openvie.api.common.cache.VersionedJsonCache;
+import com.openvie.api.common.enums.LogAction;
+import com.openvie.api.common.event.AuditLogEvent;
+import com.openvie.api.common.event.durable.DurableEventPublisher;
+import com.openvie.api.common.exception.custom.BadRequestException;
+import com.openvie.api.common.exception.custom.ConflictException;
+import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.common.exception.custom.UnauthorizedException;
+import com.openvie.api.tenant.api.DeliveryAvailability;
+import com.openvie.api.tenant.api.TenantIdentityApi;
+import com.openvie.api.tenant.api.TenantCredentials;
+import com.openvie.api.tenant.api.TenantIdentityApi.AcceptedAccount;
+import com.openvie.api.tenant.api.TenantIdentityApi.InvitationSnapshot;
+import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
+import com.openvie.api.tenant.api.event.UserDeactivatedEvent;
+import com.openvie.api.tenant.api.event.UserInvitedEvent;
+import com.openvie.api.tenant.dto.UserManagementDtos.DirectoryResponse;
+import com.openvie.api.tenant.dto.UserManagementDtos.InvitationResponse;
+import com.openvie.api.tenant.dto.UserManagementDtos.MemberResponse;
+import com.openvie.api.tenant.api.InvitationStatus;
+import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.UserStatus;
+import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.tenant.enums.WorkspaceVisibility;
+import com.openvie.api.tenant.model.Invitation;
+import com.openvie.api.tenant.model.Tenant;
+import com.openvie.api.tenant.model.User;
+import com.openvie.api.tenant.model.WorkspaceMember;
+import com.openvie.api.tenant.repository.InvitationRepository;
+import com.openvie.api.tenant.repository.TenantRepository;
+import com.openvie.api.tenant.repository.UserRepository;
+import com.openvie.api.tenant.dto.UserManagementDtos.CreateUserRequest;
+import com.openvie.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
+import com.openvie.api.tenant.model.Organization;
+import com.openvie.api.tenant.repository.OrganizationRepository;
+import com.openvie.api.tenant.repository.WorkspaceMemberRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * Member and invitation management scoped to one workspace.
+ *
+ * <p>An invitation is only created when the organization has an enabled
+ * notification channel: an undeliverable token is worse than a refused
+ * request, because the invitee never learns it exists.
+ */
+@Service
+public class TenantUserManagementService {
+    private static final Duration INVITATION_LIFETIME = Duration.ofHours(72);
+    private static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
+    private static final Duration INVITATION_VALIDITY_GRACE = Duration.ZERO;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private final UserRepository userRepository;
+    private final InvitationRepository invitationRepository;
+    private final WorkspaceMemberRepository memberRepository;
+    private final TenantRepository workspaceRepository;
+    private final OrganizationRepository organizationRepository;
+    private final DeliveryAvailability channels;
+    private final TenantCredentials credentials;
+    private final ApplicationEventPublisher eventPublisher;
+    @Autowired(required = false)
+    private DurableEventPublisher durableEventPublisher;
+    @Autowired(required = false)
+    private VersionedJsonCache businessCache;
+    @Autowired(required = false)
+    private CacheKeyFactory cacheKeyFactory;
+    @Autowired(required = false)
+    private BusinessCacheInvalidationPublisher businessInvalidationPublisher;
+
+    public TenantUserManagementService(
+            UserRepository userRepository,
+            InvitationRepository invitationRepository,
+            WorkspaceMemberRepository memberRepository,
+            TenantRepository workspaceRepository,
+            OrganizationRepository organizationRepository,
+            DeliveryAvailability channels,
+            TenantCredentials credentials,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this.userRepository = userRepository;
+        this.invitationRepository = invitationRepository;
+        this.memberRepository = memberRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.organizationRepository = organizationRepository;
+        this.channels = channels;
+        this.credentials = credentials;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Transactional
+    public DirectoryResponse getDirectory(UUID workspaceId, UUID currentUserId) {
+        MembershipSnapshot actor = resolveMembership(currentUserId, workspaceId);
+        DirectoryResponse snapshot = businessCache == null || cacheKeyFactory == null
+                ? loadDirectorySnapshot(actor.orgId(), workspaceId)
+                : businessCache.getOrLoad(
+                BusinessCache.USER_DIRECTORY,
+                cacheKeyFactory.build("user-directory", "workspace", workspaceId.toString()),
+                DirectoryResponse.class,
+                () -> loadDirectorySnapshot(actor.orgId(), workspaceId));
+        return decorateDirectory(snapshot, currentUserId, LocalDateTime.now());
+    }
+
+    private DirectoryResponse loadDirectorySnapshot(UUID orgId, UUID workspaceId) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Invitation> invitations = invitationRepository.findByTenant_IdOrderByCreatedAtDesc(workspaceId);
+        invitations.stream()
+                .filter(invitation -> invitation.getStatus() == InvitationStatus.PENDING
+                        && !invitation.getExpiresAt().isAfter(now))
+                .forEach(invitation -> invitation.setStatus(InvitationStatus.EXPIRED));
+
+        List<MemberResponse> members = memberRepository
+                .findByWorkspace_IdOrderByRoleAscCreatedAtAsc(workspaceId).stream()
+                .map(membership -> toMember(membership, null))
+                .toList();
+        List<InvitationResponse> pending = invitations.stream()
+                .filter(invitation -> invitation.getStatus() == InvitationStatus.PENDING
+                        || invitation.getStatus() == InvitationStatus.EXPIRED)
+                .map(this::toInvitation)
+                .toList();
+        Tenant workspace = requireWorkspace(workspaceId);
+        return new DirectoryResponse(members, pending, workspace.getVisibility(),
+                workspace.isDefaultWorkspace());
+    }
+
+    /**
+     * Creates an invitation for a workspace. Requires an enabled channel; when
+     * none exists the caller is told to configure one rather than being handed
+     * a token nobody will receive.
+     */
+    @Transactional
+    public InvitationResponse invite(UUID workspaceId, UUID actorId, String rawEmail, WorkspaceRole role) {
+        MembershipSnapshot actor = requireAdmin(workspaceId, actorId);
+        requireChannel(actor.orgId());
+
+        String email = normalizeEmail(rawEmail);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("An account already exists for this email");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        invitationRepository.findFirstByTenant_IdAndEmailIgnoreCaseAndStatus(
+                workspaceId, email, InvitationStatus.PENDING).ifPresent(existing -> {
+            if (existing.getExpiresAt().isAfter(now)) {
+                throw new ConflictException("A pending invitation already exists for this email");
+            }
+            existing.setStatus(InvitationStatus.EXPIRED);
+            invitationRepository.saveAndFlush(existing);
+        });
+
+        Tenant workspace = requireWorkspace(workspaceId);
+        User actorUser = requireUser(actorId);
+        String token = generateToken();
+        Invitation invitation = new Invitation();
+        invitation.setTenant(workspace);
+        invitation.setInvitedBy(actorUser);
+        invitation.setEmail(email);
+        invitation.setRole(role);
+        invitation.setTokenHash(hashToken(token));
+        invitation.setStatus(InvitationStatus.PENDING);
+        invitation.setLastSentAt(now);
+        invitation.setExpiresAt(now.plus(INVITATION_LIFETIME));
+        invitationRepository.save(invitation);
+
+        publishInvitationEmail(invitation, token);
+        audit(workspaceId, actorId, LogAction.USER_INVITE, "invitation", invitation.getId(),
+                Map.of("role", role.name(), "transition", "NONE->PENDING"));
+        invalidateMembers(workspaceId);
+        return toInvitation(invitation);
+    }
+
+    @Transactional
+    public InvitationResponse resend(UUID workspaceId, UUID actorId, UUID invitationId) {
+        MembershipSnapshot actor = requireAdmin(workspaceId, actorId);
+        requireChannel(actor.orgId());
+        Invitation invitation = requireInvitation(workspaceId, invitationId);
+        if (invitation.getStatus() != InvitationStatus.PENDING
+                && invitation.getStatus() != InvitationStatus.EXPIRED) {
+            throw new BadRequestException("Only pending or expired invitations can be resent");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        invitationRepository.findFirstByTenant_IdAndEmailIgnoreCaseAndStatus(
+                        workspaceId, invitation.getEmail(), InvitationStatus.PENDING)
+                .filter(existing -> !existing.getId().equals(invitationId))
+                .ifPresent(existing -> {
+                    throw new ConflictException("Another pending invitation already exists for this email");
+                });
+        long waitSeconds = RESEND_COOLDOWN.minus(Duration.between(invitation.getLastSentAt(), now)).toSeconds();
+        if (waitSeconds > 0) {
+            throw new BadRequestException("Please wait " + waitSeconds + " seconds before resending");
+        }
+
+        String token = generateToken();
+        invitation.setTokenHash(hashToken(token));
+        invitation.setStatus(InvitationStatus.PENDING);
+        invitation.setLastSentAt(now);
+        invitation.setExpiresAt(now.plus(INVITATION_LIFETIME));
+        invitationRepository.save(invitation);
+
+        publishInvitationEmail(invitation, token);
+        audit(workspaceId, actorId, LogAction.USER_INVITATION_RESENT, "invitation", invitationId,
+                Map.of("transition", "PENDING_OR_EXPIRED->PENDING"));
+        invalidateMembers(workspaceId);
+        return toInvitation(invitation);
+    }
+
+    @Transactional
+    public void cancel(UUID workspaceId, UUID actorId, UUID invitationId) {
+        requireAdmin(workspaceId, actorId);
+        Invitation invitation = requireInvitation(workspaceId, invitationId);
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw new BadRequestException("Only pending invitations can be cancelled");
+        }
+        invitation.setStatus(InvitationStatus.CANCELLED);
+        invitationRepository.save(invitation);
+        audit(workspaceId, actorId, LogAction.USER_INVITATION_CANCELLED, "invitation", invitationId,
+                Map.of("transition", "PENDING->CANCELLED"));
+        invalidateMembers(workspaceId);
+    }
+
+    /** Changes a member's role inside one workspace. */
+    @Transactional
+    public MemberResponse updateRole(UUID workspaceId, UUID actorId, UUID userId, WorkspaceRole role) {
+        requireAdmin(workspaceId, actorId);
+        if (actorId.equals(userId)) {
+            throw new BadRequestException("You cannot change your own role");
+        }
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_IdForUpdate(userId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        WorkspaceRole previous = membership.getRole();
+        if (previous == WorkspaceRole.WORKSPACE_ADMIN && role != WorkspaceRole.WORKSPACE_ADMIN) {
+            ensureNotFinalAdmin(workspaceId);
+        }
+        membership.setRole(role);
+        memberRepository.save(membership);
+        audit(workspaceId, actorId, LogAction.USER_ROLE_CHANGED, "user", userId,
+                Map.of("from", previous.name(), "to", role.name()));
+        invalidateMembers(workspaceId);
+        return toMember(membership, actorId);
+    }
+
+    /** Activates or deactivates a member's account within this workspace's org. */
+    @Transactional
+    public MemberResponse updateStatus(UUID workspaceId, UUID actorId, UUID userId, UserStatus status) {
+        MembershipSnapshot actor = requireAdmin(workspaceId, actorId);
+        if (status != UserStatus.ACTIVE && status != UserStatus.INACTIVE) {
+            throw new BadRequestException("Status must be ACTIVE or INACTIVE");
+        }
+        if (actorId.equals(userId) && status == UserStatus.INACTIVE) {
+            throw new BadRequestException("You cannot deactivate your own account");
+        }
+        User user = requireMembershipUser(workspaceId, userId);
+        if (user.getRole() == OrgRole.ORG_OWNER) {
+            throw new BadRequestException("The organization owner cannot be deactivated here");
+        }
+        if (status == UserStatus.INACTIVE) {
+            ensureNotFinalAdminIfApplicable(workspaceId, user);
+        }
+        user.setStatus(status);
+        userRepository.save(user);
+        if (status == UserStatus.INACTIVE) {
+            publishBusinessEvent("tenant.user.deactivated.v1", new UserDeactivatedEvent(workspaceId, userId));
+        }
+        audit(workspaceId, actorId,
+                status == UserStatus.ACTIVE ? LogAction.USER_REACTIVATED : LogAction.USER_DEACTIVATED,
+                "user", userId, Map.of("status", status.name()));
+        invalidateMembers(workspaceId);
+        return toMember(memberRepository.findByUser_IdAndWorkspace_Id(userId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found")), actorId);
+    }
+
+    /**
+     * Administrator sets a member's initial password; the member must change
+     * it on next login. Available with no email channel configured, which is
+     * how a closed workspace still onboards people.
+     */
+    @Transactional
+    public void setMemberPassword(UUID workspaceId, UUID actorId, UUID userId, String newPassword) {
+        requireAdmin(workspaceId, actorId);
+        User target = requireMembershipUser(workspaceId, userId);
+        if (target.getId().equals(actorId)) {
+            throw new BadRequestException("Use the change-password endpoint for your own password");
+        }
+        credentials.setInitialPassword(actorId, userId, newPassword);
+        invalidateMembers(workspaceId);
+    }
+
+    /**
+     * Workspace admin removes one membership from their own workspace. The
+     * default workspace (General) is excluded: every account belongs there, so
+     * removal would be meaningless. Deactivation stays an organization-owner
+     * action on the admin surface instead.
+     */
+    @Transactional
+    public void removeWorkspaceMember(UUID workspaceId, UUID actorId, UUID userId) {
+        requireAdmin(workspaceId, actorId);
+        Tenant workspace = requireWorkspace(workspaceId);
+        if (workspace.isDefaultWorkspace()) {
+            throw new BadRequestException("Members cannot be removed from the default workspace");
+        }
+        if (actorId.equals(userId)) {
+            throw new BadRequestException("You cannot remove yourself from this workspace");
+        }
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_IdForUpdate(userId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (membership.getRole() == WorkspaceRole.WORKSPACE_ADMIN) {
+            ensureNotFinalAdmin(workspaceId);
+        }
+        memberRepository.delete(membership);
+        audit(workspaceId, actorId, LogAction.MEMBER_REMOVED, "user", userId, Map.of());
+        invalidateMembers(workspaceId);
+    }
+
+    /**
+     * Organization owner activates or deactivates any account in the org,
+     * regardless of which workspaces it belongs to. The workspace scope only
+     * anchors the audit trail.
+     */
+    @Transactional
+    public OrganizationMemberResponse updateOrgUserStatus(
+            UUID orgId, UUID workspaceId, UUID actorId, UUID userId, UserStatus status) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        if (status != UserStatus.ACTIVE && status != UserStatus.INACTIVE) {
+            throw new BadRequestException("Status must be ACTIVE or INACTIVE");
+        }
+        if (actorId.equals(userId) && status == UserStatus.INACTIVE) {
+            throw new BadRequestException("You cannot deactivate your own account");
+        }
+        User user = requireOrgUser(orgId, userId);
+        if (user.getRole() == OrgRole.ORG_OWNER) {
+            throw new BadRequestException("The organization owner cannot be deactivated here");
+        }
+        if (status == UserStatus.INACTIVE) {
+            ensureNotFinalAdminEverywhere(user);
+        }
+        user.setStatus(status);
+        userRepository.save(user);
+        if (status == UserStatus.INACTIVE) {
+            publishBusinessEvent("tenant.user.deactivated.v1", new UserDeactivatedEvent(workspaceId, userId));
+        }
+        audit(workspaceId, actorId,
+                status == UserStatus.ACTIVE ? LogAction.USER_REACTIVATED : LogAction.USER_DEACTIVATED,
+                "user", userId, Map.of("status", status.name()));
+        return toOrganizationMember(user, actorId);
+    }
+
+    /**
+     * Organization owner sets any org account password. Unlike the
+     * workspace-scoped variant, the target needs no membership in the actor's
+     * active workspace.
+     */
+    @Transactional
+    public void setOrgUserPassword(
+            UUID orgId, UUID workspaceId, UUID actorId, UUID userId, String newPassword) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        User target = requireOrgUser(orgId, userId);
+        if (target.getId().equals(actorId)) {
+            throw new BadRequestException("Use the change-password endpoint for your own password");
+        }
+        credentials.setInitialPassword(actorId, userId, newPassword);
+    }
+
+    /**
+     * Link a pre-SSO password account to a Keycloak identity.
+     * Returns {@link TenantIdentityApi.SsoLinkResult} so callers stay on the
+     * published tenant boundary (see {@code ModularMonolithArchitectureTest}).
+     *
+     * Active path is auto-link by verified email inside the same org: the
+     * account keeps every workspace membership and role, so
+     * {@code recover-owner} and all workspace authorization keep working
+     * unchanged. Unknown emails are rejected (no auto-provisioning); the
+     * subject, once set, is immutable.
+     *
+     * The future TOTP-confirmation branch
+     * ({@code organizations.sso_link_require_otp}) is intentionally not
+     * implemented here: no SMTP code exists and the mail flow is untested.
+     * When that switch turns on, callers must present a
+     * Keycloak-OTP-authenticated session instead (see docs/KEYCLOAK.md).
+     */
+    @Transactional
+    public TenantIdentityApi.SsoLinkResult linkSsoIdentity(
+            UUID orgId, String keycloakSubject, String email, boolean emailVerified) {
+        if (keycloakSubject == null || keycloakSubject.isBlank()) {
+            throw new BadRequestException("SSO identity is missing");
+        }
+        Optional<User> already = userRepository.findByKeycloakSubject(keycloakSubject);
+        if (already.isPresent()) {
+            User linked = already.get();
+            if (!linked.getOrganization().getId().equals(orgId)) {
+                throw new ConflictException("SSO identity is already linked to another account");
+            }
+            return new TenantIdentityApi.SsoLinkResult(linked.getId(), false);
+        }
+        if (!emailVerified) {
+            throw new ConflictException("SSO requires a verified email address");
+        }
+        String normalized = normalizeEmail(email);
+        User user = userRepository.findByEmailIgnoreCase(normalized)
+                .filter(candidate -> candidate.getOrganization().getId().equals(orgId))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "SSO_UNKNOWN_EMAIL: No account exists for this email"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException("User account is disabled");
+        }
+        user.setKeycloakSubject(keycloakSubject);
+        userRepository.save(user);
+        List<WorkspaceMember> memberships = memberRepository.findVisibleByUserId(user.getId());
+        if (!memberships.isEmpty()) {
+            audit(memberships.get(0).getWorkspace().getId(), user.getId(),
+                    LogAction.USER_SSO_LINKED, "user", user.getId(),
+                    Map.of("via", "verified-email"));
+        }
+        return new TenantIdentityApi.SsoLinkResult(user.getId(), true);
+    }
+
+    @Transactional(readOnly = true)
+    public InvitationSnapshot validateInvitationToken(String rawToken) {
+        Invitation invitation = findInvitation(rawToken, false);
+        validateAcceptable(invitation);
+        return new InvitationSnapshot(
+                invitation.getEmail(),
+                invitation.getTenant().getOrganization().getName(),
+                invitation.getTenant().getName(),
+                invitation.getRole(),
+                invitation.getExpiresAt());
+    }
+
+    @Transactional
+    public AcceptedAccount acceptInvitationToken(String rawToken, String fullName, String passwordHash) {
+        Invitation invitation = findInvitation(rawToken, true);
+        return acceptLockedInvitation(invitation, fullName, passwordHash);
+    }
+
+    private AcceptedAccount acceptLockedInvitation(
+            Invitation invitation, String fullName, String passwordHash) {
+        validateAcceptable(invitation);
+        String email = normalizeEmail(invitation.getEmail());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("An account already exists for this email");
+        }
+        Tenant workspace = invitation.getTenant();
+
+        User user = new User();
+        user.setOrganization(workspace.getOrganization());
+        user.setInvitedBy(invitation.getInvitedBy());
+        user.setEmail(email);
+        user.setFullName(fullName.trim());
+        user.setPasswordHash(passwordHash);
+        user.setRole(OrgRole.MEMBER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+
+        grantMembership(user, workspace, invitation.getRole());
+
+        invitation.setStatus(InvitationStatus.ACCEPTED);
+        invitation.setAcceptedAt(LocalDateTime.now());
+        invitationRepository.save(invitation);
+
+        audit(workspace.getId(), user.getId(), LogAction.USER_INVITATION_ACCEPTED,
+                "invitation", invitation.getId(), Map.of("transition", "PENDING->ACCEPTED"));
+        invalidateMembers(workspace.getId());
+        return new AcceptedAccount(
+                user.getId(), workspace.getOrganization().getId(), workspace.getId(),
+                user.getEmail(), user.getFullName(), user.getRole(), invitation.getRole(),
+                user.getStatus().name(), user.isMustChangePassword());
+    }
+
+    /**
+     * Self-registration: joins the default workspace plus every PUBLIC
+     * workspace. Refused when the organization disabled self-registration.
+     */
+    @Transactional
+    public AcceptedAccount register(String email, String fullName, String passwordHash) {
+        String normalized = normalizeEmail(email);
+        if (userRepository.existsByEmailIgnoreCase(normalized)) {
+            throw new ConflictException("An account already exists for this email");
+        }
+        List<Tenant> joinable = joinableWorkspaces();
+        if (joinable.isEmpty()) {
+            throw new ConflictException("Self-registration is not enabled for this installation");
+        }
+        Tenant anchor = joinable.stream()
+                .filter(Tenant::isDefaultWorkspace)
+                .findFirst()
+                .orElse(joinable.get(0));
+
+        User user = new User();
+        user.setOrganization(anchor.getOrganization());
+        user.setEmail(normalized);
+        user.setFullName(fullName == null || fullName.isBlank() ? normalized : fullName.trim());
+        user.setPasswordHash(passwordHash);
+        user.setRole(OrgRole.MEMBER);
+        user.setStatus(UserStatus.ACTIVE);
+        userRepository.save(user);
+
+        for (Tenant workspace : joinable) {
+            grantMembership(user, workspace, WorkspaceRole.MEMBER);
+        }
+        audit(anchor.getId(), user.getId(), LogAction.MEMBER_ADDED, "user", user.getId(),
+                Map.of("via", "self-registration", "workspaces", joinable.size()));
+        joinable.forEach(workspace -> invalidateMembers(workspace.getId()));
+
+        return new AcceptedAccount(
+                user.getId(), user.getOrganization().getId(), anchor.getId(),
+                user.getEmail(), user.getFullName(), user.getRole(), WorkspaceRole.MEMBER,
+                user.getStatus().name(), user.isMustChangePassword());
+    }
+
+    /** Workspaces a self-registering account may join, honoring the org toggle. */
+    private List<Tenant> joinableWorkspaces() {
+        List<Tenant> all = workspaceRepository.findAll().stream()
+                .filter(workspace -> workspace.getStatus()
+                        == com.openvie.api.tenant.api.TenantStatus.ACTIVE)
+                .toList();
+        if (all.isEmpty()) {
+            return List.of();
+        }
+        boolean allowed = all.stream()
+                .anyMatch(workspace -> workspace.getOrganization().isAllowSelfRegistration());
+        if (!allowed) {
+            return List.of();
+        }
+        return all.stream()
+                .filter(workspace -> workspace.getOrganization().isAllowSelfRegistration())
+                .filter(workspace -> workspace.isDefaultWorkspace()
+                        || workspace.getVisibility() == WorkspaceVisibility.PUBLIC)
+                .toList();
+    }
+
+    private WorkspaceMember grantMembership(User user, Tenant workspace, WorkspaceRole role) {
+        var existing = memberRepository.findByUser_IdAndWorkspace_Id(user.getId(), workspace.getId());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        WorkspaceMember membership = new WorkspaceMember();
+        membership.setUser(user);
+        membership.setWorkspace(workspace);
+        membership.setRole(role);
+        return memberRepository.save(membership);
+    }
+
+    private DirectoryResponse decorateDirectory(
+            DirectoryResponse snapshot, UUID currentUserId, LocalDateTime now) {
+        List<MemberResponse> members = snapshot.members().stream()
+                .map(member -> new MemberResponse(member.id(), member.email(), member.fullName(),
+                        member.workspaceRole(), member.status(), member.joinedAt(), member.lastLoginAt(),
+                        member.id().equals(currentUserId)))
+                .toList();
+        List<InvitationResponse> invitations = snapshot.invitations().stream()
+                .map(invitation -> invitation.status() == InvitationStatus.PENDING
+                                && !invitation.expiresAt().isAfter(now)
+                        ? new InvitationResponse(invitation.id(), invitation.email(), invitation.role(),
+                        InvitationStatus.EXPIRED, invitation.invitedAt(), invitation.expiresAt(),
+                        invitation.lastSentAt())
+                        : invitation)
+                .filter(invitation -> invitation.status() == InvitationStatus.PENDING
+                        || invitation.status() == InvitationStatus.EXPIRED)
+                .toList();
+        return new DirectoryResponse(members, invitations, snapshot.visibility(),
+                snapshot.defaultWorkspace());
+    }
+
+    private void requireChannel(UUID orgId) {
+        if (!channels.configuredFor(orgId)) {
+            throw new ConflictException(
+                    "No notification channel is configured, so invitations cannot be delivered. "
+                            + "Configure one in organization settings.");
+        }
+    }
+
+    /**
+     * Resolves the actor's authority in this workspace straight from the
+     * repositories. Membership is read here rather than through the identity
+     * API so that the identity implementation can delegate account creation
+     * back to this service without a bean cycle.
+     */
+    private MembershipSnapshot requireAdmin(UUID workspaceId, UUID actorId) {
+        MembershipSnapshot membership = resolveMembership(actorId, workspaceId);
+        if (!membership.isWorkspaceAdmin()) {
+            throw new UnauthorizedException("This action requires workspace admin authority");
+        }
+        return membership;
+    }
+
+    private void requireOrganizationOwner(UUID orgId, UUID workspaceId, UUID actorId) {
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        if (!actor.orgId().equals(orgId) || actor.orgRole() != OrgRole.ORG_OWNER) {
+            throw new UnauthorizedException("This action requires organization owner authority");
+        }
+    }
+
+    private MembershipSnapshot resolveMembership(UUID userId, UUID workspaceId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Session is no longer valid"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new UnauthorizedException("User account is disabled");
+        }
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_Id(userId, workspaceId)
+                .orElseThrow(() -> new UnauthorizedException("You are not a member of this workspace"));
+        Tenant workspace = membership.getWorkspace();
+        if (!workspace.getOrganization().getId().equals(user.getOrganization().getId())) {
+            throw new UnauthorizedException("Workspace does not belong to your organization");
+        }
+        return new MembershipSnapshot(
+                userId, user.getOrganization().getId(), workspaceId,
+                user.getRole(), membership.getRole(), user.getStatus().name());
+    }
+
+    private Tenant requireWorkspace(UUID workspaceId) {
+        return workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Workspace was not found"));
+    }
+
+    private User requireUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+    private User requireMembershipUser(UUID workspaceId, UUID userId) {
+        return memberRepository.findByUser_IdAndWorkspace_Id(userId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"))
+                .getUser();
+    }
+
+    private User requireOrgUser(UUID orgId, UUID userId) {
+        User user = requireUser(userId);
+        if (!user.getOrganization().getId().equals(orgId)) {
+            throw new ResourceNotFoundException("User not found");
+        }
+        return user;
+    }
+
+    /**
+     * Resolves the organization owning an email for the SSO bridge.
+     * Login emails are globally unique, so at most one organization matches.
+     */
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOrgIdByEmail(String email) {
+        if (email == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmailIgnoreCase(normalizeEmail(email))
+                .map(user -> user.getOrganization().getId());
+    }
+
+    private OrganizationMemberResponse toOrganizationMember(User user, UUID currentUserId) {
+        return new OrganizationMemberResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus(),
+                user.getCreatedAt(),
+                user.getLastLoginAt(),
+                user.getId().equals(currentUserId));
+    }
+
+    /**
+     * Deactivation locks the whole account, so the target must not be the last
+     * remaining admin of any workspace it administers — not just the actor's
+     * active one.
+     */
+    private void ensureNotFinalAdminEverywhere(User user) {
+        for (WorkspaceMember membership : memberRepository.findVisibleByUserId(user.getId())) {
+            if (membership.getRole() == WorkspaceRole.WORKSPACE_ADMIN
+                    && memberRepository.countByWorkspace_IdAndRole(
+                            membership.getWorkspace().getId(), WorkspaceRole.WORKSPACE_ADMIN) <= 1) {
+                throw new BadRequestException("A workspace needs at least one active admin");
+            }
+        }
+    }
+
+    private void ensureNotFinalAdmin(UUID workspaceId) {
+        if (memberRepository.countByWorkspace_IdAndRole(workspaceId, WorkspaceRole.WORKSPACE_ADMIN) <= 1) {
+            throw new BadRequestException("A workspace needs at least one active admin");
+        }
+    }
+
+    private void ensureNotFinalAdminIfApplicable(UUID workspaceId, User user) {
+        WorkspaceMember membership = memberRepository
+                .findByUser_IdAndWorkspace_Id(user.getId(), workspaceId).orElse(null);
+        if (membership != null && membership.getRole() == WorkspaceRole.WORKSPACE_ADMIN) {
+            ensureNotFinalAdmin(workspaceId);
+        }
+    }
+
+    private Invitation requireInvitation(UUID workspaceId, UUID invitationId) {
+        return invitationRepository.findByIdAndTenant_Id(invitationId, workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invitation not found"));
+    }
+
+    private void validateAcceptable(Invitation invitation) {
+        if (invitation.getStatus() != InvitationStatus.PENDING) {
+            throw new ResourceNotFoundException("Invitation is invalid or no longer available");
+        }
+        if (!invitation.getExpiresAt().isAfter(LocalDateTime.now().minus(INVITATION_VALIDITY_GRACE))) {
+            throw new BadRequestException("Invitation has expired");
+        }
+    }
+
+    private void invalidateMembers(UUID workspaceId) {
+        if (businessInvalidationPublisher != null) {
+            businessInvalidationPublisher.memberMutation(workspaceId);
+        }
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String generateToken() {
+        byte[] bytes = new byte[32];
+        SECURE_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private void publishInvitationEmail(Invitation invitation, String token) {
+        publishBusinessEvent("tenant.user.invited.v1", new UserInvitedEvent(
+                invitation.getTenant().getOrganization().getId(),
+                invitation.getTenant().getId(),
+                invitation.getInvitedBy().getId(),
+                invitation.getEmail(),
+                invitation.getTenant().getOrganization().getName(),
+                invitation.getTenant().getName(),
+                invitation.getRole().name(),
+                token,
+                invitation.getExpiresAt(),
+                invitation.getId(),
+                invitation.getStatus().name(),
+                invitation.getCreatedAt() == null ? LocalDateTime.now() : invitation.getCreatedAt()));
+    }
+
+    private void publishBusinessEvent(String stableType, Object event) {
+        if (durableEventPublisher != null) {
+            durableEventPublisher.publish(stableType, 1, event);
+        } else {
+            eventPublisher.publishEvent(event);
+        }
+    }
+
+    private void audit(UUID workspaceId, UUID actorId, LogAction action, String resourceType,
+                       UUID resourceId, Map<String, Object> metadata) {
+        eventPublisher.publishEvent(AuditLogEvent.builder(this)
+                .tenantId(workspaceId).userId(actorId).action(action).resourceType(resourceType)
+                .resourceId(resourceId).metadata(metadata).build());
+    }
+
+    private MemberResponse toMember(WorkspaceMember membership, UUID currentUserId) {
+        User user = membership.getUser();
+        return new MemberResponse(user.getId(), user.getEmail(), user.getFullName(),
+                membership.getRole(), user.getStatus(), membership.getCreatedAt(),
+                user.getLastLoginAt(),
+                currentUserId != null && user.getId().equals(currentUserId));
+    }
+
+
+    private InvitationResponse toInvitation(Invitation invitation) {
+        return new InvitationResponse(invitation.getId(), invitation.getEmail(), invitation.getRole(),
+                invitation.getStatus(), invitation.getCreatedAt(), invitation.getExpiresAt(),
+                invitation.getLastSentAt());
+    }
+
+    String hashToken(String token) {
+        return base64Sha256(token);
+    }
+
+    private String legacyHashToken(String token) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    private static String base64Sha256(String token) {
+        try {
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
+    private Invitation findInvitation(String rawToken, boolean lock) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new ResourceNotFoundException("Invitation is invalid or no longer available");
+        }
+        var canonical = lock
+                ? invitationRepository.findByTokenHashForUpdate(hashToken(rawToken))
+                : invitationRepository.findByTokenHash(hashToken(rawToken));
+        return canonical.orElseGet(() -> (lock
+                ? invitationRepository.findByTokenHashForUpdate(legacyHashToken(rawToken))
+                : invitationRepository.findByTokenHash(legacyHashToken(rawToken)))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Invitation is invalid or no longer available")));
+    }
+
+    @Transactional
+    public MemberResponse addMember(
+            UUID workspaceId, UUID actorId, String rawEmail, WorkspaceRole role) {
+        Tenant workspace = requireWorkspace(workspaceId);
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        boolean isPublic = workspace.getVisibility() == WorkspaceVisibility.PUBLIC;
+        if (!isPublic && !actor.isWorkspaceAdmin()) {
+            throw new UnauthorizedException("Only workspace admins can add members to a private workspace");
+        }
+        if (!actor.isWorkspaceAdmin() && role != WorkspaceRole.MEMBER) {
+            throw new BadRequestException("Regular members can only add colleagues as regular members");
+        }
+        String email = normalizeEmail(rawEmail);
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .filter(candidate -> candidate.getOrganization().getId().equals(actor.orgId()))
+                .orElseThrow(() -> new ResourceNotFoundException("No account exists for that email in the organization"));
+        if (memberRepository.findByUser_IdAndWorkspace_Id(user.getId(), workspaceId).isPresent()) {
+            throw new ConflictException("That account is already a member of this workspace");
+        }
+        WorkspaceMember membership = grantMembership(user, workspace, role);
+        audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(), Map.of("role", role.name()));
+        invalidateMembers(workspaceId);
+        return toMember(membership, actorId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> getOrganizationMembers(
+            UUID orgId, UUID workspaceId, UUID currentUserId) {
+        requireOrganizationOwner(orgId, workspaceId, currentUserId);
+        return userRepository.findByOrganization_IdOrderByFullNameAsc(orgId).stream()
+                .map(user -> new OrganizationMemberResponse(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getFullName(),
+                        user.getRole(),
+                        user.getStatus(),
+                        user.getCreatedAt(),
+                        user.getLastLoginAt(),
+                        user.getId().equals(currentUserId)
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public OrganizationMemberResponse createOrganizationUser(
+            UUID orgId, UUID workspaceId, UUID actorId, CreateUserRequest request) {
+        requireOrganizationOwner(orgId, workspaceId, actorId);
+        String email = normalizeEmail(request.email());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ConflictException("An account already exists for this email");
+        }
+
+        Organization organization = organizationRepository.findById(orgId)
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
+        List<Tenant> defaultWorkspaces =
+                workspaceRepository.findByOrganization_IdAndDefaultWorkspaceTrue(orgId);
+        if (defaultWorkspaces.isEmpty()) {
+            throw new ResourceNotFoundException("Organization has no default workspace");
+        }
+
+        User user = new User();
+        user.setOrganization(organization);
+        user.setEmail(email);
+        user.setFullName(request.fullName().trim());
+        user.setPasswordHash(credentials.hashNewPassword(request.password()));
+        user.setRole(OrgRole.MEMBER);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setMustChangePassword(true);
+        user = userRepository.save(user);
+
+        for (Tenant defaultWorkspace : defaultWorkspaces) {
+            grantMembership(user, defaultWorkspace, WorkspaceRole.MEMBER);
+            invalidateMembers(defaultWorkspace.getId());
+        }
+
+        audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(),
+                Map.of("via", "admin-create", "email", email, "role", user.getRole().name()));
+
+        return new OrganizationMemberResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus(),
+                user.getCreatedAt(),
+                user.getLastLoginAt(),
+                user.getId().equals(actorId)
+        );
+    }
+}

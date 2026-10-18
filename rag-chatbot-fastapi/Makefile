@@ -212,20 +212,20 @@ backfill-spreadsheet-artifacts: env
 generate-proto: env
 	$(PYTHON_RUN) -m grpc_tools.protoc -I../proto \
 		--python_out=app/generated --pyi_out=app/generated --grpc_python_out=app/generated \
-		../proto/cacanode_ai_v1.proto
-	@sed -i.bak 's/^import cacanode_ai_v1_pb2 as/from app.generated import cacanode_ai_v1_pb2 as/' app/generated/cacanode_ai_v1_pb2_grpc.py
-	@$(REMOVE) app/generated/cacanode_ai_v1_pb2_grpc.py.bak
+		../proto/openvie_ai_v1.proto
+	@sed -i.bak 's/^import openvie_ai_v1_pb2 as/from app.generated import openvie_ai_v1_pb2 as/' app/generated/openvie_ai_v1_pb2_grpc.py
+	@$(REMOVE) app/generated/openvie_ai_v1_pb2_grpc.py.bak
 
 check-proto: env
 	@tmp=$$(mktemp -d); \
 	$(PYTHON_RUN) -m grpc_tools.protoc -I../proto \
 		--python_out=$$tmp --pyi_out=$$tmp --grpc_python_out=$$tmp \
-		../proto/cacanode_ai_v1.proto; \
-	sed -i.bak 's/^import cacanode_ai_v1_pb2 as/from app.generated import cacanode_ai_v1_pb2 as/' $$tmp/cacanode_ai_v1_pb2_grpc.py; \
-	rm -f $$tmp/cacanode_ai_v1_pb2_grpc.py.bak; \
-	diff -u app/generated/cacanode_ai_v1_pb2.py $$tmp/cacanode_ai_v1_pb2.py; \
-	diff -u app/generated/cacanode_ai_v1_pb2.pyi $$tmp/cacanode_ai_v1_pb2.pyi; \
-	diff -u app/generated/cacanode_ai_v1_pb2_grpc.py $$tmp/cacanode_ai_v1_pb2_grpc.py; \
+		../proto/openvie_ai_v1.proto; \
+	sed -i.bak 's/^import openvie_ai_v1_pb2 as/from app.generated import openvie_ai_v1_pb2 as/' $$tmp/openvie_ai_v1_pb2_grpc.py; \
+	rm -f $$tmp/openvie_ai_v1_pb2_grpc.py.bak; \
+	diff -u app/generated/openvie_ai_v1_pb2.py $$tmp/openvie_ai_v1_pb2.py; \
+	diff -u app/generated/openvie_ai_v1_pb2.pyi $$tmp/openvie_ai_v1_pb2.pyi; \
+	diff -u app/generated/openvie_ai_v1_pb2_grpc.py $$tmp/openvie_ai_v1_pb2_grpc.py; \
 	rm -rf $$tmp
 
 test: env

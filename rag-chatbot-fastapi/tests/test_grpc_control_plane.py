@@ -7,7 +7,7 @@ import grpc
 import pytest
 
 from app.bootstrap.grpc import InferenceGrpcService
-from app.generated import cacanode_ai_v1_pb2 as pb
+from app.generated import openvie_ai_v1_pb2 as pb
 from app.modules.generation.api import (
     Citation,
     GenerationContext,

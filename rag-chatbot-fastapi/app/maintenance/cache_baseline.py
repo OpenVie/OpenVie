@@ -15,15 +15,15 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 METRIC_PREFIXES = (
-    "cacanode_ai_embedding_seconds",
-    "cacanode_ai_embedding_requests_total",
-    "cacanode_ai_retrieval_seconds",
-    "cacanode_ai_retrieval_channel_seconds",
-    "cacanode_ai_reranker_seconds",
-    "cacanode_ai_rag_answer_seconds",
-    "cacanode_cache_",
-    "cacanode_redis_",
-    "cacanode_semantic_answer_cache_",
+    "openvie_ai_embedding_seconds",
+    "openvie_ai_embedding_requests_total",
+    "openvie_ai_retrieval_seconds",
+    "openvie_ai_retrieval_channel_seconds",
+    "openvie_ai_reranker_seconds",
+    "openvie_ai_rag_answer_seconds",
+    "openvie_cache_",
+    "openvie_redis_",
+    "openvie_semantic_answer_cache_",
 )
 
 

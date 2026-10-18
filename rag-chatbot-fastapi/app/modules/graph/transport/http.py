@@ -68,7 +68,7 @@ class DeleteSourceRequest(BaseModel):
 def create_graph_app(
     *, repository: KuzuGraphRepository, internal_token: str, database_path: str
 ) -> FastAPI:
-    app = FastAPI(title="Cacanode Graph Service", version="1.0.0")
+    app = FastAPI(title="OpenVie Graph Service", version="1.0.0")
 
     def authenticate(x_graph_token: str = Header(default="")) -> None:
         if not internal_token or x_graph_token != internal_token:

@@ -8,7 +8,7 @@
 		<version>4.0.6</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.cacanode</groupId>
+	<groupId>com.openvie</groupId>
 	<artifactId>api</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name/>
@@ -302,7 +302,7 @@
 	</profiles>
 
 	<build>
-		<finalName>cacanode-api</finalName>
+		<finalName>openvie-api</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.xolstice.maven.plugins</groupId>

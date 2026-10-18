@@ -17,12 +17,12 @@ def test_baseline_summary_reports_statuses_and_nearest_rank_percentiles() -> Non
 
 
 def test_baseline_captures_cache_authoritative_and_redis_metric_families() -> None:
-    assert "cacanode_cache_" in METRIC_PREFIXES
-    assert "cacanode_redis_" in METRIC_PREFIXES
-    assert "cacanode_ai_embedding_requests_total" in METRIC_PREFIXES
-    assert "cacanode_ai_retrieval_channel_seconds" in METRIC_PREFIXES
-    assert "cacanode_ai_reranker_seconds" in METRIC_PREFIXES
-    assert "cacanode_semantic_answer_cache_" in METRIC_PREFIXES
+    assert "openvie_cache_" in METRIC_PREFIXES
+    assert "openvie_redis_" in METRIC_PREFIXES
+    assert "openvie_ai_embedding_requests_total" in METRIC_PREFIXES
+    assert "openvie_ai_retrieval_channel_seconds" in METRIC_PREFIXES
+    assert "openvie_ai_reranker_seconds" in METRIC_PREFIXES
+    assert "openvie_semantic_answer_cache_" in METRIC_PREFIXES
 
 
 def test_probe_can_represent_spring_business_cache_requests() -> None:
@@ -46,7 +46,7 @@ async def test_metrics_scrape_follows_fastapi_mount_redirect() -> None:
             200,
             text=(
                 "# HELP ignored ignored\n"
-                'cacanode_ai_embedding_requests_total{outcome="success"} 4\n'
+                'openvie_ai_embedding_requests_total{outcome="success"} 4\n'
                 "python_gc_objects_collected_total 10\n"
             ),
         )
@@ -55,5 +55,5 @@ async def test_metrics_scrape_follows_fastapi_mount_redirect() -> None:
         snapshot = await _scrape_metrics(client, "http://inference.test/metrics")
 
     assert snapshot == {
-        'cacanode_ai_embedding_requests_total{outcome="success"}': 4.0,
+        'openvie_ai_embedding_requests_total{outcome="success"}': 4.0,
     }

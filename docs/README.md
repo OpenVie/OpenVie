@@ -60,14 +60,11 @@ hay duyệt cho production. Cụ thể:
 Dùng [RETRIEVAL.md](RETRIEVAL.md) cho hành vi hấp thụ đã cung cấp so với kế hoạch, và
 [DEPLOYMENT.md](DEPLOYMENT.md) cho yêu cầu kiểm chứng trên bản tự triển khai.
 
-## Đặt tên trong giai đoạn đổi thương hiệu
+## Đặt tên và thương hiệu
 
-OpenVie là tên sản phẩm hướng tới người dùng. Tên package/protobuf nội bộ, tài nguyên triển khai,
-route, tiền tố credential và tên miền hiện có cố ý giữ nguyên định danh; tên kỹ thuật còn chứa
-`cacanode` hoặc `ccn` khớp với code mà chúng mô tả. Việc đổi thương hiệu trình bày này không
-thay đổi hợp đồng tích hợp hay tạo tên miền công khai mới. Đổi ví dụ chạy được phải đi cùng thay
-đổi trong triển khai.
-
+OpenVie là tên sản phẩm và định danh thống nhất của toàn bộ hệ thống. Các package (`com.openvie.api`),
+hợp đồng protobuf (`openvie.ai.v1`), tài nguyên triển khai, hàng đợi RabbitMQ và cấu hình hệ thống
+đều sử dụng định danh `openvie`.
 Mã nguồn ứng dụng OpenVie là Apache-2.0 theo bản quyền LinkedNodeDigital; xem
 [LICENSE](../LICENSE), [NOTICE](../NOTICE), và [publication gate](OPEN_SOURCE.md#publication-gate).
 
@@ -140,14 +137,11 @@ configured, load-tested, or approved for production. In particular:
 Use [RETRIEVAL.md](RETRIEVAL.md) for delivered versus planned ingestion behavior, and
 [DEPLOYMENT.md](DEPLOYMENT.md) for verification requirements on a self-hosted install.
 
-## Naming during the rebrand
+## Naming and branding
 
-OpenVie is the user-facing product name. Internal package/protobuf names, deployment resources,
-routes, credential prefixes, and existing domains intentionally retain their current identifiers;
-technical names still containing `cacanode` or `ccn` match the code they document. This
-presentation rebrand does not change integration contracts or establish a new public domain.
-Change executable examples in the same change as their implementation.
-
+OpenVie is the unified product and technical identifier across the platform. Internal packages (`com.openvie.api`),
+protobuf contracts (`openvie.ai.v1`), deployment resources, message queues, and service configurations
+standardize on `openvie`.
 OpenVie application source is Apache-2.0 under LinkedNodeDigital copyright; see
 [LICENSE](../LICENSE), [NOTICE](../NOTICE), and the [publication gate](OPEN_SOURCE.md#publication-gate).
 
