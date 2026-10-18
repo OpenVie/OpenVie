@@ -3,9 +3,9 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cacanode-ai-api"
+name = "openvie-ai-api"
 version = "0.1.0"
-description = "Cacanode chat, retrieval, graph, and ingestion service"
+description = "OpenVie chat, retrieval, graph, and ingestion service"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "aio-pika==9.6.2",

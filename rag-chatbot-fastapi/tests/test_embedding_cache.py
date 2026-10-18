@@ -362,7 +362,7 @@ async def test_unique_misses_still_respect_underlying_ollama_batch_limit(
         enabled=True,
     )
     labels = {"operation": "documents", "provider": "ollama", "outcome": "success"}
-    before = REGISTRY.get_sample_value("cacanode_ai_embedding_requests_total", labels) or 0
+    before = REGISTRY.get_sample_value("openvie_ai_embedding_requests_total", labels) or 0
 
     result = await client.embed_documents(
         ["text-1", "text-2", "text-1", "text-3", "text-4", "text-5"]
@@ -371,5 +371,5 @@ async def test_unique_misses_still_respect_underlying_ollama_batch_limit(
     assert calls == [["text-1", "text-2"], ["text-3", "text-4"], ["text-5"]]
     assert [vector[0] for vector in result] == [1.0, 2.0, 1.0, 3.0, 4.0, 5.0]
     assert (
-        REGISTRY.get_sample_value("cacanode_ai_embedding_requests_total", labels) or 0
+        REGISTRY.get_sample_value("openvie_ai_embedding_requests_total", labels) or 0
     ) == before + 3

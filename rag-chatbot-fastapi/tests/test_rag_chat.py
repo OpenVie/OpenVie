@@ -75,10 +75,10 @@ async def test_embedding_adapter_embeds_queries(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("app.modules.model.internal.embedding.httpx.AsyncClient", FakeOllamaClient)
     embedder = OllamaEmbeddingClient(Settings(TEXT_EMBEDDING_DIMENSION=3))
     labels = {"operation": "query", "provider": "ollama", "outcome": "success"}
-    before = metric_value("cacanode_ai_embedding_seconds_count", labels)
+    before = metric_value("openvie_ai_embedding_seconds_count", labels)
 
     assert await embedder.embed_query("hello") == [1.0, 2.0, 3.0]
-    assert metric_value("cacanode_ai_embedding_seconds_count", labels) == before + 1
+    assert metric_value("openvie_ai_embedding_seconds_count", labels) == before + 1
 
 
 @pytest.mark.asyncio
@@ -674,7 +674,7 @@ async def test_chat_service_records_rag_timing_metrics_on_success() -> None:
     labels = {"provider": "test-provider", "outcome": "success"}
     before = {
         stage: metric_value(
-            "cacanode_ai_rag_answer_seconds_count",
+            "openvie_ai_rag_answer_seconds_count",
             {"stage": stage, **labels},
         )
         for stage in ("embedding", "retrieval", "llm", "total")
@@ -708,7 +708,7 @@ async def test_chat_service_records_rag_timing_metrics_on_success() -> None:
     for stage, count in before.items():
         assert (
             metric_value(
-                "cacanode_ai_rag_answer_seconds_count",
+                "openvie_ai_rag_answer_seconds_count",
                 {"stage": stage, **labels},
             )
             == count + 1
@@ -719,11 +719,11 @@ async def test_chat_service_records_rag_timing_metrics_on_success() -> None:
 async def test_chat_service_records_rag_timeout_metrics() -> None:
     labels = {"provider": "timeout-provider", "outcome": "timeout"}
     before_total = metric_value(
-        "cacanode_ai_rag_answer_seconds_count",
+        "openvie_ai_rag_answer_seconds_count",
         {"stage": "total", **labels},
     )
     before_llm = metric_value(
-        "cacanode_ai_rag_answer_seconds_count",
+        "openvie_ai_rag_answer_seconds_count",
         {"stage": "llm", **labels},
     )
     service, _, _, _ = make_service(
@@ -755,11 +755,11 @@ async def test_chat_service_records_rag_timeout_metrics() -> None:
         )
 
     assert (
-        metric_value("cacanode_ai_rag_answer_seconds_count", {"stage": "total", **labels})
+        metric_value("openvie_ai_rag_answer_seconds_count", {"stage": "total", **labels})
         == before_total + 1
     )
     assert (
-        metric_value("cacanode_ai_rag_answer_seconds_count", {"stage": "llm", **labels})
+        metric_value("openvie_ai_rag_answer_seconds_count", {"stage": "llm", **labels})
         == before_llm + 1
     )
 

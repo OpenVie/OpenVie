@@ -1,180 +1,180 @@
 from prometheus_client import Counter, Gauge, Histogram
 
 AI_EMBEDDING_SECONDS = Histogram(
-    "cacanode_ai_embedding_seconds",
+    "openvie_ai_embedding_seconds",
     "Time spent generating embeddings.",
     ["operation", "provider", "outcome"],
 )
 
 AI_EMBEDDING_REQUESTS_TOTAL = Counter(
-    "cacanode_ai_embedding_requests_total",
+    "openvie_ai_embedding_requests_total",
     "Embedding provider HTTP requests.",
     ["operation", "provider", "outcome"],
 )
 
 AI_RETRIEVAL_SECONDS = Histogram(
-    "cacanode_ai_retrieval_seconds",
+    "openvie_ai_retrieval_seconds",
     "Time spent retrieving chunks from vector storage.",
     ["provider", "outcome"],
 )
 
 AI_CHAT_MODEL_SECONDS = Histogram(
-    "cacanode_ai_chat_model_seconds",
+    "openvie_ai_chat_model_seconds",
     "Time spent generating chat model answers.",
     ["provider", "model", "outcome"],
 )
 
 AI_RAG_ANSWER_SECONDS = Histogram(
-    "cacanode_ai_rag_answer_seconds",
+    "openvie_ai_rag_answer_seconds",
     "Time spent in RAG answer stages.",
     ["stage", "provider", "outcome"],
 )
 
 AI_CHAT_MODEL_TIMEOUTS_TOTAL = Counter(
-    "cacanode_ai_chat_model_timeouts_total",
+    "openvie_ai_chat_model_timeouts_total",
     "Total chat model generation timeouts.",
     ["provider", "model"],
 )
 
 AI_ROUTER_PROFILES_TOTAL = Counter(
-    "cacanode_ai_router_profiles_total",
+    "openvie_ai_router_profiles_total",
     "Retrieval queries routed to each deterministic profile.",
     ["profile"],
 )
 
 AI_RETRIEVAL_CHANNEL_SECONDS = Histogram(
-    "cacanode_ai_retrieval_channel_seconds",
+    "openvie_ai_retrieval_channel_seconds",
     "Time spent in each retrieval channel.",
     ["channel", "outcome"],
 )
 
 AI_RETRIEVAL_CHANNEL_RESULTS = Histogram(
-    "cacanode_ai_retrieval_channel_results",
+    "openvie_ai_retrieval_channel_results",
     "Candidate count returned by each retrieval channel.",
     ["channel"],
 )
 
 AI_FUSION_CANDIDATES = Histogram(
-    "cacanode_ai_fusion_candidates",
+    "openvie_ai_fusion_candidates",
     "Candidate count retained after weighted reciprocal-rank fusion.",
 )
 
 AI_RERANKER_SECONDS = Histogram(
-    "cacanode_ai_reranker_seconds",
+    "openvie_ai_reranker_seconds",
     "Time spent reranking fused retrieval candidates.",
     ["outcome"],
 )
 
 AI_RETRIEVAL_FALLBACKS_TOTAL = Counter(
-    "cacanode_ai_retrieval_fallbacks_total",
+    "openvie_ai_retrieval_fallbacks_total",
     "Fail-open retrieval fallbacks by component.",
     ["component"],
 )
 
 AI_CONTEXT_UNITS = Histogram(
-    "cacanode_ai_context_units",
+    "openvie_ai_context_units",
     "Final cited context unit count.",
 )
 
 AI_QUERY_PLAN_SECONDS = Histogram(
-    "cacanode_ai_query_plan_seconds",
+    "openvie_ai_query_plan_seconds",
     "Time spent rewriting a follow-up question into a standalone search query.",
     ["outcome"],
 )
 
 AI_QUERY_PLAN_REWRITES_TOTAL = Counter(
-    "cacanode_ai_query_plan_rewrites_total",
+    "openvie_ai_query_plan_rewrites_total",
     "Outcome of contextual query planning for retrieval.",
     ["outcome"],
 )
 
 CACHE_OPERATIONS_TOTAL = Counter(
-    "cacanode_cache_operations_total",
+    "openvie_cache_operations_total",
     "Cache operations by controlled cache and outcome.",
     ["service", "cache", "outcome"],
 )
 
 CACHE_OPERATION_SECONDS = Histogram(
-    "cacanode_cache_operation_seconds",
+    "openvie_cache_operation_seconds",
     "Cache operation latency.",
     ["service", "cache", "operation"],
 )
 
 CACHE_PAYLOAD_BYTES = Histogram(
-    "cacanode_cache_payload_bytes",
+    "openvie_cache_payload_bytes",
     "Cache payload size in bytes.",
     ["service", "cache"],
 )
 
 REDIS_OPERATIONS_TOTAL = Counter(
-    "cacanode_redis_operations_total",
+    "openvie_redis_operations_total",
     "Raw Redis operations by controlled component and outcome.",
     ["service", "component", "operation", "outcome"],
 )
 
 CACHE_AUTHORITATIVE_SECONDS = Histogram(
-    "cacanode_cache_authoritative_seconds",
+    "openvie_cache_authoritative_seconds",
     "Authoritative backend call count and latency for cache-aside loads.",
     ["service", "cache", "outcome"],
 )
 
 CACHE_AUTHORITATIVE_LOADS_IN_FLIGHT = Gauge(
-    "cacanode_cache_authoritative_loads_in_flight",
+    "openvie_cache_authoritative_loads_in_flight",
     "Enabled cache misses or errors currently invoking an authoritative backend.",
     ["service", "cache"],
 )
 
 CACHE_SAME_KEY_OVERLAPS_TOTAL = Counter(
-    "cacanode_cache_same_key_overlaps_total",
+    "openvie_cache_same_key_overlaps_total",
     "Authoritative loads that began while the same cache key was already loading.",
     ["service", "cache"],
 )
 
 CACHE_SAME_KEY_CONCURRENCY = Histogram(
-    "cacanode_cache_same_key_concurrency",
+    "openvie_cache_same_key_concurrency",
     "Observed process-local authoritative concurrency for a hashed cache key.",
     ["service", "cache"],
     buckets=(1, 2, 3, 5, 10, 20, 50, 100),
 )
 
 SEMANTIC_ANSWER_CACHE_OPERATIONS_TOTAL = Counter(
-    "cacanode_semantic_answer_cache_operations_total",
+    "openvie_semantic_answer_cache_operations_total",
     "Semantic answer cache operations and controlled outcomes.",
     ["service", "mode", "tier", "outcome"],
 )
 
 SEMANTIC_ANSWER_CACHE_LOOKUP_SECONDS = Histogram(
-    "cacanode_semantic_answer_cache_lookup_seconds",
+    "openvie_semantic_answer_cache_lookup_seconds",
     "Semantic answer cache lookup latency.",
     ["service", "mode", "tier", "outcome"],
 )
 
 SEMANTIC_ANSWER_CACHE_SIMILARITY = Histogram(
-    "cacanode_semantic_answer_cache_similarity",
+    "openvie_semantic_answer_cache_similarity",
     "Accepted or rejected semantic candidate cosine similarity.",
     ["service", "mode", "tier"],
 )
 
 SEMANTIC_ANSWER_CACHE_SHADOW_CITATION_OVERLAP = Histogram(
-    "cacanode_semantic_answer_cache_shadow_citation_overlap",
+    "openvie_semantic_answer_cache_shadow_citation_overlap",
     "Citation-set overlap between a shadow candidate and a fresh answer.",
     ["service", "mode", "tier"],
 )
 
 SEMANTIC_ANSWER_CACHE_SHADOW_ANSWER_SIMILARITY = Histogram(
-    "cacanode_semantic_answer_cache_shadow_answer_similarity",
+    "openvie_semantic_answer_cache_shadow_answer_similarity",
     "Answer-embedding cosine similarity for shadow comparisons.",
     ["service", "mode", "tier"],
 )
 
 SEMANTIC_ANSWER_CACHE_AVOIDED_LLM_REQUESTS_TOTAL = Counter(
-    "cacanode_semantic_answer_cache_avoided_llm_requests_total",
+    "openvie_semantic_answer_cache_avoided_llm_requests_total",
     "LLM requests avoided by served answer-cache hits.",
     ["service", "mode", "tier"],
 )
 
 SEMANTIC_ANSWER_CACHE_AVOIDED_TOKENS_TOTAL = Counter(
-    "cacanode_semantic_answer_cache_avoided_tokens_total",
+    "openvie_semantic_answer_cache_avoided_tokens_total",
     "Source-model tokens avoided by served answer-cache hits.",
     ["service", "mode", "tier", "token_type"],
 )

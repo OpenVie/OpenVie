@@ -13,7 +13,7 @@ app:
       plaintext: true
   seaweedfs:
     s3-endpoint: http://localhost:8333
-    bucket: cacanode
+    bucket: openvie
     access-key:
     secret-key:
     region: us-east-1
@@ -31,7 +31,7 @@ spring:
   flyway:
     enabled: false
   datasource:
-    url: jdbc:h2:mem:cacanode-${random.uuid};MODE=PostgreSQL;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:openvie-${random.uuid};MODE=PostgreSQL;INIT=CREATE DOMAIN IF NOT EXISTS JSONB AS JSON;DB_CLOSE_DELAY=-1
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -56,13 +56,13 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
-  packages-to-scan: com.cacanode.api
+  packages-to-scan: com.openvie.api
 
 openapi:
   service:
     api-docs: api
     server: http://localhost:${server.port}
-    title: CacaNode API (Test)
+    title: OpenVie API (Test)
     version: 1.0.0
 
 sso:

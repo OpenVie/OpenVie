@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     SEAWEEDFS_S3_ENDPOINT: str = "http://localhost:18333"
     SEAWEEDFS_ACCESS_KEY: str = ""
     SEAWEEDFS_SECRET_KEY: str = ""
-    SEAWEEDFS_BUCKET: str = "cacanode"
+    SEAWEEDFS_BUCKET: str = "openvie"
     SEAWEEDFS_CONNECT_TIMEOUT_SECONDS: float = 3.0
     SEAWEEDFS_READ_TIMEOUT_SECONDS: float = 30.0
     SEAWEEDFS_MAX_ATTEMPTS: int = 3
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     QDRANT_SPARSE_VECTOR_NAME: str = "text_bm25_v1"
     QDRANT_TENANT_FIELD: str = "tenant_id"
     QDRANT_KNOWLEDGE_BASE_FIELD: str = "knowledge_base_id"
-    KUZU_DATABASE_PATH: str = "./data/kuzu/cacanode.kuzu"
+    KUZU_DATABASE_PATH: str = "./data/kuzu/openvie.kuzu"
     GRAPH_SERVICE_URL: str = "http://localhost:8010"
     GRAPH_INTERNAL_TOKEN: str = "development-graph-token"
     GRAPH_TIMEOUT_SECONDS: float = 30.0
