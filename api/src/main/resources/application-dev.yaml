@@ -7,7 +7,7 @@ app:
     cookie-secure: ${COOKIE_SECURE:false}
   seaweedfs:
     s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT:http://localhost:18333}
-    bucket: ${SEAWEEDFS_BUCKET:cacanode}
+    bucket: ${SEAWEEDFS_BUCKET:openvie}
     access-key: ${SEAWEEDFS_ACCESS_KEY:}
     secret-key: ${SEAWEEDFS_SECRET_KEY:}
     region: ${SEAWEEDFS_REGION:us-east-1}
@@ -15,7 +15,7 @@ app:
     # Local development sends through a mail catcher (Mailpit/MailHog on
     # MAIL_HOST:MAIL_PORT) so no external provider credential is needed.
     provider: ${MAIL_PROVIDER:smtp}
-    from-email: ${FROM_EMAIL:no-reply@cacanode.local}
+    from-email: ${FROM_EMAIL:no-reply@openvie.local}
     from-name: ${FROM_NAME:OpenVie}
     invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
   ai:
@@ -79,13 +79,13 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
-  packages-to-scan: com.cacanode.api
+  packages-to-scan: com.openvie.api
 
 openapi:
   service:
     api-docs: api
     server: http://localhost:${server.port}
-    title: CacaNode API
+    title: OpenVie API
     version: 1.0.0
 
 sso:

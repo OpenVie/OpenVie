@@ -32,10 +32,10 @@ from app.modules.model.api import ModelRejectedError, ModelUnavailableError
 
 logger = logging.getLogger(__name__)
 
-INGESTION_EXCHANGE = "cacanode.ingestion.v1"
-DEAD_LETTER_EXCHANGE = "cacanode.dlx.v1"
-INGESTION_QUEUE = "cacanode.document.ingestion.v1"
-INGESTION_DLQ = "cacanode.document.ingestion.dlq.v1"
+INGESTION_EXCHANGE = "openvie.ingestion.v1"
+DEAD_LETTER_EXCHANGE = "openvie.dlx.v1"
+INGESTION_QUEUE = "openvie.document.ingestion.v1"
+INGESTION_DLQ = "openvie.document.ingestion.dlq.v1"
 INGEST_REQUESTED = "document.ingest.requested"
 INGEST_PROCESSING = "document.ingest.processing"
 INGEST_COMPLETED = "document.ingest.completed"

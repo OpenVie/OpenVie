@@ -12,8 +12,8 @@ from app.bootstrap.configuration import graph_config, index_config, storage_conf
 from app.bootstrap.generation import RagRuntime
 from app.bootstrap.settings import Settings
 from app.common.storage import SeaweedS3DocumentStore
-from app.generated import cacanode_ai_v1_pb2 as pb
-from app.generated import cacanode_ai_v1_pb2_grpc as pb_grpc
+from app.generated import openvie_ai_v1_pb2 as pb
+from app.generated import openvie_ai_v1_pb2_grpc as pb_grpc
 from app.modules.generation.transport.grpc import GenerationGrpcHandler
 from app.modules.generation.transport.result_cache import ProtobufGenerationResultCache
 from app.modules.graph.internal.service import GraphServiceClient

@@ -6,7 +6,7 @@
 
 ## Hướng dẫn kiến trúc Modular-Monolith Java API — Tiếng Việt
 
-Tài liệu này giải thích cách tổ chức API Spring Boot (`com.cacanode.api`) và quy tắc mở rộng tính năng mà không phá vỡ ranh giới module.
+Tài liệu này giải thích cách tổ chức API Spring Boot (`com.openvie.api`) và quy tắc mở rộng tính năng mà không phá vỡ ranh giới module.
 
 Ứng dụng là một **Modular Monolith**: một kho mã, một JVM, một ứng dụng triển khai, một cơ sở dữ liệu, nhưng chia thành các module nghiệp vụ độc lập với ranh giới hợp đồng chặt chẽ.
 
@@ -70,7 +70,7 @@ make -C api test
 
 # Java API modular-monolith guide
 
-This guide explains how the Spring Boot API under `com.cacanode.api` is organized and how to add features without violating module boundaries.
+This guide explains how the Spring Boot API under `com.openvie.api` is organized and how to add features without violating module boundaries.
 
 The API is a **Modular Monolith**: one repository, one JVM, one deployable application, and one database, divided into business modules with explicit contracts.
 

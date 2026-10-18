@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: cacanode-api
+    name: openvie-api
   servlet:
     multipart:
       max-file-size: ${MAX_UPLOAD_FILE_SIZE:20MB}

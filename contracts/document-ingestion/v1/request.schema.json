@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cacanode.local/contracts/document-ingestion/v1/request.schema.json",
+  "$id": "https://openvie.local/contracts/document-ingestion/v1/request.schema.json",
   "title": "Document ingest requested v1",
   "type": "object",
   "additionalProperties": false,

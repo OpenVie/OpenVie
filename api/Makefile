@@ -114,4 +114,4 @@ db-reset:
 #     --recover-owner-password="$(openssl rand -base64 24)""
 recover-owner:
 	$(ENV_RUN) $(MVNW) -P$(PROFILE) package -DskipTests $(MAVEN_ARGS)
-	$(ENV_RUN) java -jar target/cacanode-api.jar --app.command.mode=recover-owner --server.port=0 --spring.task.scheduling.enabled=false $(RECOVER_ARGS)
+	$(ENV_RUN) java -jar target/openvie-api.jar --app.command.mode=recover-owner --server.port=0 --spring.task.scheduling.enabled=false $(RECOVER_ARGS)
