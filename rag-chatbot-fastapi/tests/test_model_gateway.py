@@ -344,13 +344,13 @@ async def test_qwen_http_failures_are_wrapped(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FailedQwenClient)
     model_id = "mlx-community/Qwen2.5-14B-Instruct-4bit"
     labels = {"provider": "qwen", "model": model_id, "outcome": "error"}
-    before = metric_value("cacanode_ai_chat_model_seconds_count", labels)
+    before = metric_value("openvie_ai_chat_model_seconds_count", labels)
     gateway = QwenChatModel(settings(LLM_PROVIDER="qwen", LLM_MODEL_ID=model_id))
 
     with pytest.raises(ChatModelProviderError):
         await gateway.complete([{"role": "user", "content": "hello"}])
 
-    assert metric_value("cacanode_ai_chat_model_seconds_count", labels) == before + 1
+    assert metric_value("openvie_ai_chat_model_seconds_count", labels) == before + 1
 
 
 @pytest.mark.asyncio
@@ -358,7 +358,7 @@ async def test_qwen_timeout_records_qwen_metrics(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", SlowQwenClient)
     model_id = "mlx-community/Qwen2.5-14B-Instruct-4bit"
     labels = {"provider": "qwen", "model": model_id}
-    before = metric_value("cacanode_ai_chat_model_timeouts_total", labels)
+    before = metric_value("openvie_ai_chat_model_timeouts_total", labels)
     gateway = QwenChatModel(
         settings(
             LLM_PROVIDER="qwen",
@@ -370,10 +370,10 @@ async def test_qwen_timeout_records_qwen_metrics(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(ChatModelTimeoutError):
         await gateway.complete([{"role": "user", "content": "slow"}])
 
-    assert metric_value("cacanode_ai_chat_model_timeouts_total", labels) == before + 1
+    assert metric_value("openvie_ai_chat_model_timeouts_total", labels) == before + 1
     assert (
         metric_value(
-            "cacanode_ai_chat_model_seconds_count",
+            "openvie_ai_chat_model_seconds_count",
             {"provider": "qwen", "model": model_id, "outcome": "timeout"},
         )
         >= 1
@@ -386,7 +386,7 @@ async def test_ollama_timeout_records_counter_and_raises_model_timeout(
 ) -> None:
     monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", SlowOllamaClient)
     labels = {"provider": "ollama", "model": "timeout-model"}
-    before = metric_value("cacanode_ai_chat_model_timeouts_total", labels)
+    before = metric_value("openvie_ai_chat_model_timeouts_total", labels)
     gateway = OllamaChatModel(
         settings(
             LLM_MODEL_ID="timeout-model",
@@ -397,11 +397,11 @@ async def test_ollama_timeout_records_counter_and_raises_model_timeout(
     with pytest.raises(ChatModelTimeoutError):
         await gateway.complete([{"role": "user", "content": "slow"}])
 
-    after = metric_value("cacanode_ai_chat_model_timeouts_total", labels)
+    after = metric_value("openvie_ai_chat_model_timeouts_total", labels)
     assert after == before + 1
     assert (
         metric_value(
-            "cacanode_ai_chat_model_seconds_count",
+            "openvie_ai_chat_model_seconds_count",
             {"provider": "ollama", "model": "timeout-model", "outcome": "timeout"},
         )
         >= 1

@@ -6,7 +6,7 @@ app:
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS}
   seaweedfs:
     s3-endpoint: ${SEAWEEDFS_S3_ENDPOINT}
-    bucket: ${SEAWEEDFS_BUCKET:cacanode}
+    bucket: ${SEAWEEDFS_BUCKET:openvie}
     access-key: ${SEAWEEDFS_ACCESS_KEY:}
     secret-key: ${SEAWEEDFS_SECRET_KEY:}
     region: ${SEAWEEDFS_REGION:us-east-1}
@@ -23,9 +23,9 @@ app:
     grpc:
       target: ${AI_GRPC_TARGET:ai-api:50051}
       plaintext: ${AI_GRPC_PLAINTEXT:false}
-      ca-certificate: ${AI_GRPC_CA_CERTIFICATE:/run/cacanode-grpc/ca.crt}
-      client-certificate: ${AI_GRPC_CLIENT_CERTIFICATE:/run/cacanode-grpc/spring-client.crt}
-      client-key: ${AI_GRPC_CLIENT_KEY:/run/cacanode-grpc/spring-client.key}
+      ca-certificate: ${AI_GRPC_CA_CERTIFICATE:/run/openvie-grpc/ca.crt}
+      client-certificate: ${AI_GRPC_CLIENT_CERTIFICATE:/run/openvie-grpc/spring-client.crt}
+      client-key: ${AI_GRPC_CLIENT_KEY:/run/openvie-grpc/spring-client.key}
       authority-override: ${AI_GRPC_AUTHORITY_OVERRIDE:ai-api}
       answer-deadline-seconds: ${AI_ANSWER_DEADLINE_SECONDS:100}
       document-units-deadline-seconds: ${AI_DOCUMENT_UNITS_DEADLINE_SECONDS:10}

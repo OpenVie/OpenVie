@@ -8,7 +8,7 @@ WORKDIR /app
 COPY --from=dependencies /app/node_modules node_modules
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost/api/v1
-ARG NEXT_PUBLIC_WIDGET_URL=http://localhost/widget/v1/cacanode-chat.js
+ARG NEXT_PUBLIC_WIDGET_URL=http://localhost/widget/v1/openvie-chat.js
 ARG NEXT_PUBLIC_DEFAULT_LOCALE=vi-VN
 ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ARG NEXT_PUBLIC_OIDC_ISSUER=http://localhost:18080/realms/openvie

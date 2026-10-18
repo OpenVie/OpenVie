@@ -1,2 +1,2 @@
-"""Capability modules for the Cacanode AI modular monolith."""
+"""Capability modules for the OpenVie AI modular monolith."""
 

@@ -4,7 +4,7 @@ import logging
 
 import grpc
 
-from app.generated import cacanode_ai_v1_pb2 as pb
+from app.generated import openvie_ai_v1_pb2 as pb
 from app.modules.index.api import KnowledgeIndexQueryApi, KnowledgeIndexResult
 
 logger = logging.getLogger(__name__)

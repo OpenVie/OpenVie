@@ -9,6 +9,6 @@ RUN ./mvnw -B -DskipTests clean package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /workspace/api/target/cacanode-api.jar app.jar
+COPY --from=build /workspace/api/target/openvie-api.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

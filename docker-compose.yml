@@ -33,13 +33,13 @@ x-local-environment: &local-environment
   QDRANT_COLLECTION: ${QDRANT_COLLECTION:-knowledge_units_v2}
   QDRANT_DENSE_VECTOR_NAME: ${QDRANT_DENSE_VECTOR_NAME:-text_bge_m3_v1}
   QDRANT_SPARSE_VECTOR_NAME: ${QDRANT_SPARSE_VECTOR_NAME:-text_bm25_v1}
-  KUZU_DATABASE_PATH: /data/kuzu/cacanode.kuzu
+  KUZU_DATABASE_PATH: /data/kuzu/openvie.kuzu
   GRAPH_SERVICE_URL: http://graph-service:8010
   GRAPH_INTERNAL_TOKEN: ${GRAPH_INTERNAL_TOKEN:-development-graph-token}
   SEAWEEDFS_MASTER_URL: http://seaweedfs-master:9333
   SEAWEEDFS_FILER_URL: http://seaweedfs-filer:8888
   SEAWEEDFS_S3_ENDPOINT: http://seaweedfs-s3:8333
-  SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-cacanode}
+  SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-openvie}
   SEAWEEDFS_CONNECT_TIMEOUT_SECONDS: ${SEAWEEDFS_CONNECT_TIMEOUT_SECONDS:-3}
   SEAWEEDFS_READ_TIMEOUT_SECONDS: ${SEAWEEDFS_READ_TIMEOUT_SECONDS:-30}
   SEAWEEDFS_MAX_ATTEMPTS: ${SEAWEEDFS_MAX_ATTEMPTS:-3}
@@ -71,15 +71,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-cacanode}
-      POSTGRES_USER: ${POSTGRES_USER:-cacanode}
+      POSTGRES_DB: ${POSTGRES_DB:-openvie}
+      POSTGRES_USER: ${POSTGRES_USER:-openvie}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cacanode} -d ${POSTGRES_DB:-cacanode}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openvie} -d ${POSTGRES_DB:-openvie}"]
       interval: 5s
       timeout: 5s
       retries: 10

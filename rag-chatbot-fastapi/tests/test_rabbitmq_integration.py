@@ -25,10 +25,10 @@ async def test_document_worker_declares_durable_confirmed_topology(
 ) -> None:
     suffix = uuid4().hex
     names = {
-        "INGESTION_EXCHANGE": f"test.cacanode.ingestion.{suffix}",
-        "DEAD_LETTER_EXCHANGE": f"test.cacanode.dlx.{suffix}",
-        "INGESTION_QUEUE": f"test.cacanode.document.ingestion.{suffix}",
-        "INGESTION_DLQ": f"test.cacanode.document.ingestion.dlq.{suffix}",
+        "INGESTION_EXCHANGE": f"test.openvie.ingestion.{suffix}",
+        "DEAD_LETTER_EXCHANGE": f"test.openvie.dlx.{suffix}",
+        "INGESTION_QUEUE": f"test.openvie.document.ingestion.{suffix}",
+        "INGESTION_DLQ": f"test.openvie.document.ingestion.dlq.{suffix}",
     }
     for name, value in names.items():
         monkeypatch.setattr(rabbitmq, name, value)

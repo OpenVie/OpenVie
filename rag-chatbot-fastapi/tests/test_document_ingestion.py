@@ -184,13 +184,13 @@ async def test_embedding_adapter_parses_ollama_embed_response(
         Settings(TEXT_EMBEDDING_DIMENSION=3, TEXT_EMBEDDING_BATCH_SIZE=10)
     )
     labels = {"operation": "documents", "provider": "ollama", "outcome": "success"}
-    before = metric_value("cacanode_ai_embedding_seconds_count", labels)
+    before = metric_value("openvie_ai_embedding_seconds_count", labels)
 
     embeddings = await embedder.embed_documents(["a", "b"])
 
     assert embeddings == [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
     assert FakeOllamaClient.timeout == 120.0
-    assert metric_value("cacanode_ai_embedding_seconds_count", labels) == before + 1
+    assert metric_value("openvie_ai_embedding_seconds_count", labels) == before + 1
 
 
 @pytest.mark.asyncio
