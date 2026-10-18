@@ -1,0 +1,33 @@
+services:
+  approval-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: flowable
+      POSTGRES_USER: flowable
+      POSTGRES_PASSWORD: ${FLOWABLE_DB_PASSWORD:-local-only-change-me}
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - approval_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowable -d flowable"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  flowable:
+    image: flowable/flowable-rest:7.1.0
+    depends_on:
+      approval-db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_URL: jdbc:postgresql://approval-db:5432/flowable
+      SPRING_DATASOURCE_USERNAME: flowable
+      SPRING_DATASOURCE_PASSWORD: ${FLOWABLE_DB_PASSWORD:-local-only-change-me}
+      FLOWABLE_REST_APP_ADMIN_USER_ID: ${FLOWABLE_REST_USER:-rest-admin}
+      FLOWABLE_REST_APP_ADMIN_PASSWORD: ${FLOWABLE_REST_PASSWORD:-local-only-change-me}
+      FLOWABLE_ASYNC_EXECUTOR_ACTIVATE: "true"
+    ports:
+      - "127.0.0.1:18081:8080"
+volumes:
+  approval_db_data:

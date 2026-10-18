@@ -1,0 +1,20 @@
+[
+  {
+    "documentId": "demo-ordinary-001",
+    "title": "Workspace onboarding guide",
+    "content": "This document explains workspace onboarding, account setup, and where to find team resources.",
+    "target": "workspace",
+    "workspaceId": "demo-workspace",
+    "organizationId": "demo-organization",
+    "expectedSensitive": false
+  },
+  {
+    "documentId": "demo-sensitive-001",
+    "title": "Draft medical and compliance policy",
+    "content": "This draft contains medical guidance, legal compliance requirements, and regulatory obligations.",
+    "target": "workspace",
+    "workspaceId": "demo-workspace",
+    "organizationId": "demo-organization",
+    "expectedSensitive": true
+  }
+]
