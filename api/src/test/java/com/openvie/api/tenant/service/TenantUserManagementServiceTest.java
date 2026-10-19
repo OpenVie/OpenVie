@@ -32,6 +32,8 @@ import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.TenantStatus;
 import com.openvie.api.tenant.api.UserStatus;
 import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.tenant.api.event.AccountCreatedEvent;
+import com.openvie.api.tenant.api.event.WorkspaceMemberAddedEvent;
 import com.openvie.api.tenant.dto.UserManagementDtos.CreateUserRequest;
 import com.openvie.api.tenant.enums.WorkspaceVisibility;
 import com.openvie.api.tenant.model.Invitation;
@@ -267,6 +269,12 @@ class TenantUserManagementServiceTest {
 
         assertEquals(colleague.getId(), response.id());
         assertEquals(WorkspaceRole.MEMBER, response.workspaceRole());
+        ArgumentCaptor<WorkspaceMemberAddedEvent> notice = ArgumentCaptor.forClass(WorkspaceMemberAddedEvent.class);
+        verify(events).publishEvent(notice.capture());
+        assertEquals(organization.getId(), notice.getValue().orgId());
+        assertEquals(workspaceId, notice.getValue().workspaceId());
+        assertEquals("colleague@example.com", notice.getValue().email());
+        assertEquals("General", notice.getValue().workspaceName());
         ArgumentCaptor<WorkspaceMember> membership = ArgumentCaptor.forClass(WorkspaceMember.class);
         verify(members).save(membership.capture());
         assertEquals(colleague, membership.getValue().getUser());
@@ -332,6 +340,11 @@ class TenantUserManagementServiceTest {
         verify(members).save(membership.capture());
         assertEquals(workspace, membership.getValue().getWorkspace());
         assertEquals(WorkspaceRole.MEMBER, membership.getValue().getRole());
+
+        ArgumentCaptor<AccountCreatedEvent> accountCreated = ArgumentCaptor.forClass(AccountCreatedEvent.class);
+        verify(events).publishEvent(accountCreated.capture());
+        assertEquals(organization.getId(), accountCreated.getValue().orgId());
+        assertEquals("new@example.com", accountCreated.getValue().email());
 
         ArgumentCaptor<AuditLogEvent> event = ArgumentCaptor.forClass(AuditLogEvent.class);
         verify(events).publishEvent(event.capture());

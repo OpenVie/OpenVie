@@ -61,7 +61,7 @@ class NotificationChannelServiceTest {
 
         ChannelView view = service.upsert(orgId, new ChannelRequest(
                 "smtp", true, null, null, "relay.local", null, null, "s3cret",
-                null, null, null));
+                null, null));
 
         ArgumentCaptor<String> plaintext = ArgumentCaptor.forClass(String.class);
         verify(cipher).encrypt(plaintext.capture());
@@ -93,7 +93,7 @@ class NotificationChannelServiceTest {
         givenUsableProvider();
 
         service.upsert(orgId, new ChannelRequest(
-                "smtp", true, null, null, "new.relay", null, null, null, null, null, null));
+                "smtp", true, null, null, "new.relay", null, null, null, null, null));
 
         ArgumentCaptor<String> encrypted = ArgumentCaptor.forClass(String.class);
         verify(cipher).encrypt(encrypted.capture());
@@ -109,7 +109,7 @@ class NotificationChannelServiceTest {
 
         ConflictException exception = assertThrows(ConflictException.class,
                 () -> service.upsert(orgId, new ChannelRequest(
-                        "smtp", true, null, null, null, null, null, null, null, null, null)));
+                        "smtp", true, null, null, null, null, null, null, null, null)));
         assertTrue(exception.getMessage().contains("NOTIFICATION_ENC_KEY"),
                 "must name the missing variable: " + exception.getMessage());
     }
@@ -122,23 +122,20 @@ class NotificationChannelServiceTest {
         when(resolver.providerFor(any())).thenReturn(Optional.of(unusable));
         when(resolver.configOf(any())).thenReturn(
                 new NotificationChannelConfig("smtp", "", "", "", 587, "", "",
-                        false, false, ""));
+                        false, false));
 
         assertThrows(BadRequestException.class,
                 () -> service.upsert(orgId, new ChannelRequest(
-                        "smtp", true, null, null, null, null, null, null, null, null, null)));
+                        "smtp", true, null, null, null, null, null, null, null, null)));
     }
 
     @Test
     void unknownTypeListsTheSupportedOnes() {
         BadRequestException exception = assertThrows(BadRequestException.class,
                 () -> service.upsert(orgId, new ChannelRequest(
-                        "carrier-pigeon", true, null, null, null, null, null, null,
-                        null, null, null)));
+                        "carrier-pigeon", true, null, null, null, null, null, null, null, null)));
         assertTrue(exception.getMessage().contains("smtp"),
                 "must list supported types: " + exception.getMessage());
-        assertTrue(exception.getMessage().contains("sendgrid"));
-        assertTrue(exception.getMessage().contains("brevo"));
     }
 
     @Test
@@ -161,7 +158,7 @@ class NotificationChannelServiceTest {
         NotificationChannel channel = new NotificationChannel();
         channel.setId(UUID.randomUUID());
         channel.setOrgId(orgId);
-        channel.setType("sendgrid");
+        channel.setType("smtp");
         channel.setEnabled(true);
         channel.setCredentialsEncrypted("enc(...)");
         when(channelRepository.findByOrgIdOrderByCreatedAtAsc(orgId))
@@ -181,6 +178,6 @@ class NotificationChannelServiceTest {
         when(resolver.providerFor(any())).thenReturn(Optional.of(provider));
         when(resolver.configOf(any())).thenReturn(
                 new NotificationChannelConfig("smtp", "a@b.c", "OpenVie",
-                        "relay.local", 587, "", "", true, true, ""));
+                        "relay.local", 587, "", "", true, true));
     }
 }

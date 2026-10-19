@@ -66,6 +66,15 @@ export async function addMemberToWorkspaceApi(
   }));
 }
 
+/** Add-member autocomplete: active organization accounts not in the workspace. */
+export async function suggestOrganizationUsersApi(
+  request: ApiRequest,
+  query: string,
+): Promise<OrganizationMember[]> {
+  return readJsonOrThrow<OrganizationMember[]>(await request(
+    `${getApiBase()}/users/suggest?query=${encodeURIComponent(query)}`));
+}
+
 // ─── Organization administration (admin panel, ORG_OWNER only) ─────────────────
 // Every call goes through `/api/v1/admin/users/*`: the target needs no
 // membership in the actor's active workspace.

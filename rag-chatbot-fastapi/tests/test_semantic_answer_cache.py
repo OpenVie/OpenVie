@@ -397,30 +397,6 @@ async def test_scope_history_revision_visibility_and_configuration_isolation() -
     ).scope_hash != base.scope_hash
 
 
-@pytest.mark.asyncio
-async def test_qwen_semantic_cache_identity_uses_exact_model_id() -> None:
-    model_id = "mlx-community/Qwen2.5-14B-Instruct-4bit"
-    first, _, _, _ = make_cache(
-        settings=configured(LLM_PROVIDER="qwen", LLM_MODEL_ID=model_id)
-    )
-    same, _, _, _ = make_cache(
-        settings=configured(LLM_PROVIDER="qwen", LLM_MODEL_ID=model_id)
-    )
-    changed, _, _, _ = make_cache(
-        settings=configured(
-            LLM_PROVIDER="qwen",
-            LLM_MODEL_ID="mlx-community/Qwen2.5-14B-Instruct-8bit",
-        )
-    )
-
-    first_context = await context(first, "How does this policy work?")
-    same_context = await context(same, "How does this policy work?")
-    changed_context = await context(changed, "How does this policy work?")
-
-    assert same_context.scope_hash == first_context.scope_hash
-    assert changed_context.scope_hash != first_context.scope_hash
-
-
 @pytest.mark.parametrize(
     ("left", "right"),
     [

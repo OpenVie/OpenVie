@@ -41,6 +41,9 @@ export default function WorkspacesPage() {
   const [renameValue, setRenameValue] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // The visibility select is state-driven so its trigger shows the translated
+  // label instead of the raw enum ("PUBLIC").
+  const [newVisibility, setNewVisibility] = useState<WorkspaceVisibility>("PUBLIC");
 
   const schema = z.object({
     name: z.string().trim().min(1, t("validation.nameRequired")).max(255),
@@ -142,7 +145,7 @@ export default function WorkspacesPage() {
       <div><h2 className="text-xl font-semibold text-foreground">{t("title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("description")}</p></div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => void load()}><RefreshCw className="mr-1 size-4" />{t("refresh")}</Button>
-        <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5"><Plus className="size-4" />{t("create")}</Button>
+        <Button size="sm" onClick={() => { setShowCreate(true); reset(); setNewVisibility("PUBLIC"); }} className="gap-1.5"><Plus className="size-4" />{t("create")}</Button>
       </div>
     </div>
 
@@ -217,7 +220,7 @@ export default function WorkspacesPage() {
       </div>
     </>}</Card>
 
-    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select defaultValue="PUBLIC" onValueChange={value => setValue("visibility", value as WorkspaceVisibility)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
+    <Dialog open={showCreate} onOpenChange={setShowCreate}><DialogContent><DialogHeader><DialogTitle>{t("createTitle")}</DialogTitle></DialogHeader><form onSubmit={handleSubmit(onCreate)} className="space-y-4"><div className="space-y-1.5"><Label htmlFor="workspaceName">{t("name")}</Label><Input id="workspaceName" placeholder={t("namePlaceholder")} {...register("name")} />{errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}</div><div className="space-y-1.5"><Label>{t("visibility")}</Label><Select value={newVisibility} onValueChange={value => { setNewVisibility(value as WorkspaceVisibility); setValue("visibility", value as WorkspaceVisibility); }}><SelectTrigger><SelectValue>{newVisibility === "PUBLIC" ? t("public") : t("private")}</SelectValue></SelectTrigger><SelectContent><SelectItem value="PUBLIC">{t("public")}</SelectItem><SelectItem value="PRIVATE">{t("private")}</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">{t("visibilityHint")}</p></div><DialogFooter><Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("creating") : t("create")}</Button></DialogFooter></form></DialogContent></Dialog>
 
     {/* Rename Workspace Dialog */}
     <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRenameTarget(null); }}>

@@ -16,7 +16,6 @@ export type ChannelPayload = {
   password?: string;
   auth?: boolean;
   starttls?: boolean;
-  apiKey?: string;
 };
 
 export async function listChannelsApi(

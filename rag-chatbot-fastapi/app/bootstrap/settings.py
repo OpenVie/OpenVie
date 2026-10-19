@@ -93,7 +93,7 @@ class Settings(BaseSettings):
 
     # Local generation/embedding by default. Providers target configured internal
     # endpoints only; there is no hosted-provider fallback.
-    LLM_PROVIDER: Literal["ollama", "qwen"] = "ollama"
+    LLM_PROVIDER: Literal["ollama"] = "ollama"
     LLM_BASE_URL: str = "http://localhost:11434/v1"
     LLM_MODEL_ID: str = "vylinh"
     LLM_ADAPTER_ID: str = ""

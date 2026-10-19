@@ -27,12 +27,13 @@ class EmailServiceTest {
     @BeforeEach
     void setUp() {
         provider = mock(EmailProvider.class);
-        when(provider.type()).thenReturn("sendgrid");
-        when(provider.providerName()).thenReturn("SendGrid");
+        when(provider.type()).thenReturn("smtp");
+        when(provider.providerName()).thenReturn("SMTP");
         when(provider.available(any())).thenReturn(true);
         resolver = mock(NotificationChannelResolver.class);
         orgId = UUID.randomUUID();
-        emailService = new EmailService(resolver, "http://localhost:3000/accept-invitation");
+        emailService = new EmailService(resolver, "http://localhost:3000/accept-invitation",
+                "http://localhost:3000/login", "");
     }
 
     @Test
@@ -99,6 +100,47 @@ class EmailServiceTest {
         verify(provider, never()).send(any(), any());
     }
 
+    @Test
+    void everyEmailCarriesTheDarkBrandShellAndLogo() {
+        givenResolved(provider, config());
+
+        emailService.sendAccountCreatedEmail(orgId, "user@example.com", "Ada Lovelace");
+
+        String html = captured().htmlContent();
+        assertTrue(html.contains("background:#07090c"),
+                "the email body must use the app's dark background: " + html);
+        assertTrue(html.contains("background:#c8f53c"),
+                "the button must use the lime accent");
+        assertTrue(html.contains("<img class=\"logo\" src=\"http://localhost:3000/logo.png\""),
+                "the logo must be the derived PNG from the login origin");
+    }
+
+    @Test
+    void workspaceAddedEmailUsesTheDarkShellAndLogo() {
+        givenResolved(provider, config());
+
+        emailService.sendWorkspaceAddedEmail(orgId, "user@example.com", "Ada Lovelace",
+                "Acme", "Finance", "MEMBER");
+
+        String html = captured().htmlContent();
+        assertTrue(html.contains("<img class=\"logo\" src=\"http://localhost:3000/logo.png\""));
+        assertTrue(html.contains("Finance"));
+    }
+
+    @Test
+    void logoUrlIsDerivedOrConfigurable() {
+        // Unset config derives /logo.png from the login link's origin...
+        assertEquals("http://localhost:3000/logo.png",
+                EmailService.resolveLogoUrl("", "http://localhost:3000/login"));
+        // ...is robust against a malformed login link...
+        assertEquals("http://localhost:3000/logo.png",
+                EmailService.resolveLogoUrl(null, "not-a-uri"));
+        // ...and an explicitly configured URL always wins (trimmed).
+        assertEquals("https://cdn.example.com/brand.png",
+                EmailService.resolveLogoUrl(" https://cdn.example.com/brand.png ",
+                        "http://localhost:3000/login"));
+    }
+
     private void givenResolved(EmailProvider target, NotificationChannelConfig settings) {
         when(resolver.resolve(orgId)).thenReturn(Optional.of(
                 new NotificationChannelResolver.ResolvedChannel(target, settings)));
@@ -106,8 +148,8 @@ class EmailServiceTest {
 
     private NotificationChannelConfig config() {
         return new NotificationChannelConfig(
-                "sendgrid", "from@example.com", "OpenVie", "", 587, "", "",
-                false, false, "key");
+                "smtp", "from@example.com", "OpenVie", "", 587, "", "",
+                false, false);
     }
 
     private EmailMessage captured() {
