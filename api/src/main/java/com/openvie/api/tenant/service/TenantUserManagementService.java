@@ -39,8 +39,8 @@ import com.openvie.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
 import com.openvie.api.tenant.model.Organization;
 import com.openvie.api.tenant.repository.OrganizationRepository;
 import com.openvie.api.tenant.repository.WorkspaceMemberRepository;
-import com.openvie.api.notification.service.EmailService;
-import lombok.extern.slf4j.Slf4j;
+import com.openvie.api.tenant.api.event.AccountCreatedEvent;
+import com.openvie.api.tenant.api.event.WorkspaceMemberAddedEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -68,7 +68,6 @@ import org.springframework.data.domain.PageRequest;
  * notification channel: an undeliverable token is worse than a refused
  * request, because the invitee never learns it exists.
  */
-@Slf4j
 @Service
 public class TenantUserManagementService {
     private static final Duration INVITATION_LIFETIME = Duration.ofHours(72);
@@ -83,7 +82,6 @@ public class TenantUserManagementService {
     private final OrganizationRepository organizationRepository;
     private final DeliveryAvailability channels;
     private final TenantCredentials credentials;
-    private final EmailService emailService;
     private final ApplicationEventPublisher eventPublisher;
     @Autowired(required = false)
     private DurableEventPublisher durableEventPublisher;
@@ -102,7 +100,6 @@ public class TenantUserManagementService {
             OrganizationRepository organizationRepository,
             DeliveryAvailability channels,
             TenantCredentials credentials,
-            EmailService emailService,
             ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
@@ -112,7 +109,6 @@ public class TenantUserManagementService {
         this.organizationRepository = organizationRepository;
         this.channels = channels;
         this.credentials = credentials;
-        this.emailService = emailService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -848,15 +844,9 @@ public class TenantUserManagementService {
             throw new ConflictException("That account is already a member of this workspace");
         }
         WorkspaceMember membership = grantMembership(user, workspace, role);
-        boolean notified = emailService.sendWorkspaceAddedEmail(
-                actor.orgId(), user.getEmail(), user.getFullName(),
-                workspace.getOrganization().getName(), workspace.getName(), role.name());
-        if (!notified) {
-            log.info(
-                    "Member {} added to workspace {} without email notification:"
-                            + " no usable notification channel or delivery failed",
-                    user.getEmail(), workspaceId);
-        }
+        eventPublisher.publishEvent(new WorkspaceMemberAddedEvent(
+                actor.orgId(), workspaceId, user.getId(), user.getEmail(), user.getFullName(),
+                workspace.getOrganization().getName(), workspace.getName(), role.name()));
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(), Map.of("role", role.name()));
         invalidateMembers(workspaceId);
         return toMember(membership, actorId);
@@ -946,11 +936,8 @@ public class TenantUserManagementService {
             invalidateMembers(defaultWorkspace.getId());
         }
 
-        boolean notified = emailService.sendAccountCreatedEmail(orgId, user.getEmail(), user.getFullName());
-        if (!notified) {
-            log.info("Account {} created without email notification:"
-                    + " no usable notification channel or delivery failed", user.getEmail());
-        }
+        eventPublisher.publishEvent(new AccountCreatedEvent(
+                orgId, user.getId(), user.getEmail(), user.getFullName()));
 
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(),
                 Map.of("via", "admin-create", "email", email, "role", user.getRole().name()));
