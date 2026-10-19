@@ -39,7 +39,7 @@ maintenance-> module API và common
 | `ingestion` | Phân tích file, chunking, trích xuất thực thể, điều phối thay thế chỉ mục, checkpoint worker | `IngestionApi`, `DocumentIndexLifecycleApi`, `IngestionCheckpointMaintenanceApi` | Hàng đợi RabbitMQ, Redis namespace `ccn:v1:ingestion:*` |
 | `index` | Thay thế/xóa chỉ mục, tìm kiếm dense/sparse, tra cứu dòng bảng | `KnowledgeIndexCommandApi`, `KnowledgeIndexQueryApi` | Collection Qdrant `knowledge_units_v2` |
 | `graph` | Quản lý đồ thị tri thức, duyệt đường đi quan hệ | `GraphProjectionApi`, `GraphQueryApi` | Cơ sở dữ liệu Kuzu, HTTP graph-service |
-| `model` | Adapter mô hình ngôn ngữ (Ollama/Qwen), embedding dense/sparse | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
+| `model` | Adapter mô hình ngôn ngữ (Ollama), embedding dense/sparse | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
 
 ### Quy trình hấp thụ tài liệu bền vững
 
@@ -110,7 +110,7 @@ maintenance-> module APIs and common
 | `ingestion` | Text parsing, chunking, graph extraction, worker checkpoints, status events | `IngestionApi`, `DocumentIndexLifecycleApi`, `IngestionCheckpointMaintenanceApi` | RabbitMQ queues, Redis `ccn:v1:ingestion:*` |
 | `index` | Dense/sparse vector indexing, document unit listing, table row queries | `KnowledgeIndexCommandApi`, `KnowledgeIndexQueryApi` | Qdrant `knowledge_units_v2` |
 | `graph` | Kuzu schema, graph entity projection, relationship traversal | `GraphProjectionApi`, `GraphQueryApi` | Kuzu database, graph-service HTTP |
-| `model` | Ollama/Qwen chat adapters, BGE-M3 and BM25 embeddings, token limit handling | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
+| `model` | Ollama chat adapter, BGE-M3 and BM25 embeddings, token limit handling | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
 
 ## Durable document ingestion
 

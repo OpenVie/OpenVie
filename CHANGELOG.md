@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-19
+
+### Added
+
+- **Transactional Email Suite**:
+  - New best-effort notice emails that never block membership: a workspace-added notice when an administrator adds an existing account to a workspace, and an account-created notice when an administrator creates an account (the email carries no password — the administrator shares the temporary password directly, and the first sign-in forces a password change).
+  - Shared dark-brand email shell mirroring the app theme (near-black card, lime primary button) with the PNG brand logo on top, because common webmail clients do not render SVG; all user-supplied text is HTML-escaped.
+  - `LOGIN_LINK` and `LOGO_URL` configuration; an unset `LOGO_URL` derives `/logo.png` from the login link's origin, so a deployment that configured `LOGIN_LINK` gets a working logo without extra configuration.
+  - SMTP notification channel management in the admin settings console: add/edit with write-only secrets (blank fields keep the stored values on update), enable/disable, delete, and test-send.
+  - Add-member autocomplete: new `GET /api/v1/users/suggest` endpoint returning active organization accounts that match the typed fragment and are not yet members of the workspace, gated to workspace admins, discarding LIKE wildcards, and capped at 8 results; the workspace Users add-member dialog offers debounced suggestions that fill the email field.
+  - Temporary password generation in the admin create-user dialog: crypto-random 16 characters with a guaranteed character-class mix, plus a show/hide toggle so the administrator can share the secret out of band.
+
+### Changed
+
+- Replaced `frontend/public/logo.png` with a new raster brand asset for email rendering.
+- Workspace create dialog visibility select is state-driven so its trigger shows the translated label instead of the raw enum value.
+- Bilingual dictionaries updated: invitation strings removed and suggest/password-generation strings added.
+
+### Removed
+
+- **SendGrid and Brevo API-key email providers**:
+  - Deleted `SendGridEmailProvider` and `BrevoEmailProvider` with their tests; notification channel types are limited to `smtp`, and `NotificationChannelConfig` plus channel requests drop the `apiKey` field.
+  - Dropped the `com.sendgrid`/`com.brevo` Maven dependencies, the `spring.sendgrid`/`spring.brevo` YAML keys, and the `SENDGRID_API_KEY`/`BREVO_API_KEY` environment variables from templates.
+- Disabled workspace invitation UI remnants on the Users page (commented handlers, form state, and strings).
+- **Qwen model provider in the AI runtime**:
+  - Removed `QwenChatModel` — the externally managed MLX/OpenAI-compatible chat endpoint adapter — including its OpenAI-compatible payload parsing and SSE stream handling; `create_chat_model` returns only the Ollama adapter and stream parsing is Ollama NDJSON-only.
+  - Restricted `LLM_PROVIDER` to `ollama`; removed the MLX/Qwen alternative block from `rag-chatbot-fastapi/.env.example` and the `qwen` chat-adapter rows from `docs/RETRIEVAL.md` and `rag-chatbot-fastapi/GUIDE.md`.
+  - Trimmed the qwen test suites and fakes from the model gateway, config, and semantic answer cache tests.
+
+### Fixed
+
+- Select dropdown item focus and highlight states follow the active theme tokens instead of the hard-coded accent color classes.
+
 ## [0.2.2] - 2026-10-18
 
 ### Changed

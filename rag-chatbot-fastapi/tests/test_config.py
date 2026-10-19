@@ -22,17 +22,6 @@ def test_grpc_defaults_are_plaintext_for_local_development() -> None:
     assert configured.READINESS_INGESTION_SCAN_LIMIT == 200
 
 
-def test_qwen_is_ready_with_base_url_and_exact_model_id() -> None:
-    configured = Settings(
-        _env_file=(),
-        LLM_PROVIDER="qwen",
-        LLM_BASE_URL="http://127.0.0.1:8080/v1",
-        LLM_MODEL_ID="mlx-community/Qwen2.5-14B-Instruct-4bit",
-    )
-
-    assert configured.model_configured is True
-
-
 def test_readiness_diagnostic_bounds_are_validated() -> None:
     with pytest.raises(ValidationError, match="diagnostics timeout"):
         Settings(_env_file=(), READINESS_DIAGNOSTICS_TIMEOUT_SECONDS=2.1)

@@ -69,10 +69,6 @@ spring:
           auth: ${MAIL_SMTP_AUTH:false}
           starttls:
             enable: ${MAIL_SMTP_STARTTLS:false}
-  sendgrid:
-    api-key: ${SENDGRID_API_KEY:}
-  brevo:
-    api-key: ${BREVO_API_KEY:}
 
 springdoc:
   api-docs:

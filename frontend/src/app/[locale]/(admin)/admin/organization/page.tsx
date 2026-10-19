@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, KeyRound, Loader2, Plus, UserCheck, UserX, Users } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, KeyRound, Loader2, Plus, UserCheck, UserX, Users, Wand2 } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import {
   createOrganizationUserApi,
@@ -27,6 +27,21 @@ import { Card, CardContent } from "@/components/ui/card";
 type CreateUserForm = { email: string; fullName: string; password: string };
 type PasswordForm = { password: string; confirmPassword: string };
 const initials = (name: string) => name.split(" ").filter(Boolean).map(part => part[0]).join("").toUpperCase().slice(0, 2) || "?";
+
+const PASSWORD_BUCKETS = ["abcdefghjkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%&*+?"];
+/** 16-character temporary password: crypto-random with a guaranteed class mix. */
+function generateTempPassword(): string {
+  const random = new Uint32Array(24);
+  crypto.getRandomValues(random);
+  const pool = PASSWORD_BUCKETS.join("");
+  const chars = PASSWORD_BUCKETS.map((bucket, index) => bucket[random[index] % bucket.length]);
+  for (let i = chars.length; i < 16; i++) chars.push(pool[random[i] % pool.length]);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = random[8 + i] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}
 
 function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("Users");
@@ -58,6 +73,9 @@ export default function OrganizationPage() {
   const [passwordTarget, setPasswordTarget] = useState<OrganizationMember | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<OrganizationMember | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Generated passwords are shown to the admin so they can share the
+  // temporary secret with the new member out of band.
+  const [showCreatedPassword, setShowCreatedPassword] = useState(false);
 
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
@@ -94,11 +112,17 @@ export default function OrganizationPage() {
   });
   const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) });
 
+  const fillGeneratedPassword = () => {
+    createUserForm.setValue("password", generateTempPassword(), { shouldValidate: true, shouldDirty: true });
+    setShowCreatedPassword(true);
+  };
+
   const onCreateUser = async (values: CreateUserForm) => {
     try {
       await createOrganizationUserApi(request, values);
       toast.success(t("userCreated"));
       createUserForm.reset();
+      setShowCreatedPassword(false);
       setShowCreateUser(false);
       await loadOrgMembers();
     } catch (cause) {
@@ -150,6 +174,7 @@ export default function OrganizationPage() {
         onClick={() => {
           setShowCreateUser(true);
           createUserForm.reset();
+          setShowCreatedPassword(false);
         }}
         className="gap-1.5"
       >
@@ -325,14 +350,39 @@ export default function OrganizationPage() {
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="createPassword">{t("initialPassword")}</Label>
-            <Input
-              id="createPassword"
-              type="password"
-              autoComplete="new-password"
-              placeholder="••••••••••••"
-              {...createUserForm.register("password")}
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="createPassword">{t("initialPassword")}</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={fillGeneratedPassword}
+              >
+                <Wand2 className="size-3.5" />
+                {t("generatePassword")}
+              </Button>
+            </div>
+            <div className="relative">
+              <Input
+                id="createPassword"
+                type={showCreatedPassword ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder="••••••••••••"
+                className="pr-10"
+                {...createUserForm.register("password")}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
+                title={showCreatedPassword ? t("hidePassword") : t("showPassword")}
+                onClick={() => setShowCreatedPassword(value => !value)}
+              >
+                {showCreatedPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              </Button>
+            </div>
             {createUserForm.formState.errors.password && (
               <p className="text-xs text-destructive">{createUserForm.formState.errors.password.message}</p>
             )}

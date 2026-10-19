@@ -50,8 +50,6 @@ class NotificationChannelResolverTest {
         ReflectionTestUtils.setField(resolver, "smtpPassword", "");
         ReflectionTestUtils.setField(resolver, "smtpAuth", false);
         ReflectionTestUtils.setField(resolver, "smtpStarttls", false);
-        ReflectionTestUtils.setField(resolver, "sendgridApiKey", "");
-        ReflectionTestUtils.setField(resolver, "brevoApiKey", "");
         orgId = UUID.randomUUID();
     }
 

@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +41,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserController extends BaseController {
     private final TenantUserManagementService userManagementService;
+
+    /** Add-member autocomplete: organization accounts not yet in the workspace. */
+    @GetMapping("/suggest")
+    @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
+    public List<OrganizationMemberResponse> suggest(
+            @RequestParam(name = "query", defaultValue = "") String query,
+            HttpServletRequest request) {
+        return userManagementService.suggestOrganizationUsers(
+                getTenantId(request), getUserId(request), query);
+    }
 
     @GetMapping("/directory")
     public DirectoryResponse directory(HttpServletRequest request) {

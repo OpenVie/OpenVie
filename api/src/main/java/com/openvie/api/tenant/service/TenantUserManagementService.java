@@ -39,6 +39,8 @@ import com.openvie.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
 import com.openvie.api.tenant.model.Organization;
 import com.openvie.api.tenant.repository.OrganizationRepository;
 import com.openvie.api.tenant.repository.WorkspaceMemberRepository;
+import com.openvie.api.tenant.api.event.AccountCreatedEvent;
+import com.openvie.api.tenant.api.event.WorkspaceMemberAddedEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -56,6 +58,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.data.domain.PageRequest;
 
 /**
  * Member and invitation management scoped to one workspace.
@@ -840,9 +844,46 @@ public class TenantUserManagementService {
             throw new ConflictException("That account is already a member of this workspace");
         }
         WorkspaceMember membership = grantMembership(user, workspace, role);
+        eventPublisher.publishEvent(new WorkspaceMemberAddedEvent(
+                actor.orgId(), workspaceId, user.getId(), user.getEmail(), user.getFullName(),
+                workspace.getOrganization().getName(), workspace.getName(), role.name()));
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(), Map.of("role", role.name()));
         invalidateMembers(workspaceId);
         return toMember(membership, actorId);
+    }
+
+    /**
+     * Add-member autocomplete pool: active organization accounts matching the
+     * typed fragment that are not in the workspace yet. Workspace admins may
+     * call it because they are exactly the people the dialog is for.
+     */
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> suggestOrganizationUsers(
+            UUID workspaceId, UUID actorId, String rawQuery) {
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        if (!actor.isWorkspaceAdmin()) {
+            throw new UnauthorizedException("Only workspace admins can look up organization members");
+        }
+        // Discard LIKE wildcards wholesale; suggestions are prefix/substring
+        // matches on what the admin actually typed.
+        String query = rawQuery == null ? "" : rawQuery.trim().toLowerCase(Locale.ROOT).replaceAll("[%_]", " ");
+        if (query.isEmpty()) {
+            return List.of();
+        }
+        return userRepository
+                .findAddableCandidates(actor.orgId(), workspaceId, actorId,
+                        "%" + query + "%", UserStatus.ACTIVE, PageRequest.of(0, 8))
+                .stream()
+                .map(user -> new OrganizationMemberResponse(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getFullName(),
+                        user.getRole(),
+                        user.getStatus(),
+                        user.getCreatedAt(),
+                        user.getLastLoginAt(),
+                        user.getId().equals(actorId)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -894,6 +935,9 @@ public class TenantUserManagementService {
             grantMembership(user, defaultWorkspace, WorkspaceRole.MEMBER);
             invalidateMembers(defaultWorkspace.getId());
         }
+
+        eventPublisher.publishEvent(new AccountCreatedEvent(
+                orgId, user.getId(), user.getEmail(), user.getFullName()));
 
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(),
                 Map.of("via", "admin-create", "email", email, "role", user.getRole().name()));
