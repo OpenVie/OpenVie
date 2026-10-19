@@ -58,6 +58,7 @@ class TenantUserManagementServiceTest {
     private OrganizationRepository organizations;
     private DeliveryAvailability channels;
     private TenantCredentials credentials;
+    private com.openvie.api.notification.service.EmailService emailService;
     private ApplicationEventPublisher events;
     private TenantUserManagementService service;
 
@@ -77,8 +78,10 @@ class TenantUserManagementServiceTest {
         channels = mock(DeliveryAvailability.class);
         credentials = mock(TenantCredentials.class);
         events = mock(ApplicationEventPublisher.class);
+        emailService = mock(com.openvie.api.notification.service.EmailService.class);
         service = new TenantUserManagementService(
-                users, invitations, members, workspaces, organizations, channels, credentials, events);
+                users, invitations, members, workspaces, organizations, channels, credentials,
+                emailService, events);
 
         organization = new Organization();
         organization.setId(UUID.randomUUID());

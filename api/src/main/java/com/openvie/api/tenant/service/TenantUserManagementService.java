@@ -39,6 +39,8 @@ import com.openvie.api.tenant.dto.UserManagementDtos.OrganizationMemberResponse;
 import com.openvie.api.tenant.model.Organization;
 import com.openvie.api.tenant.repository.OrganizationRepository;
 import com.openvie.api.tenant.repository.WorkspaceMemberRepository;
+import com.openvie.api.notification.service.EmailService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.PageRequest;
+
 /**
  * Member and invitation management scoped to one workspace.
  *
@@ -64,6 +68,7 @@ import java.util.UUID;
  * notification channel: an undeliverable token is worse than a refused
  * request, because the invitee never learns it exists.
  */
+@Slf4j
 @Service
 public class TenantUserManagementService {
     private static final Duration INVITATION_LIFETIME = Duration.ofHours(72);
@@ -78,6 +83,7 @@ public class TenantUserManagementService {
     private final OrganizationRepository organizationRepository;
     private final DeliveryAvailability channels;
     private final TenantCredentials credentials;
+    private final EmailService emailService;
     private final ApplicationEventPublisher eventPublisher;
     @Autowired(required = false)
     private DurableEventPublisher durableEventPublisher;
@@ -96,6 +102,7 @@ public class TenantUserManagementService {
             OrganizationRepository organizationRepository,
             DeliveryAvailability channels,
             TenantCredentials credentials,
+            EmailService emailService,
             ApplicationEventPublisher eventPublisher
     ) {
         this.userRepository = userRepository;
@@ -105,6 +112,7 @@ public class TenantUserManagementService {
         this.organizationRepository = organizationRepository;
         this.channels = channels;
         this.credentials = credentials;
+        this.emailService = emailService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -840,9 +848,52 @@ public class TenantUserManagementService {
             throw new ConflictException("That account is already a member of this workspace");
         }
         WorkspaceMember membership = grantMembership(user, workspace, role);
+        boolean notified = emailService.sendWorkspaceAddedEmail(
+                actor.orgId(), user.getEmail(), user.getFullName(),
+                workspace.getOrganization().getName(), workspace.getName(), role.name());
+        if (!notified) {
+            log.info(
+                    "Member {} added to workspace {} without email notification:"
+                            + " no usable notification channel or delivery failed",
+                    user.getEmail(), workspaceId);
+        }
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(), Map.of("role", role.name()));
         invalidateMembers(workspaceId);
         return toMember(membership, actorId);
+    }
+
+    /**
+     * Add-member autocomplete pool: active organization accounts matching the
+     * typed fragment that are not in the workspace yet. Workspace admins may
+     * call it because they are exactly the people the dialog is for.
+     */
+    @Transactional(readOnly = true)
+    public List<OrganizationMemberResponse> suggestOrganizationUsers(
+            UUID workspaceId, UUID actorId, String rawQuery) {
+        MembershipSnapshot actor = resolveMembership(actorId, workspaceId);
+        if (!actor.isWorkspaceAdmin()) {
+            throw new UnauthorizedException("Only workspace admins can look up organization members");
+        }
+        // Discard LIKE wildcards wholesale; suggestions are prefix/substring
+        // matches on what the admin actually typed.
+        String query = rawQuery == null ? "" : rawQuery.trim().toLowerCase(Locale.ROOT).replaceAll("[%_]", " ");
+        if (query.isEmpty()) {
+            return List.of();
+        }
+        return userRepository
+                .findAddableCandidates(actor.orgId(), workspaceId, actorId,
+                        "%" + query + "%", UserStatus.ACTIVE, PageRequest.of(0, 8))
+                .stream()
+                .map(user -> new OrganizationMemberResponse(
+                        user.getId(),
+                        user.getEmail(),
+                        user.getFullName(),
+                        user.getRole(),
+                        user.getStatus(),
+                        user.getCreatedAt(),
+                        user.getLastLoginAt(),
+                        user.getId().equals(actorId)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -893,6 +944,12 @@ public class TenantUserManagementService {
         for (Tenant defaultWorkspace : defaultWorkspaces) {
             grantMembership(user, defaultWorkspace, WorkspaceRole.MEMBER);
             invalidateMembers(defaultWorkspace.getId());
+        }
+
+        boolean notified = emailService.sendAccountCreatedEmail(orgId, user.getEmail(), user.getFullName());
+        if (!notified) {
+            log.info("Account {} created without email notification:"
+                    + " no usable notification channel or delivery failed", user.getEmail());
         }
 
         audit(workspaceId, actorId, LogAction.MEMBER_ADDED, "user", user.getId(),

@@ -65,7 +65,7 @@ app:
     embedding-enabled: ${EMBEDDING_CACHE_ENABLED:false}
     retrieval-enabled: ${RETRIEVAL_CACHE_ENABLED:false}
   # Mail is optional: "none" boots without any provider. Set MAIL_PROVIDER to
-  # smtp|sendgrid|brevo plus its credentials as the bootstrap default, or
+  # smtp plus its credentials as the bootstrap default, or
   # configure per-organization channels in settings (requires
   # NOTIFICATION_ENC_KEY). Invitations minted without an active channel are
   # held in the outbox and replay when one is enabled.
@@ -74,6 +74,8 @@ app:
     from-email: ${FROM_EMAIL:}
     from-name: ${FROM_NAME:OpenVie}
     invitation-link: ${INVITATION_LINK:http://localhost:3000/accept-invitation}
+    login-link: ${LOGIN_LINK:http://localhost:3000/login}
+    logo-url: ${LOGO_URL:}
   notifications:
     encryption-key: ${NOTIFICATION_ENC_KEY:}
 

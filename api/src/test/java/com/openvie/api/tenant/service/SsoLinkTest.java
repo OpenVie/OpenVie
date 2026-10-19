@@ -70,7 +70,8 @@ class SsoLinkTest {
         events = mock(ApplicationEventPublisher.class);
         service = new TenantUserManagementService(
                 users, mock(InvitationRepository.class), members, workspaces,
-                organizations, channels, credentials, events);
+                organizations, channels, credentials,
+                mock(com.openvie.api.notification.service.EmailService.class), events);
 
         organization = new Organization();
         organization.setId(UUID.randomUUID());

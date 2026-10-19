@@ -14,7 +14,7 @@ Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số c�
 
 | Năng lực | Triển khai | Ghi chú |
 |---|---|---|
-| Sinh văn bản, trích xuất đồ thị, lập kế hoạch tính toán | Chat model adapter: `ollama` hoặc `qwen` | Mặc định là Ollama với `vylinh` (3.09B). `qwen` trỏ tới endpoint tương thích OpenAI bên ngoài. |
+| Sinh văn bản, trích xuất đồ thị, lập kế hoạch tính toán | Chat model adapter: `ollama` | Mặc định là Ollama với `vylinh` (3.09B). |
 | Vector dày (Dense embeddings) | Adapter Ollama `/api/embed` | Mặc định là `bge-m3` (1024 chiều). |
 | Truy hồi từ vựng (Lexical/Sparse) | FastEmbed `Qdrant/bm25` | Bổ sung cho ngữ nghĩa đối với từ ngữ chính xác, mã hiệu, ngày tháng. |
 | Xếp hạng lại (Reranking - tùy chọn) | TEI cross-encoder endpoint | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt, cơ chế fail-open khi lỗi. |
@@ -103,7 +103,7 @@ This guide describes OpenVie's digital-document RAG implementation. OCR, general
 
 | Capability | Implementation | Notes |
 |---|---|---|
-| Text generation, graph extraction, calculation planning | Chat model adapters: `ollama` or `qwen` | Default: native Ollama with `vylinh` (3.09B). `qwen` targets an external OpenAI-compatible endpoint. |
+| Text generation, graph extraction, calculation planning | Chat model adapter: `ollama` | Default: native Ollama with `vylinh` (3.09B). |
 | Dense embeddings | Ollama `/api/embed` | Default: `bge-m3` (1024 dimensions). |
 | Lexical retrieval | FastEmbed `Qdrant/bm25` | Complements semantic search for exact codes, identifiers, dates. |
 | Reranking (optional) | TEI cross-encoder endpoint | Default: `Alibaba-NLP/gte-multilingual-reranker-base`. Fails open on errors. |

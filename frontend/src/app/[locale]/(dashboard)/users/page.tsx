@@ -1,26 +1,22 @@
 "use client";
 
-
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
 import { AlertCircle, Loader2, UserMinus, UserPlus, Users } from "lucide-react";
-// Invitation UI is intentionally disabled; retain these imports for its re-enable path.
-// import { Mail, RefreshCw } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
   addMemberToWorkspaceApi,
   getTeamDirectory,
   removeWorkspaceMemberApi,
+  suggestOrganizationUsersApi,
   updateTeamMemberRole,
 } from "@/lib/users-api";
-// Invitation UI is intentionally disabled; restore these with its commented handlers and JSX below.
-// import { cancelTeamInvitation, inviteTeamMember, resendTeamInvitation } from "@/lib/users-api";
-import type { TeamDirectory, TeamMember, WorkspaceRole } from "@/types";
+import type { OrganizationMember, TeamDirectory, TeamMember, WorkspaceRole } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,11 +27,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 
-/*
- * Invitation UI is intentionally disabled rather than deleted. Re-enable this
- * type together with the commented form state and handlers below.
- * type InviteForm = { email: string; role: WorkspaceRole };
- */
 type AddMemberForm = { email: string; role: WorkspaceRole };
 const initials = (name: string) => name.split(" ").filter(Boolean).map(part => part[0]).join("").toUpperCase().slice(0, 2) || "?";
 
@@ -52,6 +43,58 @@ function TableSkeleton() {
   return <div className="space-y-4 p-5">{Array.from({ length: 4 }).map((_, index) => (
     <div key={index} className="flex items-center gap-4"><Skeleton className="size-8 rounded-full" /><Skeleton className="h-5 flex-1" /><Skeleton className="h-5 w-28" /><Skeleton className="h-5 w-24" /></div>
   ))}</div>;
+}
+
+/** Debounced add-member suggestions: active org accounts not yet in this workspace. */
+function MemberSuggestions({ query, onPick, t }: {
+  query: string;
+  onPick: (member: OrganizationMember) => void;
+  t: (key: string) => string;
+}) {
+  const { request } = useApiClient();
+  const [items, setItems] = useState<OrganizationMember[] | null>(null);
+  const trimmed = query.trim();
+
+  useEffect(() => {
+    let cancelled = false;
+    const task = window.setTimeout(async () => {
+      if (trimmed.length < 2) { setItems(null); return; }
+      try {
+        const found = await suggestOrganizationUsersApi(request, trimmed);
+        if (!cancelled) setItems(found);
+      } catch {
+        // Suggestions are a convenience; a failed lookup stays silent.
+        if (!cancelled) setItems([]);
+      }
+    }, trimmed.length < 2 ? 0 : 250);
+    return () => { cancelled = true; window.clearTimeout(task); };
+  }, [trimmed, request]);
+
+  if (trimmed.length < 2) return null;
+  return (
+    <div className="absolute z-40 top-full mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-md">
+      {items === null ? (
+        <p className="px-3 py-2 text-sm text-muted-foreground">{t("suggestLoading")}</p>
+      ) : items.length === 0 ? (
+        <p className="px-3 py-2 text-sm text-muted-foreground">{t("suggestEmpty")}</p>
+      ) : items.map(member => (
+        <button
+          key={member.id}
+          type="button"
+          className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted"
+          onMouseDown={event => { event.preventDefault(); onPick(member); }}
+        >
+          <Avatar className="size-7 shrink-0">
+            <AvatarFallback className="bg-primary/15 text-[10px] text-primary">{initials(member.fullName || member.email)}</AvatarFallback>
+          </Avatar>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-foreground">{member.fullName || t("unnamed")}</span>
+            <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -74,7 +117,6 @@ export default function UsersPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Invitation UI disabled: const [showInvite, setShowInvite] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   // Role select state lives outside react-hook-form: the compiler skips
   // memoizing components that call form.watch() in render.
@@ -90,8 +132,6 @@ export default function UsersPage() {
   // server-side, so the button is hidden here as well.
   const canRemoveMember = isAdmin && !directory.defaultWorkspace;
   const activeAdminCount = useMemo(() => directory.members.filter(member => member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE").length, [directory.members]);
-  // Invitation UI disabled:
-  // const inviteSchema = z.object({ email: z.string().email(t("validEmail")), role: z.enum(["WORKSPACE_ADMIN", "MEMBER"]) });
   const roleLabel = (role: WorkspaceRole) => role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user");
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
@@ -112,13 +152,6 @@ export default function UsersPage() {
     return () => window.clearTimeout(task);
   }, [loadDirectory]);
 
-  /*
-   * Invitation UI disabled:
-   * const { register, handleSubmit, setValue, reset, formState: { errors, isSubmitting } } = useForm<InviteForm>({
-   *   resolver: zodResolver(inviteSchema), defaultValues: { role: "MEMBER" },
-   * });
-   */
-
   const addMemberSchema = z.object({
     email: z.string().email(t("validEmail")),
     role: z.enum(["WORKSPACE_ADMIN", "MEMBER"]),
@@ -127,17 +160,10 @@ export default function UsersPage() {
     resolver: zodResolver(addMemberSchema),
     defaultValues: { role: "MEMBER" },
   });
-
-  /*
-   * Invitation UI disabled:
-   * const onInvite = async (values: InviteForm) => {
-   *   try {
-   *     await inviteTeamMember(request, values.email, values.role);
-   *     toast.success(t("invitationSent", { email: values.email }));
-   *     reset(); setShowInvite(false); await loadDirectory();
-   *   } catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.invite")); }
-   * };
-   */
+  const emailRegister = addMemberForm.register("email");
+  const [typedEmail, setTypedEmail] = useState("");
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const suggestCloseTimer = useRef<number | null>(null);
 
   const onAddMember = async (values: AddMemberForm) => {
     try {
@@ -145,6 +171,8 @@ export default function UsersPage() {
       toast.success(t("memberAdded"));
       addMemberForm.reset();
       setAddMemberRole("MEMBER");
+      setTypedEmail("");
+      setSuggestOpen(false);
       setShowAddMember(false);
       await loadDirectory();
     } catch (cause) {
@@ -178,24 +206,6 @@ export default function UsersPage() {
     }
   };
 
-  /*
-   * Invitation UI disabled:
-   * const resend = async (id: string) => {
-   *   setBusyId(id);
-   *   try { await resendTeamInvitation(request, id); toast.success(t("resent")); await loadDirectory(); }
-   *   catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.resend")); }
-   *   finally { setBusyId(null); }
-   * };
-   *
-   * const cancel = async (id: string, email: string) => {
-   *   if (!window.confirm(t("confirmCancel", { email }))) return;
-   *   setBusyId(id);
-   *   try { await cancelTeamInvitation(request, id); toast.success(t("cancelled")); setDirectory(current => ({ ...current, invitations: current.invitations.filter(item => item.id !== id) })); }
-   *   catch (cause) { toast.error(cause instanceof Error ? cause.message : t("fallback.cancel")); }
-   *   finally { setBusyId(null); }
-   * };
-   */
-
   return <div className="space-y-6">
     <div className="flex items-center justify-between gap-4">
       <div>
@@ -203,9 +213,6 @@ export default function UsersPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
       <div className="flex items-center gap-2">
-        {/* Invite user button commented out so it can be re-enabled later:
-        {isAdmin && <Button size="sm" onClick={() => setShowInvite(true)} className="gap-1.5"><UserPlus className="size-4" />{t("inviteUser")}</Button>}
-        */}
         {canAddMember && (
           <Button
             size="sm"
@@ -213,6 +220,7 @@ export default function UsersPage() {
               setShowAddMember(true);
               addMemberForm.reset({ role: "MEMBER" });
               setAddMemberRole("MEMBER");
+              setTypedEmail("");
             }}
             className="gap-1.5"
           >
@@ -360,74 +368,12 @@ export default function UsersPage() {
                 </TableRow>
               );
             })}
-
-            {/* Pending invitations commented out so they can be re-enabled later:
-            {directory.invitations.map(invitation => (
-              <TableRow key={`invite-${invitation.id}`}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
-                      <Mail className="size-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">{t("pendingInvitation")}</p>
-                      <p className="text-sm text-muted-foreground">{invitation.email}</p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{roleLabel(invitation.role)}</TableCell>
-                <TableCell><StatusBadge status={invitation.status} /></TableCell>
-                <TableCell className="text-sm text-muted-foreground">{t("expires", { date: formatDate(invitation.expiresAt) })}</TableCell>
-                {isAdmin && (
-                  <TableCell className="space-x-2 text-right">
-                    <Button size="sm" variant="outline" disabled={busyId === invitation.id} onClick={() => void resend(invitation.id)}>
-                      <RefreshCw className="mr-1 size-3.5" />{t("resend")}
-                    </Button>
-                    {invitation.status === "PENDING" && (
-                      <Button size="sm" variant="outline" disabled={busyId === invitation.id} onClick={() => void cancel(invitation.id, invitation.email)}>
-                        {t("cancel")}
-                      </Button>
-                    )}
-                  </TableCell>
-                )}
-              </TableRow>
-            ))}
-            */}
           </TableBody>
         </Table>
         </div>
         </>
       )}
     </Card>
-
-    {/* Invite Member dialog commented out so it can be re-enabled later:
-    <Dialog open={showInvite} onOpenChange={setShowInvite}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>{t("inviteMember")}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit(onInvite)} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="inviteEmail">{t("emailAddress")}</Label>
-            <Input id="inviteEmail" type="email" placeholder="colleague@company.com" {...register("email")} />
-            {errors.email && <p className="text-xs text-red-600">{errors.email.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t("role")}</Label>
-            <Select defaultValue="MEMBER" onValueChange={value => setValue("role", value as WorkspaceRole)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
-                <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>{t("cancel")}</Button>
-            <Button type="submit" disabled={isSubmitting}>{t("sendInvitation")}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-    */}
 
     {/* Add Member to Workspace Dialog */}
     <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
@@ -439,12 +385,36 @@ export default function UsersPage() {
         <form onSubmit={addMemberForm.handleSubmit(onAddMember)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="addMemberEmail">{t("emailAddress")}</Label>
-            <Input
-              id="addMemberEmail"
-              type="email"
-              placeholder="colleague@company.com"
-              {...addMemberForm.register("email")}
-            />
+            <div className="relative">
+              <Input
+                id="addMemberEmail"
+                type="email"
+                autoComplete="off"
+                placeholder="colleague@company.com"
+                {...emailRegister}
+                onChange={event => {
+                  emailRegister.onChange(event);
+                  setTypedEmail(event.target.value);
+                  setSuggestOpen(true);
+                }}
+                onFocus={() => {
+                  if (suggestCloseTimer.current) { window.clearTimeout(suggestCloseTimer.current); suggestCloseTimer.current = null; }
+                  setSuggestOpen(true);
+                }}
+                onBlur={() => { suggestCloseTimer.current = window.setTimeout(() => setSuggestOpen(false), 150); }}
+              />
+              {suggestOpen && (
+                <MemberSuggestions
+                  query={typedEmail}
+                  t={t as (key: string) => string}
+                  onPick={member => {
+                    addMemberForm.setValue("email", member.email, { shouldValidate: true });
+                    setTypedEmail(member.email);
+                    setSuggestOpen(false);
+                  }}
+                />
+              )}
+            </div>
             {addMemberForm.formState.errors.email && (
               <p className="text-xs text-destructive">{addMemberForm.formState.errors.email.message}</p>
             )}
@@ -456,7 +426,8 @@ export default function UsersPage() {
               disabled={!isAdmin}
               onValueChange={value => setAddMemberRole(value as WorkspaceRole)}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              {/* The trigger renders the translated label, never the raw enum. */}
+              <SelectTrigger><SelectValue>{roleLabel(addMemberRole)}</SelectValue></SelectTrigger>
               <SelectContent>
                 {isAdmin && <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>}
                 <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>

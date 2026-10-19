@@ -34,7 +34,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class NotificationChannelService {
 
-    private static final Set<String> KNOWN_TYPES = Set.of("smtp", "sendgrid", "brevo");
+    private static final Set<String> KNOWN_TYPES = Set.of("smtp");
 
     private final NotificationChannelRepository channelRepository;
     private final CredentialCipher cipher;
@@ -61,8 +61,7 @@ public class NotificationChannelService {
             String username,
             String password,
             Boolean auth,
-            Boolean starttls,
-            String apiKey) {
+            Boolean starttls) {
     }
 
     @Transactional(readOnly = true)
@@ -191,7 +190,6 @@ public class NotificationChannelService {
         if (request.password() != null) merged.put("password", request.password());
         if (request.auth() != null) merged.put("auth", request.auth());
         if (request.starttls() != null) merged.put("starttls", request.starttls());
-        if (request.apiKey() != null) merged.put("apiKey", request.apiKey());
         return merged.isEmpty() ? null : merged.toString();
     }
 

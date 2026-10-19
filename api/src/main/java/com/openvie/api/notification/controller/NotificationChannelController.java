@@ -62,7 +62,7 @@ public class NotificationChannelController extends BaseController {
         return channelService.upsert(getOrgId(request), new ChannelRequest(
                 type, body.enabled(), body.fromEmail(), body.fromName(), body.host(),
                 body.port(), body.username(), body.password(), body.auth(),
-                body.starttls(), body.apiKey()));
+                body.starttls()));
     }
 
     @PostMapping("/{channelId}/enabled")
