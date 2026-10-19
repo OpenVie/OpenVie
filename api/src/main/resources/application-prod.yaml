@@ -12,9 +12,9 @@ app:
     region: ${SEAWEEDFS_REGION:us-east-1}
   email:
     # Mail is optional: "none" boots without a provider. Set MAIL_PROVIDER to
-    # smtp|sendgrid|brevo plus its credential (MAIL_HOST / SENDGRID_API_KEY /
-    # BREVO_API_KEY) and FROM_EMAIL for the env bootstrap default, or store
-    # per-organization channels in settings (needs NOTIFICATION_ENC_KEY).
+    # smtp plus its credential (MAIL_HOST) and FROM_EMAIL for the env
+    # bootstrap default, or store per-organization channels in settings
+    # (needs NOTIFICATION_ENC_KEY).
     provider: ${MAIL_PROVIDER:none}
     from-email: ${FROM_EMAIL:}
     from-name: ${FROM_NAME:OpenVie}
@@ -76,10 +76,6 @@ spring:
           auth: ${MAIL_SMTP_AUTH:true}
           starttls:
             enable: ${MAIL_SMTP_STARTTLS:true}
-  sendgrid:
-    api-key: ${SENDGRID_API_KEY:}
-  brevo:
-    api-key: ${BREVO_API_KEY:}
 
 management:
   endpoints:

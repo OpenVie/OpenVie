@@ -16,7 +16,6 @@ from app.modules.model.api import ModelTimeoutError as ChatModelTimeoutError
 from app.modules.model.api import ModelUnavailableError as ChatModelProviderError
 from app.modules.model.internal.chat import (
     OllamaChatModel,
-    QwenChatModel,
     create_chat_model,
 )
 
@@ -91,98 +90,6 @@ class UsageOllamaClient(FakeOllamaClient):
         return UsageOllamaResponse()
 
 
-class FakeQwenResponse:
-    def raise_for_status(self) -> None:
-        return None
-
-    def json(self) -> object:
-        return {
-            "choices": [{"message": {"role": "assistant", "content": " Qwen answer. "}}],
-            "usage": {"prompt_tokens": 53, "completion_tokens": 11},
-        }
-
-
-class EmptyQwenResponse(FakeQwenResponse):
-    def json(self) -> object:
-        return {"choices": [{"message": {"role": "assistant", "content": "  "}}]}
-
-
-class LengthLimitedQwenResponse(FakeQwenResponse):
-    def json(self) -> object:
-        return {
-            "choices": [
-                {
-                    "finish_reason": "length",
-                    "message": {"role": "assistant", "content": '{"entities":['},
-                }
-            ]
-        }
-
-
-class MalformedQwenResponse(FakeQwenResponse):
-    def json(self) -> object:
-        return {"choices": []}
-
-
-class InvalidJsonQwenResponse(FakeQwenResponse):
-    def json(self) -> object:
-        raise ValueError("invalid JSON")
-
-
-class FailedQwenResponse(FakeQwenResponse):
-    def raise_for_status(self) -> None:
-        request = httpx.Request("POST", "http://localhost:8080/v1/chat/completions")
-        response = httpx.Response(503, request=request)
-        raise httpx.HTTPStatusError("service unavailable", request=request, response=response)
-
-
-class FakeQwenClient:
-    response_type: type[FakeQwenResponse] = FakeQwenResponse
-    last_url = ""
-    last_json: dict[str, object] = {}
-
-    def __init__(self, timeout: float):
-        self.timeout = timeout
-
-    async def __aenter__(self) -> FakeQwenClient:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        return None
-
-    async def post(self, url: str, json: dict[str, object]) -> FakeQwenResponse:
-        FakeQwenClient.last_url = url
-        FakeQwenClient.last_json = dict(json)
-        return self.response_type()
-
-
-class EmptyQwenClient(FakeQwenClient):
-    response_type = EmptyQwenResponse
-
-
-class LengthLimitedQwenClient(FakeQwenClient):
-    response_type = LengthLimitedQwenResponse
-
-
-class MalformedQwenClient(FakeQwenClient):
-    response_type = MalformedQwenResponse
-
-
-class InvalidJsonQwenClient(FakeQwenClient):
-    response_type = InvalidJsonQwenResponse
-
-
-class FailedQwenClient(FakeQwenClient):
-    response_type = FailedQwenResponse
-
-
-class SlowQwenClient(FakeQwenClient):
-    async def post(self, url: str, json: dict[str, object]) -> FakeQwenResponse:
-        del url, json
-        await asyncio.sleep(1)
-        return FakeQwenResponse()
-
-
 def settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "_env_file": (),
@@ -198,21 +105,9 @@ def settings(**overrides: object) -> Settings:
 
 
 def test_create_chat_model_defaults_to_ollama() -> None:
-    model = create_chat_model(settings(LLM_PROVIDER="ollama"))
+    model = create_chat_model(settings())
 
     assert isinstance(model, OllamaChatModel)
-
-
-def test_create_chat_model_selects_qwen() -> None:
-    model = create_chat_model(
-        settings(
-            LLM_PROVIDER="qwen",
-            LLM_BASE_URL="http://127.0.0.1:8080/v1",
-            LLM_MODEL_ID="mlx-community/Qwen2.5-14B-Instruct-4bit",
-        )
-    )
-
-    assert isinstance(model, QwenChatModel)
 
 
 @pytest.mark.asyncio
@@ -258,71 +153,6 @@ async def test_ollama_complete_with_usage_extracts_native_token_counts(
 
 
 @pytest.mark.asyncio
-async def test_qwen_chat_uses_openai_compatible_payload_and_parses_usage(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FakeQwenClient)
-    gateway = QwenChatModel(
-        settings(
-            LLM_PROVIDER="qwen",
-            LLM_BASE_URL="http://127.0.0.1:8080/v1/",
-            LLM_MODEL_ID="mlx-community/Qwen2.5-14B-Instruct-4bit",
-            LLM_TEMPERATURE=0.3,
-            LLM_MAX_OUTPUT_TOKENS=256,
-        )
-    )
-    messages = [
-        {"role": "system", "content": "Follow the policy."},
-        {"role": "user", "content": "Question"},
-        {"role": "assistant", "content": "Prior answer"},
-    ]
-
-    completion = await gateway.complete_with_usage(messages)
-
-    assert completion.content == "Qwen answer."
-    assert completion.input_tokens == 53
-    assert completion.output_tokens == 11
-    assert FakeQwenClient.last_url == "http://127.0.0.1:8080/v1/chat/completions"
-    assert FakeQwenClient.last_json == {
-        "model": "mlx-community/Qwen2.5-14B-Instruct-4bit",
-        "messages": messages,
-        "temperature": 0.3,
-        "max_tokens": 256,
-        "stream": False,
-    }
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "client_type",
-    [EmptyQwenClient, MalformedQwenClient, InvalidJsonQwenClient],
-)
-async def test_qwen_empty_and_malformed_responses_are_provider_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    client_type: type[FakeQwenClient],
-) -> None:
-    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", client_type)
-    gateway = QwenChatModel(settings(LLM_PROVIDER="qwen"))
-
-    with pytest.raises(ChatModelProviderError):
-        await gateway.complete([{"role": "user", "content": "hello"}])
-
-
-@pytest.mark.asyncio
-async def test_qwen_output_limit_reports_finish_reason(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.modules.model.internal.chat.httpx.AsyncClient", LengthLimitedQwenClient
-    )
-    gateway = QwenChatModel(settings(LLM_PROVIDER="qwen"))
-
-    with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
-        await gateway.complete_text([{"role": "user", "content": "hello"}], max_output_tokens=16)
-
-    with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
-        await gateway.complete([{"role": "user", "content": "hello"}])
-
-
-@pytest.mark.asyncio
 async def test_ollama_output_limit_reports_finish_reason(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -337,47 +167,6 @@ async def test_ollama_output_limit_reports_finish_reason(
 
     with pytest.raises(ChatModelProviderError, match="finish_reason=length"):
         await gateway.complete([{"role": "user", "content": "hello"}])
-
-
-@pytest.mark.asyncio
-async def test_qwen_http_failures_are_wrapped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FailedQwenClient)
-    model_id = "mlx-community/Qwen2.5-14B-Instruct-4bit"
-    labels = {"provider": "qwen", "model": model_id, "outcome": "error"}
-    before = metric_value("openvie_ai_chat_model_seconds_count", labels)
-    gateway = QwenChatModel(settings(LLM_PROVIDER="qwen", LLM_MODEL_ID=model_id))
-
-    with pytest.raises(ChatModelProviderError):
-        await gateway.complete([{"role": "user", "content": "hello"}])
-
-    assert metric_value("openvie_ai_chat_model_seconds_count", labels) == before + 1
-
-
-@pytest.mark.asyncio
-async def test_qwen_timeout_records_qwen_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", SlowQwenClient)
-    model_id = "mlx-community/Qwen2.5-14B-Instruct-4bit"
-    labels = {"provider": "qwen", "model": model_id}
-    before = metric_value("openvie_ai_chat_model_timeouts_total", labels)
-    gateway = QwenChatModel(
-        settings(
-            LLM_PROVIDER="qwen",
-            LLM_MODEL_ID=model_id,
-            LLM_TIMEOUT_SECONDS=0.001,
-        )
-    )
-
-    with pytest.raises(ChatModelTimeoutError):
-        await gateway.complete([{"role": "user", "content": "slow"}])
-
-    assert metric_value("openvie_ai_chat_model_timeouts_total", labels) == before + 1
-    assert (
-        metric_value(
-            "openvie_ai_chat_model_seconds_count",
-            {"provider": "qwen", "model": model_id, "outcome": "timeout"},
-        )
-        >= 1
-    )
 
 
 @pytest.mark.asyncio
@@ -429,9 +218,8 @@ class FragmentedProviderStream(httpx.AsyncByteStream):
         self.closed = True
 
 
-def provider_frame(provider: str, data: dict[str, object]) -> bytes:
-    encoded = json.dumps(data, ensure_ascii=False).encode()
-    return encoded + b"\n" if provider == "ollama" else b"data: " + encoded + b"\n\n"
+def provider_frame(data: dict[str, object]) -> bytes:
+    return json.dumps(data, ensure_ascii=False).encode() + b"\n"
 
 
 def install_provider_stream(
@@ -451,40 +239,27 @@ def install_provider_stream(
     return requests
 
 
-def streaming_frames(provider: str, *, truncated: bool = False) -> list[bytes]:
-    if provider == "ollama":
-        return [
-            provider_frame(provider, {"message": {"content": "Thông tin "}, "done": False}),
-            provider_frame(provider, {"message": {"content": "được cung cấp."}, "done": False}),
-            provider_frame(provider, {
-                "message": {"content": ""},
-                "done": True,
-                "done_reason": "length" if truncated else "stop",
-                "prompt_eval_count": 31,
-                "eval_count": 7,
-            }),
-        ]
+def streaming_frames(*, truncated: bool = False) -> list[bytes]:
     return [
-        provider_frame(provider, {"choices": [{"delta": {"content": "Thông tin "}}]}),
-        provider_frame(provider, {"choices": [{"delta": {"content": "được cung cấp."}}]}),
-        provider_frame(provider, {"choices": [{
-            "delta": {}, "finish_reason": "length" if truncated else "stop",
-        }]}),
-        provider_frame(provider, {
-            "choices": [], "usage": {"prompt_tokens": 31, "completion_tokens": 7},
+        provider_frame({"message": {"content": "Thông tin "}, "done": False}),
+        provider_frame({"message": {"content": "được cung cấp."}, "done": False}),
+        provider_frame({
+            "message": {"content": ""},
+            "done": True,
+            "done_reason": "length" if truncated else "stop",
+            "prompt_eval_count": 31,
+            "eval_count": 7,
         }),
-        b"data: [DONE]\n\n",
     ]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 async def test_provider_stream_delivers_before_finish_and_preserves_usage(
-    monkeypatch: pytest.MonkeyPatch, provider: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wire = FragmentedProviderStream(streaming_frames(provider), gate_after=2)
+    wire = FragmentedProviderStream(streaming_frames(), gate_after=2)
     requests = install_provider_stream(monkeypatch, wire)
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     stream = model.stream_with_usage([{"role": "user", "content": "Question"}])
     try:
         assert await anext(stream) == "Thông tin "
@@ -502,24 +277,19 @@ async def test_provider_stream_delivers_before_finish_and_preserves_usage(
         wire.release.set()
         await stream.aclose()
     assert requests[0]["stream"] is True
-    if provider == "ollama":
-        assert requests[0]["think"] is False
-        assert requests[0]["options"] == {"temperature": 0.0, "num_predict": 64}
-    else:
-        assert requests[0]["max_tokens"] == 64
-        assert requests[0]["stream_options"] == {"include_usage": True}
+    assert requests[0]["think"] is False
+    assert requests[0]["options"] == {"temperature": 0.0, "num_predict": 64}
     assert wire.closed
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 @pytest.mark.parametrize("allow_truncated", [False, True])
 async def test_provider_stream_length_is_explicit(
-    monkeypatch: pytest.MonkeyPatch, provider: str, allow_truncated: bool
+    monkeypatch: pytest.MonkeyPatch, allow_truncated: bool
 ) -> None:
-    wire = FragmentedProviderStream(streaming_frames(provider, truncated=True))
+    wire = FragmentedProviderStream(streaming_frames(truncated=True))
     install_provider_stream(monkeypatch, wire)
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     stream = model.stream_with_usage(
         [{"role": "user", "content": "Question"}], allow_truncated=allow_truncated
     )
@@ -534,17 +304,16 @@ async def test_provider_stream_length_is_explicit(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 @pytest.mark.parametrize("failure", ["premature", "malformed", "blank"])
 async def test_provider_stream_does_not_complete_invalid_wire_response(
-    monkeypatch: pytest.MonkeyPatch, provider: str, failure: str
+    monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
-    frames = streaming_frames(provider)[:1] if failure == "premature" else []
+    frames = streaming_frames()[:1] if failure == "premature" else []
     if failure == "malformed":
-        frames = [b"not json\n" if provider == "ollama" else b"data: not json\n\n"]
+        frames = [b"not json\n"]
     wire = FragmentedProviderStream(frames)
     install_provider_stream(monkeypatch, wire)
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     events: list[str | ModelCompletion] = []
     with pytest.raises(ChatModelProviderError):
         async for event in model.stream_with_usage([{"role": "user", "content": "Question"}]):
@@ -554,13 +323,12 @@ async def test_provider_stream_does_not_complete_invalid_wire_response(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 async def test_closing_provider_consumer_closes_http_stream(
-    monkeypatch: pytest.MonkeyPatch, provider: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wire = FragmentedProviderStream(streaming_frames(provider), gate_after=1)
+    wire = FragmentedProviderStream(streaming_frames(), gate_after=1)
     install_provider_stream(monkeypatch, wire)
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     stream = model.stream_with_usage([{"role": "user", "content": "Question"}])
     assert await anext(stream) == "Thông tin "
     await stream.aclose()
@@ -569,13 +337,12 @@ async def test_closing_provider_consumer_closes_http_stream(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 async def test_cancelling_pending_provider_read_closes_http_stream(
-    monkeypatch: pytest.MonkeyPatch, provider: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wire = FragmentedProviderStream(streaming_frames(provider), gate_after=1)
+    wire = FragmentedProviderStream(streaming_frames(), gate_after=1)
     install_provider_stream(monkeypatch, wire)
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     stream = model.stream_with_usage([{"role": "user", "content": "Question"}])
     assert await anext(stream) == "Thông tin "
     pending = asyncio.create_task(anext(stream))
@@ -588,18 +355,17 @@ async def test_cancelling_pending_provider_read_closes_http_stream(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider", ["ollama", "qwen"])
 async def test_provider_stream_deadline_closes_http_without_completion(
-    monkeypatch: pytest.MonkeyPatch, provider: str
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    wire = FragmentedProviderStream(streaming_frames(provider), gate_after=1)
+    wire = FragmentedProviderStream(streaming_frames(), gate_after=1)
     install_provider_stream(monkeypatch, wire)
     clock = [0.0]
     monkeypatch.setattr(
         "app.modules.model.internal.chat.time",
         SimpleNamespace(perf_counter=lambda: clock[0]),
     )
-    model = create_chat_model(settings(LLM_PROVIDER=provider))
+    model = create_chat_model(settings())
     stream = model.stream_with_usage([{"role": "user", "content": "Question"}])
     assert await anext(stream) == "Thông tin "
     clock[0] = 2.0

@@ -6,18 +6,17 @@ package com.openvie.api.notification.service;
  * encrypted) or from the environment as the bootstrap default.
  *
  * <p>Never log this record and never serialize it into an API response: it
- * carries the relay password or provider API key.
+ * carries the SMTP relay password.
  *
- * @param type       provider type: {@code smtp}, {@code sendgrid}, {@code brevo}
+ * @param type       provider type: {@code smtp}
  * @param fromEmail  envelope sender address
  * @param fromName   display name of the sender
- * @param host       SMTP host (smtp only)
- * @param port       SMTP port (smtp only)
- * @param username   SMTP auth user, blank when the relay needs no auth (smtp only)
- * @param password   SMTP auth password (smtp only)
+ * @param host       SMTP host
+ * @param port       SMTP port
+ * @param username   SMTP auth user, blank when the relay needs no auth
+ * @param password   SMTP auth password
  * @param smtpAuth   whether SMTP AUTH is used
  * @param starttls   whether STARTTLS is negotiated
- * @param apiKey     SendGrid/Brevo API key (provider types only)
  */
 public record NotificationChannelConfig(
         String type,
@@ -28,8 +27,7 @@ public record NotificationChannelConfig(
         String username,
         String password,
         boolean smtpAuth,
-        boolean starttls,
-        String apiKey) {
+        boolean starttls) {
 
     public boolean isSmtp() {
         return "smtp".equalsIgnoreCase(type);

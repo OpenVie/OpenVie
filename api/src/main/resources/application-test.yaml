@@ -40,11 +40,6 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
-  sendgrid:
-    api-key: test-key
-    from-email: test@test.com
-  brevo:
-    api-key: test-brevo-key
   rabbitmq:
     addresses: ${RABBITMQ_TEST_URL:amqp://guest:guest@localhost:5672/}
     listener:

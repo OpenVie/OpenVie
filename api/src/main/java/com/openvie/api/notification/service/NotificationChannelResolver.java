@@ -62,12 +62,6 @@ public class NotificationChannelResolver {
     @Value("${spring.mail.properties.mail.smtp.starttls.enable:false}")
     private boolean smtpStarttls;
 
-    @Value("${spring.sendgrid.api-key:}")
-    private String sendgridApiKey;
-
-    @Value("${spring.brevo.api-key:}")
-    private String brevoApiKey;
-
     /** The organization's active mail settings, if any. */
     @Transactional(readOnly = true)
     public Optional<ResolvedChannel> resolve(UUID orgId) {
@@ -120,23 +114,14 @@ public class NotificationChannelResolver {
                 text(credentials, "username", smtpUsername),
                 text(credentials, "password", smtpPassword),
                 credentials.path("auth").asBoolean(smtpAuth),
-                credentials.path("starttls").asBoolean(smtpStarttls),
-                text(credentials, "apiKey", apiKeyFor(channel.getType())));
+                credentials.path("starttls").asBoolean(smtpStarttls));
     }
 
     private NotificationChannelConfig environmentConfig(String type) {
         return new NotificationChannelConfig(
                 type, environmentFromEmail, environmentFromName,
                 smtpHost, smtpPort, smtpUsername, smtpPassword,
-                smtpAuth, smtpStarttls, apiKeyFor(type));
-    }
-
-    private String apiKeyFor(String type) {
-        return switch (type.toLowerCase(Locale.ROOT)) {
-            case "sendgrid" -> sendgridApiKey;
-            case "brevo" -> brevoApiKey;
-            default -> "";
-        };
+                smtpAuth, smtpStarttls);
     }
 
     private JsonNode readCredentials(NotificationChannel channel) {

@@ -157,17 +157,6 @@
 			<optional>true</optional>
 		</dependency>
 
-		<!--	SendGrid	-->
-		<dependency>
-			<groupId>com.sendgrid</groupId>
-			<artifactId>sendgrid-java</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.brevo</groupId>
-			<artifactId>brevo</artifactId>
-			<version>1.1.7</version>
-		</dependency>
-
 		<!--	S3-compatible object storage (SeaweedFS S3 gateway)	-->
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>

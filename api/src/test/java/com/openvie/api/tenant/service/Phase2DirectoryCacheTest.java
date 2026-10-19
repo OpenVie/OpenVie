@@ -99,6 +99,7 @@ class Phase2DirectoryCacheTest {
         TenantUserManagementService service = new TenantUserManagementService(
                 users, invitations, members, workspaces, organizations,
                 mock(DeliveryAvailability.class), mock(TenantCredentials.class),
+                mock(com.openvie.api.notification.service.EmailService.class),
                 mock(ApplicationEventPublisher.class));
         CacheProperties properties = new CacheProperties();
         properties.setEnabled(true);
