@@ -33,13 +33,13 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (20 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
 | **Quản trị dữ liệu phi cấu trúc** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), hấp thụ đa định dạng | **Đạt** | Chưa có OCR / âm thanh / video |
-| **Động cơ luồng công việc (Workflow)** | Có PoC BPMN Flowable cô lập tại `spikes/eoffice-approval`; chưa tích hợp runtime chính | **Đang thực hiện** | Hoàn thiện kiểm thử runtime, tích hợp authorization/notification/ingestion (xem [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) và [PoC Issue #7](../spikes/eoffice-approval/README.md)) |
+| **Động cơ luồng công việc (Workflow)** | PoC BPMN Flowable cô lập tại `spikes/eoffice-approval`; demo được tài liệu hóa theo luồng submit → approve/reject → kiểm tra kết quả | **Đạt (phạm vi PoC)** | Tích hợp production authorization/notification/ingestion vẫn còn ngoài phạm vi demo (xem [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) và [PoC Issue #7](../spikes/eoffice-approval/README.md)) |
 
 ### 4. Đánh nhãn H-P-D-I cho giao diện Tầng 2
 
 - **[I] Trí tuệ số:** Trợ lý ảo RAG vận hành trên kho tri thức nội bộ (`/`, `/documents/[id]`) — **Đạt** (ứng dụng minh họa chính).
 - **[H] Con người số:** Kho tài liệu, bách khoa hướng dẫn, quản trị thành viên/workspace (`/documents`, `/documentation`, `/users`, `/workspaces`) — **Đạt**.
-- **[P] Quy trình số:** Thiết lập tổ chức, phân quyền 3 cấp, kênh thông báo, nhật ký kiểm toán — **Một phần** (chưa có BPMN).
+- **[P] Quy trình số:** Demo phê duyệt BPMN Flowable độc lập — **Đạt (phạm vi PoC)**. Tích hợp workflow vào runtime chính, authorization, notification và ingestion production vẫn chưa hoàn tất.
 - **[D] Dữ liệu số:** Nguồn gốc tài liệu, nhật ký kiểm toán, số liệu Prometheus — **Chưa đạt** (chưa có dashboard BI/IOC).
 
 ### 5. Bốn nguyên lý thiết kế
@@ -88,7 +88,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Structured Data** | PostgreSQL 16 + Flyway (20 business tables with tenant scoping) | **Achieved** | — |
 | **Unstructured Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), asynchronous multi-format ingestion | **Achieved** | OCR / audio / video not delivered |
-| **Workflow Engine** | Isolated Flowable BPMN PoC at `spikes/eoffice-approval`; not integrated into the main runtime | **In progress** | Complete runtime verification and integrate authorization/notifications/ingestion (see [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) and [Issue #7 PoC](../spikes/eoffice-approval/README.md)) |
+| **Workflow Engine** | Isolated Flowable BPMN PoC at `spikes/eoffice-approval`; documented demo covers submit → approve/reject → result verification | **Achieved (PoC scope)** | Production integration for authorization, notifications, and ingestion remains outstanding (see [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) and [Issue #7 PoC](../spikes/eoffice-approval/README.md)) |
 
 ### 4. H-P-D-I Capability Labeling (Tier 2)
 

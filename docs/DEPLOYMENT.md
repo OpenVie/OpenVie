@@ -123,12 +123,39 @@ curl --fail http://localhost:8010/health/ready
 curl --fail http://127.0.0.1:8088/apisix/status
 ```
 
-### 8. Vận hành, sao lưu và cập nhật
+## 8. Chạy demo Workflow BPMN (PoC)
+
+Demo nằm tại `spikes/eoffice-approval`, dùng Flowable và PostgreSQL riêng; không khởi chạy runtime production của OpenVie.
+
+```bash
+cd spikes/eoffice-approval
+export FLOWABLE_REST_PASSWORD='change-this-local-demo-password'
+export FLOWABLE_DB_PASSWORD='change-this-local-db-password'
+docker compose -f compose.yaml up -d
+```
+
+Chờ Flowable sẵn sàng tại `http://localhost:18081/flowable-rest/service`, sau đó mở terminal thứ nhất để triển khai BPMN và tạo process instance:
+
+```bash
+python scripts/seed_demo.py
+```
+
+Mở terminal thứ hai, từ cùng thư mục, đặt lại cùng biến môi trường và chạy worker:
+
+```bash
+python scripts/worker.py
+```
+
+Dùng Flowable REST để xem task và trạng thái process; xem `spikes/eoffice-approval/README.md` để biết cách claim/complete task và các endpoint cụ thể. Kết quả demo được xác minh qua process variables và log worker.
+
+**Giới hạn:** `publish-document` là stub, không thực hiện ingestion production. Chỉ bind cổng vào loopback như cấu hình Compose mặc định; không công khai Flowable REST ra Internet. Dừng demo bằng `docker compose -f compose.yaml down`. Không dùng `down -v` nếu cần giữ database demo.
+
+### 9. Vận hành, sao lưu và cập nhật
 
 - **Sao lưu:** Cần lên lịch sao lưu tự động định kỳ cho PostgreSQL (pg_dump), SeaweedFS volumes, và `.env.production`.
 - **Cập nhật & Tái lập chỉ mục:** Khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ qua `DocumentReindexCommand` của Spring Boot với cấu hình `app.maintenance.reindex.enabled=true`.
 
-### 9. Cổng biên Apache APISIX (Edge Gateway)
+### 10. Cổng biên Apache APISIX (Edge Gateway)
 
 APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/apisix/status`: Probe sức khỏe nội bộ.
@@ -262,12 +289,39 @@ curl --fail http://localhost:8010/health/ready
 curl --fail http://127.0.0.1:8088/apisix/status
 ```
 
-## 8. Backup and operations
+## 8. Run the BPMN workflow demo (PoC)
+
+The demo in `spikes/eoffice-approval` uses a separate Flowable engine and PostgreSQL database. It does not start or integrate the production OpenVie workflow runtime.
+
+```bash
+cd spikes/eoffice-approval
+export FLOWABLE_REST_PASSWORD='change-this-local-demo-password'
+export FLOWABLE_DB_PASSWORD='change-this-local-db-password'
+docker compose -f compose.yaml up -d
+```
+
+Wait until Flowable is available at `http://localhost:18081/flowable-rest/service`. In the first terminal, deploy the BPMN and create demo process instances:
+
+```bash
+python scripts/seed_demo.py
+```
+
+In a second terminal, from the same directory, export the same environment variables and start the worker:
+
+```bash
+python scripts/worker.py
+```
+
+Use Flowable REST to inspect tasks and process state. See `spikes/eoffice-approval/README.md` for the task claim/complete procedure and exact endpoints. Verify the result using process variables and worker logs.
+
+**Boundary:** `publish-document` is a stub and does not execute production ingestion. Keep the REST endpoint bound to loopback as configured; never expose it publicly. Stop with `docker compose -f compose.yaml down`. Do not use `down -v` if the demo database must be preserved.
+
+## 9. Backup and operations
 
 - **Backups:** Implement off-host backups for PostgreSQL (`pg_dump`), SeaweedFS object volumes, and `.env.production`.
 - **Reindexing:** To re-extract knowledge graphs after pipeline updates, trigger Spring's `DocumentReindexCommand` via `app.maintenance.reindex.enabled=true`.
 
-## 9. Edge gateway (Apache APISIX)
+## 10. Edge gateway (Apache APISIX)
 
 APISIX operates standalone on port `8088`:
 - `/apisix/status`: Gateway health probe.

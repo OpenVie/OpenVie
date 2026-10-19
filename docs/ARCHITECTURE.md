@@ -84,6 +84,15 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 4. Worker tải file, phân đoạn tri thức, nhúng vector BGE-M3, nạp Qdrant, trích xuất thực thể đồ thị nạp Kuzu.
 5. Worker gửi sự kiện `COMPLETED` về RabbitMQ; Spring cập nhật trạng thái tài liệu sang `COMPLETED`.
 
+#### C. Workflow phê duyệt e-Office (PoC)
+
+1. `scripts/seed_demo.py` triển khai BPMN và tạo hai process instance từ `data/demo-documents.json`.
+2. Flowable điều phối external tasks; `scripts/worker.py` nhận các topic và đánh giá độ nhạy cảm bằng cách import chính sách hiện có `sensitive_policy.py`.
+3. BPMN định tuyến tác vụ phê duyệt theo kết quả phân loại và candidate group; người vận hành demo hoàn tất tác vụ qua Flowable REST.
+4. Worker ghi nhận kết quả audit/xuất bản trong process variables và log.
+
+**Ranh giới PoC:** `publish-document` hiện là stub. Nó không tải tài liệu lên SeaweedFS, không đẩy ingestion job vào RabbitMQ production và chưa tích hợp authorization/notification của runtime chính. Chỉ coi workflow demo là đạt trong phạm vi PoC; không suy diễn rằng workflow production đã hoàn tất.
+
 ### 5. Bảo mật và phân lập
 
 - **Phân quyền 3 vai trò:** `ORG_OWNER` (quản trị toàn tổ chức, tạo workspace), `WORKSPACE_ADMIN` (quản lý thành viên và tài liệu trong workspace), `MEMBER` (chat, tải/xóa tài liệu của chính mình).
@@ -138,6 +147,15 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 3. Outbox relay forwards message to RabbitMQ. Worker claims job lease via Redis, sets `PROCESSING`.
 4. Worker parses text, chunks content, extracts BGE-M3 vectors, indexes Qdrant, projects Kuzu graph entities.
 5. Worker publishes `COMPLETED` to RabbitMQ; Spring marks document `COMPLETED`.
+
+### e-Office approval workflow (PoC)
+
+1. `scripts/seed_demo.py` deploys the BPMN model and creates two process instances from `data/demo-documents.json`.
+2. Flowable coordinates external tasks; `scripts/worker.py` handles the topics and imports the existing `sensitive_policy.py` policy.
+3. The BPMN process routes approval tasks according to the sensitivity result and candidate group. The demo operator completes a task through Flowable REST.
+4. The worker records audit/publication outcomes in process variables and logs.
+
+**PoC boundary:** `publish-document` is currently a stub. It does not upload documents to SeaweedFS, enqueue jobs in the production RabbitMQ ingestion pipeline, or integrate with the main runtime's authorization/notification services. The workflow can be marked achieved only for the documented PoC demonstration, not for production integration.
 
 ## 5. Security and isolation
 
