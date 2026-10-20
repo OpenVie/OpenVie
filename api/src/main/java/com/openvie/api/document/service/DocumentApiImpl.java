@@ -36,6 +36,21 @@ public class DocumentApiImpl implements DocumentApi {
 
     @Override
     @Transactional(readOnly = true)
+    public void validateChatScope(
+            UUID tenantId, UUID knowledgeBaseId, List<UUID> documentIds) {
+        if (documentIds.isEmpty()) {
+            return;
+        }
+        List<Document> documents = repository.findByIdInAndTenantIdAndKnowledgeBaseIdAndStatus(
+                documentIds, tenantId, knowledgeBaseId, DocumentStatus.COMPLETED);
+        if (documents.size() != documentIds.size()) {
+            throw new BadRequestException(
+                    "Chat scope must reference completed documents of this knowledge base.");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ApprovalDocumentSnapshot requireApprovalCandidate(UUID tenantId, UUID documentId) {
         Document document = repository.findByIdAndTenantId(documentId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found"));

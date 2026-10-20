@@ -288,7 +288,17 @@
     "chats": "Cuộc trò chuyện",
     "noChats": "Chưa có cuộc trò chuyện.",
     "hideChat": "Ẩn {title}",
-    "deleteChat": "Xóa cuộc trò chuyện"
+    "deleteChat": "Xóa cuộc trò chuyện",
+    "scopeTriggerAll": "Chọn tài liệu",
+    "scopeTriggerCount": "{count} tài liệu",
+    "scopeDialogTitle": "Chọn tài liệu để trò chuyện",
+    "scopeDialogDescription": "AI sẽ trả lời dựa trên các tài liệu được chọn ({count} tài liệu tối đa). Bỏ chọn hết để dùng toàn bộ cơ sở tri thức.",
+    "scopeSearchPlaceholder": "Tìm theo tên tệp…",
+    "scopeEmpty": "Không có tài liệu nào khớp.",
+    "scopeClose": "Đóng",
+    "scopeClear": "Bỏ chọn",
+    "scopeApply": "Áp dụng",
+    "scopeSelectedCount": "Đã chọn {count} tài liệu"
   },
   "AssistantResponse": {
     "sources": "Nguồn",
@@ -464,6 +474,10 @@
       "upload": "Tải lên thất bại",
       "delete": "Không thể xóa tài liệu",
       "approval": "Không thể gửi yêu cầu phê duyệt"
+    },
+    "approvalBadge": {
+      "inReview": "Đang phê duyệt",
+      "approved": "Đã phê duyệt"
     }
   },
   "Approval": {
@@ -492,8 +506,31 @@
     "updated": "Đã cập nhật phê duyệt",
     "fallback": {
       "load": "Không thể tải yêu cầu phê duyệt",
-      "action": "Không thể cập nhật phê duyệt"
-    }
+      "action": "Không thể cập nhật phê duyệt",
+      "log": "Không thể tải nhật ký phê duyệt"
+    },
+    "viewLog": "Xem nhật ký",
+    "logTitle": "Nhật ký phê duyệt",
+    "logEmpty": "Chưa có sự kiện phê duyệt nào.",
+    "reasonLabel": "Lý do",
+    "selfDecision": "Người nộp tự quyết định",
+    "system": "Hệ thống",
+    "status": {
+      "inReview": "Đang phê duyệt",
+      "approved": "Đã phê duyệt",
+      "rejected": "Bị từ chối"
+    },
+    "action": {
+      "WORKFLOW_STARTED": "Gửi phê duyệt",
+      "WORKFLOW_TASK_CLAIMED": "Nhận xử lý",
+      "WORKFLOW_APPROVED": "Phê duyệt",
+      "WORKFLOW_REJECTED": "Từ chối",
+      "WORKFLOW_ESCALATED": "Chuyển cấp",
+      "WORKFLOW_REMINDER_SENT": "Nhắc nhở SLA",
+      "WORKFLOW_SLA_CONFIG_CHANGED": "Thay đổi cấu hình SLA"
+    },
+    "viewDocument": "Xem tài liệu",
+    "previewTitle": "Xem trước tài liệu"
   },
   "DocumentViewer": {
     "spreadsheetTable": "Bảng tính",
@@ -530,7 +567,11 @@
       "content": "Không thể tải nội dung đã lập chỉ mục",
       "download": "Không thể tải tài liệu xuống"
     },
-    "citationOf": "Bằng chứng {current} / {total}"
+    "citationOf": "Bằng chứng {current} / {total}",
+    "viewModeLabel": "Chế độ xem",
+    "extractedView": "Nhận diện",
+    "originalView": "Bản gốc",
+    "chatWithDocument": "Chat với tài liệu"
   },
   "Setup": {
     "tagline": "AI dựa trên tài liệu cho đội ngũ của bạn",
@@ -691,5 +732,15 @@
         "delete": "Không thể xóa kênh"
       }
     }
+  },
+  "DocumentPreview": {
+    "loading": "Đang tải bản xem trước…",
+    "loadError": "Không tải được bản xem trước.",
+    "retry": "Thử lại",
+    "unsupported": "Chưa hỗ trợ xem trước định dạng này.",
+    "saveAs": "Tải về để xem",
+    "empty": "Tệp trống hoặc không đọc được nội dung.",
+    "truncated": "Tệp quá dài — chỉ hiển thị 500 dòng đầu tiên.",
+    "sheetAria": "Chọn sheet"
   }
 }

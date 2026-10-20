@@ -379,6 +379,19 @@ class FreshPostgresBaselineTest {
         assertThrows(BadRequestException.class, () -> documentApi.validateCitations(
                         workspaceIds[0], knowledgeBases[0].getId(), List.of(pending[0].getId())),
                 "only completed documents may back a citation");
+
+        assertDoesNotThrow(() -> documentApi.validateChatScope(
+                workspaceIds[0], knowledgeBases[0].getId(), List.of(completedDocumentId)),
+                "a completed document of the same workspace and knowledge base is a valid chat scope");
+        assertThrows(BadRequestException.class, () -> documentApi.validateChatScope(
+                        workspaceIds[1], knowledgeBases[1].getId(), List.of(completedDocumentId)),
+                "another workspace may not scope a chat to this workspace's document");
+        assertThrows(BadRequestException.class, () -> documentApi.validateChatScope(
+                        workspaceIds[0], knowledgeBases[0].getId(), List.of(UUID.randomUUID())),
+                "forged chat scope identifiers must be rejected");
+        assertThrows(BadRequestException.class, () -> documentApi.validateChatScope(
+                        workspaceIds[0], knowledgeBases[0].getId(), List.of(pending[0].getId())),
+                "only completed documents may back a chat scope");
     }
 
     @Test

@@ -1,6 +1,7 @@
 import type {
   ApprovalDecision,
   CompleteTaskResponse,
+  ProcessLog,
   PublishTarget,
   StartProcessResponse,
   WorkflowProcess,
@@ -38,6 +39,25 @@ export async function listApprovalProcessesApi(
   return readJsonOrThrow<WorkflowProcess[]>(response);
 }
 
+/**
+ * Server-paged window over the approval journal: 1-based FE page mapped to
+ * the 0-based `page` query, total read from the X-Total-Count header — same
+ * contract as the documents list.
+ */
+export async function listApprovalProcessesPagedApi(
+  request: ApiRequest,
+  query: { includeFinished?: boolean; page?: number; size?: number },
+): Promise<{ items: WorkflowProcess[]; total: number }> {
+  const params = new URLSearchParams({
+    includeFinished: String(query.includeFinished ?? true),
+    page: String(query.page ?? 0),
+    size: String(query.size ?? 20),
+  });
+  const response = await request(`${getApiBase()}/workflow/processes?${params}`);
+  const items = await readJsonOrThrow<WorkflowProcess[]>(response);
+  return { items, total: Number(response.headers.get("X-Total-Count") ?? items.length) };
+}
+
 export async function listApprovalTasksApi(request: ApiRequest): Promise<WorkspaceTasks> {
   const response = await request(`${getApiBase()}/workflow/tasks`);
   return readJsonOrThrow<WorkspaceTasks>(response);
@@ -64,4 +84,13 @@ export async function completeApprovalTaskApi(
     body: JSON.stringify({ decision, reason: reason?.trim() || null }),
   });
   return readJsonOrThrow<CompleteTaskResponse>(response);
+}
+
+/** The audited trail of one approval process: who did what, and when. */
+export async function getProcessLogApi(
+  request: ApiRequest,
+  processInstanceId: string,
+): Promise<ProcessLog> {
+  const response = await request(`${getApiBase()}/workflow/processes/${processInstanceId}/log`);
+  return readJsonOrThrow<ProcessLog>(response);
 }

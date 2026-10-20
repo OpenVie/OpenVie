@@ -33,6 +33,9 @@ class GenerationContext:
     prior_messages: tuple[PriorMessage, ...]
     tenant_name: str
     prompt_schema_version: str
+    # Optional retrieval scope: restricts the answer to these indexed documents.
+    # Empty means the whole knowledge base.
+    document_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -82,7 +82,8 @@ openapi:
     api-docs: api
     server: http://localhost:${server.port}
     title: OpenVie API
-    version: 1.0.0
+    # Maven resource filtering injects the pom version (see pom.xml <resources>).
+    version: @project.version@
 
 sso:
   enabled: ${SSO_ENABLED:false}

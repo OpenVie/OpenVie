@@ -4,6 +4,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,8 +22,10 @@ import com.openvie.api.bootstrap.config.GlobalExceptionHandler;
 import com.openvie.api.workflow.controller.WorkflowController;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskResponse;
+import com.openvie.api.workflow.dto.WorkflowDtos.ProcessListResult;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessResponse;
+import com.openvie.api.workflow.dto.WorkflowDtos.WorkflowProcessView;
 import com.openvie.api.workflow.dto.WorkflowDtos.WorkspaceTasks;
 import com.openvie.api.workflow.service.WorkflowService;
 import org.springframework.security.access.AccessDeniedException;
@@ -52,7 +55,7 @@ class WorkflowControllerTest {
         when(service.start(tenantId, userId, new StartProcessRequest(documentId, "workspace"))).thenReturn(
                 new StartProcessResponse(UUID.randomUUID(), documentId, "weekly-notes.docx",
                         "workspace", false, 1, "sensitive-keyword-v1", "PT24H", "PT48H",
-                        UUID.randomUUID()));
+                        UUID.randomUUID(), false, null));
 
         mvc.perform(post("/api/v1/workflow/processes")
                         .requestAttr("tenantId", tenantId.toString())
@@ -120,6 +123,29 @@ class WorkflowControllerTest {
     }
 
     @Test
+    void processLogSurfacesTheAuditTrail() throws Exception {
+        UUID processInstanceId = UUID.randomUUID();
+        when(service.processLog(org.mockito.ArgumentMatchers.eq(tenantId),
+                org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(processInstanceId)))
+                .thenReturn(new com.openvie.api.workflow.dto.WorkflowDtos.ProcessLog(
+                        new com.openvie.api.workflow.dto.WorkflowDtos.WorkflowProcessView(
+                                processInstanceId, documentId, "weekly-notes.docx", false, 1,
+                                "sensitive-keyword-v1", "workspace", "IN_REVIEW", false,
+                                java.time.LocalDateTime.now(), null),
+                        java.util.List.of(new com.openvie.api.workflow.dto.WorkflowDtos.ProcessLogEntry(
+                                java.time.Instant.now(), userId, "Nguyen Van A",
+                                "WORKFLOW_STARTED", java.util.Map.of("documentId", documentId)))));
+
+        mvc.perform(get("/api/v1/workflow/processes/{processInstanceId}/log", processInstanceId)
+                        .requestAttr("tenantId", tenantId.toString())
+                        .requestAttr("userId", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.process.processInstanceId").value(processInstanceId.toString()))
+                .andExpect(jsonPath("$.entries[0].action").value("WORKFLOW_STARTED"))
+                .andExpect(jsonPath("$.entries[0].actorName").value("Nguyen Van A"));
+    }
+
+    @Test
     void slaConfigUpdateReturnsTheEffectiveValues() throws Exception {
         when(service.updateSlaConfig(org.mockito.ArgumentMatchers.eq(tenantId),
                 org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.argThat(
@@ -144,6 +170,55 @@ class WorkflowControllerTest {
                         .requestAttr("userId", userId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reminderMinutes\":0,\"escalationMinutes\":60}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void processListPagingReturnsItemsWithTheTotalCountHeader() throws Exception {
+        WorkflowProcessView view = new WorkflowProcessView(
+                UUID.randomUUID(), documentId, "weekly-notes.docx", false, 1,
+                "sensitive-keyword-v1", "workspace", "IN_REVIEW", false,
+                java.time.LocalDateTime.now(), null);
+        when(service.listProcessesPage(org.mockito.ArgumentMatchers.eq(tenantId),
+                org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(true),
+                org.mockito.ArgumentMatchers.eq(1), org.mockito.ArgumentMatchers.eq(10)))
+                .thenReturn(new ProcessListResult(java.util.List.of(view), 11L));
+
+        mvc.perform(get("/api/v1/workflow/processes")
+                        .requestAttr("tenantId", tenantId.toString())
+                        .requestAttr("userId", userId.toString())
+                        .param("includeFinished", "true")
+                        .param("page", "1")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "11"))
+                .andExpect(jsonPath("$[0].documentFileName").value("weekly-notes.docx"));
+    }
+
+    @Test
+    void processListWithoutPageParamsKeepsThePlainList() throws Exception {
+        when(service.listProcesses(tenantId, userId, false)).thenReturn(java.util.List.of());
+
+        mvc.perform(get("/api/v1/workflow/processes")
+                        .requestAttr("tenantId", tenantId.toString())
+                        .requestAttr("userId", userId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void processListPagingRejectsOutOfRangeSizes() throws Exception {
+        when(service.listProcessesPage(org.mockito.ArgumentMatchers.eq(tenantId),
+                org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(false),
+                org.mockito.ArgumentMatchers.eq(0), org.mockito.ArgumentMatchers.eq(101)))
+                .thenThrow(new com.openvie.api.common.exception.custom.BadRequestException(
+                        "Size must be between 1 and 100"));
+
+        mvc.perform(get("/api/v1/workflow/processes")
+                        .requestAttr("tenantId", tenantId.toString())
+                        .requestAttr("userId", userId.toString())
+                        .param("page", "0")
+                        .param("size", "101"))
                 .andExpect(status().isBadRequest());
     }
 }

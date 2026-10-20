@@ -288,7 +288,17 @@
     "chats": "Chats",
     "noChats": "No chats yet.",
     "hideChat": "Hide {title}",
-    "deleteChat": "Delete chat"
+    "deleteChat": "Delete chat",
+    "scopeTriggerAll": "Select documents",
+    "scopeTriggerCount": "{count} documents",
+    "scopeDialogTitle": "Pick documents to chat with",
+    "scopeDialogDescription": "The AI answers from the selected documents (up to {count}). Clear the selection to search the whole knowledge base.",
+    "scopeSearchPlaceholder": "Search by file name…",
+    "scopeEmpty": "No documents match.",
+    "scopeClose": "Close",
+    "scopeClear": "Clear",
+    "scopeApply": "Apply",
+    "scopeSelectedCount": "{count} selected"
   },
   "AssistantResponse": {
     "sources": "Sources",
@@ -464,6 +474,10 @@
       "upload": "Upload failed",
       "delete": "Unable to delete document",
       "approval": "Unable to submit approval"
+    },
+    "approvalBadge": {
+      "inReview": "In review",
+      "approved": "Approved"
     }
   },
   "Approval": {
@@ -492,8 +506,31 @@
     "updated": "Approval updated",
     "fallback": {
       "load": "Unable to load approvals",
-      "action": "Unable to update approval"
-    }
+      "action": "Unable to update approval",
+      "log": "Could not load the approval log"
+    },
+    "viewLog": "View log",
+    "logTitle": "Approval log",
+    "logEmpty": "No approval events yet.",
+    "reasonLabel": "Reason",
+    "selfDecision": "Decided by the submitter",
+    "system": "System",
+    "status": {
+      "inReview": "In review",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "action": {
+      "WORKFLOW_STARTED": "Submitted",
+      "WORKFLOW_TASK_CLAIMED": "Claimed",
+      "WORKFLOW_APPROVED": "Approved",
+      "WORKFLOW_REJECTED": "Rejected",
+      "WORKFLOW_ESCALATED": "Escalated",
+      "WORKFLOW_REMINDER_SENT": "SLA reminder",
+      "WORKFLOW_SLA_CONFIG_CHANGED": "SLA configuration changed"
+    },
+    "viewDocument": "View document",
+    "previewTitle": "Document preview"
   },
   "DocumentViewer": {
     "spreadsheetTable": "Spreadsheet table",
@@ -530,7 +567,11 @@
       "content": "Unable to load indexed content",
       "download": "Unable to download document"
     },
-    "citationOf": "Citation {current} of {total}"
+    "citationOf": "Citation {current} of {total}",
+    "viewModeLabel": "View mode",
+    "extractedView": "Extracted",
+    "originalView": "Original",
+    "chatWithDocument": "Chat with document"
   },
   "Setup": {
     "tagline": "Document-grounded AI for your team",
@@ -691,5 +732,15 @@
         "delete": "Unable to delete the channel"
       }
     }
+  },
+  "DocumentPreview": {
+    "loading": "Loading preview…",
+    "loadError": "Could not load the preview.",
+    "retry": "Try again",
+    "unsupported": "This file type has no inline preview yet.",
+    "saveAs": "Download to view",
+    "empty": "The file is empty or has no readable content.",
+    "truncated": "File too long — only the first 500 rows are shown.",
+    "sheetAria": "Choose sheet"
   }
 }

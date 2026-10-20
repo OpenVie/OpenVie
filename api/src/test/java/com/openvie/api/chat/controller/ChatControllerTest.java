@@ -56,8 +56,8 @@ class ChatControllerTest extends BaseController {
     void streamCarriesReplacementPreviewsResetAndAuthoritativeComplete() throws Exception {
         UUID sessionId = UUID.randomUUID();
         when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
-                any(), eq("key"), eq("request"), any())).thenAnswer(invocation -> {
-            ChatControlPlaneService.AnswerStreamListener listener = invocation.getArgument(7);
+                any(), any(), eq("key"), eq("request"), any())).thenAnswer(invocation -> {
+            ChatControlPlaneService.AnswerStreamListener listener = invocation.getArgument(8);
             listener.onContent("Initial draft");
             listener.onReset();
             listener.onContent("Revised draft");
@@ -97,9 +97,9 @@ class ChatControllerTest extends BaseController {
 
     @Test
     void establishedStreamKeepsMappedProviderErrorCodeAndClearsDraftWithoutComplete() throws Exception {
-        when(service.submitEmployeeMessage(any(), any(), any(), anyString(), any(), any(), any(), any()))
+        when(service.submitEmployeeMessage(any(), any(), any(), anyString(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    ChatControlPlaneService.AnswerStreamListener listener = invocation.getArgument(7);
+                    ChatControlPlaneService.AnswerStreamListener listener = invocation.getArgument(8);
                     listener.onContent("Uncommitted draft");
                     throw new AiInferenceException(HttpStatus.GATEWAY_TIMEOUT, "MODEL_TIMEOUT",
                             "The model took too long to answer.");

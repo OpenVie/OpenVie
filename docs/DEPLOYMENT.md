@@ -64,6 +64,8 @@ Lệnh trên tự động khởi chạy:
 4. Giao diện người dùng: Next.js Web Console (:3000) + mặt quản trị `frontend-admin` (`/admin/*`, OIDC client `openvie-admin`).
 5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API, Web và mặt quản trị.
 
+> Ghi chú về tài liệu API: worker AI (`rag-chatbot-fastapi`) cố ý tắt FastAPI docs/OpenAPI (`docs_url=None, openapi_url=None`) vì đó là service nội bộ, chỉ nói chuyện gRPC có mTLS với API Spring. Tài liệu API công khai duy nhất là Swagger UI của API Spring tại `/swagger-ui` — và chỉ bật ở profile dev/test; production trả 404 cho `/v3/api-docs` và `/swagger-ui`.
+
 Cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal) **trước** khi tải mô hình:
 - **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`, chạy như service systemd.
 - **macOS:** tải tại `https://ollama.com/download` (hoặc `brew install --cask ollama`), chạy như LaunchAgent qua launchd.
@@ -149,6 +151,8 @@ python scripts/worker.py
 Dùng Flowable REST để xem task và trạng thái process; xem `spikes/eoffice-approval/README.md` để biết cách claim/complete task và các endpoint cụ thể. Kết quả demo được xác minh qua process variables và log worker.
 
 **Giới hạn:** `publish-document` là stub, không thực hiện ingestion production. Chỉ bind cổng vào loopback như cấu hình Compose mặc định; không công khai Flowable REST ra Internet. Dừng demo bằng `docker compose -f compose.yaml down`. Không dùng `down -v` nếu cần giữ database demo.
+
+**Phân biệt:** Đây chỉ là demo đánh giá engine độc lập (PoC). Luồng phê duyệt dùng trong sản phẩm chạy nhúng trong API runtime chính — không cần compose riêng; SLA cấu hình qua `openvie.workflow.*` bên phía api, luồng runtime mô tả tại [Kiến trúc](ARCHITECTURE.md).
 
 ### 9. Vận hành, sao lưu và cập nhật
 
@@ -315,6 +319,8 @@ python scripts/worker.py
 Use Flowable REST to inspect tasks and process state. See `spikes/eoffice-approval/README.md` for the task claim/complete procedure and exact endpoints. Verify the result using process variables and worker logs.
 
 **Boundary:** `publish-document` is a stub and does not execute production ingestion. Keep the REST endpoint bound to loopback as configured; never expose it publicly. Stop with `docker compose -f compose.yaml down`. Do not use `down -v` if the demo database must be preserved.
+
+**Distinction:** This is only the standalone engine-evaluation demo. The product-facing approval flow runs embedded inside the main API runtime — no extra Compose stack is required; SLA is configured through `openvie.workflow.*` on the api service, and the runtime flow is described in [Architecture](ARCHITECTURE.md).
 
 ## 9. Backup and operations
 

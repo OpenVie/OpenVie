@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -11,7 +12,7 @@ import {
 import { useFormatter, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
 import { useRouter } from "@/i18n/navigation";
-import type { Document, DocumentStatus, TenantWorkspace } from "@/types";
+import type { Document, DocumentStatus, TenantWorkspace, WorkflowProcess } from "@/types";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,7 @@ import {
 } from "@/lib/documents-api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getTenantWorkspaceApi } from "@/lib/workspace-api";
-import { startApprovalApi } from "@/lib/workflow-api";
+import { listApprovalProcessesApi, startApprovalApi } from "@/lib/workflow-api";
 import type { PublishTarget } from "@/types";
 import { ClearFiltersButton, DateRangeFields, FilterPanel, FilterSelect, PaginationControls, ResultsSummary, UrlSearchField } from "@/components/list/ListControls";
 import { oneOf, safeDate, safePage, safeSize, useUrlListState } from "@/hooks/useUrlListState";
@@ -132,6 +133,7 @@ export default function DocumentsPage() {
   const [approvalTarget, setApprovalTarget] = useState<DashboardDocument | null>(null);
   const [publishTarget, setPublishTarget] = useState<PublishTarget>("workspace");
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [approvals, setApprovals] = useState<WorkflowProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -152,10 +154,45 @@ export default function DocumentsPage() {
   const displayDocuments = [...optimisticDocuments, ...documents];
   const requestKey = [workspace?.knowledgeBase.id, urlQuery, statusFilter, typeFilter, uploadedFrom, uploadedTo, sortValue, page, size, revision].join("|");
   const refreshing = !loading && loadedKey !== requestKey;
+  const approvalByDoc = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const process of approvals) map.set(process.documentId, process.documentStatus);
+    return map;
+  }, [approvals]);
   const formatBytes = (bytes: number) => bytes < 1024 ? `${format.number(bytes)} B`
     : bytes < 1024 * 1024 ? `${format.number(bytes / 1024, { maximumFractionDigits: 1 })} KB`
     : `${format.number(bytes / (1024 * 1024), { maximumFractionDigits: 1 })} MB`;
   const formatDate = (iso: string) => format.dateTime(new Date(iso), { dateStyle: "medium" });
+
+  const canDeleteDoc = (doc: DashboardDocument) =>
+    doc.uploadedBy === user?.userId
+    || user?.workspaceRole === "WORKSPACE_ADMIN"
+    || user?.orgRole === "ORG_OWNER";
+
+  function approvalControl(doc: DashboardDocument) {
+    if (doc.status !== "COMPLETED" || Boolean(doc.uploadState)) return null;
+    const approvalStatus = approvalByDoc.get(doc.id);
+    if (approvalStatus === "IN_REVIEW" || approvalStatus === "APPROVED") {
+      return (
+        <Badge variant={approvalStatus === "APPROVED" ? "default" : "secondary"}>
+          {approvalStatus === "APPROVED" ? t("approvalBadge.approved") : t("approvalBadge.inReview")}
+        </Badge>
+      );
+    }
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation();
+          setApprovalTarget(doc);
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {t("submitApproval")}
+      </Button>
+    );
+  }
 
   async function confirmApproval() {
     if (!approvalTarget) return;
@@ -171,6 +208,22 @@ export default function DocumentsPage() {
       setSubmittingApproval(false);
     }
   }
+
+  // Which documents already live in the approval flow (or were decided), so
+  // the submit action never offers a re-entry the backend would refuse.
+  useEffect(() => {
+    let cancelled = false;
+    listApprovalProcessesApi(request, true)
+      .then((processes) => {
+        if (!cancelled) setApprovals(processes);
+      })
+      .catch(() => {
+        // Stale-tolerant: the approval overlays reappear on the next revision bump.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [request, revision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,20 +502,8 @@ export default function DocumentsPage() {
                   <p className="min-w-0 truncate text-sm font-medium text-foreground">{doc.fileName}</p>
                   <div className="flex shrink-0 items-center gap-1">
                     <Badge variant="secondary" className="text-xs uppercase">{doc.fileType}</Badge>
-                    {doc.status === "COMPLETED" && !doc.uploadState && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setApprovalTarget(doc);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        {t("submitApproval")}
-                      </Button>
-                    )}
-                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
+                    {approvalControl(doc)}
+                    {canDeleteDoc(doc) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -545,20 +586,8 @@ export default function DocumentsPage() {
                         : t("waitingForIndexing")}
                   </TableCell>
                   <TableCell className="space-x-1">
-                    {doc.status === "COMPLETED" && !doc.uploadState && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setApprovalTarget(doc);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        {t("submitApproval")}
-                      </Button>
-                    )}
-                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
+                    {approvalControl(doc)}
+                    {canDeleteDoc(doc) && (
                       <Button
                         variant="ghost"
                         size="icon"

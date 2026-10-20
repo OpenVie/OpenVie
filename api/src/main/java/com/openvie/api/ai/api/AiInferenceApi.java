@@ -27,6 +27,7 @@ public interface AiInferenceApi {
             List<PriorMessage> priorMessages,
             String tenantName,
             String promptSchemaVersion,
+            List<UUID> documentIds,
             String requestId,
             String traceId
     ) {

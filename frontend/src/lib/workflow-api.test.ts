@@ -4,6 +4,8 @@ import type { ApiRequest } from "@/lib/api-request"
 import {
   claimApprovalTaskApi,
   completeApprovalTaskApi,
+  getProcessLogApi,
+  listApprovalProcessesPagedApi,
   listApprovalTasksApi,
   startApprovalApi,
 } from "@/lib/workflow-api"
@@ -20,6 +22,27 @@ function jsonResponse(body: unknown): Response {
 }
 
 describe("workflow API", () => {
+  it("reads the paged approval window and the total count header", async () => {
+    const endpoints: string[] = []
+    const request: ApiRequest = async (endpoint) => {
+      endpoints.push(endpoint)
+      return new Response(JSON.stringify([{ processInstanceId: "process-1" }]), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "X-Total-Count": "41" },
+      })
+    }
+
+    const result = await listApprovalProcessesPagedApi(request, { includeFinished: true, page: 2, size: 10 })
+
+    expect(endpoints[0]).toContain("/workflow/processes?")
+    const query = new URL(endpoints[0]).search
+    expect(query).toContain("includeFinished=true")
+    expect(query).toContain("page=2")
+    expect(query).toContain("size=10")
+    expect(result.total).toBe(41)
+    expect(result.items).toEqual([{ processInstanceId: "process-1" }])
+  })
+
   it("submits a document with the selected publish target", async () => {
     const calls: Array<{ endpoint: string; options?: RequestInit }> = []
     const request: ApiRequest = async (endpoint, options) => {
@@ -53,5 +76,24 @@ describe("workflow API", () => {
       "POST http://api.test/api/v1/workflow/tasks/task-1/claim",
       "POST http://api.test/api/v1/workflow/tasks/task-1/complete",
     ])
+  })
+
+  it("fetches the audited log of one process", async () => {
+    const calls: Array<{ endpoint: string; options?: RequestInit }> = []
+    const request: ApiRequest = async (endpoint, options) => {
+      calls.push({ endpoint, options })
+      return jsonResponse({
+        process: { processInstanceId: "process-1", documentStatus: "IN_REVIEW" },
+        entries: [
+          { occurredAt: "2026-01-01T00:00:00Z", actorId: "user-1", actorName: "Nguyen Van A", action: "WORKFLOW_STARTED", metadata: {} },
+        ],
+      })
+    }
+
+    const log = await getProcessLogApi(request, "process-1")
+
+    expect(calls[0]?.endpoint).toBe("http://api.test/api/v1/workflow/processes/process-1/log")
+    expect(log.entries[0]?.action).toBe("WORKFLOW_STARTED")
+    expect(log.entries[0]?.actorName).toBe("Nguyen Van A")
   })
 })
