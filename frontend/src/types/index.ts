@@ -14,6 +14,64 @@ export interface Document {
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
+export type ApprovalDecision = "APPROVE" | "REJECT" | "ESCALATE";
+export type PublishTarget = "workspace" | "shared" | "public";
+
+export interface WorkflowTask {
+  taskId: string;
+  taskName: string;
+  taskDefinitionKey: string;
+  approvalLevel: number | null;
+  candidateGroup: string | null;
+  assignee: string | null;
+  processInstanceId: string;
+  documentId: string;
+  documentFileName: string;
+  createdAt: string;
+}
+
+export interface WorkspaceTasks {
+  assignedToMe: WorkflowTask[];
+  groupTasks: WorkflowTask[];
+}
+
+export interface WorkflowProcess {
+  processInstanceId: string;
+  documentId: string;
+  documentFileName: string;
+  sensitive: boolean;
+  approvalLevel: number;
+  policyVersion: string;
+  publishTarget: PublishTarget;
+  documentStatus: string;
+  escalated: boolean;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface StartProcessResponse {
+  processInstanceId: string;
+  documentId: string;
+  documentFileName: string;
+  publishTarget: PublishTarget;
+  sensitive: boolean;
+  approvalLevel: number;
+  policyVersion: string;
+  slaReminder: string;
+  slaEscalation: string;
+  taskId: string;
+}
+
+export interface CompleteTaskResponse {
+  taskId: string;
+  decision: ApprovalDecision;
+  processInstanceId: string;
+  documentId: string;
+  processEnded: boolean;
+  documentStatus: string | null;
+  nextTaskId: string | null;
+}
+
 export interface DocumentUploadResponse {
   id: string;
   jobId: string;

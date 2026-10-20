@@ -23,6 +23,7 @@ describe("application navigation", () => {
     expect(appNavigation.map((item) => item.href)).toEqual([
       "/",
       "/documents",
+      "/approvals",
       "/users",
       "/admin/organization",
       "/admin/workspaces",
@@ -35,6 +36,7 @@ describe("application navigation", () => {
     expect(visibleNavigation("MEMBER").map((item) => item.href)).toEqual([
       "/",
       "/documents",
+      "/approvals",
       "/users",
       "/documentation",
     ]);
