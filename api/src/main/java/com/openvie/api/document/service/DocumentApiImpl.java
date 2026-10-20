@@ -1,6 +1,7 @@
 package com.openvie.api.document.service;
 
 import com.openvie.api.common.exception.custom.BadRequestException;
+import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.model.Document;
@@ -31,5 +32,14 @@ public class DocumentApiImpl implements DocumentApi {
         if (documents.size() != documentIds.size()) {
             throw new BadRequestException("The model returned an invalid citation.");
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ApprovalDocumentSnapshot requireApprovalCandidate(UUID tenantId, UUID documentId) {
+        Document document = repository.findByIdAndTenantId(documentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+        return new ApprovalDocumentSnapshot(
+                document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), document.getFileName());
     }
 }
