@@ -800,6 +800,7 @@ html[data-theme="light"] {
 .ov-light .ov-navigation-link { color: #647069; }
 .ov-light .ov-navigation-link:hover { background: #e7f2c8; color: #10150f; }
 .ov-light .ov-navigation-link-active { background: transparent; box-shadow: none; color: #527400; }
+.ov-light .ov-process-eyebrow { color: #527400; }
 .ov-light .ov-account-trigger { color: #647069; }
 .ov-light .ov-account-trigger:hover { background: #eff2eb; color: #17201b; }
 .ov-light .ov-user-menu { border-color: #dce3d8; }
