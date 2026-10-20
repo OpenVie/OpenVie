@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ListPager, usePagedList } from "@/components/ui/list-pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,6 +68,7 @@ export default function OrganizationPage() {
   const format = useFormatter();
   const { request } = useApiClient();
   const [orgMembers, setOrgMembers] = useState<OrganizationMember[]>([]);
+  const pagedOrgMembers = usePagedList(orgMembers);
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgError, setOrgError] = useState<string | null>(null);
   const [showCreateUser, setShowCreateUser] = useState(false);
@@ -201,7 +203,7 @@ export default function OrganizationPage() {
       ) : (
         <>
         <div className="divide-y divide-border sm:hidden">
-          {orgMembers.map(user => {
+          {pagedOrgMembers.slice.map(user => {
             const isOwnerRow = user.orgRole === "ORG_OWNER";
             return (
               <div key={`org-user-mobile-${user.id}`} className="p-3">
@@ -260,7 +262,7 @@ export default function OrganizationPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orgMembers.map(user => {
+            {pagedOrgMembers.slice.map(user => {
               const isOwnerRow = user.orgRole === "ORG_OWNER";
               return (
                 <TableRow key={`org-user-${user.id}`}>
@@ -314,6 +316,14 @@ export default function OrganizationPage() {
           </TableBody>
         </Table>
         </div>
+        <ListPager
+          page={pagedOrgMembers.page}
+          pageCount={pagedOrgMembers.pageCount}
+          size={pagedOrgMembers.size}
+          total={pagedOrgMembers.total}
+          onPageChange={pagedOrgMembers.setPage}
+          onSizeChange={(nextSize) => { pagedOrgMembers.setSize(nextSize); pagedOrgMembers.setPage(1); }}
+        />
         </>
       )}
     </Card>

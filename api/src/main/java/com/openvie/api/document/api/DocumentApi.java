@@ -8,6 +8,16 @@ public interface DocumentApi {
             UUID tenantId, UUID knowledgeBaseId, List<UUID> documentIds);
 
     /**
+     * Authoritative chat-scope check: every requested document must be a
+     * COMPLETED document of the same tenant and knowledge base.
+     *
+     * @throws com.openvie.api.common.exception.custom.BadRequestException
+     *             when any requested document is missing or not indexed yet
+     */
+    void validateChatScope(
+            UUID tenantId, UUID knowledgeBaseId, List<UUID> documentIds);
+
+    /**
      * Resolves the workspace-bounded document facts an approval process needs
      * at start time (issue #8): existence inside the workspace plus the file
      * name the sensitivity scorer runs on.

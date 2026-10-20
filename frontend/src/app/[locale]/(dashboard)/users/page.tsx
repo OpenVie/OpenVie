@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ListPager, usePagedList } from "@/components/ui/list-pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -132,6 +133,7 @@ export default function UsersPage() {
   // server-side, so the button is hidden here as well.
   const canRemoveMember = isAdmin && !directory.defaultWorkspace;
   const activeAdminCount = useMemo(() => directory.members.filter(member => member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE").length, [directory.members]);
+  const pagedMembers = usePagedList(directory.members);
   const roleLabel = (role: WorkspaceRole) => role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user");
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
@@ -250,7 +252,7 @@ export default function UsersPage() {
       ) : (
         <>
         <div className="divide-y divide-border sm:hidden">
-          {directory.members.map(member => {
+          {pagedMembers.slice.map(member => {
             const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
             const protectedAction = member.currentUser || finalAdmin;
             return (
@@ -277,7 +279,7 @@ export default function UsersPage() {
                       disabled={busyId === member.id || protectedAction}
                       onValueChange={value => void changeRole(member, value as WorkspaceRole)}
                     >
-                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-36"><SelectValue>{roleLabel(member.workspaceRole)}</SelectValue></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
                         <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
@@ -309,7 +311,7 @@ export default function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {directory.members.map(member => {
+            {pagedMembers.slice.map(member => {
               const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
               const protectedAction = member.currentUser || finalAdmin;
               return (
@@ -337,7 +339,7 @@ export default function UsersPage() {
                         disabled={busyId === member.id || protectedAction}
                         onValueChange={value => void changeRole(member, value as WorkspaceRole)}
                       >
-                        <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-52"><SelectValue>{roleLabel(member.workspaceRole)}</SelectValue></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
                           <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
@@ -371,6 +373,14 @@ export default function UsersPage() {
           </TableBody>
         </Table>
         </div>
+        <ListPager
+          page={pagedMembers.page}
+          pageCount={pagedMembers.pageCount}
+          size={pagedMembers.size}
+          total={pagedMembers.total}
+          onPageChange={pagedMembers.setPage}
+          onSizeChange={(nextSize) => { pagedMembers.setSize(nextSize); pagedMembers.setPage(1); }}
+        />
         </>
       )}
     </Card>

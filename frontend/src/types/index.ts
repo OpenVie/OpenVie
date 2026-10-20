@@ -60,6 +60,10 @@ export interface StartProcessResponse {
   slaReminder: string;
   slaEscalation: string;
   taskId: string;
+  /** True when the submitting authority already decided the document. */
+  autoApproved: boolean;
+  /** APPROVED when autoApproved, else null while in review. */
+  documentStatus: string | null;
 }
 
 export interface CompleteTaskResponse {
@@ -70,6 +74,20 @@ export interface CompleteTaskResponse {
   processEnded: boolean;
   documentStatus: string | null;
   nextTaskId: string | null;
+}
+
+/** One audited event of an approval process (`GET /workflow/processes/:id/log`). */
+export interface WorkflowLogEntry {
+  occurredAt: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProcessLog {
+  process: WorkflowProcess;
+  entries: WorkflowLogEntry[];
 }
 
 export interface DocumentUploadResponse {

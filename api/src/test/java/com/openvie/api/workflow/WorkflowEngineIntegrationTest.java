@@ -262,8 +262,10 @@ class WorkflowEngineIntegrationTest {
 
     @Test
     void rejectionReasonIsMandatoryEverywhere() {
-        UUID documentId = seedDocument(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        // Submitted by the member: an admin's own workspace-scoped submission
+        // would already be decided by their authority when it starts.
+        UUID documentId = seedDocument(workspaceId, memberId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
         workflowService.claim(workspaceId, adminId, started.taskId());
 
@@ -330,8 +332,10 @@ class WorkflowEngineIntegrationTest {
 
     @Test
     void slaTimersReminderAndEscalationFireThroughTheEmbeddedEngine() {
-        UUID documentId = seedDocument(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        // Member-submitted like the other reviewed flows: the submitting
+        // authority fast-path would short-circuit the timers it is testing.
+        UUID documentId = seedDocument(workspaceId, memberId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
         String pid = started.processInstanceId().toString();
         workflowService.claim(workspaceId, adminId, started.taskId());
@@ -370,6 +374,62 @@ class WorkflowEngineIntegrationTest {
                 UUID.fromString(escalatedTaskId), new CompleteTaskRequest("APPROVE", null));
         assertTrue(approved.processEnded());
         assertEquals("APPROVED", approved.documentStatus());
+    }
+
+    // ------------------------------------------------------------------
+    // Authority short-circuit and the self-approval guard
+    // ------------------------------------------------------------------
+
+    @Test
+    void theSubmittingAuthorityDecidesItsOwnWorkspaceScopedSubmissionAtStart() {
+        UUID documentId = seedDocument(workspaceId, adminId, "internal onboarding memo.txt");
+
+        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+                new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
+        assertTrue(started.autoApproved());
+        assertEquals("APPROVED", started.documentStatus());
+        assertEquals(0, taskService.createTaskQuery()
+                        .processInstanceId(started.processInstanceId().toString()).list().size(),
+                "a decided submission leaves no open approval task");
+        awaitAuditRow(LogAction.WORKFLOW_STARTED, workspaceId, null);
+        awaitAuditRow(LogAction.WORKFLOW_APPROVED, workspaceId, "selfApproved");
+    }
+
+    @Test
+    void sharedTargetsFromAnAdminRequireTheOrgOwner() {
+        UUID documentId = seedDocument(workspaceId, adminId, "external brochure.pdf");
+
+        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+                new WorkflowDtos.StartProcessRequest(documentId, "shared"));
+        assertFalse(started.autoApproved());
+        // A shared target always routes to the org owner: the submitting
+        // workspace admin is never a candidate of the owner-only task.
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.claim(workspaceId, adminId, started.taskId()));
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.complete(workspaceId, adminId, started.taskId(),
+                        new CompleteTaskRequest("APPROVE", null)),
+                "the submitter's own shared publication cannot be decided by them");
+
+        WorkspaceTaskView ownedClaim = workflowService.claim(workspaceId, ownerId, started.taskId());
+        assertEquals(ownerId.toString(), ownedClaim.assignee());
+        CompleteTaskResponse approved = workflowService.complete(workspaceId, ownerId,
+                started.taskId(), new CompleteTaskRequest("APPROVE", null));
+        assertTrue(approved.processEnded());
+        assertEquals("APPROVED", approved.documentStatus());
+
+        // The audited trail answers who did what, when — names resolved server-side.
+        var log = workflowService.processLog(workspaceId, adminId, started.processInstanceId());
+        assertTrue(log.entries().stream().anyMatch(entry ->
+                LogAction.WORKFLOW_STARTED.name().equals(entry.action())));
+        assertTrue(log.entries().stream().anyMatch(entry ->
+                LogAction.WORKFLOW_APPROVED.name().equals(entry.action())
+                        && entry.actorId() != null
+                        && entry.actorId().equals(ownerId)
+                        && entry.actorName() != null
+                        && !entry.actorName().isBlank()),
+                "the audit trail names the deciding reviewer");
+        assertEquals("APPROVED", log.process().documentStatus());
     }
 
     // ------------------------------------------------------------------

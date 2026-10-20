@@ -77,6 +77,15 @@ spring:
           starttls:
             enable: ${MAIL_SMTP_STARTTLS:true}
 
+# Public API documentation is disabled in production: springdoc registers no
+# endpoints, so /v3/api-docs and /swagger-ui answer 404 (the permitAll entries
+# for them in SecurityConfig become inert). Dev and test keep the UI enabled.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 management:
   endpoints:
     web:

@@ -83,6 +83,7 @@ class GenerationService(GenerationApi):
                 content=context.question,
                 prior_messages=history,
                 on_content=on_content,
+                document_ids=context.document_ids,
             )
         except (ModelTimeoutError, ChatModelTimeoutError) as exc:
             raise GenerationTimeoutError("Model deadline exceeded") from exc

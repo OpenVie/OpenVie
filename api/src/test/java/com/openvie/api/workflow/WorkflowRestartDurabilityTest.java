@@ -93,6 +93,7 @@ class WorkflowRestartDurabilityTest {
     private UUID orgId;
     private UUID workspaceId;
     private UUID adminId;
+    private UUID memberId;
     private UUID ownerId;
 
     @BeforeEach
@@ -101,16 +102,21 @@ class WorkflowRestartDurabilityTest {
         workspaceId = newWorkspace("ws-" + suffix());
         adminId = newUser("admin-" + suffix() + "@restart.test", OrgRole.MEMBER,
                 WorkspaceRole.WORKSPACE_ADMIN);
+        memberId = newUser("member-" + suffix() + "@restart.test", OrgRole.MEMBER,
+                WorkspaceRole.MEMBER);
         ownerId = newUser("owner-" + suffix() + "@restart.test", OrgRole.ORG_OWNER,
                 WorkspaceRole.MEMBER);
     }
 
     @Test
     void aRunningApprovalSurvivesAFullApiRestartInTheSameDatabase() {
-        UUID documentId = seedDocument(workspaceId, adminId, "restart durability memo.txt");
+        // The submitter is a plain member: a workspace admin's own workspace-
+        // scoped submission is decided by their own authority when it starts,
+        // so the reviewed flow under test needs a submission that really queues.
+        UUID documentId = seedDocument(workspaceId, memberId, "restart durability memo.txt");
 
         // Boot 1: start the flow and let an admin claim the level 1 task.
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
         workflowService.claim(workspaceId, adminId, started.taskId());
 
@@ -182,8 +188,9 @@ class WorkflowRestartDurabilityTest {
 
     @Test
     void crossWorkspaceTaskAccessStaysForbiddenAfterARestart() {
-        UUID documentId = seedDocument(workspaceId, adminId, "forbidden app.txt");
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        // Also submitted by the plain member so the task is alive under review.
+        UUID documentId = seedDocument(workspaceId, memberId, "forbidden app.txt");
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
 
         ConfigurableApplicationContext restarted = new SpringApplicationBuilder(ApiApplication.class)

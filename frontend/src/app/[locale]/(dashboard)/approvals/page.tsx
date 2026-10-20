@@ -1,23 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
-import { Check, ClipboardCheck, Loader2, X } from "lucide-react";
+import { Check, ClipboardCheck, Eye, History, Loader2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useApiClient } from "@/hooks/useApiClient";
+import { useAuthStore } from "@/components/providers/StoreProvider";
+import DocumentPreview from "@/components/documents/DocumentPreview";
+import { ListPager, usePagedList } from "@/components/ui/list-pager";
+import { safePage, safeSize, useUrlListState } from "@/hooks/useUrlListState";
 import {
   claimApprovalTaskApi,
   completeApprovalTaskApi,
-  listApprovalProcessesApi,
+  getProcessLogApi,
+  listApprovalProcessesPagedApi,
   listApprovalTasksApi,
 } from "@/lib/workflow-api";
-import type { ApprovalDecision, WorkflowProcess, WorkflowTask } from "@/types";
+import type {
+  ApprovalDecision,
+  ProcessLog,
+  WorkflowProcess,
+  WorkflowTask,
+} from "@/types";
 
 type DecisionDialog = { task: WorkflowTask; decision: "REJECT" | "ESCALATE" } | null;
+type LogDialog = { process: WorkflowProcess } | null;
+type PreviewDialog = { documentId: string; fileName: string } | null;
 
 function taskRole(task: WorkflowTask, t: ReturnType<typeof useTranslations<"Approval">>) {
   return task.approvalLevel === 2 ? t("levelTwo") : t("levelOne");
@@ -27,23 +39,44 @@ export default function ApprovalsPage() {
   const t = useTranslations("Approval");
   const format = useFormatter();
   const { request } = useApiClient();
+  const user = useAuthStore((state) => state.user);
+  const { searchParams, update } = useUrlListState();
+  const page = safePage(searchParams.get("page"));
+  const size = safeSize(searchParams.get("size"));
   const [processes, setProcesses] = useState<WorkflowProcess[]>([]);
+  const [processTotal, setProcessTotal] = useState(0);
+  const journalRequestRef = useRef("");
   const [assigned, setAssigned] = useState<WorkflowTask[]>([]);
   const [groupTasks, setGroupTasks] = useState<WorkflowTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DecisionDialog>(null);
   const [reason, setReason] = useState("");
+  const [logDialog, setLogDialog] = useState<LogDialog>(null);
+  const [log, setLog] = useState<ProcessLog | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+  const [preview, setPreview] = useState<PreviewDialog>(null);
 
   const load = useCallback(async () => {
-    const [nextProcesses, nextTasks] = await Promise.all([
-      listApprovalProcessesApi(request, true),
+    const requestKey = `${page}/${size}`;
+    journalRequestRef.current = requestKey;
+    const [journal, nextTasks] = await Promise.all([
+      listApprovalProcessesPagedApi(request, { includeFinished: true, page: page - 1, size }),
       listApprovalTasksApi(request),
     ]);
-    setProcesses(nextProcesses);
+    // Stale guard: a slow response for an earlier window must not overwrite
+    // the page the user has already navigated to.
+    if (journalRequestRef.current !== requestKey) return;
+    const pages = Math.max(1, Math.ceil(journal.total / size));
+    if (page > pages) {
+      update({ page: pages === 1 ? null : pages }, false);
+      return;
+    }
+    setProcesses(journal.items);
+    setProcessTotal(journal.total);
     setAssigned(nextTasks.assignedToMe);
     setGroupTasks(nextTasks.groupTasks);
-  }, [request]);
+  }, [request, page, size, update]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +115,52 @@ export default function ApprovalsPage() {
     await runTaskAction(task, () => completeApprovalTaskApi(request, task.taskId, decision, decisionReason));
   }
 
+  async function openLog(process: WorkflowProcess) {
+    setLogDialog({ process });
+    setLog(null);
+    setLogLoading(true);
+    try {
+      setLog(await getProcessLogApi(request, process.processInstanceId));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("fallback.log"));
+      setLogDialog(null);
+    } finally {
+      setLogLoading(false);
+    }
+  }
+
   const tasks = [...assigned, ...groupTasks.filter((task) => !assigned.some((item) => item.taskId === task.taskId))];
+  const pagedTasks = usePagedList(tasks);
+  const journalPageCount = Math.max(1, Math.ceil(processTotal / size));
+
+  function statusLabel(status: string): string {
+    const key: Record<string, Parameters<typeof t>[0]> = {
+      IN_REVIEW: "status.inReview",
+      APPROVED: "status.approved",
+      REJECTED: "status.rejected",
+    };
+    const message = key[status];
+    return message && t.has(message) ? t(message) : status;
+  }
+
+  function actionLabel(action: string): string {
+    const key = `action.${action}` as Parameters<typeof t>[0];
+    return t.has(key) ? t(key) : action;
+  }
+
+  function entryExtras(metadata: Record<string, unknown>): string | null {
+    const decision = typeof metadata.decision === "string" ? metadata.decision : null;
+    const reason = typeof metadata.reason === "string" && metadata.reason ? `“${metadata.reason}”` : null;
+    const selfDecision = metadata.selfDecision === true;
+    const selfApproved = metadata.selfApproved === true;
+    const flags: string[] = [];
+    if (reason) flags.push(`${t("reasonLabel")}: ${reason}`);
+    if (selfDecision || selfApproved) flags.push(t("selfDecision"));
+    if (decision) flags.unshift(decision);
+    return flags.length ? flags.join(" · ") : null;
+  }
+
+  const logEntries = useMemo(() => log?.entries ?? [], [log]);
 
   return (
     <main className="ov-page-shell">
@@ -102,14 +180,21 @@ export default function ApprovalsPage() {
           <Card>
             <CardHeader><CardTitle>{t("inboxTitle")}</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {tasks.length === 0 ? <p className="text-sm text-muted-foreground">{t("emptyInbox")}</p> : tasks.map((task) => (
+              {tasks.length === 0 ? <p className="text-sm text-muted-foreground">{t("emptyInbox")}</p> : pagedTasks.slice.map((task) => {
+                const mine = Boolean(user?.userId && task.assignee === user.userId);
+                return (
                 <div key={task.taskId} className="rounded-xl border p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{task.documentFileName}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{taskRole(task, t)} · {format.dateTime(new Date(task.createdAt), { dateStyle: "medium", timeStyle: "short" })}</p>
                     </div>
-                    <Badge variant="secondary">{task.assignee ? t("claimed") : t("unclaimed")}</Badge>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: task.documentId, fileName: task.documentFileName })}>
+                        <Eye className="size-4" />
+                      </Button>
+                      <Badge variant="secondary">{task.assignee ? t("claimed") : t("unclaimed")}</Badge>
+                    </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {!task.assignee && (
@@ -117,16 +202,16 @@ export default function ApprovalsPage() {
                         {busyTaskId === task.taskId && <Loader2 className="animate-spin" />} {t("claim")}
                       </Button>
                     )}
-                    {(task.assignee || !task.assignee) && (
+                    {mine && (
                       <>
-                        <Button size="sm" disabled={busyTaskId === task.taskId || !task.assignee} onClick={() => complete(task, "APPROVE")}>
+                        <Button size="sm" disabled={busyTaskId === task.taskId} onClick={() => complete(task, "APPROVE")}>
                           <Check /> {t("approve")}
                         </Button>
-                        <Button size="sm" variant="destructive" disabled={busyTaskId === task.taskId || !task.assignee} onClick={() => openDecision(task, "REJECT")}>
+                        <Button size="sm" variant="destructive" disabled={busyTaskId === task.taskId} onClick={() => openDecision(task, "REJECT")}>
                           <X /> {t("reject")}
                         </Button>
                         {task.approvalLevel === 1 && (
-                          <Button size="sm" variant="outline" disabled={busyTaskId === task.taskId || !task.assignee} onClick={() => openDecision(task, "ESCALATE")}>
+                          <Button size="sm" variant="outline" disabled={busyTaskId === task.taskId} onClick={() => openDecision(task, "ESCALATE")}>
                             {t("escalate")}
                           </Button>
                         )}
@@ -134,7 +219,17 @@ export default function ApprovalsPage() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
+              <ListPager
+                page={pagedTasks.page}
+                pageCount={pagedTasks.pageCount}
+                size={pagedTasks.size}
+                total={pagedTasks.total}
+                onPageChange={pagedTasks.setPage}
+                onSizeChange={(nextSize) => { pagedTasks.setSize(nextSize); pagedTasks.setPage(1); }}
+                className="-mx-2"
+              />
             </CardContent>
           </Card>
 
@@ -145,13 +240,32 @@ export default function ApprovalsPage() {
                 <div key={process.processInstanceId} className="flex items-center justify-between gap-3 rounded-xl border p-4">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{process.documentFileName}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{format.dateTime(new Date(process.startedAt), { dateStyle: "medium", timeStyle: "short" })}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {statusLabel(process.documentStatus)} · {format.dateTime(new Date(process.startedAt), { dateStyle: "medium", timeStyle: "short" })}
+                    </p>
                   </div>
-                  <Badge variant={process.documentStatus === "APPROVED" ? "default" : process.documentStatus === "REJECTED" ? "destructive" : "secondary"}>
-                    {process.documentStatus}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={process.documentStatus === "APPROVED" ? "default" : process.documentStatus === "REJECTED" ? "destructive" : "secondary"}>
+                      {statusLabel(process.documentStatus)}
+                    </Badge>
+                    <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: process.documentId, fileName: process.documentFileName })}>
+                      <Eye className="size-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewLog")} onClick={() => openLog(process)}>
+                      <History className="size-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
+              <ListPager
+                page={page}
+                pageCount={journalPageCount}
+                size={size}
+                total={processTotal}
+                onPageChange={(value) => update({ page: value === 1 ? null : value }, false)}
+                onSizeChange={(value) => update({ size: value === 20 ? null : value })}
+                className="-mx-2"
+              />
             </CardContent>
           </Card>
         </div>
@@ -185,6 +299,61 @@ export default function ApprovalsPage() {
               {t("confirm")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logDialog !== null} onOpenChange={(open) => !open && setLogDialog(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("logTitle")}</DialogTitle>
+            <DialogDescription>{logDialog?.process.documentFileName}</DialogDescription>
+          </DialogHeader>
+          {logLoading ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> {t("loading")}
+            </div>
+          ) : logEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("logEmpty")}</p>
+          ) : (
+            <ol className="space-y-3">
+              {logEntries.map((entry, index) => (
+                <li key={`${entry.action}-${entry.occurredAt ?? index}`} className="rounded-lg border p-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium">{actionLabel(entry.action)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.actorName ?? entry.actorId ?? t("system")}
+                      {entry.occurredAt
+                        ? ` · ${format.dateTime(new Date(entry.occurredAt), { dateStyle: "medium", timeStyle: "medium" })}`
+                        : ""}
+                    </p>
+                    {(() => {
+                      const extras = entryExtras(entry.metadata ?? {});
+                      return extras ? <p className="mt-1 text-xs text-muted-foreground">{extras}</p> : null;
+                    })()}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLogDialog(null)}>{t("cancel")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={preview !== null} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{t("previewTitle")}</DialogTitle>
+            <DialogDescription>{preview?.fileName}</DialogDescription>
+          </DialogHeader>
+          {preview && (
+            <DocumentPreview
+              documentId={preview.documentId}
+              fileName={preview.fileName}
+              className="h-[65vh] min-h-0 flex-1"
+            />
+          )}
         </DialogContent>
       </Dialog>
     </main>

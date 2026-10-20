@@ -14,7 +14,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 
 | Tầng DX-OS | Thành phần trong OpenVie | Trạng thái |
 | --- | --- | --- |
-| **Tầng 1 – Nền tảng Dịch vụ Lõi số** (PaaS, headless) | `api/` (Spring Boot 21), `rag-chatbot-fastapi/` (AI HTTP + gRPC + worker), `apisix/` (cổng API), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | Một phần |
+| **Tầng 1 – Nền tảng Dịch vụ Lõi số** (PaaS, headless) | `api/` (Spring Boot trên Java 21), `rag-chatbot-fastapi/` (AI HTTP + gRPC + worker), `apisix/` (cổng API), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Đạt (MVP)** — đủ các dịch vụ lõi bắt buộc; hardening vận hành (Vault/WAF, backup tự động, log tập trung) và CDC/Lakehouse còn mở |
 | **Tầng 2 – Không gian Năng lực số** (H-P-D-I, có giao diện) | `frontend/` (Next.js) | **Đạt** (có ứng dụng minh họa giao diện) |
 | **Tầng 3 – Nền tảng Kinh doanh số** (OMS/WMS/POS/LMS/CRM…) | Không có | Ngoài phạm vi |
 
@@ -24,6 +24,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 - `api/` chỉ xuất HTTP JSON (`/api/v1/**`) và gRPC nội bộ (`:50051`).
 - Toàn bộ giao diện người dùng tách biệt hoàn toàn tại `frontend/` (Tầng 2).
 - Cổng biên `apisix/` chỉ mở giao diện web và `/api/v1/*`. Các hạ tầng dữ liệu và AI không lộ ra ngoài mạng.
+- Kết luận: nguyên tắc lõi headless **Đạt** — không UI ở core, API chỉ HTTP JSON + gRPC nội bộ, biên chỉ lộ web + `/api/v1`.
 
 ### 3. Bốn dịch vụ lõi bắt buộc
 
@@ -33,13 +34,13 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (20 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
 | **Quản trị dữ liệu phi cấu trúc** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), hấp thụ đa định dạng | **Đạt** | Chưa có OCR / âm thanh / video |
-| **Động cơ luồng công việc (Workflow)** | PoC BPMN Flowable cô lập tại `spikes/eoffice-approval`; demo được tài liệu hóa theo luồng submit → approve/reject → kiểm tra kết quả | **Đạt (phạm vi PoC)** | Tích hợp production authorization/notification/ingestion vẫn còn ngoài phạm vi demo (xem [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) và [PoC Issue #7](../spikes/eoffice-approval/README.md)) |
+| **Động cơ luồng công việc (Workflow)** | Engine Flowable nhúng trong API runtime chính: nộp → duyệt/từ chối/leo thang hai cấp, chính sách độ nhạy dùng chung, SLA theo tổ chức, audit log đầy đủ; demo đánh giá engine độc lập còn lại tại `spikes/eoffice-approval` | **Đạt (runtime MVP)** | Ghi kết quả duyệt vào trạng thái tài liệu, notification production và ingestion/công bố hoá chưa nối vào engine (xem [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) và [demo PoC](../spikes/eoffice-approval/README.md)) |
 
 ### 4. Đánh nhãn H-P-D-I cho giao diện Tầng 2
 
 - **[I] Trí tuệ số:** Trợ lý ảo RAG vận hành trên kho tri thức nội bộ (`/`, `/documents/[id]`) — **Đạt** (ứng dụng minh họa chính).
 - **[H] Con người số:** Kho tài liệu, bách khoa hướng dẫn, quản trị thành viên/workspace (`/documents`, `/documentation`, `/users`, `/workspaces`) — **Đạt**.
-- **[P] Quy trình số:** Demo phê duyệt BPMN Flowable độc lập — **Đạt (phạm vi PoC)**. Tích hợp workflow vào runtime chính, authorization, notification và ingestion production vẫn chưa hoàn tất.
+- **[P] Quy trình số:** Phê duyệt tài liệu hai cấp chạy trong runtime chính: nộp → duyệt/từ chối/leo thang, chính sách độ nhạy dùng chung, SLA nhắc nhở/leo thang, audit log — **Đạt (runtime MVP)**. Notification production, kết quả duyệt ghi về trạng thái tài liệu và công bố theo `publishTarget` còn mở; demo engine độc lập nằm ở `spikes/eoffice-approval` (PoC).
 - **[D] Dữ liệu số:** Nguồn gốc tài liệu, nhật ký kiểm toán, số liệu Prometheus — **Chưa đạt** (chưa có dashboard BI/IOC).
 
 ### 5. Bốn nguyên lý thiết kế
@@ -54,7 +55,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 - **Lớp 1 (Trải nghiệm):** Next.js + Tailwind CSS (*Một phần*).
 - **Lớp 2 (Biên mạng & An toàn):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Một phần* - thiếu IdP/WAF).
 - **Lớp 3 (Tác nghiệp & Trạng thái):** PostgreSQL, RabbitMQ, gRPC (*Một phần*).
-- **Lớp 4 (Tự động hóa & DevSecOps):** GitHub Actions CI (*Một phần* - thiếu BPMN).
+- **Lớp 4 (Tự động hóa & DevSecOps):** GitHub Actions CI (*Một phần* - thiếu GitOps/WAF tệp, backup tự động).
 - **Lớp 5 (Dữ liệu hội tụ & Sổ cái):** RabbitMQ, SeaweedFS (*Một phần* - thiếu Lakehouse).
 - **Lớp 6 (Phân tích & Trí tuệ):** Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Một phần* - thiếu BI/GIS).
 - **Lớp 7 (Quản trị & Giám sát):** Qdrant, Prometheus metrics (*Một phần* - thiếu Grafana/Log tập trung).
@@ -69,7 +70,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 
 | DX-OS Tier | OpenVie Component | Status |
 | --- | --- | --- |
-| **Tier 1 – Digital Core Platform** (Headless PaaS) | `api/` (Spring Boot 21), `rag-chatbot-fastapi/` (AI inference, gRPC, worker), `apisix/` (gateway), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | Partial |
+| **Tier 1 – Digital Core Platform** (Headless PaaS) | `api/` (Spring Boot on Java 21), `rag-chatbot-fastapi/` (AI inference, gRPC, worker), `apisix/` (gateway), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Achieved (MVP)** — all mandatory core services delivered; platform hardening (Vault/WAF, automated backups, centralized logs) and CDC/Lakehouse remain open |
 | **Tier 2 – Digital Capability Space** (H-P-D-I with UI) | `frontend/` (Next.js) | **Achieved** (UI demo application) |
 | **Tier 3 – Digital Business Platform** (OMS, WMS, POS, LMS...) | None | Out of scope |
 
@@ -79,6 +80,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 - `api/` only exposes REST endpoints (`/api/v1/**`) and internal gRPC (`:50051`).
 - The entire web UI lives in `frontend/` (Tier 2).
 - Edge gateway `apisix/` only publishes the web client and `/api/v1/*`. Internal data and AI services are never exposed.
+- Verdict: the headless core principle is **Achieved** — no UI in the core, JSON-over-HTTP plus internal gRPC only, and the edge exposes nothing beyond the web client and `/api/v1`.
 
 ### 3. Four Mandatory Core Services
 
@@ -88,13 +90,13 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §9](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | **Structured Data** | PostgreSQL 16 + Flyway (20 business tables with tenant scoping) | **Achieved** | — |
 | **Unstructured Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), asynchronous multi-format ingestion | **Achieved** | OCR / audio / video not delivered |
-| **Workflow Engine** | Isolated Flowable BPMN PoC at `spikes/eoffice-approval`; documented demo covers submit → approve/reject → result verification | **Achieved (PoC scope)** | Production integration for authorization, notifications, and ingestion remains outstanding (see [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) and [Issue #7 PoC](../spikes/eoffice-approval/README.md)) |
+| **Workflow Engine** | Flowable embedded in the main API runtime: two-level submit → approve/reject/escalate, shared sensitivity policy, per-organization SLA, full audit trail; the standalone engine-evaluation demo remains at `spikes/eoffice-approval` | **Achieved (runtime MVP)** | Decision write-back to document state, production notifications, and ingestion/publication are not yet wired into the engine (see [ADR-0001](adr/ADR-0001-workflow-engine-flowable.md) and the [PoC demo](../spikes/eoffice-approval/README.md)) |
 
 ### 4. H-P-D-I Capability Labeling (Tier 2)
 
 - **[I] Digital Intelligence:** Document-grounded RAG assistant (`/`, `/documents/[id]`) — **Achieved** (primary demo).
 - **[H] Digital Human:** Document vault, documentation wiki, workspace/member management (`/documents`, `/documentation`, `/users`, `/workspaces`) — **Achieved**.
-- **[P] Digital Process:** Org setup, RBAC, notification channels, audit logging — **Partial** (no BPMN).
+- **[P] Digital Process:** Two-level document approval in the main runtime: submit → approve/reject/escalate, shared sensitivity policy, SLA reminders/escalation, audit logging — **Achieved (runtime MVP)**. Production notifications, approval results written back to document state, and `publishTarget`-driven publication remain open; the standalone engine demo lives at `spikes/eoffice-approval` (PoC).
 - **[D] Digital Data:** Source provenance, audit logs, Prometheus metrics — **Not Met** (no BI dashboard).
 
 ### 5. Four Design Principles
@@ -109,7 +111,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 - **Layer 1 (Experience):** Next.js, React, Tailwind CSS (*Partial*).
 - **Layer 2 (Perimeter & Security):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Partial* - missing WAF).
 - **Layer 3 (Operations & State):** PostgreSQL, RabbitMQ, gRPC (*Partial*).
-- **Layer 4 (Automation & DevSecOps):** GitHub Actions CI (*Partial* - missing BPMN).
+- **Layer 4 (Automation & DevSecOps):** GitHub Actions CI (*Partial* - missing GitOps/file WAF and automated backups).
 - **Layer 5 (Hyperconverged Data & Ledger):** RabbitMQ, SeaweedFS (*Partial* - missing Lakehouse).
 - **Layer 6 (Analytics & Intelligence):** Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Partial* - missing BI/GIS).
 - **Layer 7 (Governance & Monitoring):** Qdrant search, Prometheus metrics (*Partial* - missing Grafana/centralized logs).

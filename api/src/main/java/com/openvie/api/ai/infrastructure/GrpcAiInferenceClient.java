@@ -90,6 +90,11 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 .setTenantName(request.tenantName())
                 .setPromptSchemaVersion(request.promptSchemaVersion())
                 .setTrace(trace(request.requestId(), request.traceId()));
+        if (request.documentIds() != null) {
+            request.documentIds().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(documentId -> builder.addDocumentIds(documentId.toString()));
+        }
         request.priorMessages().stream().limit(20).forEach(message -> builder.addPriorMessages(
                 com.openvie.ai.v1.PriorMessage.newBuilder()
                         .setRole(message.role()).setContent(message.content())));

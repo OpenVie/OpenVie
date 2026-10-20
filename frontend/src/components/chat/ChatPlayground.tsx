@@ -15,6 +15,7 @@ import { withNext } from "@/lib/auth-redirect"
 import toast from "react-hot-toast"
 import {
   ArrowUp,
+  FileStack,
   FileText,
   Loader2,
   Paperclip,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react"
 import { AppShell } from "@/components/app/AppShell"
 import { AssistantResponse } from "@/components/chat/AssistantResponse"
+import { DocumentScopeDialog, MAX_SCOPE_DOCUMENTS } from "@/components/chat/DocumentScopeDialog"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { useApiClient } from "@/hooks/useApiClient"
 import { cn } from "@/lib/utils"
@@ -47,6 +49,7 @@ import { getTenantWorkspaceApi } from "@/lib/workspace-api"
 import type { ChatCitation, Document, DocumentStatus, TenantWorkspace } from "@/types"
 import {
   consumeNewChatRequest,
+  consumePendingDocumentScope,
   consumePendingSessionSelect,
   NEW_CHAT_EVENT,
   notifyActiveChatSession,
@@ -149,6 +152,9 @@ function Playground() {
   const [sending, setSending] = useState(false)
   const [heroAnimationKey, setHeroAnimationKey] = useState(0)
   const [recentUploadIds, setRecentUploadIds] = useState<string[]>([])
+  const [scope, setScope] = useState<string[]>([])
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const [pendingScopeIds, setPendingScopeIds] = useState<string[] | null>(null)
 
   useEffect(() => {
     const replayHeroAnimation = () => setHeroAnimationKey((current) => current + 1)
@@ -213,6 +219,7 @@ function Playground() {
           ? null
           : consumePendingSessionSelect() ?? restored.sessionId
         setSessionId(nextSessionId)
+        setPendingScopeIds(consumePendingDocumentScope())
         canPersistStateRef.current = true
         if (!nextSessionId) {
           // No chat was requested explicitly: continue the most recent one.
@@ -270,6 +277,33 @@ function Playground() {
       cancelled = true
     }
   }, [request, t, workspace])
+
+  useEffect(() => {
+    if (!workspace || !pendingScopeIds || pendingScopeIds.length === 0) return
+
+    let cancelled = false
+    const resolve = async () => {
+      const results = await Promise.allSettled(
+        pendingScopeIds.slice(0, MAX_SCOPE_DOCUMENTS).map((id) => getDocumentStatusApi(request, id)),
+      )
+      if (cancelled) return
+      const valid = results.flatMap((result) => {
+        if (result.status !== "fulfilled") return []
+        const document = result.value
+        return document.knowledgeBaseId === workspace.knowledgeBase.id &&
+          document.status === "COMPLETED"
+          ? [document.id]
+          : []
+      })
+      setScope(valid)
+      setPendingScopeIds(null)
+    }
+
+    void resolve()
+    return () => {
+      cancelled = true
+    }
+  }, [pendingScopeIds, request, workspace])
 
   useEffect(() => {
     if (!workspace || !sessionId || sending) return
@@ -402,6 +436,7 @@ function Playground() {
     setSessionId(null)
     setMessages([])
     setMessage("")
+    setScope([])
   }, [cancelMessage])
 
   useEffect(() => {
@@ -419,6 +454,7 @@ function Playground() {
     followLatestRef.current = true
     setMessages([])
     setSessionId(nextSessionId)
+    setScope([])
   }, [cancelMessage, sessionId])
 
   useEffect(() => {
@@ -495,7 +531,10 @@ function Playground() {
       if (!isActive()) return
       let response
       try {
-        response = await submitChatMessageApi(request, activeSessionId, content, streamOptions)
+        response = await submitChatMessageApi(request, activeSessionId, content, {
+          ...streamOptions,
+          documentIds: scope.length > 0 ? scope : undefined,
+        })
       } catch (error) {
         if (!isActive()) return
         if (error instanceof Error && error.message === "Chat session was not found.") {
@@ -503,7 +542,10 @@ function Playground() {
           activeSessionId = await createSession(abortController.signal)
           if (!isActive()) return
           streamOptions.onReset()
-          response = await submitChatMessageApi(request, activeSessionId, content, streamOptions)
+          response = await submitChatMessageApi(request, activeSessionId, content, {
+            ...streamOptions,
+            documentIds: scope.length > 0 ? scope : undefined,
+          })
         } else {
           throw error
         }
@@ -716,7 +758,7 @@ function Playground() {
               aria-label={t("message")}
             />
             <div className="flex h-9 items-center justify-between gap-2">
-              <div className="relative">
+              <div className="relative flex items-center gap-0.5">
                 <button
                   type="button"
                   disabled={sending}
@@ -728,6 +770,26 @@ function Playground() {
                 >
                   <Paperclip className="size-4" />
                   <span>{t("addSource")}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!workspace || sending}
+                  onClick={() => setScopeOpen(true)}
+                  className={cn(
+                    "flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs transition-colors sm:px-2.5 sm:text-sm",
+                    !workspace || sending
+                      ? "cursor-not-allowed opacity-50"
+                      : scope.length > 0
+                        ? "bg-primary/10 text-primary hover:bg-primary/20"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <FileStack className="size-4" />
+                  <span>
+                    {scope.length > 0
+                      ? t("scopeTriggerCount", { count: scope.length })
+                      : t("scopeTriggerAll")}
+                  </span>
                 </button>
                 <input
                   ref={fileInputRef}
@@ -763,6 +825,21 @@ function Playground() {
       </div>
         </div>
       </div>
+
+      <DocumentScopeDialog
+        open={scopeOpen}
+        onOpenChange={setScopeOpen}
+        documents={sources.map((source) => ({
+          id: source.id,
+          fileName: source.fileName,
+          status: source.status,
+        }))}
+        selected={scope}
+        onApply={(next) => {
+          setScope(next)
+          setScopeOpen(false)
+        }}
+      />
     </div>
   )
 

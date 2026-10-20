@@ -7,6 +7,7 @@ import com.openvie.api.notification.model.NotificationChannel;
 import com.openvie.api.notification.repository.NotificationChannelRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -41,17 +42,23 @@ public class NotificationChannelService {
     private final NotificationChannelResolver resolver;
     private final ObjectMapper objectMapper;
 
+    @Schema(description = "One configured notification channel. Secret values are never echoed: only whether "
+            + "credentials are stored and the last delivery outcome.")
     public record ChannelView(
             UUID id,
             String type,
             boolean enabled,
+            @Schema(description = "True when credentials are stored (never the values themselves).")
             boolean credentialsStored,
+            @Schema(description = "Delivery error of the last attempted send, when it failed.")
             String lastDeliveryError,
             LocalDateTime lastDeliveryAt) {
     }
 
     /** Upsert request. Null credential fields keep the stored value on update. */
+    @Schema(description = "Upsert request for a mail plugin. Null credential fields keep the stored value on update.")
     public record ChannelRequest(
+            @Schema(description = "Plugin type, for example `smtp`.", example = "smtp")
             String type,
             Boolean enabled,
             String fromEmail,
@@ -59,6 +66,7 @@ public class NotificationChannelService {
             String host,
             Integer port,
             String username,
+            @Schema(description = "Write-only credential; never returned by reads.")
             String password,
             Boolean auth,
             Boolean starttls) {

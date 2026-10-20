@@ -14,6 +14,8 @@ import com.openvie.api.common.exception.custom.UnauthorizedException;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.RegistrationStatus;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -46,6 +48,8 @@ public class AuthController extends BaseController {
      * Login is email and password only. Email is never required to
      * authenticate, because a notification channel is optional.
      */
+    @Operation(summary = "Password login", description = "Exchanges email and password for the internal credential pair; "
+            + "the refresh token rides an HttpOnly cookie. Public endpoint.")
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest request,
@@ -58,6 +62,9 @@ public class AuthController extends BaseController {
      * Returns the standard internal credential pair, so the frontend session
      * handling stays identical to password login.
      */
+    @Operation(summary = "Exchange a Keycloak SSO code",
+            description = "One-time PKCE code exchange for Keycloak SSO; returns the standard internal credential pair so "
+                    + "frontend session handling stays identical to password login. Public endpoint.")
     @PostMapping("/sso/exchange")
     public ResponseEntity<AuthResponse> ssoExchange(
             @Valid @RequestBody SsoExchangeRequest request,
@@ -65,6 +72,9 @@ public class AuthController extends BaseController {
         return ResponseEntity.ok(authService.ssoExchange(request, response));
     }
 
+    @Operation(summary = "Rotate credentials using the refresh cookie",
+            description = "Reads the HttpOnly refresh_token cookie and re-issues the credential pair (roles re-resolved). "
+            + "Public endpoint; requires no bearer token.")
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
@@ -76,6 +86,9 @@ public class AuthController extends BaseController {
     }
 
     /** Re-issues credentials scoped to another workspace the caller belongs to. */
+    @Operation(summary = "Switch workspace",
+            description = "Re-issues credentials scoped to another workspace the refresh token (or current bearer, to "
+                    + "verify membership) already belongs to. Public endpoint backed by the refresh cookie.")
     @PostMapping("/workspaces/switch")
     public ResponseEntity<AuthResponse> switchWorkspace(
             @RequestBody Map<String, String> body,
@@ -101,11 +114,16 @@ public class AuthController extends BaseController {
                 workspaceId, refreshToken, authenticatedUserId, response));
     }
 
+    @Operation(summary = "List the workspaces of the caller",
+            description = "The full membership list used by the workspace switcher. Requires a bearer token.")
+    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/workspaces")
     public ResponseEntity<List<WorkspaceSummaryResponse>> workspaces(HttpServletRequest request) {
         return ResponseEntity.ok(authService.listWorkspaces(getUserId(request)));
     }
 
+    @Operation(summary = "Logout",
+            description = "Revokes the refresh token (when present) and clears the refresh cookie. Public endpoint.")
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
@@ -121,6 +139,10 @@ public class AuthController extends BaseController {
      * Self-service password change. Also completes the forced change that an
      * administrator-set initial password requires.
      */
+    @Operation(summary = "Change password (self-service)",
+            description = "Changes the caller's own password and completes the forced change that an administrator-set "
+                    + "initial password requires. Requires a bearer token.")
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/change-password")
     public ResponseEntity<Void> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
@@ -133,6 +155,8 @@ public class AuthController extends BaseController {
     // ─── Public account entry points ──────────────────────────────────────────
 
     /** Lets the web client choose between the setup form, login, and register. */
+    @Operation(summary = "Registration status",
+            description = "Tells the web client to show the one-time setup form, login, or registration. Public endpoint.")
     @GetMapping("/registration-status")
     public ResponseEntity<Map<String, Object>> registrationStatus() {
         RegistrationStatus status = identityApi.registrationStatus();
@@ -145,6 +169,9 @@ public class AuthController extends BaseController {
      * Creates an account when the organization allows self-registration. The
      * account joins the default workspace and every public workspace.
      */
+    @Operation(summary = "Self-registration",
+            description = "Creates an account when the organization allows self-registration; the account joins the "
+            + "default workspace and every public workspace. Public endpoint.")
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
             @Valid @RequestBody RegisterRequest request,
@@ -153,11 +180,15 @@ public class AuthController extends BaseController {
                 .body(authService.register(request, response));
     }
 
+    @Operation(summary = "Validate an invitation token",
+            description = "Read-only check for the invitation landing page. Public endpoint.")
     @GetMapping("/invitations/validate")
     public ResponseEntity<InvitationValidationResponse> validateInvitation(@RequestParam String token) {
         return ResponseEntity.ok(authService.validateInvitation(token));
     }
 
+    @Operation(summary = "Accept an invitation",
+            description = "Creates the member account from the invitation and issues the credential pair. Public endpoint.")
     @PostMapping("/invitations/accept")
     public ResponseEntity<AuthResponse> acceptInvitation(
             @Valid @RequestBody AcceptInvitationRequest request,

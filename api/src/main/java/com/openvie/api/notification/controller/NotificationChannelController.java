@@ -5,6 +5,12 @@ import com.openvie.api.notification.service.NotificationChannelService;
 import com.openvie.api.notification.service.NotificationChannelService.ChannelRequest;
 import com.openvie.api.notification.service.NotificationChannelService.ChannelView;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -42,6 +48,7 @@ import java.util.UUID;
 @RequestMapping({"/api/v1/channels", "/api/v1/admin/channels"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
+@SecurityRequirement(name = "bearerAuth")
 public class NotificationChannelController extends BaseController {
 
     private final NotificationChannelService channelService;
@@ -49,11 +56,28 @@ public class NotificationChannelController extends BaseController {
     public record TestRequest(@NotBlank @Email String email) {
     }
 
+    @Operation(summary = "List the organization's notification channels",
+            description = "Configured mail plugins with credential presence flags — stored secrets are write-only and "
+                    + "never echoed back.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Channels"),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may manage channels")
+    })
     @GetMapping
     public List<ChannelView> list(HttpServletRequest request) {
         return channelService.list(getOrgId(request));
     }
 
+    @Operation(summary = "Create or update a notification channel",
+            description = "Upserts the mail plugin of `type` (unknown types answer 400). Null credential fields keep "
+                    + "the stored values; the response never contains secrets.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Channel saved", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Unknown channel type",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Stored channels require NOTIFICATION_ENC_KEY to be configured",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PutMapping("/{type}")
     public ChannelView upsert(
             @PathVariable String type,
@@ -65,6 +89,14 @@ public class NotificationChannelController extends BaseController {
                 body.starttls()));
     }
 
+    @Operation(summary = "Enable or disable a channel")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "New state applied", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "The channel type has no registered transport, or credentials are incomplete",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Channel not found in the organization",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping("/{channelId}/enabled")
     public ChannelView setEnabled(
             @PathVariable UUID channelId,
@@ -74,12 +106,27 @@ public class NotificationChannelController extends BaseController {
                 Boolean.TRUE.equals(body.get("enabled")));
     }
 
+    @Operation(summary = "Delete a notification channel")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Channel deleted"),
+            @ApiResponse(responseCode = "404", description = "Channel not found in the organization",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @DeleteMapping("/{channelId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID channelId, HttpServletRequest request) {
         channelService.delete(getOrgId(request), channelId);
     }
 
+    @Operation(summary = "Send a test email through the active channel",
+            description = "Delivers a test message to the given address using the organization's active notification channel.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Test message sent"),
+            @ApiResponse(responseCode = "400", description = "Email validation failed",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "No active channel, or the selected provider is not usable with the current settings",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping("/test")
     public ResponseEntity<Void> test(
             @Valid @RequestBody TestRequest body,

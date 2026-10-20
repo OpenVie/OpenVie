@@ -33,7 +33,7 @@ class TraceMetadata(_message.Message):
     def __init__(self, request_id: _Optional[str] = ..., trace_id: _Optional[str] = ..., parent_span_id: _Optional[str] = ..., baggage: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class GenerateAnswerRequest(_message.Message):
-    __slots__ = ("generation_id", "turn_id", "tenant_id", "chatbot_id", "knowledge_base_id", "authoritative_revision", "channel", "locale", "question", "prior_messages", "tenant_name", "prompt_schema_version", "trace")
+    __slots__ = ("generation_id", "turn_id", "tenant_id", "chatbot_id", "knowledge_base_id", "authoritative_revision", "channel", "locale", "question", "prior_messages", "tenant_name", "prompt_schema_version", "trace", "document_ids")
     GENERATION_ID_FIELD_NUMBER: _ClassVar[int]
     TURN_ID_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -47,6 +47,7 @@ class GenerateAnswerRequest(_message.Message):
     TENANT_NAME_FIELD_NUMBER: _ClassVar[int]
     PROMPT_SCHEMA_VERSION_FIELD_NUMBER: _ClassVar[int]
     TRACE_FIELD_NUMBER: _ClassVar[int]
+    DOCUMENT_IDS_FIELD_NUMBER: _ClassVar[int]
     generation_id: str
     turn_id: str
     tenant_id: str
@@ -60,7 +61,8 @@ class GenerateAnswerRequest(_message.Message):
     tenant_name: str
     prompt_schema_version: str
     trace: TraceMetadata
-    def __init__(self, generation_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., chatbot_id: _Optional[str] = ..., knowledge_base_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., channel: _Optional[str] = ..., locale: _Optional[str] = ..., question: _Optional[str] = ..., prior_messages: _Optional[_Iterable[_Union[PriorMessage, _Mapping]]] = ..., tenant_name: _Optional[str] = ..., prompt_schema_version: _Optional[str] = ..., trace: _Optional[_Union[TraceMetadata, _Mapping]] = ...) -> None: ...
+    document_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, generation_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., chatbot_id: _Optional[str] = ..., knowledge_base_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., channel: _Optional[str] = ..., locale: _Optional[str] = ..., question: _Optional[str] = ..., prior_messages: _Optional[_Iterable[_Union[PriorMessage, _Mapping]]] = ..., tenant_name: _Optional[str] = ..., prompt_schema_version: _Optional[str] = ..., trace: _Optional[_Union[TraceMetadata, _Mapping]] = ..., document_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Citation(_message.Message):
     __slots__ = ("id", "document_id", "source_name", "page_number", "chunk_index", "score", "snippet", "unit_id", "modality", "section_path", "block_type", "sheet_name", "cell_range", "table_id")

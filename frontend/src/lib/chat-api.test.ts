@@ -153,4 +153,32 @@ describe("submitChatMessageApi streaming", () => {
       vi.useRealTimers()
     }
   })
+
+  it("sends document_ids only when a scope is active", async () => {
+    const bodies: unknown[] = []
+    const request: ApiRequest = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return streamResponse(completionFrame)
+    }
+
+    await submitChatMessageApi(request, "session-1", "Question", {
+      onContent: vi.fn(),
+      onReset: vi.fn(),
+      documentIds: ["doc-2", "doc-1"],
+    })
+    expect(bodies[0]).toEqual({ content: "Question", document_ids: ["doc-2", "doc-1"] })
+
+    await submitChatMessageApi(request, "session-1", "Question", {
+      onContent: vi.fn(),
+      onReset: vi.fn(),
+    })
+    expect(bodies[1]).toEqual({ content: "Question" })
+
+    await submitChatMessageApi(request, "session-1", "Question", {
+      onContent: vi.fn(),
+      onReset: vi.fn(),
+      documentIds: [],
+    })
+    expect(bodies[2]).toEqual({ content: "Question" })
+  })
 })
