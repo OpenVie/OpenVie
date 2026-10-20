@@ -5,8 +5,8 @@ from pathlib import Path
 
 from app.contracts.document_ingestion_v1 import DocumentIngestRequestedEvent
 from app.generated import openvie_ai_v1_pb2 as pb
-from app.modules.ingestion.api.event import status_event
 from app.modules.generation.internal import sensitive_policy
+from app.modules.ingestion.api.event import status_event
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / "contracts" / "document-ingestion" / "v1"
@@ -114,7 +114,8 @@ def test_sensitive_policy_contract_is_the_single_shared_vocabulary() -> None:
     :mod:`sensitive_policy` on the version, on the term list, and on every
     canonical fixture — one vocabulary, two consumers, no second keyword list.
     """
-    contract = json.loads((APPROVAL_CONTRACTS / "sensitive-policy.json").read_text(encoding="utf-8"))
+    policy_path = APPROVAL_CONTRACTS / "sensitive-policy.json"
+    contract = json.loads(policy_path.read_text(encoding="utf-8"))
     assert contract["policy_version"] == sensitive_policy.POLICY_VERSION
     assert tuple(contract["terms"]) == sensitive_policy._SENSITIVE_TERMS
     for fixture in contract["fixtures"]:

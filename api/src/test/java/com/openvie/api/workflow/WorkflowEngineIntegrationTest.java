@@ -74,7 +74,12 @@ import com.openvie.api.workflow.service.WorkflowService;
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
         "spring.jpa.show-sql=false",
-        "spring.datasource.driver-class-name=org.postgresql.Driver"
+        "spring.datasource.driver-class-name=org.postgresql.Driver",
+        // The SLA timers are executed manually through ManagementService; a
+        // running async executor would acquire the same moved job and kill
+        // one of the two transactions with an optimistic-locking collision.
+        "flowable.async-executor-activate=false",
+        "flowable.async-history-executor-activate=false"
 })
 @ActiveProfiles("test")
 class WorkflowEngineIntegrationTest {
