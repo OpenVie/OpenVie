@@ -59,7 +59,7 @@ flowchart TB
 
 ### 3. Phân định trách nhiệm dữ liệu
 
-- **PostgreSQL (Spring sở hữu):** Lưu trữ chính thống về tổ chức, người dùng, workspace, phiên hội thoại, tin nhắn, nhật ký kiểm toán, kênh thông báo và outbox/inbox sự kiện bền vững.
+- **PostgreSQL (Spring sở hữu):** Lưu trữ chính thống về tổ chức, người dùng, workspace, phiên hội thoại, tin nhắn, nhật ký kiểm toán, kênh thông báo và outbox/inbox sự kiện bền vững. Các bảng engine Flowable (`ACT_*`, `FLW_*`) cho phê duyệt tài liệu sống trong cùng PostgreSQL này, quản lý schema bởi engine (ngay cạnh schema nghiệp vụ, không cần thêm container).
 - **Qdrant & Kuzu (Python sở hữu):** Lưu trữ chỉ mục vector (dense/sparse) và đồ thị quan hệ phái sinh từ tài liệu. Không chứa dữ liệu nghiệp vụ thuần túy.
 - **SeaweedFS (S3):** Chứa tệp tài liệu gốc và bảng Parquet phái sinh từ bảng tính.
 - **Redis:** Lưu trữ tạm bộ đệm (mặc định tắt), checkpoint và lease trạng thái xử lý của ingestion worker.
@@ -83,6 +83,13 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 3. Relay đẩy sự kiện tới RabbitMQ. Worker nhận job, đánh dấu lease trong Redis, cập nhật `PROCESSING`.
 4. Worker tải file, phân đoạn tri thức, nhúng vector BGE-M3, nạp Qdrant, trích xuất thực thể đồ thị nạp Kuzu.
 5. Worker gửi sự kiện `COMPLETED` về RabbitMQ; Spring cập nhật trạng thái tài liệu sang `COMPLETED`.
+
+#### C. Phê duyệt tài liệu hai cấp (Approval Sequence, issue #8)
+1. Thành viên nộp tài liệu kèm đích công bố (`workspace`/`shared`/`public`). Spring ghi số và biến quy trình rồi chạy BPMN nhúng Flowable trong cùng PostgreSQL (`eofficeDocumentApproval`).
+2. Service task tính độ nhạy cảm theo hợp đồng dùng chung `contracts/approval/v1/sensitive-policy.json` (`sensitive-keyword-v1`) — Java không giữ danh sách từ khóa thứ hai. Hệ thống — không phải người nộp — quyết định cấp phê duyệt: nhạy cảm hoặc đích `shared`/`public` → cấp 2 (`ORG_OWNER`), thường → cấp 1 (`WORKSPACE_ADMIN`).
+3. Nghiệp vụ được ghi vào nhật ký kiểm toán (`workflow_process`): bắt đầu, nhận xử lý, phê duyệt, từ chối (bắt buộc có lý do), bàn giao L1→L2, bỏ qua không được phép.
+4. Timer SLA cấu hình được theo từng tổ chức (mặc định PT24H nhắc nhở, PT48H leo thang trong `openvie.workflow.*`; hàng đè trong `workflow_sla_configs`): nhắc nhở không gián đoạn, quá hạn leo thang nhiệm vụ cấp 1 sang cấp 2 và ghi nhật ký leo thang (overdue, không phải quyết định thủ công).
+5. Trạng thái chạy nằm trong bảng engine `ACT_*` của PostgreSQL nên API khởi động lại (deploy/crash) vẫn tái hiện quy trình và nhiệm vụ đang chờ mà không cần trình phát lại.
 
 ### 5. Bảo mật và phân lập
 
@@ -114,7 +121,7 @@ See the shared topology diagram above. Key boundaries:
 
 ## 3. Data ownership
 
-- **PostgreSQL (Spring):** Authoritative state for organizations, workspaces, accounts, permissions, chat sessions, turns, audit logs, and transactional outbox/inbox.
+- **PostgreSQL (Spring):** Authoritative state for organizations, workspaces, accounts, permissions, chat sessions, turns, audit logs, and transactional outbox/inbox. The Flowable engine tables (`ACT_*`, `FLW_*`) for the e-Office document approval live in the same PostgreSQL, with schemas managed by the engine — right next to the business tables, no extra container.
 - **Qdrant & Kuzu (Python):** Materialized dense/sparse vectors and entity knowledge graphs. No business SQL access.
 - **SeaweedFS:** Raw source document storage and derived Parquet tables.
 - **Redis:** Checkpoint leases for workers, rate limiting, and optional caches (off by default).
@@ -138,6 +145,13 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 3. Outbox relay forwards message to RabbitMQ. Worker claims job lease via Redis, sets `PROCESSING`.
 4. Worker parses text, chunks content, extracts BGE-M3 vectors, indexes Qdrant, projects Kuzu graph entities.
 5. Worker publishes `COMPLETED` to RabbitMQ; Spring marks document `COMPLETED`.
+
+### Two-level document approval
+1. A workspace member submits a COMPLETED document with a publish target (`workspace`, `shared`, or `public`); Spring starts the embedded Flowable process `eofficeDocumentApproval` in the shared PostgreSQL.
+2. The scoring service task applies the shared sensitivity contract (`contracts/approval/v1/sensitive-policy.json`, `sensitive-keyword-v1`) — Java has no second keyword list — and the system (not the submitter) fixes the approval level: sensitive or `shared`/`public` targets need level 2 (`ORG_OWNER`), ordinary documents stay at level 1 (`WORKSPACE_ADMIN`).
+3. Every transition is audited (`workflow_process`): start, claim (one claim per task; the group queue keeps seeing it), approve, reject (reason is mandatory), and the explicit L1→L2 hand-off — level skipping is not offered.
+4. SLA timers are per-organization configurable (`workflow_sla_configs`, defaults `openvie.workflow.*` = PT24H reminder / PT48H escalation): the reminder never interrupts the task, escalation interrupts it and moves an overdue level 1 task to the owner queue, both audited (`overdue`, not a manual decision).
+5. Runtime state lives in the engine's `ACT_*` tables, so an API restart (deploy or crash) rediscovers the running process and pending task without replay; workflows are claimed and completed by live membership, so a foreign-workspace task or process is answered with an explicit 403.
 
 ## 5. Security and isolation
 

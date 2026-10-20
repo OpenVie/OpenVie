@@ -1,0 +1,411 @@
+package com.openvie.api.workflow;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.flowable.engine.HistoryService;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
+import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.task.api.Task;
+import org.flowable.task.api.TaskQuery;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
+
+import com.openvie.api.common.enums.LogAction;
+import com.openvie.api.common.event.AuditLogEvent;
+import com.openvie.api.common.exception.custom.BadRequestException;
+import com.openvie.api.common.exception.custom.ConflictException;
+import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.common.exception.custom.UnauthorizedException;
+import com.openvie.api.document.api.DocumentApi;
+import com.openvie.api.document.api.DocumentApi.ApprovalDocumentSnapshot;
+import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.TenantIdentityApi;
+import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
+import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
+import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessRequest;
+import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessResponse;
+import com.openvie.api.workflow.dto.WorkflowDtos.UpdateSlConfigRequest;
+import com.openvie.api.workflow.model.WorkflowSlaConfig;
+import com.openvie.api.workflow.repository.WorkflowSlaConfigRepository;
+import com.openvie.api.workflow.service.WorkflowProperties;
+import com.openvie.api.workflow.service.WorkflowService;
+
+class WorkflowServiceTest {
+
+    private final RuntimeService runtimeService = mock(RuntimeService.class);
+    private final TaskService taskService = mock(TaskService.class);
+    private final HistoryService historyService = mock(HistoryService.class);
+    private final WorkflowSlaConfigRepository slaConfigRepository = mock(WorkflowSlaConfigRepository.class);
+    private final DocumentApi documentApi = mock(DocumentApi.class);
+    private final TenantIdentityApi identityApi = mock(TenantIdentityApi.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+
+    private final UUID workspaceId = UUID.randomUUID();
+    private final UUID otherWorkspaceId = UUID.randomUUID();
+    private final UUID organizationId = UUID.randomUUID();
+    private final UUID userId = UUID.randomUUID();
+    private final UUID documentId = UUID.randomUUID();
+    private final UUID taskId = UUID.randomUUID();
+    private final UUID processInstanceId = UUID.randomUUID();
+
+    private WorkflowService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new WorkflowService(runtimeService, taskService, historyService,
+                slaConfigRepository, new WorkflowProperties(), documentApi, identityApi, eventPublisher);
+        lenient().when(slaConfigRepository.findByOrganizationId(organizationId)).thenReturn(Optional.empty());
+    }
+
+    // ------------------------------------------------------------------
+    // start
+    // ------------------------------------------------------------------
+
+    @Test
+    void startPublishesTheLevelDecisionWithThePolicyVersionOntoProcessAndAudit() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        when(documentApi.requireApprovalCandidate(workspaceId, documentId)).thenReturn(
+                new ApprovalDocumentSnapshot(documentId, workspaceId, UUID.randomUUID(),
+                        "hop-dong-lao-dong.pdf"));
+        ProcessInstance instance = mock(ProcessInstance.class);
+        when(instance.getId()).thenReturn(processInstanceId.toString());
+        when(runtimeService.startProcessInstanceByKey(eq(WorkflowService.PROCESS_KEY),
+                eq(documentId.toString()), any())).thenReturn(instance);
+        when(runtimeService.getVariables(processInstanceId.toString())).thenReturn(Map.of(
+                "sensitive", true, "approvalLevel", 2, "policyVersion", "sensitive-keyword-v1"));
+        Task firstTask = task(WorkflowService.LEVEL_2_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString()));
+        stubTaskQuery(List.of(firstTask));
+
+        StartProcessResponse response = service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace"));
+
+        assertEquals(2, response.approvalLevel());
+        assertTrue(response.sensitive());
+        assertEquals("sensitive-keyword-v1", response.policyVersion());
+        assertEquals(UUID.fromString(firstTask.getId()), response.taskId());
+
+        org.mockito.ArgumentCaptor<Map<String, Object>> captor =
+                org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(runtimeService).startProcessInstanceByKey(anyString(), anyString(), captor.capture());
+        assertEquals(workspaceId.toString(), captor.getValue().get("workspaceId"));
+        assertEquals(organizationId.toString(), captor.getValue().get("organizationId"));
+        assertEquals("hop-dong-lao-dong.pdf", captor.getValue().get("documentFileName"));
+
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.argThat(event -> {
+            AuditLogEvent audit = (AuditLogEvent) event;
+            return audit.getAction() == LogAction.WORKFLOW_STARTED
+                    && workspaceId.equals(audit.getTenantId())
+                    && Boolean.TRUE.equals(audit.getMetadata().get("sensitive"))
+                    && audit.getMetadata().get("approvalLevel").equals(2)
+                    && "sensitive-keyword-v1".equals(audit.getMetadata().get("policyVersion"));
+        }));
+    }
+
+    @Test
+    void startRejectsNonMembersBeforeTouchingDocuments() {
+        when(identityApi.requireMembership(userId, workspaceId))
+                .thenThrow(new UnauthorizedException("You are not a member of this workspace"));
+
+        assertThrows(UnauthorizedException.class, () -> service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace")));
+        verify(documentApi, never()).requireApprovalCandidate(any(), any());
+    }
+
+    @Test
+    void startFailsWhenTheDocumentIsUnknown() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        when(documentApi.requireApprovalCandidate(workspaceId, documentId))
+                .thenThrow(new ResourceNotFoundException("Document not found"));
+
+        assertThrows(ResourceNotFoundException.class, () -> service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace")));
+        verify(runtimeService, never()).startProcessInstanceByKey(anyString(), anyString(), any());
+    }
+
+    // ------------------------------------------------------------------
+    // claim
+    // ------------------------------------------------------------------
+
+    @Test
+    void claimResolvesTasksByIdAndForbidsForeignWorkspacesWithAccessDenied() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, null,
+                Map.of("workspaceId", otherWorkspaceId.toString())));
+
+        assertThrows(AccessDeniedException.class, () -> service.claim(workspaceId, userId, taskId),
+                "a member of workspace B must not act on workspace A's task (403)");
+        verify(taskService, never()).claim(anyString(), anyString());
+    }
+
+    @Test
+    void claimAnswersNotFoundForUnknownTaskIds() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(null);
+
+        assertThrows(ResourceNotFoundException.class, () -> service.claim(workspaceId, userId, taskId));
+    }
+
+    @Test
+    void plainMemberCannotClaimLevelOneTasks() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString())));
+
+        assertThrows(AccessDeniedException.class, () -> service.claim(workspaceId, userId, taskId));
+        verify(taskService, never()).claim(anyString(), anyString());
+    }
+
+    @Test
+    void orgOwnerClaimsALevelTwoTaskThroughItsOrgRole() {
+        member(WorkspaceRole.MEMBER, OrgRole.ORG_OWNER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_2_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString())));
+
+        service.claim(workspaceId, userId, taskId);
+
+        verify(taskService).claim(taskId.toString(), userId.toString());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.argThat(event ->
+                ((AuditLogEvent) event).getAction() == LogAction.WORKFLOW_TASK_CLAIMED
+                        && workspaceId.equals(((AuditLogEvent) event).getTenantId())));
+    }
+
+    @Test
+    void claimingAClaimedTaskConflicts() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY,
+                UUID.randomUUID().toString(), Map.of("workspaceId", workspaceId.toString())));
+
+        assertThrows(ConflictException.class, () -> service.claim(workspaceId, userId, taskId));
+        verify(taskService, never()).claim(anyString(), anyString());
+    }
+
+    // ------------------------------------------------------------------
+    // complete
+    // ------------------------------------------------------------------
+
+    @Test
+    void rejectRequiresAReason() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, null, baseVariables()));
+
+        assertThrows(BadRequestException.class, () -> service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("REJECT", "   ")));
+        verify(taskService, never()).complete(anyString(), anyMap());
+    }
+
+    @Test
+    void escalateIsRejectedOnLevelTwoTasks() {
+        member(WorkspaceRole.MEMBER, OrgRole.ORG_OWNER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_2_TASK_KEY, null, baseVariables()));
+
+        assertThrows(BadRequestException.class, () -> service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("ESCALATE", "not mine")));
+        verify(taskService, never()).complete(anyString(), anyMap());
+    }
+
+    @Test
+    void approveEndsAnOrdinaryProcessAndStoresTheDecision() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, userId.toString(), baseVariables()));
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentStatus", "APPROVED"),
+                LocalDateTime.now());
+
+        var response = service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("APPROVE", null));
+
+        assertTrue(response.processEnded());
+        assertEquals("APPROVED", response.documentStatus());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.argThat(event -> {
+            AuditLogEvent audit = (AuditLogEvent) event;
+            return audit.getAction() == LogAction.WORKFLOW_APPROVED
+                    && "APPROVE".equals(audit.getMetadata().get("decision"))
+                    && Boolean.TRUE.equals(audit.getMetadata().get("sensitive"))
+                    && "sensitive-keyword-v1".equals(audit.getMetadata().get("policyVersion"));
+        }));
+    }
+
+    @Test
+    void rejectedDecisionRecordsTheReasonAndLeavesTheProcessOpen() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, userId.toString(), baseVariables()));
+        // after REJECT the flow reaches recordRejection synchronously, so history ends:
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentStatus", "REJECTED"),
+                LocalDateTime.now());
+
+        var response = service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("REJECT", "contract expired"));
+
+        assertTrue(response.processEnded());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.argThat(event -> {
+            AuditLogEvent audit = (AuditLogEvent) event;
+            return audit.getAction() == LogAction.WORKFLOW_REJECTED
+                    && "contract expired".equals(audit.getMetadata().get("reason"));
+        }));
+    }
+
+    // ------------------------------------------------------------------
+    // process visibility
+    // ------------------------------------------------------------------
+
+    @Test
+    void foreignProcessDetailIsForbidden() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        HistoricProcessInstanceQuery historicQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        HistoricProcessInstance historic = mock(HistoricProcessInstance.class);
+        when(historic.getProcessVariables()).thenReturn(
+                Map.of("workspaceId", otherWorkspaceId.toString()));
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(historicQuery);
+        when(historicQuery.singleResult()).thenReturn(historic);
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.getProcess(workspaceId, userId, processInstanceId));
+    }
+
+    @Test
+    void unknownProcessDetailIsNotFound() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        HistoricProcessInstanceQuery historicQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(historicQuery);
+        when(historicQuery.singleResult()).thenReturn(null);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.getProcess(workspaceId, userId, processInstanceId));
+    }
+
+    // ------------------------------------------------------------------
+    // SLA configuration
+    // ------------------------------------------------------------------
+
+    @Test
+    void workspaceAdminsCannotChangeSla() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        assertThrows(AccessDeniedException.class, () -> service.updateSlaConfig(workspaceId, userId,
+                new UpdateSlConfigRequest(30, 60)));
+        verify(slaConfigRepository, never()).save(any());
+    }
+
+    @Test
+    void escalationCannotComeBeforeTheReminder() {
+        member(WorkspaceRole.MEMBER, OrgRole.ORG_OWNER);
+        assertThrows(BadRequestException.class, () -> service.updateSlaConfig(workspaceId, userId,
+                new UpdateSlConfigRequest(60, 30)));
+        verify(slaConfigRepository, never()).save(any());
+    }
+
+    @Test
+    void ownerUpdatePersistsMinutesAndRecordsTheAudit() {
+        member(WorkspaceRole.MEMBER, OrgRole.ORG_OWNER);
+
+        var response = service.updateSlaConfig(workspaceId, userId,
+                new UpdateSlConfigRequest(1, 2));
+
+        assertEquals(1, response.reminderMinutes());
+        assertEquals(2, response.escalationMinutes());
+        org.mockito.ArgumentCaptor<WorkflowSlaConfig> saved =
+                org.mockito.ArgumentCaptor.forClass(WorkflowSlaConfig.class);
+        verify(slaConfigRepository).save(saved.capture());
+        assertEquals(organizationId, saved.getValue().getOrganizationId());
+        assertEquals(userId, saved.getValue().getUpdatedBy());
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.argThat(event ->
+                ((AuditLogEvent) event).getAction() == LogAction.WORKFLOW_SLA_CONFIG_CHANGED
+                        && workspaceId.equals(((AuditLogEvent) event).getTenantId())));
+    }
+
+    @Test
+    void effectiveSlaFallsBackToDefaultsWhenNoRowExists() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+
+        var response = service.effectiveSlaConfig(workspaceId, userId);
+
+        assertEquals(1440, response.defaultReminderMinutes());
+        assertEquals(2880, response.defaultEscalationMinutes());
+        assertEquals(1440, response.reminderMinutes());
+        assertEquals(2880, response.escalationMinutes());
+    }
+
+    // ------------------------------------------------------------------
+    // helpers
+    // ------------------------------------------------------------------
+
+    private Map<String, Object> baseVariables() {
+        return Map.of(
+                "workspaceId", workspaceId.toString(),
+                "documentId", documentId.toString(),
+                "sensitive", true,
+                "policyVersion", "sensitive-keyword-v1");
+    }
+
+    private Task task(String taskDefinitionKey, String assignee, Map<String, Object> variables) {
+        Task task = mock(Task.class);
+        lenient().when(task.getTaskDefinitionKey()).thenReturn(taskDefinitionKey);
+        lenient().when(task.getAssignee()).thenReturn(assignee);
+        lenient().when(task.getProcessVariables()).thenReturn(variables);
+        lenient().when(task.getProcessInstanceId()).thenReturn(processInstanceId.toString());
+        lenient().when(task.getId()).thenReturn(taskId.toString());
+        lenient().when(task.getName()).thenReturn(taskDefinitionKey);
+        return task;
+    }
+
+    /** Tasks resolve through a fluent query; RETURNS_SELF keeps the chain usable. */
+    private TaskQuery stubTaskQuerySingle(Task singleResult) {
+        TaskQuery query = mock(TaskQuery.class, RETURNS_SELF);
+        lenient().when(query.singleResult()).thenReturn(singleResult);
+        lenient().when(taskService.createTaskQuery()).thenReturn(query);
+        return query;
+    }
+
+    private TaskQuery stubTaskQuery(List<Task> list) {
+        TaskQuery query = mock(TaskQuery.class, RETURNS_SELF);
+        lenient().when(query.singleResult()).thenReturn(list.isEmpty() ? null : list.get(0));
+        lenient().when(query.list()).thenReturn(list);
+        lenient().when(taskService.createTaskQuery()).thenReturn(query);
+        return query;
+    }
+
+    private void stubHistoric(String pid, Map<String, Object> variables, LocalDateTime endTime) {
+        HistoricProcessInstanceQuery query = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        HistoricProcessInstance historic = mock(HistoricProcessInstance.class);
+        lenient().when(historic.getId()).thenReturn(pid);
+        lenient().when(historic.getEndTime()).thenReturn(toJavaDate(endTime));
+        lenient().when(historic.getProcessVariables()).thenReturn(variables);
+        lenient().when(historyService.createHistoricProcessInstanceQuery()).thenReturn(query);
+        lenient().when(query.singleResult()).thenReturn(historic);
+    }
+
+private java.util.Date toJavaDate(LocalDateTime time) {
+        return time == null ? null : java.util.Date.from(time.atZone(java.time.ZoneId.systemDefault()).toInstant());
+    }
+
+    private void member(WorkspaceRole workspaceRole, OrgRole orgRole) {
+        when(identityApi.requireMembership(userId, workspaceId)).thenReturn(
+                new MembershipSnapshot(userId, organizationId, workspaceId, orgRole,
+                        workspaceRole, "ACTIVE"));
+    }
+}
