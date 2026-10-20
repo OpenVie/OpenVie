@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Building2,
+  ClipboardCheck,
   FileText,
   MessageSquare,
   Settings,
@@ -11,7 +12,7 @@ import {
 
 export type AppNavigationItem = {
   href: string
-  labelKey: "chat" | "documents" | "documentation" | "users" | "organization" | "workspaces" | "settings"
+  labelKey: "chat" | "documents" | "approvals" | "documentation" | "users" | "organization" | "workspaces" | "settings"
   icon: LucideIcon
   placement?: "main" | "footer"
   /** When set, the item only shows for callers holding an org-level role. */
@@ -21,6 +22,7 @@ export type AppNavigationItem = {
 export const appNavigation: AppNavigationItem[] = [
   { href: "/", labelKey: "chat", icon: MessageSquare },
   { href: "/documents", labelKey: "documents", icon: FileText },
+  { href: "/approvals", labelKey: "approvals", icon: ClipboardCheck },
   { href: "/users", labelKey: "users", icon: Users },
   { href: "/admin/organization", labelKey: "organization", icon: ShieldCheck, ownerOnly: true },
   { href: "/admin/workspaces", labelKey: "workspaces", icon: Building2, ownerOnly: true },

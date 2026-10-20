@@ -15,6 +15,7 @@
   "Navigation": {
     "chat": "Chat",
     "documents": "Documents",
+    "approvals": "Approval inbox",
     "documentation": "Documentation",
     "users": "Users",
     "logout": "Log out",
@@ -33,6 +34,7 @@
     "login": "Log In",
     "acceptInvitation": "Accept Invitation",
     "documents": "Documents",
+    "approvals": "Approval inbox",
     "documentDetails": "Document Details",
     "users": "Team Members",
     "organization": "Organization",
@@ -398,6 +400,15 @@
     "uploadDocuments": "Upload documents",
     "upload": "Upload",
     "cancel": "Cancel",
+    "submitApproval": "Submit for approval",
+    "submitApprovalTitle": "Submit document for approval",
+    "publishTarget": "Who can use the approved document?",
+    "publishTargets": {
+      "workspace": "This workspace",
+      "shared": "Shared workspaces",
+      "public": "Public"
+    },
+    "approvalSubmitted": "Document submitted for approval",
     "dropFiles": "Drop files here to upload",
     "fileHelp": "PDF, DOCX, TXT, Markdown, HTML, XLSX, and CSV up to 20 MB. Scanned PDFs and legacy Office files are excluded.",
     "searchFilenames": "Search filenames",
@@ -451,7 +462,37 @@
       "workspace": "Unable to load workspace",
       "load": "Unable to load documents",
       "upload": "Upload failed",
-      "delete": "Unable to delete document"
+      "delete": "Unable to delete document",
+      "approval": "Unable to submit approval"
+    }
+  },
+  "Approval": {
+    "eyebrow": "Digital process",
+    "title": "Approval inbox",
+    "description": "Submit documents for review and complete approval tasks in one place.",
+    "loading": "Loading approval workflow",
+    "inboxTitle": "Tasks to review",
+    "submissionsTitle": "Approval history",
+    "emptyInbox": "There are no approval tasks waiting for you.",
+    "emptySubmissions": "No approval requests yet.",
+    "levelOne": "Level 1 · Workspace admin",
+    "levelTwo": "Level 2 · Organization owner",
+    "claimed": "Claimed",
+    "unclaimed": "Waiting",
+    "claim": "Claim",
+    "approve": "Approve",
+    "reject": "Reject",
+    "escalate": "Escalate",
+    "rejectTitle": "Reject document",
+    "escalateTitle": "Escalate approval",
+    "rejectPlaceholder": "Explain why this document is rejected",
+    "escalatePlaceholder": "Add a note for the next approval level",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "updated": "Approval updated",
+    "fallback": {
+      "load": "Unable to load approvals",
+      "action": "Unable to update approval"
     }
   },
   "DocumentViewer": {
