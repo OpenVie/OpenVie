@@ -61,7 +61,9 @@ import com.openvie.api.workflow.service.WorkflowService;
         "spring.jpa.hibernate.ddl-auto=validate",
         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
         "spring.jpa.show-sql=false",
-        "spring.datasource.driver-class-name=org.postgresql.Driver"
+        "spring.datasource.driver-class-name=org.postgresql.Driver",
+        "flowable.async-executor-activate=false",
+        "flowable.async-history-executor-activate=false"
 })
 @ActiveProfiles("test")
 class WorkflowRestartDurabilityTest {
@@ -126,6 +128,8 @@ class WorkflowRestartDurabilityTest {
                         "--spring.jpa.hibernate.ddl-auto=validate",
                         "--spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                         "--spring.flyway.enabled=true",
+                        "--flowable.async-executor-activate=false",
+                        "--flowable.async-history-executor-activate=false",
                         "--server.port=0");
         try {
             WorkflowService afterRestart = restarted.getBean(WorkflowService.class);
@@ -192,6 +196,8 @@ class WorkflowRestartDurabilityTest {
                         "--spring.jpa.hibernate.ddl-auto=validate",
                         "--spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
                         "--spring.flyway.enabled=true",
+                        "--flowable.async-executor-activate=false",
+                        "--flowable.async-history-executor-activate=false",
                         "--server.port=0");
         try {
             WorkflowService afterRestart = restarted.getBean(WorkflowService.class);
