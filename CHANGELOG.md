@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.3] - 2026-10-19
+### Added
+
+- **Two-level document approval workflow (issue #8)**:
+  - Embedded Flowable 8 BPMN engine in the Spring Boot `api` module, sharing the existing PostgreSQL (engine-managed `ACT_*`/`FLW_*` tables next to the business schema — no additional container); process `eofficeDocumentApproval` with synchronous sensitivity scoring, level routing, and SLA boundary timers.
+  - Workspace REST surface under `/api/v1/workflow`: start a process (member submits only), list processes/tasks, claim a task (one assignee per task; the candidate-group queue keeps it visible as backup), approve, reject (reason is mandatory), and an explicit level-1→level-2 hand-off — skipping a level is not offered; a task or process of another workspace answers with an explicit 403.
+  - RBAC-aware approval levels set by the system, not the submitter: documents matched by the shared sensitivity policy or targeting `shared`/`public` publish routes are approved at level 2 by the organization owner only, ordinary workspace documents at level 1 by workspace admins; SSO-issued tokens work because every call resolves the live workspace membership.
+  - Shared sensitivity contract `contracts/approval/v1/sensitive-policy.json` (`sensitive-keyword-v1`) dual-consumed by the Python `sensitive_policy` router and the Java scorer (byte-identical runtime copy in `api/src/main/resources/approval/`); cross-language sync tests assert the term set and all 18 canonical fixtures on both sides — Java keeps no second keyword list.
+  - Per-organization SLA tuning: `PUT /api/v1/workflow/sla-config` (org owner only) persists reminder/escalation minutes in `workflow_sla_configs` (Flyway V5); the 24h reminder timer is non-interrupting, the 48h escalation timer moves an overdue level-1 task to the owner queue, both escalated paths land at level 2 and record audit entries (`overdue`, never a manual decision). Defaults stay in `openvie.workflow.*` (ISO-8601 durations), demo-shortenable to minutes.
+  - Audit trail of every workflow transition via `AuditLogEvent` (`WORKFLOW_STARTED`, `WORKFLOW_TASK_CLAIMED`, `WORKFLOW_APPROVED`, `WORKFLOW_REJECTED`, `WORKFLOW_ESCALATED`, `WORKFLOW_REMINDER_SENT`, `WORKFLOW_SLA_CONFIG_CHANGED`) with `POLICY_VERSION`, level decision, and decision reason recorded as process variables.
+  - Durable state proof: integration tests restart a full application context over the same database and rediscover the running process, its claimed task, and finish the approval without replay.## [0.2.3] - 2026-10-19
 
 ### Added
 

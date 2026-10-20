@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "policy_version": "sensitive-keyword-v1",
+  "source": "rag-chatbot-fastapi/app/modules/generation/internal/sensitive_policy.py",
+  "description": "Canonical sensitivity vocabulary and fixtures shared by the Spring approval workflow engine (which scores a document when an approval process starts) and the Python Generation module's sensitive_policy. The keyword list is a verbatim copy of sensitive_policy._SENSITIVE_TERMS at the moment this contract was adopted. Extend the Python vocabulary first, then update this file so both sides move together: rag-chatbot-fastapi/tests/test_contracts.py keeps this file locked to the Python implementation, and com.openvie.api.workflow keeps its runtime copy byte-identical to this file.",
+  "terms": [
+    "legal", "law", "lawsuit", "court", "attorney", "lawyer", "contract",
+    "regulation", "regulatory", "compliance", "government", "visa", "immigration",
+    "tax", "taxes", "medical", "diagnosis", "diagnose", "prescription", "medication",
+    "medicine", "health", "healthcare", "finance", "financial", "investment",
+    "investing", "loan", "interest rate", "insurance",
+    "phap ly", "luat", "toa an", "luat su", "hop dong", "quy dinh",
+    "tuan thu", "chinh phu", "co quan nha nuoc", "thi thuc", "nhap cu",
+    "thue", "y te", "chan doan", "don thuoc", "thuoc", "benh",
+    "suc khoe", "tai chinh", "dau tu", "vay", "lai suat", "bao hiem"
+  ],
+  "fixtures": [
+    {"text": "Do we need a lawyer for this contract?", "expected_sensitive": true},
+    {"text": "hop dong nhan vien 2026", "expected_sensitive": true},
+    {"text": "Hop dong lao dong bien ban", "expected_sensitive": true},
+    {"text": "quy dinh ve nghi phep", "expected_sensitive": true},
+    {"text": "Tai chinh doanh thu boundary report", "expected_sensitive": true},
+    {"text": "ket qua thi dau tu", "expected_sensitive": true},
+    {"text": "dieu tri y te cho be", "expected_sensitive": true},
+    {"text": "xac nhan suc khoe", "expected_sensitive": true},
+    {"text": "Tôi có phải nộp thuế không?", "expected_sensitive": true},
+    {"text": "Bệnh của tôi có cần thuốc đặc biệt không?", "expected_sensitive": true},
+    {"text": "la Hut, vet law is restrictive", "expected_sensitive": true},
+    {"text": "Is this lawful-ish?", "expected_sensitive": false},
+    {"text": "kiểm tra giá bán sản phẩm", "expected_sensitive": false},
+    {"text": "How do I reset my password?", "expected_sensitive": false},
+    {"text": "hom nay troi dep qua", "expected_sensitive": false},
+    {"text": "báo cáo mạng nội bộ tuần 42", "expected_sensitive": false},
+    {"text": "onboarding checklist for new employees", "expected_sensitive": false},
+    {"text": "gia ban san pham va ho tro khach hang", "expected_sensitive": false}
+  ]
+}

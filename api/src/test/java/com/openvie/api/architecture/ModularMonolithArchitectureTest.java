@@ -16,7 +16,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 class ModularMonolithArchitectureTest {
     private static final Set<String> BUSINESS_MODULES = Set.of(
-            "ai", "auth", "chat", "document", "notification", "tenant");
+            "ai", "auth", "chat", "document", "notification", "tenant", "workflow");
 
     private static final ImportOption MAIN_OUTPUT_ONLY = location -> {
         String path = location.asURI().getPath();
