@@ -39,6 +39,8 @@ import {
 } from "@/lib/documents-api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getTenantWorkspaceApi } from "@/lib/workspace-api";
+import { startApprovalApi } from "@/lib/workflow-api";
+import type { PublishTarget } from "@/types";
 import { ClearFiltersButton, DateRangeFields, FilterPanel, FilterSelect, PaginationControls, ResultsSummary, UrlSearchField } from "@/components/list/ListControls";
 import { oneOf, safeDate, safePage, safeSize, useUrlListState } from "@/hooks/useUrlListState";
 
@@ -127,6 +129,9 @@ export default function DocumentsPage() {
   const [workspace, setWorkspace] = useState<TenantWorkspace | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardDocument | null>(null);
+  const [approvalTarget, setApprovalTarget] = useState<DashboardDocument | null>(null);
+  const [publishTarget, setPublishTarget] = useState<PublishTarget>("workspace");
+  const [submittingApproval, setSubmittingApproval] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -151,6 +156,21 @@ export default function DocumentsPage() {
     : bytes < 1024 * 1024 ? `${format.number(bytes / 1024, { maximumFractionDigits: 1 })} KB`
     : `${format.number(bytes / (1024 * 1024), { maximumFractionDigits: 1 })} MB`;
   const formatDate = (iso: string) => format.dateTime(new Date(iso), { dateStyle: "medium" });
+
+  async function confirmApproval() {
+    if (!approvalTarget) return;
+    setSubmittingApproval(true);
+    try {
+      await startApprovalApi(request, approvalTarget.id, publishTarget);
+      toast.success(t("approvalSubmitted"));
+      setApprovalTarget(null);
+      setRevision((value) => value + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("fallback.approval"));
+    } finally {
+      setSubmittingApproval(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -429,6 +449,19 @@ export default function DocumentsPage() {
                   <p className="min-w-0 truncate text-sm font-medium text-foreground">{doc.fileName}</p>
                   <div className="flex shrink-0 items-center gap-1">
                     <Badge variant="secondary" className="text-xs uppercase">{doc.fileType}</Badge>
+                    {doc.status === "COMPLETED" && !doc.uploadState && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setApprovalTarget(doc);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {t("submitApproval")}
+                      </Button>
+                    )}
                     {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
                       <Button
                         variant="ghost"
@@ -511,8 +544,21 @@ export default function DocumentsPage() {
                         ? doc.errorMessage ?? t("indexingFailed")
                         : t("waitingForIndexing")}
                   </TableCell>
-                  {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
-                    <TableCell>
+                  <TableCell className="space-x-1">
+                    {doc.status === "COMPLETED" && !doc.uploadState && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setApprovalTarget(doc);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        {t("submitApproval")}
+                      </Button>
+                    )}
+                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -527,8 +573,8 @@ export default function DocumentsPage() {
                       >
                         {deletingId === doc.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
                       </Button>
-                    </TableCell>
-                  )}
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -552,6 +598,42 @@ export default function DocumentsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadOpen(false)}>{t("cancel")}</Button>
             <Button onClick={() => void confirmUpload()}>{t("upload")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={approvalTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !submittingApproval) setApprovalTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("submitApprovalTitle")}</DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-foreground">{approvalTarget?.fileName}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <label className="space-y-2 text-sm font-medium">
+            {t("publishTarget")}
+            <select
+              className="flex h-9 w-full rounded-lg border bg-background px-3 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+              value={publishTarget}
+              onChange={(event) => setPublishTarget(event.target.value as PublishTarget)}
+              disabled={submittingApproval}
+            >
+              <option value="workspace">{t("publishTargets.workspace")}</option>
+              <option value="shared">{t("publishTargets.shared")}</option>
+              <option value="public">{t("publishTargets.public")}</option>
+            </select>
+          </label>
+          <DialogFooter>
+            <Button variant="outline" disabled={submittingApproval} onClick={() => setApprovalTarget(null)}>{t("cancel")}</Button>
+            <Button disabled={submittingApproval} onClick={() => void confirmApproval()}>
+              {submittingApproval && <Loader2 className="size-4 animate-spin" />}
+              {t("submitApproval")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

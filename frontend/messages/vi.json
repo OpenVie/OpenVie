@@ -15,6 +15,7 @@
   "Navigation": {
     "chat": "Trò chuyện",
     "documents": "Tài liệu",
+    "approvals": "Hộp thư phê duyệt",
     "documentation": "Tài liệu hướng dẫn",
     "users": "Người dùng",
     "logout": "Đăng xuất",
@@ -33,6 +34,7 @@
     "login": "Đăng nhập",
     "acceptInvitation": "Chấp nhận lời mời",
     "documents": "Tài liệu",
+    "approvals": "Hộp thư phê duyệt",
     "documentDetails": "Chi tiết tài liệu",
     "users": "Thành viên",
     "organization": "Tổ chức",
@@ -398,6 +400,15 @@
     "uploadDocuments": "Tải tài liệu lên",
     "upload": "Tải lên",
     "cancel": "Hủy",
+    "submitApproval": "Gửi để phê duyệt",
+    "submitApprovalTitle": "Gửi tài liệu để phê duyệt",
+    "publishTarget": "Ai có thể sử dụng tài liệu sau khi duyệt?",
+    "publishTargets": {
+      "workspace": "Không gian này",
+      "shared": "Các không gian được chia sẻ",
+      "public": "Công khai"
+    },
+    "approvalSubmitted": "Đã gửi tài liệu để phê duyệt",
     "dropFiles": "Thả tệp vào đây để tải lên",
     "fileHelp": "Hỗ trợ PDF, DOCX, TXT, Markdown, HTML, XLSX và CSV tối đa 20 MB. Không hỗ trợ PDF quét và tệp Office cũ.",
     "searchFilenames": "Tìm tên tệp",
@@ -451,7 +462,37 @@
       "workspace": "Không thể tải không gian làm việc",
       "load": "Không thể tải tài liệu",
       "upload": "Tải lên thất bại",
-      "delete": "Không thể xóa tài liệu"
+      "delete": "Không thể xóa tài liệu",
+      "approval": "Không thể gửi yêu cầu phê duyệt"
+    }
+  },
+  "Approval": {
+    "eyebrow": "Quy trình số",
+    "title": "Hộp thư phê duyệt",
+    "description": "Gửi tài liệu để duyệt và xử lý các yêu cầu phê duyệt tại một nơi.",
+    "loading": "Đang tải quy trình phê duyệt",
+    "inboxTitle": "Yêu cầu cần xử lý",
+    "submissionsTitle": "Lịch sử phê duyệt",
+    "emptyInbox": "Không có yêu cầu phê duyệt nào đang chờ bạn.",
+    "emptySubmissions": "Chưa có yêu cầu phê duyệt.",
+    "levelOne": "Cấp 1 · Quản trị không gian",
+    "levelTwo": "Cấp 2 · Chủ sở hữu tổ chức",
+    "claimed": "Đã nhận",
+    "unclaimed": "Đang chờ",
+    "claim": "Nhận xử lý",
+    "approve": "Phê duyệt",
+    "reject": "Từ chối",
+    "escalate": "Chuyển cấp",
+    "rejectTitle": "Từ chối tài liệu",
+    "escalateTitle": "Chuyển cấp phê duyệt",
+    "rejectPlaceholder": "Nêu lý do từ chối tài liệu",
+    "escalatePlaceholder": "Thêm ghi chú cho cấp phê duyệt tiếp theo",
+    "cancel": "Hủy",
+    "confirm": "Xác nhận",
+    "updated": "Đã cập nhật phê duyệt",
+    "fallback": {
+      "load": "Không thể tải yêu cầu phê duyệt",
+      "action": "Không thể cập nhật phê duyệt"
     }
   },
   "DocumentViewer": {
