@@ -130,6 +130,19 @@
 			<version>1.3.2</version>
 		</dependency>
 
+		<!--
+			Embedded BPMN workflow engine (ADR-0001, issue #8). Flowable 8 targets
+			Spring Boot 4 / Spring Framework 7. Only the process (BPMN) engine is
+			needed — the full starter would also boot the CMMN/DMN/App engines.
+			Engine tables live in the same PostgreSQL database as the business
+			schema; the engine creates and owns its ACT_* tables itself.
+		-->
+		<dependency>
+			<groupId>org.flowable</groupId>
+			<artifactId>flowable-spring-boot-starter-process</artifactId>
+			<version>8.0.0</version>
+		</dependency>
+
 		<!--	Devtools	-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

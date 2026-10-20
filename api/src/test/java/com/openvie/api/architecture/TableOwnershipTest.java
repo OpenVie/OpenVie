@@ -23,6 +23,7 @@ class TableOwnershipTest {
         own(owners, "notification", "notifications", "notification_channels");
         own(owners, "tenant", "organizations", "tenants", "users", "workspace_members",
                 "invitations", "knowledge_bases", "chatbots");
+        own(owners, "workflow", "workflow_sla_configs");
 
         Path root = Path.of("src/main/java/com/openvie/api");
         try (var files = Files.walk(root)) {
