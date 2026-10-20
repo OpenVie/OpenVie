@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="https://openvie.dev/bpmn/eoffice">
+  <process id="eofficeDocumentApproval" name="e-Office two-level document approval" isExecutable="true">
+    <documentation>Issue #8 runtime implementation of the issue #7 spike. The sensitivity score service task reuses the shared
+      vocabulary from contracts/approval/v1/sensitive-policy.json (sensitive-keyword-v1) — Java keeps no second keyword list.
+      POLICY_VERSION and the level decision are stored as process variables and recorded in the audit log. SLA timers are
+      plain process variables so organizations can configure them (demoruns shorten to seconds).</documentation>
+
+    <startEvent id="start" name="Document submitted" />
+    <sequenceFlow id="f_start_score" sourceRef="start" targetRef="scoreSensitivity" />
+    <serviceTask id="scoreSensitivity" name="Score document sensitivity"
+      flowable:delegateExpression="${sensitivityScoringDelegate}" />
+    <sequenceFlow id="f_score_route" sourceRef="scoreSensitivity" targetRef="routeLevel" />
+
+    <exclusiveGateway id="routeLevel" name="Choose approval level" default="f_ordinary" />
+    <sequenceFlow id="f_level2" sourceRef="routeLevel" targetRef="level2Approval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approvalLevel == 2}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_ordinary" sourceRef="routeLevel" targetRef="level1Approval" />
+
+    <userTask id="level1Approval" name="Level 1 — workspace admin approval" flowable:candidateGroups="WORKSPACE_ADMIN" />
+    <boundaryEvent id="reminderTimer" name="24h reminder" attachedToRef="level1Approval" cancelActivity="false">
+      <timerEventDefinition><timeDuration>${reminderDuration}</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="f_reminder" sourceRef="reminderTimer" targetRef="sendReminder" />
+    <serviceTask id="sendReminder" name="Record in-app reminder" flowable:delegateExpression="${workflowReminderDelegate}" />
+    <sequenceFlow id="f_reminder_end" sourceRef="sendReminder" targetRef="reminderEnd" />
+    <endEvent id="reminderEnd" name="Reminder recorded" />
+
+    <boundaryEvent id="escalationTimer" name="48h escalation" attachedToRef="level1Approval" cancelActivity="true">
+      <timerEventDefinition><timeDuration>${escalationDuration}</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="f_timer_escalate" sourceRef="escalationTimer" targetRef="recordEscalation" />
+    <serviceTask id="recordEscalation" name="Audit SLA escalation" flowable:delegateExpression="${workflowTimerEscalationDelegate}" />
+    <sequenceFlow id="f_escalation_to_level2" sourceRef="recordEscalation" targetRef="level2Approval" />
+
+    <exclusiveGateway id="level1Outcome" name="Level 1 decision" default="f_level1_reject" />
+    <sequenceFlow id="f_level1_decision" sourceRef="level1Approval" targetRef="level1Outcome" />
+    <sequenceFlow id="f_level1_approve" sourceRef="level1Outcome" targetRef="publishDocument">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approvalOutcome == 'APPROVE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level1_escalate" sourceRef="level1Outcome" targetRef="level2Approval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approvalOutcome == 'ESCALATE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level1_reject" sourceRef="level1Outcome" targetRef="recordRejection" />
+
+    <userTask id="level2Approval" name="Level 2 — organization owner approval" flowable:candidateGroups="ORG_OWNER" />
+    <sequenceFlow id="f_level2_decision" sourceRef="level2Approval" targetRef="level2Outcome" />
+    <exclusiveGateway id="level2Outcome" name="Level 2 decision" default="f_level2_reject" />
+    <sequenceFlow id="f_level2_approve" sourceRef="level2Outcome" targetRef="publishDocument">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${approvalOutcome == 'APPROVE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level2_reject" sourceRef="level2Outcome" targetRef="recordRejection" />
+
+    <serviceTask id="publishDocument" name="Record approved state" flowable:delegateExpression="${approvalPublishDelegate}" />
+    <sequenceFlow id="f_publish_end" sourceRef="publishDocument" targetRef="approvedEnd" />
+    <endEvent id="approvedEnd" name="Approved" />
+    <serviceTask id="recordRejection" name="Record rejected state" flowable:delegateExpression="${approvalRejectionDelegate}" />
+    <sequenceFlow id="f_reject_end" sourceRef="recordRejection" targetRef="rejectedEnd" />
+    <endEvent id="rejectedEnd" name="Rejected" />
+  </process>
+</definitions>

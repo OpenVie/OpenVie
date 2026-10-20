@@ -127,11 +127,12 @@ class FreshPostgresBaselineTest {
     void flywayMigratesTheBaselineIntoAnEmptyDatabase() {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "select version, description, success from flyway_schema_history order by installed_rank");
-        assertEquals(4, history.size(), "baseline must contain the schema, model seed, document content hash, and SSO identity link");
+        assertEquals(5, history.size(), "baseline must contain the schema, model seed, document content hash, SSO identity link, and workflow SLA config");
         assertEquals("1", String.valueOf(history.get(0).get("version")));
         assertEquals("2", String.valueOf(history.get(1).get("version")));
         assertEquals("3", String.valueOf(history.get(2).get("version")));
         assertEquals("4", String.valueOf(history.get(3).get("version")));
+        assertEquals("5", String.valueOf(history.get(4).get("version")));
         history.forEach(row -> assertTrue((Boolean) row.get("success"),
                 "migration " + row.get("version") + " must be recorded as successful"));
     }
@@ -145,15 +146,27 @@ class FreshPostgresBaselineTest {
                 "chat_sessions", "chat_messages", "chat_turns",
                 "documents", "internal_event_outbox", "internal_event_inbox",
                 "module_event_outbox", "module_event_inbox",
-                "audit_logs", "notifications");
-        List<String> actual = jdbc.queryForList(
+                "audit_logs", "notifications", "workflow_sla_configs");
+        List<String> allTables = jdbc.queryForList(
                 "select table_name from information_schema.tables "
                         + "where table_schema = 'public' and table_name <> 'flyway_schema_history'",
                 String.class);
-        assertEquals(expected, new HashSet<>(actual),
-                "fresh install must contain exactly the retained v0.2 tables");
-        assertFalse(actual.contains("login_2fa_state"),
+        // The embedded Flowable engine owns and creates its ACT_*/FLW_* tables
+        // next to the business schema (ADR-0001); they are asserted separately
+        // so business tables stay an exact, explicit set.
+        Set<String> business = allTables.stream()
+                .filter(name -> !name.toLowerCase().startsWith("act_")
+                        && !name.toLowerCase().startsWith("flw_"))
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(expected, business, "fresh install must contain exactly the retained v0.2 tables");
+        assertFalse(tablesContain(allTables, "login_2fa_state"),
                 "password-only login leaves no 2FA state table behind");
+        assertTrue(allTables.stream().anyMatch(name -> name.toLowerCase().startsWith("act_ge_property")),
+                "the embedded Flowable engine tables must exist alongside the business schema");
+    }
+
+    private boolean tablesContain(List<String> tables, String table) {
+        return tables.contains(table);
     }
 
     @Test
