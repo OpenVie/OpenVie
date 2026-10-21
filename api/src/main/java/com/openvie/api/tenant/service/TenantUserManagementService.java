@@ -24,6 +24,8 @@ import com.openvie.api.tenant.dto.UserManagementDtos.InvitationResponse;
 import com.openvie.api.tenant.dto.UserManagementDtos.MemberResponse;
 import com.openvie.api.tenant.api.InvitationStatus;
 import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.TenantIdentityApi;
+import com.openvie.api.tenant.api.TenantStatus;
 import com.openvie.api.tenant.api.UserStatus;
 import com.openvie.api.tenant.api.WorkspaceRole;
 import com.openvie.api.tenant.enums.WorkspaceVisibility;
@@ -70,6 +72,7 @@ import org.springframework.data.domain.PageRequest;
  */
 @Service
 public class TenantUserManagementService {
+    private static final String SERVICE_EMAIL_DOMAIN = "keys.openvie.invalid";
     private static final Duration INVITATION_LIFETIME = Duration.ofHours(72);
     private static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
     private static final Duration INVITATION_VALIDITY_GRACE = Duration.ZERO;
@@ -637,6 +640,65 @@ public class TenantUserManagementService {
     private Tenant requireWorkspace(UUID workspaceId) {
         return workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace was not found"));
+    }
+
+    /**
+     * Provisions the service-member identity backing one API key: an
+     * organization account with an unusable password credential plus a single
+     * workspace membership. API-key lifecycle code is the only producer of
+     * service accounts; nothing here sends mail because service members never
+     * sign in.
+     */
+    @Transactional
+    public TenantIdentityApi.IdentitySnapshot provisionServiceAccount(
+            UUID orgId, UUID creatorId, UUID workspaceId, String workspaceRole, String displayName) {
+        requireOrgUser(orgId, creatorId);
+        Tenant workspace = workspaceRepository.findById(workspaceId)
+                .filter(candidate -> candidate.getOrganization().getId().equals(orgId))
+                .orElseThrow(() -> new ResourceNotFoundException("Workspace not found"));
+        if (workspace.getStatus() != TenantStatus.ACTIVE) {
+            throw new BadRequestException("Workspace is not active");
+        }
+        User serviceUser = new User();
+        serviceUser.setOrganization(workspace.getOrganization());
+        // Key holders never sign in: the stored credential cannot match the
+        // password encoder, so password login always fails for this account.
+        serviceUser.setPasswordHash("!no-credential");
+        serviceUser.setEmail("service+" + UUID.randomUUID().toString().substring(0, 8)
+                + "@" + SERVICE_EMAIL_DOMAIN);
+        serviceUser.setFullName(displayName);
+        serviceUser.setRole(OrgRole.MEMBER);
+        serviceUser.setStatus(UserStatus.ACTIVE);
+        serviceUser.setMustChangePassword(false);
+        serviceUser.setInvitedBy(requireUser(creatorId));
+        userRepository.save(serviceUser);
+
+        WorkspaceMember membership = new WorkspaceMember();
+        membership.setUser(serviceUser);
+        membership.setWorkspace(workspace);
+        membership.setRole(WorkspaceRole.valueOf(workspaceRole));
+        memberRepository.save(membership);
+
+        return new TenantIdentityApi.IdentitySnapshot(
+                serviceUser.getId(),
+                orgId,
+                serviceUser.getEmail(),
+                serviceUser.getFullName(),
+                OrgRole.MEMBER,
+                UserStatus.ACTIVE.name(),
+                false);
+    }
+
+    /**
+     * Suspends the service-member identity behind a revoked API key. The
+     * membership rows stay, so dashboards keep showing what the key touched;
+     * the unusable credential keeps password sign-in impossible.
+     */
+    @Transactional
+    public void deactivateServiceAccount(UUID orgId, UUID serviceUserId, UUID actorId) {
+        User serviceUser = requireOrgUser(orgId, serviceUserId);
+        serviceUser.setStatus(UserStatus.SUSPENDED);
+        userRepository.save(serviceUser);
     }
 
     private User requireUser(UUID userId) {

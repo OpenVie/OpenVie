@@ -37,4 +37,26 @@ public interface DocumentApi {
             UUID knowledgeBaseId,
             String fileName) {
     }
+
+    /**
+     * Records that an approval process is now open for this document, with the
+     * publish target chosen by the submitter. Idempotent while the document is
+     * already PENDING; a settled document may be re-submitted (the latest
+     * process owns the state).
+     *
+     * @throws com.openvie.api.common.exception.custom.ResourceNotFoundException
+     *             when the document does not exist in the workspace
+     */
+    void markApprovalPending(UUID tenantId, UUID documentId, String publishTarget);
+
+    /**
+     * Writes the terminal decision of an approval process onto the document
+     * row. The Flowable process remains the journal of who decided what and
+     * when; this makes the document's own state authoritative for listings,
+     * caches, and downstream consumers.
+     *
+     * @throws com.openvie.api.common.exception.custom.ResourceNotFoundException
+     *             when the document does not exist in the workspace
+     */
+    void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy);
 }

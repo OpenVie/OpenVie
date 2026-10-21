@@ -469,12 +469,13 @@ export default function DocumentViewerPage() {
         // Keep the current status visible during a transient polling failure.
       }
     };
-    const timer = window.setInterval(() => void poll(), 1800);
+    const timer = window.setInterval(() => void poll(), 2500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [document, documentId, request]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document?.status, documentId, request]);
 
   useEffect(() => {
     if (document?.status !== "COMPLETED") return;

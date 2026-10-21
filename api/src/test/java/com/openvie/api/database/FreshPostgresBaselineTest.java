@@ -127,12 +127,15 @@ class FreshPostgresBaselineTest {
     void flywayMigratesTheBaselineIntoAnEmptyDatabase() {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "select version, description, success from flyway_schema_history order by installed_rank");
-        assertEquals(5, history.size(), "baseline must contain the schema, model seed, document content hash, SSO identity link, and workflow SLA config");
+        assertEquals(8, history.size(), "baseline must contain the schema, model seed, document content hash, SSO identity link, workflow SLA config, API keys, webhooks, and the approval write-back");
         assertEquals("1", String.valueOf(history.get(0).get("version")));
         assertEquals("2", String.valueOf(history.get(1).get("version")));
         assertEquals("3", String.valueOf(history.get(2).get("version")));
         assertEquals("4", String.valueOf(history.get(3).get("version")));
         assertEquals("5", String.valueOf(history.get(4).get("version")));
+        assertEquals("6", String.valueOf(history.get(5).get("version")));
+        assertEquals("7", String.valueOf(history.get(6).get("version")));
+        assertEquals("8", String.valueOf(history.get(7).get("version")));
         history.forEach(row -> assertTrue((Boolean) row.get("success"),
                 "migration " + row.get("version") + " must be recorded as successful"));
     }
@@ -146,7 +149,8 @@ class FreshPostgresBaselineTest {
                 "chat_sessions", "chat_messages", "chat_turns",
                 "documents", "internal_event_outbox", "internal_event_inbox",
                 "module_event_outbox", "module_event_inbox",
-                "audit_logs", "notifications", "workflow_sla_configs");
+                "audit_logs", "notifications", "workflow_sla_configs",
+                "api_keys", "webhook_endpoints", "webhook_deliveries");
         List<String> allTables = jdbc.queryForList(
                 "select table_name from information_schema.tables "
                         + "where table_schema = 'public' and table_name <> 'flyway_schema_history'",

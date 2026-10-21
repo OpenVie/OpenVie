@@ -6,6 +6,7 @@ import com.openvie.api.notification.service.NotificationService;
 import com.openvie.api.tenant.api.event.AccountCreatedEvent;
 import com.openvie.api.tenant.api.event.UserInvitedEvent;
 import com.openvie.api.tenant.api.event.WorkspaceMemberAddedEvent;
+import com.openvie.api.workflow.api.event.WorkflowDecisionEvent;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +72,25 @@ public class NotificationListener {
             emailService.sendAccountCreatedEmail(event.orgId(), event.email(), event.fullName());
         } catch (Exception e) {
             log.warn("Account-created notice to {} failed: {}", event.email(), e.getMessage());
+        }
+    }
+
+    /**
+     * Submitter-facing verdict notice for a settled approval process. Fired
+     * after the workflow transaction commits, so a mail failure only marks the
+     * notification journal row FAILED.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void handleWorkflowDecision(WorkflowDecisionEvent event) {
+        log.info("Sending workflow {} notice to: {}", event.decision(), event.recipientUserId());
+        try {
+            notificationService.sendAndRecordWorkflowDecisionEmail(
+                    event.organizationId(), event.workspaceId(), event.recipientUserId(),
+                    event.recipientEmail(), event.recipientName(), event.documentFileName(),
+                    event.decision(), event.reason(), event.approvalLevel(), event.publishTarget());
+        } catch (Exception e) {
+            log.warn("Workflow decision notice to {} failed: {}",
+                    event.recipientUserId(), e.getMessage());
         }
     }
 

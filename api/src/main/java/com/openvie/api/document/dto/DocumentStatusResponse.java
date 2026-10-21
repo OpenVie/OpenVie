@@ -3,6 +3,7 @@ package com.openvie.api.document.dto;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.openvie.api.document.api.ApprovalStatus;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.enums.DocumentType;
 
@@ -19,6 +20,12 @@ public record DocumentStatusResponse(
         LocalDateTime uploadedAt,
         UUID knowledgeBaseId,
         @Schema(description = "Ingestion state: PENDING, PROCESSING, COMPLETED, or FAILED.") DocumentStatus status,
+        @Schema(description = "Approval state written back by the workflow engine: absent when the document was "
+                + "never submitted, PENDING while a process is open, then APPROVED or REJECTED.")
+        ApprovalStatus approvalStatus,
+        @Schema(description = "Publish target chosen at submission: workspace, shared, or public. "
+                + "Absent until the document is submitted for approval.")
+        String approvalTarget,
         Integer chunkCount,
         @Schema(description = "Set when ingestion FAILED; explains the worker-side reason.") String errorMessage,
         UUID uploadedBy

@@ -385,6 +385,9 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "existingMemberHint": "The user must already have an account in this organization.",
+    "addMultipleMembersHint": "Type or paste emails (separated by commas or spaces), or select from suggestions.",
+    "addMorePlaceholder": "Add another member...",
+    "membersAddedCount": "Added {count} members to the workspace",
     "suggestLoading": "Searching…",
     "suggestEmpty": "No matching people in this organization",
     "organizationDescription": "Manage all accounts in this organization.",
@@ -412,6 +415,7 @@
     "cancel": "Cancel",
     "submitApproval": "Submit for approval",
     "submitApprovalTitle": "Submit document for approval",
+    "submitApprovalDescription": "This document will be submitted for official approval within this workspace.",
     "publishTarget": "Who can use the approved document?",
     "publishTargets": {
       "workspace": "This workspace",
@@ -478,7 +482,9 @@
     "approvalBadge": {
       "inReview": "In review",
       "approved": "Approved"
-    }
+    },
+    "draftStatus": "Draft (unapproved)",
+    "rejectedStatus": "Rejected"
   },
   "Approval": {
     "eyebrow": "Digital process",
@@ -624,11 +630,13 @@
     "label": "Switch workspace",
     "workspaces": "Workspaces",
     "admin": "Admin",
-    "member": "Member"
+    "member": "Member",
+    "general": "General"
   },
   "Workspaces": {
     "title": "Workspaces",
     "description": "Create, rename, and archive the workspaces in this organization.",
+    "general": "General",
     "create": "New workspace",
     "createTitle": "Create workspace",
     "name": "Name",

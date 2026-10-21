@@ -7,12 +7,14 @@ import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.common.model.AuditLog;
 import com.openvie.api.common.repository.AuditLogRepository;
+import com.openvie.api.document.api.ApprovalStatus;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.document.api.DocumentApi.ApprovalDocumentSnapshot;
 import com.openvie.api.tenant.api.OrgRole;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.workflow.api.event.WorkflowDecisionEvent;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskResponse;
 import com.openvie.api.workflow.dto.WorkflowDtos.ProcessDetail;
@@ -106,6 +108,9 @@ public class WorkflowService {
                 documentApi.requireApprovalCandidate(workspaceId, request.documentId());
         SlEffective sla = effectiveSla(membership.orgId());
         String publishTarget = request.publishTarget().toLowerCase(Locale.ROOT);
+        // Write-back: the document's own state reflects that review is open, so
+        // listings and caches never re-derive it from engine history.
+        documentApi.markApprovalPending(workspaceId, document.documentId(), publishTarget);
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("workspaceId", workspaceId.toString());
@@ -175,6 +180,14 @@ public class WorkflowService {
                             "policyVersion", policyVersion,
                             "documentId", document.documentId(),
                             "taskDefinitionKey", firstTask.getTaskDefinitionKey()));
+            // The APPROVE path ended the process in this same transaction, so
+            // the document state and the submitter notice settle with it.
+            documentApi.recordApprovalDecision(
+                    workspaceId, document.documentId(), ApprovalStatus.APPROVED, userId);
+            publishDecisionEvent(membership.orgId(), workspaceId, instance.getId(), document.documentId(),
+                    document.fileName(), userId, "APPROVE",
+                    "Published by the submitting authority inside its own workspace",
+                    level, publishTarget);
             return new StartProcessResponse(
                     UUID.fromString(instance.getId()), document.documentId(), document.fileName(), publishTarget,
                     sensitive, level, policyVersion, sla.reminderDuration(), sla.escalationDuration(),
@@ -189,9 +202,9 @@ public class WorkflowService {
 
     @Transactional(readOnly = true)
     public List<WorkflowProcessView> listProcesses(UUID workspaceId, UUID userId, boolean includeFinished) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         List<WorkflowProcessView> views = new ArrayList<>();
-        for (HistoricProcessInstance historic : historyQuery(workspaceId, includeFinished)) {
+        for (HistoricProcessInstance historic : historyQuery(workspaceId, membership, includeFinished)) {
             views.add(processView(historic));
         }
         return views;
@@ -206,7 +219,7 @@ public class WorkflowService {
     @Transactional(readOnly = true)
     public ProcessListResult listProcessesPage(UUID workspaceId, UUID userId, boolean includeFinished,
             Integer page, Integer size) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         int requestedPage = page == null ? 0 : page;
         int requestedSize = size == null ? DEFAULT_PAGE_SIZE : size;
         if (requestedPage < 0) {
@@ -215,9 +228,9 @@ public class WorkflowService {
         if (requestedSize < 1 || requestedSize > MAX_PAGE_SIZE) {
             throw new BadRequestException("Size must be between 1 and 100");
         }
-        long total = processHistoryQuery(workspaceId, includeFinished).count();
+        long total = processHistoryQuery(workspaceId, membership, includeFinished).count();
         List<WorkflowProcessView> views = new ArrayList<>();
-        for (HistoricProcessInstance historic : processHistoryQuery(workspaceId, includeFinished)
+        for (HistoricProcessInstance historic : processHistoryQuery(workspaceId, membership, includeFinished)
                 .listPage(requestedPage * requestedSize, requestedSize)) {
             views.add(processView(historic));
         }
@@ -226,7 +239,7 @@ public class WorkflowService {
 
     @Transactional(readOnly = true)
     public ProcessDetail getProcess(UUID workspaceId, UUID userId, UUID processInstanceId) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         HistoricProcessInstance historic = historyService
                 .createHistoricProcessInstanceQuery()
                 .processInstanceId(processInstanceId.toString())
@@ -239,6 +252,7 @@ public class WorkflowService {
             // A known process of another workspace: forbidden, never silently filtered.
             throw new AccessDeniedException("This approval process belongs to another workspace");
         }
+        requireCanViewProcess(membership, historic);
         List<WorkspaceTaskView> tasks = new ArrayList<>();
         for (Task task : taskService.createTaskQuery()
                 .processInstanceId(processInstanceId.toString())
@@ -258,7 +272,7 @@ public class WorkflowService {
      */
     @Transactional(readOnly = true)
     public ProcessLog processLog(UUID workspaceId, UUID userId, UUID processInstanceId) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         HistoricProcessInstance historic = historyService
                 .createHistoricProcessInstanceQuery()
                 .processInstanceId(processInstanceId.toString())
@@ -271,6 +285,7 @@ public class WorkflowService {
             // A known process of another workspace: forbidden, never silently filtered.
             throw new AccessDeniedException("This approval process belongs to another workspace");
         }
+        requireCanViewProcess(membership, historic);
 
         Map<UUID, String> actorNames = new HashMap<>();
         List<ProcessLogEntry> entries = new ArrayList<>();
@@ -444,7 +459,21 @@ public class WorkflowService {
         }
         audit(workspaceId, userId, action, UUID.fromString(task.getProcessInstanceId()), metadata);
 
-        return terminalState(taskId, decision, task.getProcessInstanceId(), documentId);
+        CompleteTaskResponse response = terminalState(taskId, decision, task.getProcessInstanceId(), documentId);
+        if (response.processEnded()) {
+            // Terminal verdict: write it back onto the document and tell the
+            // submitter. A hand-off to level 2 is not a decision, so it only
+            // lands in the audit trail.
+            ApprovalStatus verdict = "APPROVE".equals(decision)
+                    ? ApprovalStatus.APPROVED
+                    : ApprovalStatus.REJECTED;
+            documentApi.recordApprovalDecision(workspaceId, documentId, verdict, userId);
+            publishDecisionEvent(membership.orgId(), workspaceId, task.getProcessInstanceId(), documentId,
+                    variable(task, "documentFileName", null),
+                    UUID.fromString(requireVariable(task, "initiatorId")),
+                    decision, reason, level, variable(task, "publishTarget", null));
+        }
+        return response;
     }
 
     // ------------------------------------------------------------------
@@ -523,17 +552,34 @@ public class WorkflowService {
                 config != null ? config.getUpdatedAt() : null);
     }
 
-    private HistoricProcessInstanceQuery processHistoryQuery(UUID workspaceId, boolean includeFinished) {
+    private HistoricProcessInstanceQuery processHistoryQuery(
+            UUID workspaceId, MembershipSnapshot membership, boolean includeFinished) {
         var query = historyService.createHistoricProcessInstanceQuery()
                 .variableValueEquals("workspaceId", workspaceId.toString());
+        // Regular members only see their own submissions; workspace admins and
+        // org owners oversee every process in the workspace.
+        if (membership != null && !membership.isWorkspaceAdmin()) {
+            query.variableValueEquals("initiatorId", membership.userId().toString());
+        }
         if (!includeFinished) {
             query.unfinished();
         }
         return query.includeProcessVariables().orderByProcessInstanceStartTime().asc();
     }
 
-    private List<HistoricProcessInstance> historyQuery(UUID workspaceId, boolean includeFinished) {
-        return processHistoryQuery(workspaceId, includeFinished).list();
+    private List<HistoricProcessInstance> historyQuery(
+            UUID workspaceId, MembershipSnapshot membership, boolean includeFinished) {
+        return processHistoryQuery(workspaceId, membership, includeFinished).list();
+    }
+
+    private void requireCanViewProcess(MembershipSnapshot membership, HistoricProcessInstance historic) {
+        if (membership == null || membership.isWorkspaceAdmin()) {
+            return;
+        }
+        String initiatorId = String.valueOf(historic.getProcessVariables().get("initiatorId"));
+        if (!membership.userId().toString().equals(initiatorId)) {
+            throw new AccessDeniedException("You can only view approval processes that you submitted");
+        }
     }
 
     private WorkflowProcessView processView(HistoricProcessInstance historic) {
@@ -654,6 +700,23 @@ public class WorkflowService {
 
     private int inMinutes(String isoDuration) {
         return (int) Duration.parse(isoDuration).toMinutes();
+    }
+
+    /**
+     * Publishes the submitter-facing decision notice. The recipient address is
+     * resolved here so the notification module needs no lookup of its own; an
+     * account that no longer resolves simply skips the notice.
+     */
+    private void publishDecisionEvent(UUID organizationId, UUID workspaceId, String processInstanceId,
+            UUID documentId, String documentFileName, UUID recipientUserId, String decision,
+            String reason, int approvalLevel, String publishTarget) {
+        TenantIdentityApi.IdentitySnapshot recipient = identityApi.findUserById(recipientUserId);
+        eventPublisher.publishEvent(new WorkflowDecisionEvent(
+                organizationId, workspaceId, UUID.fromString(processInstanceId), documentId, documentFileName,
+                recipientUserId,
+                recipient == null ? null : recipient.email(),
+                recipient == null ? null : recipient.fullName(),
+                decision, reason, approvalLevel, publishTarget));
     }
 
     private void audit(UUID tenantId, UUID actorId, LogAction action, UUID resourceId,

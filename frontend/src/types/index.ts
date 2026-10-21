@@ -10,6 +10,8 @@ export interface Document {
   errorMessage?: string | null;
   uploadedAt: string;
   uploadedBy?: string | null;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  approvalTarget?: "workspace" | "shared" | "public" | null;
 }
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -107,6 +109,8 @@ export interface DocumentStatusResponse {
   uploadedBy?: string | null;
   knowledgeBaseId: string;
   status: DocumentStatus;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  approvalTarget?: "workspace" | "shared" | "public" | null;
   chunkCount?: number | null;
   errorMessage?: string | null;
 }

@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
@@ -37,6 +38,49 @@ class ChatControllerTest extends BaseController {
     void setUp() {
         when(request.getAttribute("tenantId")).thenReturn(tenantId.toString());
         when(request.getAttribute("userId")).thenReturn(userId.toString());
+    }
+
+    @Test
+    void jsonAcceptRunsTheSamePipelineSynchronouslyWithoutStreaming() {
+        UUID sessionId = UUID.randomUUID();
+        when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
+                any(), any(), eq("key"), eq("request"), any()))
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null));
+
+        when(request.getHeader("Accept")).thenReturn(MediaType.APPLICATION_JSON_VALUE);
+        var body = new ChatDtos.SubmitMessageRequest("Question", Map.of(), null);
+
+        var response = controller.submit(sessionId, body, "key", "request", request);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(MediaType.APPLICATION_JSON, response.getHeaders().getContentType());
+        var assistant = (ChatDtos.AssistantMessageResponse) response.getBody();
+        assertEquals("assistant", assistant.role());
+        assertEquals("Committed answer", assistant.content());
+    }
+
+    @Test
+    void jsonAcceptWithWildcardlessEventStreamPreferenceStaysStreaming() throws Exception {
+        when(request.getHeader("Accept")).thenReturn(null);
+        UUID sessionId = UUID.randomUUID();
+        when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
+                any(), any(), isNull(), isNull(), any()))
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        try {
+            var pending = mvc.perform(post("/api/v1/chat/sessions/{sessionId}/messages", sessionId)
+                            .requestAttr("tenantId", tenantId.toString())
+                            .requestAttr("userId", userId.toString())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"content\":\"Question\",\"metadata\":{}}"))
+                    .andExpect(request().asyncStarted())
+                    .andReturn();
+            pending.getAsyncResult(3000);
+            mvc.perform(asyncDispatch(pending));
+        } finally {
+            controller.closeStreams();
+        }
     }
 
     @Test

@@ -4,7 +4,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import com.openvie.api.notification.enums.NotificationStatus;
 import com.openvie.api.notification.enums.NotificationType;
 import com.openvie.api.notification.model.Notification;
@@ -50,6 +51,51 @@ public class NotificationService {
     } finally {
       notificationRepository.save(notification);
     }
+  }
+
+  /**
+   * Records and delivers the submitter-facing approval verdict. Both halves are
+   * best-effort: the decision is already committed, so a missing mail channel
+   * only marks the journal row FAILED instead of failing the workflow.
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void sendAndRecordWorkflowDecisionEmail(
+      UUID orgId,
+      UUID workspaceId,
+      UUID userId,
+      String email,
+      String fullName,
+      String documentFileName,
+      String decision,
+      String reason,
+      int approvalLevel,
+      String publishTarget) {
+    boolean approved = "APPROVE".equalsIgnoreCase(decision);
+    String fileName = documentFileName == null || documentFileName.isBlank()
+        ? "Your submission"
+        : documentFileName;
+    Notification notification = new Notification();
+    notification.setTenantId(workspaceId);
+    notification.setUserId(userId);
+    notification.setType(NotificationType.WORKFLOW_DECIDED);
+    notification.setTitle(approved ? "Document approved" : "Document rejected");
+    notification.setMessage(fileName + " was " + (approved ? "approved" : "rejected")
+        + " at approval level " + approvalLevel
+        + (approved || reason == null || reason.isBlank() ? "" : " — reason: " + reason));
+    notification.setStatus(NotificationStatus.PENDING);
+    notificationRepository.save(notification);
+
+    boolean usableRecipient = email != null && !email.isBlank();
+    boolean sent = usableRecipient && emailService.sendWorkflowDecisionEmail(
+        orgId, email, fullName, documentFileName, decision, reason, approvalLevel, publishTarget);
+    if (!usableRecipient) {
+      log.warn("Workflow decision notice skipped for user {}: no resolvable address", userId);
+    }
+    notification.setStatus(sent ? NotificationStatus.SENT : NotificationStatus.FAILED);
+    if (sent) {
+      notification.setSentAt(LocalDateTime.now());
+    }
+    notificationRepository.save(notification);
   }
 
 }
