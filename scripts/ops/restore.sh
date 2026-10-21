@@ -15,8 +15,27 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
 cd "$ROOT_DIR"
 
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
-ENV_FILE="${ENV_FILE:-.env.production}"
+if [ -z "${ENV_FILE:-}" ]; then
+  if [ -f .env.production ]; then
+    ENV_FILE=.env.production
+  elif [ -f .env ]; then
+    ENV_FILE=.env
+  else
+    ENV_FILE=.env.production
+  fi
+fi
+
+if [ -z "${COMPOSE_FILE:-}" ]; then
+  if [ -f docker-compose.prod.yml ] && docker compose -f docker-compose.prod.yml ps -q 2>/dev/null | grep -q .; then
+    COMPOSE_FILE=docker-compose.prod.yml
+  elif [ -f docker-compose.yml ] && docker compose -f docker-compose.yml ps -q 2>/dev/null | grep -q .; then
+    COMPOSE_FILE=docker-compose.yml
+  elif [ -f docker-compose.prod.yml ]; then
+    COMPOSE_FILE=docker-compose.prod.yml
+  else
+    COMPOSE_FILE=docker-compose.yml
+  fi
+fi
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-openvie}"
 VOL_MASTER="${PROJECT_NAME}_seaweedfs_master"
 VOL_VOLUME="${PROJECT_NAME}_seaweedfs_volume"
@@ -151,8 +170,23 @@ if [ "$CONFIRMED" -ne 1 ]; then
 fi
 
 if [ "$ONLY" = "postgres" ] || [ "$ONLY" = "all" ]; then
-  [ -n "${POSTGRES_USER:-}" ] || die "POSTGRES_USER is not set (try: set -a; . ./$ENV_FILE; set +a)"
-  [ -n "${POSTGRES_DB:-}" ] || die "POSTGRES_DB is not set (try: set -a; . ./$ENV_FILE; set +a)"
+  if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "./$ENV_FILE"
+    set +a
+  fi
+  POSTGRES_USER="${POSTGRES_USER:-openvie}"
+  POSTGRES_DB="${POSTGRES_DB:-openvie}"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    if ! docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" >/dev/null 2>&1; then
+      if docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U cacanode -d cacanode -c "SELECT 1" >/dev/null 2>&1; then
+        log "detected legacy role 'cacanode'; using cacanode"
+        POSTGRES_USER=cacanode
+        POSTGRES_DB=cacanode
+      fi
+    fi
+  fi
 fi
 command -v docker >/dev/null 2>&1 || die "docker is not on PATH"
 if [ "$DRY_RUN" -eq 0 ]; then
