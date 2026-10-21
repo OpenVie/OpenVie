@@ -1809,3 +1809,21 @@ html[data-theme="light"] .ov-auth-link:hover { color: #274c00; opacity: 1; }
   ::view-transition-old(root),
   ::view-transition-new(root) { animation: none; }
 }
+
+/* Evidence anchoring inside original-file previews (DocumentPreview) */
+mark.preview-citation {
+  background: rgb(253 230 138 / .55);
+  box-shadow: 0 0 0 2px rgb(234 179 8 / .4);
+  border-radius: 4px;
+  color: inherit;
+}
+.preview-citation-overlay {
+  background: rgb(253 230 138 / .45);
+  outline: 2px solid rgb(234 179 8 / .45);
+  outline-offset: -1px;
+  animation: preview-citation-flash 1.4s ease-out 1;
+}
+@keyframes preview-citation-flash {
+  0% { background: rgb(253 224 71 / .8); outline-color: rgb(234 179 8 / .8); }
+  100% { background: rgb(253 230 138 / .45); outline-color: rgb(234 179 8 / .45); }
+}

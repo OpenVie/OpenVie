@@ -1,0 +1,16 @@
+# Grafana dashboard provisioning (OpenVie).
+# Dashboards are loaded from the bind-mounted directory on every restart and
+# re-scanned periodically; the JSON files live in ./monitoring/grafana/dashboards.
+apiVersion: 1
+
+providers:
+  - name: OpenVie
+    orgId: 1
+    folder: OpenVie
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -84,18 +84,24 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 4. Worker tải file, phân đoạn tri thức, nhúng vector BGE-M3, nạp Qdrant, trích xuất thực thể đồ thị nạp Kuzu.
 5. Worker gửi sự kiện `COMPLETED` về RabbitMQ; Spring cập nhật trạng thái tài liệu sang `COMPLETED`.
 
-#### C. Phê duyệt tài liệu hai cấp (Approval Sequence, issue #8)
+#### C. Phê duyệt tài liệu hai cấp (Approval Sequence)
 1. Thành viên nộp tài liệu kèm đích công bố (`workspace`/`shared`/`public`). Spring ghi số và biến quy trình rồi chạy BPMN nhúng Flowable trong cùng PostgreSQL (`eofficeDocumentApproval`).
 2. Service task tính độ nhạy cảm theo hợp đồng dùng chung `contracts/approval/v1/sensitive-policy.json` (`sensitive-keyword-v1`) — Java không giữ danh sách từ khóa thứ hai. Hệ thống — không phải người nộp — quyết định cấp phê duyệt: nhạy cảm hoặc đích `shared`/`public` → cấp 2 (`ORG_OWNER`), thường → cấp 1 (`WORKSPACE_ADMIN`).
-3. Nghiệp vụ được ghi vào nhật ký kiểm toán (`workflow_process`): bắt đầu, nhận xử lý, phê duyệt, từ chối (bắt buộc có lý do), bàn giao L1→L2, bỏ qua không được phép.
-4. Timer SLA cấu hình được theo từng tổ chức (mặc định PT24H nhắc nhở, PT48H leo thang trong `openvie.workflow.*`; hàng đè trong `workflow_sla_configs`): nhắc nhở không gián đoạn, quá hạn leo thang nhiệm vụ cấp 1 sang cấp 2 và ghi nhật ký leo thang (overdue, không phải quyết định thủ công).
-5. Trạng thái chạy nằm trong bảng engine `ACT_*` của PostgreSQL nên API khởi động lại (deploy/crash) vẫn tái hiện quy trình và nhiệm vụ đang chờ mà không cần trình phát lại.
+3. Đường tắt theo quyền hạn: đăng tài liệu thường (`workspace`-target, không nhạy cảm) bởi người đã giữ thẩm quyền duyệt của workspace đó — workspace admin hoặc chủ sở hữu tổ chức (trường hợp đăng lên General) — được quyết bằng quyền hạn sẵn có ngay trong giao dịch; quy trình vẫn chạy nhánh APPROVE (lịch sử thống nhất), ghi `selfApproved=true`. Không thêm ceremony khi người nộp đã giữ thẩm quyền duyệt; tài liệu nhạy cảm luôn giữ lại trình duyệt.
+4. Chống tự duyệt: trong trình duyệt thật, người nộp có thể rút tài liệu (từ chối kèm lý do) hoặc bàn giao lên trên, nhưng quyết định tài liệu của chính mình phải đến từ người khác — chỉ chủ sở hữu tổ chức, đỉnh của chuỗi, được quyết tài liệu của mình (`selfDecision` có ghi audit). Task đã claim chỉ người claim được hoàn tất; task trống trong nhóm được claim-tại-hoàn-tất.
+5. Nghiệp vụ được ghi vào nhật ký kiểm toán (`workflow_process`): bắt đầu, nhận xử lý, phê duyệt, từ chối (bắt buộc có lý do), bàn giao L1→L2, bỏ qua không được phép. `GET /api/v1/workflow/processes/{id}/log` trả nhật ký audit theo từng quy trình, resolve tên người thực hiện phía server; trang approvals hiển thị log theo dialog của từng tài liệu.
+6. Timer SLA cấu hình được theo từng tổ chức (mặc định PT24H nhắc nhở, PT48H leo thang trong `openvie.workflow.*`; hàng đè trong `workflow_sla_configs`): nhắc nhở không gián đoạn, quá hạn leo thang nhiệm vụ cấp 1 sang cấp 2 và ghi nhật ký leo thang (overdue, không phải quyết định thủ công).
+7. Trạng thái chạy nằm trong bảng engine `ACT_*` của PostgreSQL nên API khởi động lại (deploy/crash) vẫn tái hiện quy trình và nhiệm vụ đang chờ mà không cần trình phát lại.
+8. Ghi nhận trạng thái chính thức: Khi quy trình kết thúc (duyệt hoặc từ chối), `DocumentApi.recordApprovalDecision` ghi trực tiếp `approval_status` và người duyệt vào bảng `documents`, đồng thời phát sự kiện `WorkflowDecisionEvent` gửi email thông báo kết quả phê duyệt cho người nộp qua kênh SMTP (`WORKFLOW_DECIDED`).
 
 ### 5. Bảo mật và phân lập
 
 - **Phân quyền 3 vai trò:** `ORG_OWNER` (quản trị toàn tổ chức, tạo workspace), `WORKSPACE_ADMIN` (quản lý thành viên và tài liệu trong workspace), `MEMBER` (chat, tải/xóa tài liệu của chính mình).
 - **Phân lập Workspace:** Qdrant và Kuzu luôn lọc dữ liệu chặt chẽ theo `tenant_id` (đại diện cho workspace).
 - **gRPC nội bộ:** Sử dụng plaintext ở profile `dev`; profile `prod` bắt buộc xác thực TLS chứng chỉ qua `AI_GRPC_*`.
+- **API Key máy (M2M):** Khóa định danh `ovk_...` xác thực trực tiếp như một tài khoản service member có thực trong database, tuân thủ chặt chẽ ranh giới workspace và phân quyền RBAC.
+- **Giới hạn tần suất phân tán:** `ConsumerRateLimitFilter` kiểm soát lưu lượng đã xác thực theo tenant:user trong Redis, fail-open khi Redis ngắt kết nối.
+- **Webhook ký số:** Sự kiện nghiệp vụ đẩy ra ngoài được ký bảo mật HMAC-SHA256 (`X-OpenVie-Signature: t=...,v1=...`) với retry giới hạn và cơ chế Transactional Outbox.
 
 ---
 
@@ -149,12 +155,18 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 ### Two-level document approval
 1. A workspace member submits a COMPLETED document with a publish target (`workspace`, `shared`, or `public`); Spring starts the embedded Flowable process `eofficeDocumentApproval` in the shared PostgreSQL.
 2. The scoring service task applies the shared sensitivity contract (`contracts/approval/v1/sensitive-policy.json`, `sensitive-keyword-v1`) — Java has no second keyword list — and the system (not the submitter) fixes the approval level: sensitive or `shared`/`public` targets need level 2 (`ORG_OWNER`), ordinary documents stay at level 1 (`WORKSPACE_ADMIN`).
-3. Every transition is audited (`workflow_process`): start, claim (one claim per task; the group queue keeps seeing it), approve, reject (reason is mandatory), and the explicit L1→L2 hand-off — level skipping is not offered.
-4. SLA timers are per-organization configurable (`workflow_sla_configs`, defaults `openvie.workflow.*` = PT24H reminder / PT48H escalation): the reminder never interrupts the task, escalation interrupts it and moves an overdue level 1 task to the owner queue, both audited (`overdue`, not a manual decision).
-5. Runtime state lives in the engine's `ACT_*` tables, so an API restart (deploy or crash) rediscovers the running process and pending task without replay; workflows are claimed and completed by live membership, so a foreign-workspace task or process is answered with an explicit 403.
+3. Authority short-circuit: a workspace publishing an ordinary (`workspace`-target, non-sensitive) document by someone who already holds that workspace's approval authority — its admin, or the org owner (the General case) — is decided by their own authority in the same transaction; the process still runs its APPROVE path (uniform history), audited with `selfApproved=true`. No ceremony is added where the submitter already holds the reviewing authority; sensitive documents always keep the review.
+4. Self-approval guard: inside a real review the submitter may withdraw (reject with a reason) or hand the task upward, but a decision on an own document requires another reviewer — only the org owner, the terminal authority of the chain, decides an own submission (`selfDecision` audited). A claimed task is completed only by its claimant; an unclaimed task of the approval group is claim-on-complete.
+5. Every transition is audited (`workflow_process`): start, claim (one claim per task; the group queue keeps seeing it), approve, reject (reason is mandatory), and the explicit L1→L2 hand-off — level skipping is not offered. `GET /api/v1/workflow/processes/{id}/log` returns the workspace-scoped audit trail of one process with actor display names resolved server-side; the approvals page shows it as a per-process log dialog.
+6. SLA timers are per-organization configurable (`workflow_sla_configs`, defaults `openvie.workflow.*` = PT24H reminder / PT48H escalation): the reminder never interrupts the task, escalation interrupts it and moves an overdue level 1 task to the owner queue, both audited (`overdue`, not a manual decision).
+7. Runtime state lives in the engine's `ACT_*` tables, so an API restart (deploy or crash) rediscovers the running process and pending task without replay; workflows are claimed and completed by live membership, so a foreign-workspace task or process is answered with an explicit 403.
+8. Authoritative decision write-back: upon terminal settlement (approved or rejected), `DocumentApi.recordApprovalDecision` commits `approval_status`, timestamp, and the deciding user directly onto the `documents` record, invalidating document caches and publishing `WorkflowDecisionEvent` for transactional submitter email notification (`WORKFLOW_DECIDED`).
 
 ## 5. Security and isolation
 
 - **Three-tier RBAC:** `ORG_OWNER` (organization administration), `WORKSPACE_ADMIN` (workspace-level moderation), `MEMBER` (workspace interaction and self-upload management).
 - **Tenant Isolation:** Qdrant and Kuzu filter queries by `tenant_id` (representing the workspace).
 - **Transport Security:** Plaintext gRPC in development; TLS mTLS certificate authentication required in production (`AI_GRPC_PLAINTEXT=false`).
+- **Machine-to-Machine API Keys:** Token format `ovk_...` authenticates as an active service-member user row with live membership checks, enforcing identical RBAC and tenancy guarantees without separate code paths.
+- **Distributed Rate Limiting:** `ConsumerRateLimitFilter` meters authenticated requests per `tenant:user` in Redis, failing open during Redis outages to maintain service availability.
+- **Cryptographic Webhooks:** Outbound events are signed with HMAC-SHA256 (`X-OpenVie-Signature: t=...,v1=...`) via a transactional outbox with bounded exponential retries.

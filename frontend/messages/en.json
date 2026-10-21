@@ -288,7 +288,17 @@
     "chats": "Chats",
     "noChats": "No chats yet.",
     "hideChat": "Hide {title}",
-    "deleteChat": "Delete chat"
+    "deleteChat": "Delete chat",
+    "scopeTriggerAll": "Select documents",
+    "scopeTriggerCount": "{count} documents",
+    "scopeDialogTitle": "Pick documents to chat with",
+    "scopeDialogDescription": "The AI answers from the selected documents (up to {count}). Clear the selection to search the whole knowledge base.",
+    "scopeSearchPlaceholder": "Search by file name…",
+    "scopeEmpty": "No documents match.",
+    "scopeClose": "Close",
+    "scopeClear": "Clear",
+    "scopeApply": "Apply",
+    "scopeSelectedCount": "{count} selected"
   },
   "AssistantResponse": {
     "sources": "Sources",
@@ -375,6 +385,9 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "existingMemberHint": "The user must already have an account in this organization.",
+    "addMultipleMembersHint": "Type or paste emails (separated by commas or spaces), or select from suggestions.",
+    "addMorePlaceholder": "Add another member...",
+    "membersAddedCount": "Added {count} members to the workspace",
     "suggestLoading": "Searching…",
     "suggestEmpty": "No matching people in this organization",
     "organizationDescription": "Manage all accounts in this organization.",
@@ -402,6 +415,7 @@
     "cancel": "Cancel",
     "submitApproval": "Submit for approval",
     "submitApprovalTitle": "Submit document for approval",
+    "submitApprovalDescription": "This document will be submitted for official approval within this workspace.",
     "publishTarget": "Who can use the approved document?",
     "publishTargets": {
       "workspace": "This workspace",
@@ -464,7 +478,13 @@
       "upload": "Upload failed",
       "delete": "Unable to delete document",
       "approval": "Unable to submit approval"
-    }
+    },
+    "approvalBadge": {
+      "inReview": "In review",
+      "approved": "Approved"
+    },
+    "draftStatus": "Draft (unapproved)",
+    "rejectedStatus": "Rejected"
   },
   "Approval": {
     "eyebrow": "Digital process",
@@ -492,8 +512,31 @@
     "updated": "Approval updated",
     "fallback": {
       "load": "Unable to load approvals",
-      "action": "Unable to update approval"
-    }
+      "action": "Unable to update approval",
+      "log": "Could not load the approval log"
+    },
+    "viewLog": "View log",
+    "logTitle": "Approval log",
+    "logEmpty": "No approval events yet.",
+    "reasonLabel": "Reason",
+    "selfDecision": "Decided by the submitter",
+    "system": "System",
+    "status": {
+      "inReview": "In review",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "action": {
+      "WORKFLOW_STARTED": "Submitted",
+      "WORKFLOW_TASK_CLAIMED": "Claimed",
+      "WORKFLOW_APPROVED": "Approved",
+      "WORKFLOW_REJECTED": "Rejected",
+      "WORKFLOW_ESCALATED": "Escalated",
+      "WORKFLOW_REMINDER_SENT": "SLA reminder",
+      "WORKFLOW_SLA_CONFIG_CHANGED": "SLA configuration changed"
+    },
+    "viewDocument": "View document",
+    "previewTitle": "Document preview"
   },
   "DocumentViewer": {
     "spreadsheetTable": "Spreadsheet table",
@@ -530,7 +573,11 @@
       "content": "Unable to load indexed content",
       "download": "Unable to download document"
     },
-    "citationOf": "Citation {current} of {total}"
+    "citationOf": "Citation {current} of {total}",
+    "viewModeLabel": "View mode",
+    "extractedView": "Extracted",
+    "originalView": "Original",
+    "chatWithDocument": "Chat with document"
   },
   "Setup": {
     "tagline": "Document-grounded AI for your team",
@@ -583,11 +630,13 @@
     "label": "Switch workspace",
     "workspaces": "Workspaces",
     "admin": "Admin",
-    "member": "Member"
+    "member": "Member",
+    "general": "General"
   },
   "Workspaces": {
     "title": "Workspaces",
     "description": "Create, rename, and archive the workspaces in this organization.",
+    "general": "General",
     "create": "New workspace",
     "createTitle": "Create workspace",
     "name": "Name",
@@ -691,5 +740,15 @@
         "delete": "Unable to delete the channel"
       }
     }
+  },
+  "DocumentPreview": {
+    "loading": "Loading preview…",
+    "loadError": "Could not load the preview.",
+    "retry": "Try again",
+    "unsupported": "This file type has no inline preview yet.",
+    "saveAs": "Download to view",
+    "empty": "The file is empty or has no readable content.",
+    "truncated": "File too long — only the first 500 rows are shown.",
+    "sheetAria": "Choose sheet"
   }
 }

@@ -41,6 +41,7 @@ import com.openvie.api.document.dto.DocumentStatusResponse;
 import com.openvie.api.document.dto.DocumentUploadResponse;
 import com.openvie.api.document.event.FailedDocumentCleanupRequestedEvent;
 import com.openvie.api.document.enums.DocumentStatus;
+import com.openvie.api.document.api.ApprovalStatus;
 import com.openvie.api.document.enums.DocumentType;
 import com.openvie.api.document.messaging.DocumentIngestRequestedEvent;
 import com.openvie.api.document.messaging.DocumentIngestionPublisher;
@@ -528,6 +529,50 @@ public class DocumentService {
     }
 
     
+    /**
+     * Approval write-back: an approval process opened for this document, with
+     * the submitter's publish target. Idempotent while the document is already
+     * pending with the same target; a settled document may be re-submitted,
+     * because the latest process owns the state.
+     */
+    @Transactional
+    public void markApprovalPending(UUID tenantId, UUID documentId, String publishTarget) {
+        Document document = documentRepository.findByIdAndTenantId(documentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+        if (document.getApprovalStatus() == ApprovalStatus.PENDING
+                && java.util.Objects.equals(document.getApprovalTarget(), publishTarget)) {
+            return;
+        }
+        document.setApprovalStatus(ApprovalStatus.PENDING);
+        document.setApprovalTarget(publishTarget);
+        document.setApprovalDecidedBy(null);
+        document.setApprovalDecidedAt(null);
+        documentRepository.save(document);
+        invalidateDocuments(tenantId, document.getKnowledgeBaseId());
+    }
+
+    /**
+     * Approval write-back: the process settled, so the document row carries the
+     * verdict. The Flowable process remains the journal of who decided what and
+     * when; this is the authoritative current state.
+     */
+    @Transactional
+    public void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy) {
+        if (decision == null || decision == ApprovalStatus.PENDING) {
+            throw new BadRequestException("An approval decision must be APPROVED or REJECTED");
+        }
+        Document document = documentRepository.findByIdAndTenantId(documentId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+        if (document.getApprovalStatus() == decision) {
+            return;
+        }
+        document.setApprovalStatus(decision);
+        document.setApprovalDecidedBy(decidedBy);
+        document.setApprovalDecidedAt(LocalDateTime.now());
+        documentRepository.save(document);
+        invalidateDocuments(tenantId, document.getKnowledgeBaseId());
+    }
+
     private boolean isMonotonicTransition(DocumentStatus current, DocumentStatus next) {
         if (current == next) {
             return false;
@@ -668,6 +713,8 @@ public class DocumentService {
                 document.getCreatedAt(),
                 document.getKnowledgeBaseId(),
                 document.getStatus(),
+                document.getApprovalStatus(),
+                document.getApprovalTarget(),
                 document.getChunkCount(),
                 document.getErrorMessage(),
                 document.getUploadedBy()

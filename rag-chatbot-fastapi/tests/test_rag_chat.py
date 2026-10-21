@@ -302,6 +302,63 @@ async def test_chat_service_returns_no_information_without_evidence() -> None:
     assert store.get_for_tenant(session.id, "tenant-1") is not None
 
 @pytest.mark.asyncio
+async def test_document_scope_is_forwarded_to_retrieval_and_deduplicated() -> None:
+    service, store, retriever, _ = make_service(chunks=[
+        RetrievedChunk(
+            document_id="doc-2",
+            source_name="policy.txt",
+            page_number=1,
+            chunk_index=0,
+            text="Policy source text.",
+            score=0.9,
+        )
+    ])
+    session = service.create_session(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        chatbot_id="bot-1",
+        knowledge_base_id="kb-1",
+        locale="vi-VN",
+    )
+
+    await service.submit_message(
+        tenant_id="tenant-1",
+        session_id=session.id,
+        content="Chinh sach doi tra san pham nhu the nao?",
+        document_ids=("doc-2", "doc-2", "doc-1"),
+    )
+
+    assert retriever.calls[0]["document_ids"] == ["doc-2", "doc-1"]
+
+@pytest.mark.asyncio
+async def test_document_scope_stays_unscoped_without_document_ids() -> None:
+    service, store, retriever, _ = make_service(chunks=[
+        RetrievedChunk(
+            document_id="doc-1",
+            source_name="policy.txt",
+            page_number=1,
+            chunk_index=0,
+            text="Policy source text.",
+            score=0.9,
+        )
+    ])
+    session = service.create_session(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        chatbot_id="bot-1",
+        knowledge_base_id="kb-1",
+        locale="vi-VN",
+    )
+
+    await service.submit_message(
+        tenant_id="tenant-1",
+        session_id=session.id,
+        content="Chinh sach doi tra san pham nhu the nao?",
+    )
+
+    assert retriever.calls[0]["document_ids"] is None
+
+@pytest.mark.asyncio
 async def test_nonsense_input_skips_retrieval_and_has_no_citations() -> None:
     service, store, retriever, model = make_service(chunks=[
         RetrievedChunk(

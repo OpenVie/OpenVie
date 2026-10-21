@@ -14,6 +14,8 @@ import {
   Download,
   FileText,
   Loader2,
+  MessageSquareText,
+  ScanText,
   Sheet,
   Table2,
 } from "lucide-react";
@@ -22,12 +24,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApiClient } from "@/hooks/useApiClient";
+import DocumentPreview from "@/components/documents/DocumentPreview";
 import {
   downloadDocumentApi,
   getDocumentStatusApi,
   getDocumentUnitsApi,
   isTerminalDocumentStatus,
 } from "@/lib/documents-api";
+import { requestChatWithDocumentScope } from "@/lib/chat-events";
 import { cn } from "@/lib/utils";
 import type { DocumentStatusResponse, DocumentUnit } from "@/types";
 
@@ -428,6 +432,7 @@ export default function DocumentViewerPage() {
   const [unitsLoaded, setUnitsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [viewMode, setViewMode] = useState<"extracted" | "original">("extracted");
   const requestedFocus = useMemo(() => searchParams.getAll("focus"), [searchParams]);
   const focusKey = requestedFocus.join("\u0000");
   const [citationSelection, setCitationSelection] = useState({ focusKey, index: 0 });
@@ -464,12 +469,13 @@ export default function DocumentViewerPage() {
         // Keep the current status visible during a transient polling failure.
       }
     };
-    const timer = window.setInterval(() => void poll(), 1800);
+    const timer = window.setInterval(() => void poll(), 2500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [document, documentId, request]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document?.status, documentId, request]);
 
   useEffect(() => {
     if (document?.status !== "COMPLETED") return;
@@ -563,6 +569,47 @@ export default function DocumentViewerPage() {
         </div>
         <div className="flex min-w-0 items-center gap-2 sm:justify-end">
           <Badge variant="outline" className="shrink-0">{document.status === "COMPLETED" ? t("status.ready") : document.status === "PROCESSING" ? t("status.indexing") : document.status === "PENDING" ? t("status.pending") : t("status.failed")}</Badge>
+          <div className="flex shrink-0 rounded-lg border border-border bg-muted/50 p-0.5" role="tablist" aria-label={t("viewModeLabel")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "extracted"}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                viewMode === "extracted" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setViewMode("extracted")}
+            >
+              <ScanText className="size-4" />
+              <span className="hidden sm:inline">{t("extractedView")}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "original"}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                viewMode === "original" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setViewMode("original")}
+            >
+              <FileText className="size-4" />
+              <span className="hidden sm:inline">{t("originalView")}</span>
+            </button>
+          </div>
+          <Button
+            className="min-w-0 flex-1 sm:flex-none"
+            variant="outline"
+            disabled={document?.status !== "COMPLETED"}
+            onClick={() => {
+              if (!document) return;
+              requestChatWithDocumentScope(document.id);
+              router.push("/");
+            }}
+          >
+            <MessageSquareText className="size-4" />
+            <span className="truncate">{t("chatWithDocument")}</span>
+          </Button>
           <Button className="min-w-0 flex-1 sm:flex-none" variant="outline" onClick={() => void downloadOriginal()} disabled={downloading}>
             {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
             <span className="truncate">{t("downloadOriginal")}</span>
@@ -578,7 +625,15 @@ export default function DocumentViewerPage() {
         </div>
       )}
 
-      {document.status === "PENDING" || document.status === "PROCESSING" ? (
+      {viewMode === "original" ? (
+        <DocumentPreview
+          documentId={documentId}
+          fileName={document.fileName}
+          fileType={document.fileType}
+          evidence={citationUnits[selectedCitation] ?? null}
+          className="h-[75vh] min-h-[28rem]"
+        />
+      ) : document.status === "PENDING" || document.status === "PROCESSING" ? (
         <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><Loader2 className="mb-4 size-8 animate-spin text-primary" /><h3 className="font-semibold text-foreground">{document.status === "PENDING" ? t("waitingToIndex") : t("indexingDocument")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{t("viewerSoon")}</p></CardContent></Card>
       ) : document.status === "FAILED" ? (
         <Card><CardContent className="flex min-h-[22rem] flex-col items-center justify-center text-center"><FileText className="mb-4 size-9 text-red-400" /><h3 className="font-semibold text-foreground">{t("indexingFailed")}</h3><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{document.errorMessage ?? t("indexingFailedDescription")}</p></CardContent></Card>

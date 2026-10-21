@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.openvie.api.auth.service.JwtService;
 import com.openvie.api.common.security.AppUserDetailsService;
+import com.openvie.api.integration.apikey.ApiKeyService;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
@@ -31,18 +32,28 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Establishes the request principal and its ACTIVE workspace scope.
  *
- * <p>The workspace role from the JWT is never trusted on its own: membership is
- * re-resolved from the database on every request, so a revoked membership or a
- * demotion takes effect immediately rather than at token expiry.
+ * <p>The workspace role is never trusted on its own: membership is re-resolved
+ * from the database on every request, so a revoked membership or a demotion
+ * takes effect immediately rather than at token expiry.
+ *
+ * <p>Two credential kinds land in the exact same principal shape:
+ * <ul>
+ *   <li>`Authorization: Bearer {internal JWT}` — a human member.</li>
+ *   <li>`Authorization: Bearer ovk_...` — an API key authenticating as its
+ *   service-member user through the same live membership resolution.</li>
+ * </ul>
  */
 @Slf4j(topic = "JWT-AUTH-FILTER")
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
 
+  private static final String API_KEY_MARKER = "ovk_";
+
   private final JwtService jwtService;
   private final AppUserDetailsService userDetailsService;
   private final TenantIdentityApi identityApi;
+  private final ApiKeyService apiKeyService;
 
   @Override
   protected void doFilterInternal(
@@ -60,6 +71,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     final String token = authHeader.substring(7);
+
+    if (token.startsWith(API_KEY_MARKER)) {
+      handleApiKey(request, response, token, filterChain);
+      return;
+    }
 
     try {
       String email = jwtService.extractEmail(token);
@@ -87,21 +103,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
           : membership.workspaceRole();
 
         var userDetails = userDetailsService.loadUserByUsername(email);
-        List<SimpleGrantedAuthority> authorities = List.of(
-          new SimpleGrantedAuthority("ROLE_" + effectiveRole.name()),
-          new SimpleGrantedAuthority("ROLE_" + membership.orgRole().name()));
-
-        UsernamePasswordAuthenticationToken authentication =
-          new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
-        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        // Request attributes are the only workspace source controllers may use.
-        request.setAttribute("tenantId", workspaceId.toString());
-        request.setAttribute("orgId", membership.orgId().toString());
-        request.setAttribute("userId", userId.toString());
-        request.setAttribute("role", effectiveRole.name());
-        request.setAttribute("orgRole", membership.orgRole().name());
+        establishPrincipal(request, membership, effectiveRole, userDetails);
       }
 
     } catch (Exception e) {
@@ -111,6 +113,58 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     filterChain.doFilter(request, response);
+  }
+
+  /**
+   * API-key requests authenticate as the key's service-member user through the
+   * same live-membership resolution user JWTs use, so controllers and
+   * @PreAuthorize rules need no changes.
+   */
+  private void handleApiKey(
+    HttpServletRequest request,
+    HttpServletResponse response,
+    String token,
+    FilterChain filterChain
+  ) throws ServletException, IOException {
+    try {
+      MembershipSnapshot membership = apiKeyService.authenticate(token);
+      if (membership == null) {
+        sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "Invalid API key");
+        return;
+      }
+      establishPrincipal(request, membership, membership.workspaceRole(),
+              "api-key:" + membership.userId());
+      filterChain.doFilter(request, response);
+    } catch (Exception e) {
+      log.error("API key authentication failed: {}", e.getMessage());
+      sendErrorResponse(response, HttpStatus.UNAUTHORIZED, e.getMessage());
+    }
+  }
+
+  /**
+   * Authenticated principal + the request attributes that are the only
+   * workspace source controllers may use.
+   */
+  private void establishPrincipal(
+    HttpServletRequest request,
+    MembershipSnapshot membership,
+    WorkspaceRole effectiveRole,
+    Object principal
+  ) {
+    List<SimpleGrantedAuthority> authorities = List.of(
+      new SimpleGrantedAuthority("ROLE_" + effectiveRole.name()),
+      new SimpleGrantedAuthority("ROLE_" + membership.orgRole().name()));
+
+    UsernamePasswordAuthenticationToken authentication =
+      new UsernamePasswordAuthenticationToken(principal, null, authorities);
+    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+    request.setAttribute("tenantId", membership.workspaceId().toString());
+    request.setAttribute("orgId", membership.orgId().toString());
+    request.setAttribute("userId", membership.userId().toString());
+    request.setAttribute("role", effectiveRole.name());
+    request.setAttribute("orgRole", membership.orgRole().name());
   }
 
   private void sendErrorResponse(

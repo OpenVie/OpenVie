@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party assets (e.g. pdf.worker.min.mjs) must not be linted.
+    "public/**",
   ]),
 ]);
 

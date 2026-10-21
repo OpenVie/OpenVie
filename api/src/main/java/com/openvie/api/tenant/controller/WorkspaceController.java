@@ -7,6 +7,12 @@ import com.openvie.api.tenant.service.WorkspaceService.MemberView;
 import com.openvie.api.tenant.service.WorkspaceService.OrganizationSnapshot;
 import com.openvie.api.tenant.service.WorkspaceService.WorkspaceView;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -48,15 +54,30 @@ import java.util.UUID;
 @RequestMapping({"/api/v1/workspaces", "/api/v1/admin/workspaces"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
+@SecurityRequirement(name = "bearerAuth")
 public class WorkspaceController extends BaseController {
 
     private final WorkspaceService workspaceService;
 
+    @Operation(summary = "List all workspaces of the organization",
+            description = "Owner view over every workspace, regardless of the caller's membership.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Workspaces"),
+            @ApiResponse(responseCode = "403", description = "Session is no longer valid, or only the organization owner may manage workspaces")
+    })
     @GetMapping
     public List<WorkspaceView> list(HttpServletRequest request) {
         return workspaceService.listAll(getUserId(request));
     }
 
+    @Operation(summary = "Create a workspace",
+            description = "Creates a PUBLIC (joinable through self-registration) or PRIVATE workspace.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Workspace created", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Workspace name must be 1-255 characters or visibility is invalid",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may create workspaces")
+    })
     @PostMapping
     public ResponseEntity<WorkspaceView> create(
             @Valid @RequestBody CreateWorkspaceRequest body, HttpServletRequest request) {
@@ -65,6 +86,14 @@ public class WorkspaceController extends BaseController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    @Operation(summary = "Rename a workspace")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Workspace renamed", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Workspace name must be 1-255 characters",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PatchMapping("/{workspaceId}")
     public WorkspaceView rename(
             @PathVariable UUID workspaceId,
@@ -73,6 +102,15 @@ public class WorkspaceController extends BaseController {
         return workspaceService.rename(getUserId(request), workspaceId, body.getName());
     }
 
+    @Operation(summary = "Change workspace visibility",
+            description = "PUBLIC workspaces are joined by self-registered members; the default workspace must stay public.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Visibility applied", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Visibility must be PUBLIC or PRIVATE, or the default workspace must stay public",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PatchMapping("/{workspaceId}/visibility")
     public WorkspaceView setVisibility(
             @PathVariable UUID workspaceId,
@@ -81,17 +119,45 @@ public class WorkspaceController extends BaseController {
         return workspaceService.setVisibility(getUserId(request), workspaceId, body.getVisibility());
     }
 
+    @Operation(summary = "Archive a workspace",
+            description = "Archived workspaces refuse new activity; the default workspace cannot be archived.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Workspace archived"),
+            @ApiResponse(responseCode = "400", description = "The default workspace cannot be archived",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @DeleteMapping("/{workspaceId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void archive(@PathVariable UUID workspaceId, HttpServletRequest request) {
         workspaceService.archive(getUserId(request), workspaceId);
     }
 
+    @Operation(summary = "List workspace members",
+            description = "Members of one workspace with their roles; reserved to the owner, even though membership "
+                    + "changes inside one workspace are issued from the members surface.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Members"),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @GetMapping("/{workspaceId}/members")
     public List<MemberView> members(@PathVariable UUID workspaceId, HttpServletRequest request) {
         return workspaceService.members(getUserId(request), workspaceId);
     }
 
+    @Operation(summary = "Add an email to the workspace as a member",
+            description = "Adds an existing organization account by email to a workspace (org account must already exist).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Member added", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Email or role invalid",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "That account is already a member of this workspace",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace or organization account not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping("/{workspaceId}/members")
     public ResponseEntity<MemberView> addMember(
             @PathVariable UUID workspaceId,
@@ -102,6 +168,14 @@ public class WorkspaceController extends BaseController {
         return ResponseEntity.status(HttpStatus.CREATED).body(added);
     }
 
+    @Operation(summary = "Change a member's workspace role")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Role updated", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "A workspace needs at least one active admin",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace or member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PatchMapping("/{workspaceId}/members/{userId}/role")
     public MemberView changeMemberRole(
             @PathVariable UUID workspaceId,
@@ -112,6 +186,15 @@ public class WorkspaceController extends BaseController {
                 getUserId(request), workspaceId, userId, body.getRole());
     }
 
+    @Operation(summary = "Remove a member from a workspace",
+            description = "Removes the membership only; the organization account stays.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Member removed"),
+            @ApiResponse(responseCode = "400", description = "You cannot remove yourself, or a workspace needs at least one active admin",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Workspace or member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @DeleteMapping("/{workspaceId}/members/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMember(
@@ -121,11 +204,23 @@ public class WorkspaceController extends BaseController {
 
     // ─── Organization settings ────────────────────────────────────────────────
 
+    @Operation(summary = "Read the organization snapshot",
+            description = "Org-level facts (name, default workspace, self-registration state) for the admin panel.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Organization snapshot", useReturnTypeSchema = true)
+    })
     @GetMapping("/organization")
     public OrganizationSnapshot organization(HttpServletRequest request) {
         return workspaceService.requireOrg(getOrgId(request));
     }
 
+    @Operation(summary = "Toggle organization self-registration",
+            description = "Applies or removes the open-registration flag the web setup and login screens honor.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Flag applied"),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may manage workspaces"),
+            @ApiResponse(responseCode = "401", description = "Session is no longer valid")
+    })
     @PatchMapping("/organization/self-registration")
     public Map<String, Object> setSelfRegistration(
             @Valid @RequestBody ToggleRequest body, HttpServletRequest request) {

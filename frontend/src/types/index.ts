@@ -10,6 +10,8 @@ export interface Document {
   errorMessage?: string | null;
   uploadedAt: string;
   uploadedBy?: string | null;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  approvalTarget?: "workspace" | "shared" | "public" | null;
 }
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -60,6 +62,10 @@ export interface StartProcessResponse {
   slaReminder: string;
   slaEscalation: string;
   taskId: string;
+  /** True when the submitting authority already decided the document. */
+  autoApproved: boolean;
+  /** APPROVED when autoApproved, else null while in review. */
+  documentStatus: string | null;
 }
 
 export interface CompleteTaskResponse {
@@ -70,6 +76,20 @@ export interface CompleteTaskResponse {
   processEnded: boolean;
   documentStatus: string | null;
   nextTaskId: string | null;
+}
+
+/** One audited event of an approval process (`GET /workflow/processes/:id/log`). */
+export interface WorkflowLogEntry {
+  occurredAt: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProcessLog {
+  process: WorkflowProcess;
+  entries: WorkflowLogEntry[];
 }
 
 export interface DocumentUploadResponse {
@@ -89,6 +109,8 @@ export interface DocumentStatusResponse {
   uploadedBy?: string | null;
   knowledgeBaseId: string;
   status: DocumentStatus;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  approvalTarget?: "workspace" | "shared" | "public" | null;
   chunkCount?: number | null;
   errorMessage?: string | null;
 }

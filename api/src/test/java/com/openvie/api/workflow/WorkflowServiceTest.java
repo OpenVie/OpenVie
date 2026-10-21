@@ -1,11 +1,14 @@
 package com.openvie.api.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -39,6 +42,7 @@ import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.common.exception.custom.UnauthorizedException;
+import com.openvie.api.common.model.AuditLog;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.document.api.DocumentApi.ApprovalDocumentSnapshot;
 import com.openvie.api.tenant.api.OrgRole;
@@ -46,6 +50,7 @@ import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
+import com.openvie.api.workflow.dto.WorkflowDtos.ProcessListResult;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessResponse;
 import com.openvie.api.workflow.dto.WorkflowDtos.UpdateSlConfigRequest;
@@ -62,12 +67,15 @@ class WorkflowServiceTest {
     private final WorkflowSlaConfigRepository slaConfigRepository = mock(WorkflowSlaConfigRepository.class);
     private final DocumentApi documentApi = mock(DocumentApi.class);
     private final TenantIdentityApi identityApi = mock(TenantIdentityApi.class);
+    private final com.openvie.api.common.repository.AuditLogRepository auditLogRepository =
+            mock(com.openvie.api.common.repository.AuditLogRepository.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
     private final UUID workspaceId = UUID.randomUUID();
     private final UUID otherWorkspaceId = UUID.randomUUID();
     private final UUID organizationId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
+    private final UUID initiatorId = UUID.randomUUID();
     private final UUID documentId = UUID.randomUUID();
     private final UUID taskId = UUID.randomUUID();
     private final UUID processInstanceId = UUID.randomUUID();
@@ -77,7 +85,8 @@ class WorkflowServiceTest {
     @BeforeEach
     void setUp() {
         service = new WorkflowService(runtimeService, taskService, historyService,
-                slaConfigRepository, new WorkflowProperties(), documentApi, identityApi, eventPublisher);
+                slaConfigRepository, new WorkflowProperties(), documentApi, identityApi,
+                auditLogRepository, eventPublisher);
         lenient().when(slaConfigRepository.findByOrganizationId(organizationId)).thenReturn(Optional.empty());
     }
 
@@ -145,6 +154,91 @@ class WorkflowServiceTest {
         assertThrows(ResourceNotFoundException.class, () -> service.start(workspaceId, userId,
                 new StartProcessRequest(documentId, "workspace")));
         verify(runtimeService, never()).startProcessInstanceByKey(anyString(), anyString(), any());
+    }
+
+    @Test
+    void startAutoPublishesTheWorkspaceScopedSubmissionOfItsOwnAdmin() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        when(documentApi.requireApprovalCandidate(workspaceId, documentId)).thenReturn(
+                new ApprovalDocumentSnapshot(documentId, workspaceId, UUID.randomUUID(),
+                        "huong-dan-noi-bo.pdf"));
+        ProcessInstance instance = mock(ProcessInstance.class);
+        when(instance.getId()).thenReturn(processInstanceId.toString());
+        when(runtimeService.startProcessInstanceByKey(eq(WorkflowService.PROCESS_KEY),
+                eq(documentId.toString()), any())).thenReturn(instance);
+        when(runtimeService.getVariables(processInstanceId.toString())).thenReturn(
+                Map.of("sensitive", false, "approvalLevel", 1, "policyVersion", "sensitive-keyword-v1"));
+        Task firstTask = task(WorkflowService.LEVEL_1_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString()));
+        stubTaskQuery(List.of(firstTask));
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentStatus", "APPROVED"),
+                LocalDateTime.now());
+
+        StartProcessResponse response = service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace"));
+
+        assertTrue(response.autoApproved());
+        assertEquals("APPROVED", response.documentStatus());
+        verify(taskService).complete(eq(firstTask.getId()), argThat((java.util.Map<String, Object> outcome) ->
+                "APPROVE".equals(outcome.get("approvalOutcome"))
+                        && Boolean.TRUE.equals(outcome.get("selfApproved"))));
+        verify(eventPublisher).publishEvent(argThat(event ->
+                ((AuditLogEvent) event).getAction() == LogAction.WORKFLOW_APPROVED
+                        && Boolean.TRUE.equals(((AuditLogEvent) event).getMetadata().get("selfApproved"))
+                        && Boolean.FALSE.equals(((AuditLogEvent) event).getMetadata().get("manual"))));
+    }
+
+    @Test
+    void startKeepsTheReviewFlowForSharedTargetsAndSensitiveDocuments() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        when(documentApi.requireApprovalCandidate(workspaceId, documentId)).thenReturn(
+                new ApprovalDocumentSnapshot(documentId, workspaceId, UUID.randomUUID(),
+                        "hop-dong-lao-dong.pdf"));
+        ProcessInstance instance = mock(ProcessInstance.class);
+        when(instance.getId()).thenReturn(processInstanceId.toString());
+        when(runtimeService.startProcessInstanceByKey(eq(WorkflowService.PROCESS_KEY),
+                eq(documentId.toString()), any())).thenReturn(instance);
+        when(runtimeService.getVariables(processInstanceId.toString())).thenReturn(
+                Map.of("sensitive", false, "approvalLevel", 2, "policyVersion", "sensitive-keyword-v1"));
+        Task firstTask = task(WorkflowService.LEVEL_2_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString()));
+        stubTaskQuery(List.of(firstTask));
+
+        StartProcessResponse shared = service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "shared"));
+        assertFalse(shared.autoApproved());
+
+        when(runtimeService.getVariables(processInstanceId.toString())).thenReturn(
+                Map.of("sensitive", true, "approvalLevel", 2, "policyVersion", "sensitive-keyword-v1"));
+        StartProcessResponse sensitive = service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace"));
+        assertFalse(sensitive.autoApproved());
+
+        verify(taskService, never()).complete(anyString(), anyMap());
+    }
+
+    @Test
+    void plainMemberSubmissionsStillQueueForReview() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        when(documentApi.requireApprovalCandidate(workspaceId, documentId)).thenReturn(
+                new ApprovalDocumentSnapshot(documentId, workspaceId, UUID.randomUUID(),
+                        "bien-ban-hop.pdf"));
+        ProcessInstance instance = mock(ProcessInstance.class);
+        when(instance.getId()).thenReturn(processInstanceId.toString());
+        when(runtimeService.startProcessInstanceByKey(eq(WorkflowService.PROCESS_KEY),
+                eq(documentId.toString()), any())).thenReturn(instance);
+        when(runtimeService.getVariables(processInstanceId.toString())).thenReturn(
+                Map.of("sensitive", false, "approvalLevel", 1, "policyVersion", "sensitive-keyword-v1"));
+        Task firstTask = task(WorkflowService.LEVEL_1_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString()));
+        stubTaskQuery(List.of(firstTask));
+
+        StartProcessResponse response = service.start(workspaceId, userId,
+                new StartProcessRequest(documentId, "workspace"));
+
+        assertFalse(response.autoApproved());
+        verify(taskService, never()).complete(anyString(), anyMap());
     }
 
     // ------------------------------------------------------------------
@@ -270,6 +364,71 @@ class WorkflowServiceTest {
         }));
     }
 
+    @Test
+    void initiatorCannotApproveTheirOwnSubmission() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        Map<String, Object> ownVariables = new java.util.HashMap<>(baseVariables());
+        ownVariables.put("initiatorId", userId.toString());
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, userId.toString(), ownVariables));
+
+        assertThrows(AccessDeniedException.class, () -> service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("APPROVE", null)),
+                "the submitter must not decide an approval of their own document");
+        verify(taskService, never()).complete(anyString(), anyMap());
+    }
+
+    @Test
+    void theOrgOwnerMayDecideTheirOwnSubmissionAndTheAuditFlagsIt() {
+        member(WorkspaceRole.MEMBER, OrgRole.ORG_OWNER);
+        Map<String, Object> ownVariables = new java.util.HashMap<>(baseVariables());
+        ownVariables.put("initiatorId", userId.toString());
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_2_TASK_KEY, userId.toString(), ownVariables));
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentStatus", "APPROVED"),
+                LocalDateTime.now());
+
+        var response = service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("APPROVE", null));
+
+        assertTrue(response.processEnded());
+        verify(taskService).complete(eq(taskId.toString()), argThat((java.util.Map<String, Object> outcome) ->
+                "APPROVE".equals(outcome.get("approvalOutcome"))
+                        && Boolean.TRUE.equals(outcome.get("selfDecision"))));
+        verify(eventPublisher).publishEvent(argThat(event -> {
+            AuditLogEvent audit = (AuditLogEvent) event;
+            return audit.getAction() == LogAction.WORKFLOW_APPROVED
+                    && Boolean.TRUE.equals(audit.getMetadata().get("selfDecision"));
+        }));
+    }
+
+    @Test
+    void completingSomebodyElsesClaimedTaskIsDenied() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY,
+                UUID.randomUUID().toString(), baseVariables()));
+
+        assertThrows(AccessDeniedException.class, () -> service.complete(workspaceId, userId, taskId,
+                new CompleteTaskRequest("APPROVE", null)),
+                "a claim reserves the task for its claimant");
+        verify(taskService, never()).claim(anyString(), anyString());
+        verify(taskService, never()).complete(anyString(), anyMap());
+    }
+
+    @Test
+    void completingAnUnclaimedTaskClaimsItFirst() {
+        member(WorkspaceRole.WORKSPACE_ADMIN, OrgRole.MEMBER);
+        stubTaskQuerySingle(task(WorkflowService.LEVEL_1_TASK_KEY, null, baseVariables()));
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentStatus", "APPROVED"),
+                LocalDateTime.now());
+
+        service.complete(workspaceId, userId, taskId, new CompleteTaskRequest("APPROVE", null));
+
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(taskService);
+        inOrder.verify(taskService).claim(taskId.toString(), userId.toString());
+        inOrder.verify(taskService).complete(eq(taskId.toString()), anyMap());
+    }
+
     // ------------------------------------------------------------------
     // process visibility
     // ------------------------------------------------------------------
@@ -297,6 +456,143 @@ class WorkflowServiceTest {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> service.getProcess(workspaceId, userId, processInstanceId));
+    }
+
+    // ------------------------------------------------------------------
+    // process list paging
+    // ------------------------------------------------------------------
+
+    @Test
+    void processListPagingCountsAndSlicesTheJournal() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        HistoricProcessInstanceQuery countQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        HistoricProcessInstanceQuery pageQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(countQuery, pageQuery);
+        when(countQuery.count()).thenReturn(11L);
+        HistoricProcessInstance historic = mock(HistoricProcessInstance.class);
+        when(historic.getId()).thenReturn(processInstanceId.toString());
+        when(historic.getStartTime()).thenReturn(toJavaDate(LocalDateTime.now().minusMinutes(5)));
+        when(historic.getEndTime()).thenReturn(null);
+        when(historic.getProcessVariables()).thenReturn(Map.of(
+                "workspaceId", workspaceId.toString(), "documentId", documentId.toString(),
+                "documentFileName", "hop-dong.pdf", "sensitive", false, "approvalLevel", 1,
+                "policyVersion", "sensitive-keyword-v1", "publishTarget", "workspace"));
+        when(pageQuery.listPage(10, 10)).thenReturn(List.of(historic));
+
+        ProcessListResult result = service.listProcessesPage(workspaceId, userId, true, 1, 10);
+
+        assertEquals(11L, result.totalCount());
+        assertEquals(1, result.processes().size());
+        assertEquals(processInstanceId, result.processes().get(0).processInstanceId());
+        assertEquals("IN_REVIEW", result.processes().get(0).documentStatus());
+    }
+
+    @Test
+    void processListPagingKeepsTheUnfinishedFilterAndDefaultWindow() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        HistoricProcessInstanceQuery countQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        HistoricProcessInstanceQuery pageQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(countQuery, pageQuery);
+        when(countQuery.count()).thenReturn(0L);
+        when(pageQuery.listPage(0, 20)).thenReturn(List.of());
+
+        ProcessListResult result = service.listProcessesPage(workspaceId, userId, false, null, null);
+
+        assertEquals(0L, result.totalCount());
+        assertTrue(result.processes().isEmpty());
+        verify(pageQuery).unfinished();
+        verify(pageQuery).listPage(0, 20);
+    }
+
+    @Test
+    void processListPagingValidatesTheWindow() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+
+        assertThrows(BadRequestException.class,
+                () -> service.listProcessesPage(workspaceId, userId, true, -1, 20));
+        assertThrows(BadRequestException.class,
+                () -> service.listProcessesPage(workspaceId, userId, true, 0, 0));
+        assertThrows(BadRequestException.class,
+                () -> service.listProcessesPage(workspaceId, userId, true, 0, 101));
+    }
+
+    // ------------------------------------------------------------------
+    // process log
+    // ------------------------------------------------------------------
+
+    @Test
+    void processLogReturnsTheOrderedAuditTrailWithResolvedActors() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentId", documentId.toString(),
+                        "initiatorId", userId.toString(),
+                        "documentFileName", "hop-dong.pdf", "sensitive", false, "approvalLevel", 1,
+                        "policyVersion", "sensitive-keyword-v1", "publishTarget", "workspace",
+                        "escalated", false),
+                null);
+
+        AuditLog submitted = new AuditLog();
+        submitted.setTenantId(workspaceId);
+        submitted.setUserId(initiatorId);
+        submitted.setAction(LogAction.WORKFLOW_STARTED);
+        submitted.setResourceType("workflow_process");
+        submitted.setResourceId(processInstanceId);
+        submitted.setMetadata(Map.of("documentId", documentId.toString(), "publishTarget", "workspace"));
+        submitted.setCreatedAt(LocalDateTime.now().minusMinutes(10));
+        AuditLog reminder = new AuditLog();
+        reminder.setTenantId(workspaceId);
+        reminder.setUserId(null);
+        reminder.setAction(LogAction.WORKFLOW_REMINDER_SENT);
+        reminder.setResourceType("workflow_process");
+        reminder.setResourceId(processInstanceId);
+        reminder.setMetadata(Map.of("documentId", documentId.toString()));
+        reminder.setCreatedAt(LocalDateTime.now());
+        when(auditLogRepository.findByTenantIdAndResourceIdOrderByIdAsc(workspaceId, processInstanceId))
+                .thenReturn(List.of(submitted, reminder));
+        when(identityApi.findUserById(initiatorId)).thenReturn(
+                new TenantIdentityApi.IdentitySnapshot(initiatorId, organizationId, "initiator@x.vn",
+                        "Nguyen Thi B", OrgRole.MEMBER, "ACTIVE", false));
+
+        var log = service.processLog(workspaceId, userId, processInstanceId);
+
+        assertEquals(2, log.entries().size());
+        assertEquals(LogAction.WORKFLOW_STARTED.name(), log.entries().get(0).action());
+        assertEquals("Nguyen Thi B", log.entries().get(0).actorName());
+        assertEquals(initiatorId, log.entries().get(0).actorId());
+        assertEquals(LogAction.WORKFLOW_REMINDER_SENT.name(), log.entries().get(1).action());
+        assertNull(log.entries().get(1).actorName());
+        assertEquals(1, log.process().approvalLevel());
+    }
+
+    @Test
+    void processLogOfAForeignWorkspaceIsForbidden() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        HistoricProcessInstanceQuery historicQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        HistoricProcessInstance historic = mock(HistoricProcessInstance.class);
+        when(historic.getProcessVariables()).thenReturn(
+                Map.of("workspaceId", otherWorkspaceId.toString()));
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(historicQuery);
+        when(historicQuery.singleResult()).thenReturn(historic);
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.processLog(workspaceId, userId, processInstanceId));
+        verify(auditLogRepository, never()).findByTenantIdAndResourceIdOrderByIdAsc(any(), any());
+    }
+
+    @Test
+    void processLogOfAnotherMembersProcessIsForbiddenForPlainMember() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentId", documentId.toString(),
+                        "initiatorId", UUID.randomUUID().toString(),
+                        "documentFileName", "hop-dong.pdf", "sensitive", false, "approvalLevel", 1,
+                        "policyVersion", "sensitive-keyword-v1", "publishTarget", "workspace",
+                        "escalated", false),
+                null);
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.processLog(workspaceId, userId, processInstanceId));
+        verify(auditLogRepository, never()).findByTenantIdAndResourceIdOrderByIdAsc(any(), any());
     }
 
     // ------------------------------------------------------------------
@@ -358,6 +654,7 @@ class WorkflowServiceTest {
         return Map.of(
                 "workspaceId", workspaceId.toString(),
                 "documentId", documentId.toString(),
+                "initiatorId", initiatorId.toString(),
                 "sensitive", true,
                 "policyVersion", "sensitive-keyword-v1");
     }

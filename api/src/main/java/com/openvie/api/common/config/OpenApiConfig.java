@@ -4,7 +4,6 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
-import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springdoc.core.models.GroupedOpenApi;
@@ -46,9 +45,17 @@ public class OpenApiConfig {
                                                 .bearerFormat("JWT")
                                 )
                 )
-                .security(List.of(new SecurityRequirement().addList(securitySchemeName)))
+                // No global security requirement: each controller declares
+                // @SecurityRequirement(name = "bearerAuth") itself, so public
+                // auth/setup endpoints show up unlocked in Swagger UI.
                 .info(new Info().title(title)
-                        .description("API documents of OpenVie")
+                        .description("OpenVie API — multi-workspace document intelligence. "
+                                + "Authenticate with a Bearer JWT from `/api/v1/auth/login` (or `sso/exchange`, `refresh`, "
+                                + "`workspaces/switch`). The active workspace (tenant), user, and role are resolved from "
+                                + "the token attributes on every request — no tenant header is used. Endpoints marked "
+                                + "with a padlock require this scheme; public auth and setup endpoints are unlocked. "
+                                + "Most failures answer with the standard error body (timestamp, status, path, error, "
+                                + "message); chat resources answer with `{\"error\": {\"code\", \"message\", \"request_id\"}}`.")
                         .version(version)
                         .license(new License().name("Apache-2.0").url("https://www.apache.org/licenses/LICENSE-2.0"))
                 );

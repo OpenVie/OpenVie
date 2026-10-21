@@ -40,4 +40,5 @@ def create_document_ingestion_pipeline(
             max_entities_per_unit=settings.GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT,
             max_relations_per_unit=settings.GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT,
         ),
+        graph_extraction_enabled=settings.GRAPH_EXTRACTION_ENABLED,
     )

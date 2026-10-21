@@ -1,6 +1,7 @@
 package com.openvie.api.workflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -169,9 +170,13 @@ class WorkflowEngineIntegrationTest {
         assertEquals(WorkflowService.LEVEL_1_TASK_KEY, groupView.taskDefinitionKey());
         assertEquals("WORKSPACE_ADMIN", groupView.candidateGroup());
         assertNull(groupView.assignee());
+        assertEquals("nasdaq onboarding checklist.pdf", groupView.documentFileName());
+        assertEquals(documentId, groupView.documentId());
 
         WorkspaceTaskView claimed = workflowService.claim(workspaceId, adminId, level1TaskId);
         assertEquals(adminId.toString(), claimed.assignee());
+        assertEquals("nasdaq onboarding checklist.pdf", claimed.documentFileName());
+        assertEquals(documentId, claimed.documentId());
 
         // One claim = one assignee: a second claimer hits a conflict; the group
         // keeps seeing the claimed task as a backup but can no longer grab it.
@@ -219,6 +224,56 @@ class WorkflowEngineIntegrationTest {
     }
 
     // ------------------------------------------------------------------
+    // Decision write-back onto the document row
+    // ------------------------------------------------------------------
+
+    @Test
+    void approvalDecisionsAreWrittenBackOntoTheDocumentRow() {
+        // Rejection path: the open state, then the verdict, actor and timestamp
+        // land on the document row itself.
+        UUID rejectedDocument = seedDocument(workspaceId, memberId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse rejectedStart = workflowService.start(workspaceId, memberId,
+                new WorkflowDtos.StartProcessRequest(rejectedDocument, "workspace"));
+        Map<String, Object> pendingRow = approvalRow(rejectedDocument);
+        assertEquals("PENDING", pendingRow.get("approval_status"),
+                "submitting for approval writes an open state onto the document");
+        assertEquals("workspace", pendingRow.get("approval_target"));
+        assertNull(pendingRow.get("approval_decided_at"), "an open review has no decision timestamp");
+
+        UUID level1TaskId = UUID.fromString(taskService.createTaskQuery()
+                .processInstanceId(rejectedStart.processInstanceId().toString())
+                .singleResult()
+                .getId());
+        workflowService.claim(workspaceId, adminId, level1TaskId);
+        CompleteTaskResponse rejected = workflowService.complete(workspaceId, adminId, level1TaskId,
+                new CompleteTaskRequest("REJECT", "missing the signature page"));
+        assertTrue(rejected.processEnded());
+
+        Map<String, Object> rejectedRow = approvalRow(rejectedDocument);
+        assertEquals("REJECTED", rejectedRow.get("approval_status"));
+        assertEquals(adminId, rejectedRow.get("approval_decided_by"),
+                "the deciding reviewer is recorded, not the submitter");
+        assertNotNull(rejectedRow.get("approval_decided_at"));
+
+        // The submitter gets a notification journal row carrying the reason. No
+        // mail channel is configured in tests, so delivery is recorded FAILED —
+        // the contract is that the notice is produced and auditable.
+        awaitWorkflowNotification(workspaceId, memberId, "missing the signature page");
+
+        // Approval path: an authority-covered submission settles in the same
+        // transaction that starts it.
+        UUID approvedDocument = seedDocument(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse approved = workflowService.start(workspaceId, adminId,
+                new WorkflowDtos.StartProcessRequest(approvedDocument, "workspace"));
+        assertTrue(approved.autoApproved());
+        Map<String, Object> approvedRow = approvalRow(approvedDocument);
+        assertEquals("APPROVED", approvedRow.get("approval_status"));
+        assertEquals(adminId, approvedRow.get("approval_decided_by"));
+        assertNotNull(approvedRow.get("approval_decided_at"));
+        awaitWorkflowNotification(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
+    }
+
+    // ------------------------------------------------------------------
     // Sensitivity routing and rejection
     // ------------------------------------------------------------------
 
@@ -262,8 +317,10 @@ class WorkflowEngineIntegrationTest {
 
     @Test
     void rejectionReasonIsMandatoryEverywhere() {
-        UUID documentId = seedDocument(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        // Submitted by the member: an admin's own workspace-scoped submission
+        // would already be decided by their authority when it starts.
+        UUID documentId = seedDocument(workspaceId, memberId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
         workflowService.claim(workspaceId, adminId, started.taskId());
 
@@ -330,8 +387,10 @@ class WorkflowEngineIntegrationTest {
 
     @Test
     void slaTimersReminderAndEscalationFireThroughTheEmbeddedEngine() {
-        UUID documentId = seedDocument(workspaceId, adminId, "nasdaq onboarding checklist.pdf");
-        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+        // Member-submitted like the other reviewed flows: the submitting
+        // authority fast-path would short-circuit the timers it is testing.
+        UUID documentId = seedDocument(workspaceId, memberId, "nasdaq onboarding checklist.pdf");
+        StartProcessResponse started = workflowService.start(workspaceId, memberId,
                 new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
         String pid = started.processInstanceId().toString();
         workflowService.claim(workspaceId, adminId, started.taskId());
@@ -373,6 +432,62 @@ class WorkflowEngineIntegrationTest {
     }
 
     // ------------------------------------------------------------------
+    // Authority short-circuit and the self-approval guard
+    // ------------------------------------------------------------------
+
+    @Test
+    void theSubmittingAuthorityDecidesItsOwnWorkspaceScopedSubmissionAtStart() {
+        UUID documentId = seedDocument(workspaceId, adminId, "internal onboarding memo.txt");
+
+        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+                new WorkflowDtos.StartProcessRequest(documentId, "workspace"));
+        assertTrue(started.autoApproved());
+        assertEquals("APPROVED", started.documentStatus());
+        assertEquals(0, taskService.createTaskQuery()
+                        .processInstanceId(started.processInstanceId().toString()).list().size(),
+                "a decided submission leaves no open approval task");
+        awaitAuditRow(LogAction.WORKFLOW_STARTED, workspaceId, null);
+        awaitAuditRow(LogAction.WORKFLOW_APPROVED, workspaceId, "selfApproved");
+    }
+
+    @Test
+    void sharedTargetsFromAnAdminRequireTheOrgOwner() {
+        UUID documentId = seedDocument(workspaceId, adminId, "external brochure.pdf");
+
+        StartProcessResponse started = workflowService.start(workspaceId, adminId,
+                new WorkflowDtos.StartProcessRequest(documentId, "shared"));
+        assertFalse(started.autoApproved());
+        // A shared target always routes to the org owner: the submitting
+        // workspace admin is never a candidate of the owner-only task.
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.claim(workspaceId, adminId, started.taskId()));
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.complete(workspaceId, adminId, started.taskId(),
+                        new CompleteTaskRequest("APPROVE", null)),
+                "the submitter's own shared publication cannot be decided by them");
+
+        WorkspaceTaskView ownedClaim = workflowService.claim(workspaceId, ownerId, started.taskId());
+        assertEquals(ownerId.toString(), ownedClaim.assignee());
+        CompleteTaskResponse approved = workflowService.complete(workspaceId, ownerId,
+                started.taskId(), new CompleteTaskRequest("APPROVE", null));
+        assertTrue(approved.processEnded());
+        assertEquals("APPROVED", approved.documentStatus());
+
+        // The audited trail answers who did what, when — names resolved server-side.
+        var log = workflowService.processLog(workspaceId, adminId, started.processInstanceId());
+        assertTrue(log.entries().stream().anyMatch(entry ->
+                LogAction.WORKFLOW_STARTED.name().equals(entry.action())));
+        assertTrue(log.entries().stream().anyMatch(entry ->
+                LogAction.WORKFLOW_APPROVED.name().equals(entry.action())
+                        && entry.actorId() != null
+                        && entry.actorId().equals(ownerId)
+                        && entry.actorName() != null
+                        && !entry.actorName().isBlank()),
+                "the audit trail names the deciding reviewer");
+        assertEquals("APPROVED", log.process().documentStatus());
+    }
+
+    // ------------------------------------------------------------------
     // SLA configuration
     // ------------------------------------------------------------------
 
@@ -408,6 +523,49 @@ class WorkflowEngineIntegrationTest {
                 "select count(*) from workflow_sla_configs where organization_id = ?",
                 Long.class, orgId);
         assertEquals(0L, rows);
+    }
+
+    @Test
+    void plainMembersOnlySeeTheirOwnSubmissionsAndCannotViewOthers() {
+        UUID secondMemberId = newUser("member2-" + suffix() + "@workflow.test", OrgRole.MEMBER,
+                WorkspaceRole.MEMBER, workspaceId);
+
+        UUID docA = seedDocument(workspaceId, memberId, "member1 confidential.pdf");
+        UUID docB = seedDocument(workspaceId, secondMemberId, "member2 confidential.pdf");
+
+        StartProcessResponse procA = workflowService.start(workspaceId, memberId,
+                new WorkflowDtos.StartProcessRequest(docA, "workspace"));
+        StartProcessResponse procB = workflowService.start(workspaceId, secondMemberId,
+                new WorkflowDtos.StartProcessRequest(docB, "workspace"));
+
+        // Member 1 only sees their own process
+        List<WorkflowDtos.WorkflowProcessView> member1Views =
+                workflowService.listProcesses(workspaceId, memberId, true);
+        assertEquals(1, member1Views.size());
+        assertEquals(procA.processInstanceId(), member1Views.get(0).processInstanceId());
+
+        // Member 2 only sees their own process
+        List<WorkflowDtos.WorkflowProcessView> member2Views =
+                workflowService.listProcesses(workspaceId, secondMemberId, true);
+        assertEquals(1, member2Views.size());
+        assertEquals(procB.processInstanceId(), member2Views.get(0).processInstanceId());
+
+        // Workspace Admin sees all processes in the workspace
+        List<WorkflowDtos.WorkflowProcessView> adminViews =
+                workflowService.listProcesses(workspaceId, adminId, true);
+        assertTrue(adminViews.size() >= 2);
+        assertTrue(adminViews.stream().anyMatch(v -> v.processInstanceId().equals(procA.processInstanceId())));
+        assertTrue(adminViews.stream().anyMatch(v -> v.processInstanceId().equals(procB.processInstanceId())));
+
+        // Member 1 cannot inspect Member 2's process detail or log
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.getProcess(workspaceId, memberId, procB.processInstanceId()));
+        assertThrows(AccessDeniedException.class,
+                () -> workflowService.processLog(workspaceId, memberId, procB.processInstanceId()));
+
+        // Admin can inspect both
+        assertDoesNotThrow(() -> workflowService.getProcess(workspaceId, adminId, procB.processInstanceId()));
+        assertDoesNotThrow(() -> workflowService.processLog(workspaceId, adminId, procB.processInstanceId()));
     }
 
     // ==================================================================
@@ -530,6 +688,39 @@ class WorkflowEngineIntegrationTest {
                 .filter(job -> boundaryElementId.equals(job.getElementId()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private Map<String, Object> approvalRow(UUID documentId) {
+        return jdbc.queryForMap(
+                "select approval_status, approval_target, approval_decided_by, approval_decided_at "
+                        + "from documents where id = ?",
+                documentId);
+    }
+
+    /** The decision notice is recorded AFTER_COMMIT; poll for the journal row. */
+    private void awaitWorkflowNotification(UUID workspace, UUID userId, String messageFragment) {
+        long deadline = System.currentTimeMillis() + 6000;
+        while (System.currentTimeMillis() < deadline) {
+            if (countWorkflowNotifications(workspace, userId, messageFragment) > 0) {
+                return;
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        fail("workflow decision notification for " + userId + " / " + messageFragment
+                + " did not appear within the grace period");
+    }
+
+    private long countWorkflowNotifications(UUID workspace, UUID userId, String messageFragment) {
+        Long count = jdbc.queryForObject(
+                "select count(*) from notifications where tenant_id = ? and user_id = ? "
+                        + "and type = 'WORKFLOW_DECIDED' and message like ?",
+                Long.class, workspace, userId, "%" + messageFragment + "%");
+        return count == null ? 0 : count;
     }
 
     /** The audit listener persists AFTER_COMMIT on an executor thread: poll. */

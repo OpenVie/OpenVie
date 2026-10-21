@@ -1,0 +1,112 @@
+# OpenVie alerting rules.
+#
+# Metric names come from Micrometer (Spring API, `openvie.cache.*` /
+# `openvie.redis.*` meters + default JVM/HTTP meters) and from prometheus_client
+# (FastAPI AI service, `openvie_ai_*` / `openvie_cache_*` / `openvie_redis_*` /
+# `openvie_semantic_answer_cache_*`). Micrometer meters are exported with dots
+# and dashes normalised to underscores and a `_total` suffix on counters, so
+# `openvie.cache.operations` is scraped as `openvie_cache_operations_total`.
+#
+# Controlled cache outcomes are identical on both services: hit, miss, bypass,
+# write, invalidate, error.
+
+groups:
+  - name: openvie-targets
+    rules:
+      - alert: OpenVieApiTargetDown
+        expr: up{job="openvie-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: spring-api
+        annotations:
+          summary: "Spring API scrape target is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (job openvie-api) for 1 minute; the business API is unreachable or /actuator/prometheus is failing."
+
+      - alert: OpenVieAiTargetDown
+        expr: up{job="openvie-ai"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: ai-api
+        annotations:
+          summary: "AI service scrape target is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} (job openvie-ai) for 1 minute; the FastAPI AI/ingestion service is unreachable or /metrics is failing."
+
+  - name: openvie-api
+    rules:
+      - alert: OpenVieApiHighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="openvie-api",outcome="SERVER_ERROR"}[5m]))
+            /
+          clamp_min(sum(rate(http_server_requests_seconds_count{job="openvie-api"}[5m])), 0.001)
+            > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          component: spring-api
+        annotations:
+          summary: "Spring API 5xx error ratio above 5%"
+          description: "More than 5% of HTTP requests to the Spring API returned a server error over the last 10 minutes."
+
+      - alert: OpenVieApiJvmHeapHigh
+        expr: |
+          sum(jvm_memory_used_bytes{job="openvie-api",area="heap"})
+            /
+          clamp_min(sum(jvm_memory_max_bytes{job="openvie-api",area="heap"}), 1)
+            > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: spring-api
+        annotations:
+          summary: "Spring API JVM heap usage above 90%"
+          description: "The Spring API JVM has used more than 90% of its maximum heap for 10 minutes; expect GC pressure or OutOfMemoryError."
+
+  - name: openvie-cache
+    rules:
+      - alert: OpenVieCacheErrorRatioHigh
+        expr: |
+          sum(rate(openvie_cache_operations_total{outcome="error"}[5m])) by (service)
+            /
+          clamp_min(sum(rate(openvie_cache_operations_total[5m])) by (service), 0.001)
+            > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Cache error ratio above 10% for {{ $labels.service }}"
+          description: "The `{{ $labels.service }}` service is reporting cache operation errors above 10% of all cache operations for 10 minutes."
+
+      - alert: OpenVieRedisOperationErrors
+        expr: sum(rate(openvie_redis_operations_total{outcome="error"}[5m])) by (service) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis operation errors reported by {{ $labels.service }}"
+          description: "The `{{ $labels.service }}` service is recording failing Redis operations for 5 minutes; check Redis availability and connection limits."
+
+  - name: openvie-ai
+    rules:
+      - alert: OpenVieAiChatModelTimeouts
+        expr: sum(rate(openvie_ai_chat_model_timeouts_total[10m])) by (model) > 0
+        for: 10m
+        labels:
+          severity: warning
+          component: ai-api
+        annotations:
+          summary: "Chat model timeouts for {{ $labels.model }}"
+          description: "The AI service is timing out on chat model `{{ $labels.model }}` over the last 10 minutes; check the LLM backend capacity and LLM_TIMEOUT_SECONDS."
+
+      - alert: OpenVieAiRetrievalFallbacks
+        expr: sum(rate(openvie_ai_retrieval_fallbacks_total[10m])) by (component) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: ai-api
+        annotations:
+          summary: "Retrieval fail-open fallbacks for {{ $labels.component }}"
+          description: "The AI service is repeatedly fail-open falling back on `{{ $labels.component }}` (>0.1/s over 10 minutes); a retrieval dependency (Qdrant, graph, reranker) is degraded."

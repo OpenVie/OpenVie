@@ -2,6 +2,7 @@ package com.openvie.api.chat.query;
 
 import com.openvie.api.ai.api.AiInferenceApi;
 import com.openvie.api.ai.api.AiInferenceException;
+import com.openvie.api.common.exception.custom.BadRequestException;
 import io.grpc.Context;
 import com.openvie.api.chat.dto.ChatDtos;
 import com.openvie.api.chat.enums.ChatChannel;
@@ -76,11 +77,11 @@ public class ChatControlPlaneService {
 
     public ChatDtos.AssistantMessageResponse submitEmployeeMessage(
             UUID tenantId, UUID userId, UUID sessionId, String content,
-            Map<String, Object> metadata, String idempotencyKey, String requestId,
-            AnswerStreamListener listener) {
+            Map<String, Object> metadata, List<UUID> documentIds,
+            String idempotencyKey, String requestId, AnswerStreamListener listener) {
         checkCancelled();
         PreparedTurn prepared = transactions.execute(status -> prepareTurn(
-                tenantId, userId, sessionId, content, metadata, idempotencyKey, requestId));
+                tenantId, userId, sessionId, content, metadata, documentIds, idempotencyKey, requestId));
         Objects.requireNonNull(prepared);
         if (isCancelled()) {
             failCancelled(prepared.turnId());
@@ -168,11 +169,21 @@ public class ChatControlPlaneService {
 
     private PreparedTurn prepareTurn(
             UUID tenantId, UUID userId, UUID sessionId, String content,
-            Map<String, Object> metadata, String idempotencyKey, String requestId) {
+            Map<String, Object> metadata, List<UUID> documentIds,
+            String idempotencyKey, String requestId) {
         ChatSession session = lockedAuthorizedSession(tenantId, userId, sessionId);
+        List<UUID> scope = documentScope(documentIds);
+        if (!scope.isEmpty()) {
+            try {
+                documentApi.validateChatScope(tenantId, session.getKnowledgeBaseId(), scope);
+            } catch (BadRequestException exception) {
+                throw new ChatApiException(HttpStatus.BAD_REQUEST, "INVALID_DOCUMENT_SCOPE",
+                        "Only completed documents of this workspace's knowledge base can be selected.");
+            }
+        }
         String keyHash = idempotencyKey == null || idempotencyKey.isBlank()
                 ? null : sha256(idempotencyKey);
-        String fingerprint = fingerprint(content, metadata, null);
+        String fingerprint = fingerprint(content, metadata, null, scope);
         if (keyHash != null) {
             ChatTurn duplicate = turnRepository.findBySessionIdAndIdempotencyKeyHash(sessionId, keyHash)
                     .orElse(null);
@@ -196,7 +207,9 @@ public class ChatControlPlaneService {
                 duplicate.setAttemptCount(duplicate.getAttemptCount() + 1);
                 ChatMessage userMessage = messageRepository.findById(duplicate.getUserMessageId())
                         .orElseThrow();
-                GenerationContext context = captureContext(session, duplicate, userMessage, requestId);
+                GenerationContext context =
+                        captureContext(session, duplicate, userMessage, requestId)
+                                .withDocumentScope(documentScopeFromTurn(duplicate));
                 duplicate.setKnowledgeRevision(context.revision());
                 duplicate.setGenerationContext(context.asMap());
                 return new PreparedTurn(duplicate.getId(), context, null);
@@ -225,7 +238,9 @@ public class ChatControlPlaneService {
         turn.setKnowledgeRevision(workspace.searchRevision());
         turn.setAttemptCount(1);
         turn = turnRepository.save(turn);
-        GenerationContext context = captureContext(session, turn, userMessage, prior, requestId);
+        GenerationContext context =
+                captureContext(session, turn, userMessage, prior, requestId)
+                        .withDocumentScope(scope.isEmpty() ? null : scope);
         turn.setGenerationContext(context.asMap());
         return new PreparedTurn(turn.getId(), context, null);
     }
@@ -272,7 +287,9 @@ public class ChatControlPlaneService {
         ChatSession session = sessionRepository.findForUpdate(turn.getSessionId(), turn.getTenantId())
                 .orElseThrow(() -> sessionNotFound());
         ChatMessage userMessage = messageRepository.findById(turn.getUserMessageId()).orElseThrow();
-        GenerationContext context = captureContext(session, turn, userMessage, requestId);
+        GenerationContext context =
+                captureContext(session, turn, userMessage, requestId)
+                        .withDocumentScope(documentScopeFromTurn(turn));
         turn.setKnowledgeRevision(context.revision());
         turn.setGenerationContext(context.asMap());
         turn.setAttemptCount(turn.getAttemptCount() + 1);
@@ -532,7 +549,41 @@ public class ChatControlPlaneService {
                 turn.getGenerationId(), turn.getId(), session.getTenantId(), session.getChatbotId(),
                 session.getKnowledgeBaseId(), workspace.searchRevision(), session.getChannel().name(),
                 session.getLocale(), userMessage.getContent(), history, workspace.tenantName(),
-                requestId == null ? UUID.randomUUID().toString() : requestId);
+                requestId == null ? UUID.randomUUID().toString() : requestId, null);
+    }
+
+    /** Distinct document ids in arrival order; empty means the whole knowledge base. */
+    private static List<UUID> documentScope(List<UUID> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return List.of();
+        }
+        return documentIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<UUID> documentScopeFromTurn(ChatTurn turn) {
+        Map<String, Object> stored = turn.getGenerationContext();
+        if (stored == null) {
+            return List.of();
+        }
+        Object raw = stored.get("document_ids");
+        if (!(raw instanceof List<?> values) || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .map(value -> {
+                    try {
+                        return UUID.fromString(value.toString());
+                    } catch (RuntimeException exception) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private List<ChatMessage> firstPriorMessages(UUID sessionId, int beforeSequence) {
@@ -619,7 +670,12 @@ public class ChatControlPlaneService {
     }
 
     private String fingerprint(String content, Map<String, Object> metadata, String locale) {
-        Map<String, Object> value = fingerprintPayload(content, metadata, locale);
+        return fingerprint(content, metadata, locale, null);
+    }
+
+    private String fingerprint(
+            String content, Map<String, Object> metadata, String locale, List<UUID> documentIds) {
+        Map<String, Object> value = fingerprintPayload(content, metadata, locale, documentIds);
         try {
             return sha256(objectMapper.writeValueAsString(value));
         } catch (JsonProcessingException exception) {
@@ -629,11 +685,19 @@ public class ChatControlPlaneService {
 
     public static Map<String, Object> fingerprintPayload(
             String content, Map<String, Object> metadata, String locale) {
+        return fingerprintPayload(content, metadata, locale, null);
+    }
+
+    public static Map<String, Object> fingerprintPayload(
+            String content, Map<String, Object> metadata, String locale, List<UUID> documentIds) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("content", content);
         value.put("metadata", metadata == null ? Map.of() : new java.util.TreeMap<>(metadata));
         if (locale != null) {
             value.put("locale", locale);
+        }
+        if (documentIds != null && !documentIds.isEmpty()) {
+            value.put("document_ids", documentIds.stream().map(UUID::toString).toList());
         }
         return value;
     }
@@ -682,13 +746,22 @@ public class ChatControlPlaneService {
             String question,
             List<AiInferenceApi.PriorMessage> priorMessages,
             String tenantName,
-            String requestId
+            String requestId,
+            List<UUID> documentIds
     ) {
+        private GenerationContext withDocumentScope(List<UUID> documentIds) {
+            return new GenerationContext(
+                    generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision,
+                    channel, locale, question, priorMessages, tenantName, requestId,
+                    documentIds == null || documentIds.isEmpty() ? null : documentIds);
+        }
+
         AiInferenceApi.GenerationRequest toRequest() {
             return new AiInferenceApi.GenerationRequest(
                     generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision,
                     channel, locale, question, priorMessages, tenantName,
-                    PROMPT_SCHEMA_VERSION, requestId, requestId);
+                    PROMPT_SCHEMA_VERSION, documentIds == null ? List.of() : documentIds,
+                    requestId, requestId);
         }
 
         Map<String, Object> asMap() {
@@ -705,6 +778,9 @@ public class ChatControlPlaneService {
                     .map(message -> Map.of("role", message.role(), "content", message.content())).toList());
             value.put("tenant_name", tenantName);
             value.put("prompt_schema_version", PROMPT_SCHEMA_VERSION);
+            if (documentIds != null && !documentIds.isEmpty()) {
+                value.put("document_ids", documentIds.stream().map(UUID::toString).toList());
+            }
             return value;
         }
     }

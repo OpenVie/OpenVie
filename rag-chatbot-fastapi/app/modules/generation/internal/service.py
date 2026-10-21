@@ -107,6 +107,21 @@ def _conversation_block(conversation: Sequence[ChatMessage]) -> str:
     return "Recent conversation:\n" + "\n".join(turns[-_CONVERSATION_MESSAGES:]) + "\n\n"
 
 
+def _document_scope(
+    document_ids: Sequence[str] | None,
+) -> tuple[str, ...] | None:
+    """Normalize an optional retrieval scope.
+
+    ``None`` and empty sequences both mean "search the whole knowledge base";
+    otherwise duplicates are dropped while order is kept (the retrieval cache
+    normalizes ordering itself).
+    """
+    if document_ids is None:
+        return None
+    scope = tuple(dict.fromkeys(str(value) for value in document_ids if str(value)))
+    return scope or None
+
+
 class QueryEmbedder(Protocol):
     async def embed_query(self, text: str) -> list[float]: ...
 
@@ -212,13 +227,16 @@ class RagChatService:
         tenant_id: str | None = None,
         session_id: str | None = None,
         user_id: str | None = None,
+        document_ids: Sequence[str] | None = None,
         on_content: Callable[[str], Awaitable[None]] | None = None,
     ) -> AssistantMessage:
+        scope = _document_scope(document_ids)
         if session is not None:
             return await self._generate(
                 session=session,
                 content=content,
                 prior_messages=prior_messages,
+                document_ids=scope,
                 on_content=on_content,
             )
         if self._sessions is None or tenant_id is None or session_id is None:
@@ -237,6 +255,7 @@ class RagChatService:
             session=stored,
             content=content,
             prior_messages=history,
+            document_ids=scope,
             on_content=on_content,
         )
         self._sessions.add_assistant_message(session_id, message)
@@ -248,6 +267,7 @@ class RagChatService:
         session: ChatSession,
         content: str,
         prior_messages: Sequence[ChatMessage] = (),
+        document_ids: tuple[str, ...] | None = None,
         on_content: Callable[[str], Awaitable[None]] | None = None,
     ) -> AssistantMessage:
         tenant_id = session.tenant_id
@@ -284,7 +304,7 @@ class RagChatService:
                     session=session,
                     query=content,
                     prior_history=[],
-                    visible_document_ids=None,
+                    visible_document_ids=document_ids,
                 )
 
             if cache_context is not None and semantic_cache is not None:
@@ -353,6 +373,7 @@ class RagChatService:
                     query_text=retrieval_query,
                     query_vector=query_vector,
                     authoritative_revision=session.authoritative_revision,
+                    document_ids=document_ids,
                 )
             except Exception:
                 retrieval_outcome = "error"

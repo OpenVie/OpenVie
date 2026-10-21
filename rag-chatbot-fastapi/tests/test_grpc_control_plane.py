@@ -145,6 +145,22 @@ async def test_generation_context_is_supplied_and_result_is_deduplicated() -> No
     assert [item.content for item in generation.context.prior_messages] == ["Earlier"]
 
 
+@pytest.mark.asyncio
+async def test_document_scope_flows_from_request_into_generation_context() -> None:
+    generation = Generation()
+    grpc_service = service(generation, Redis())
+
+    scoped = request()
+    scoped.document_ids.extend(["doc-2", "doc-1", "doc-2"])
+
+    events = [event async for event in grpc_service.GenerateAnswer(scoped, Context())]
+    assert [event.WhichOneof("payload") for event in events][-1] == "completed"
+    assert generation.context is not None
+    # The transport maps the request verbatim; deduplication and normalization
+    # belong to the retrieval layer.
+    assert generation.context.document_ids == ("doc-2", "doc-1", "doc-2")
+
+
 class ControlledGeneration(Generation):
     def __init__(self, *, error: Exception | None = None) -> None:
         super().__init__()

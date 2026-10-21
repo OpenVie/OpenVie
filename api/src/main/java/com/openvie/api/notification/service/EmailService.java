@@ -147,6 +147,41 @@ public class EmailService {
     }
 
     /**
+     * Best-effort notice to the submitter that an approval process settled.
+     * Returns false when no channel is configured or the transport failed —
+     * the decision itself is already committed and never depends on the mail.
+     */
+    public boolean sendWorkflowDecisionEmail(UUID orgId, String toEmail, String fullName,
+            String documentFileName, String decision, String reason, int approvalLevel,
+            String publishTarget) {
+        boolean approved = "APPROVE".equalsIgnoreCase(decision);
+        String verdict = approved ? "approved" : "rejected";
+        String displayName = fullName == null || fullName.isBlank() ? toEmail : fullName;
+        String fileName = documentFileName == null || documentFileName.isBlank()
+                ? "your submission"
+                : documentFileName;
+        String reasonBlock = approved || reason == null || reason.isBlank()
+                ? ""
+                : "<p><strong>Reason:</strong> %s</p>".formatted(html(reason));
+        EmailMessage message = new EmailMessage(
+                toEmail,
+                toEmail,
+                "Your document was %s on OpenVie".formatted(verdict),
+                renderShell("""
+                <h1>Document %1$s</h1>
+                <p>Hi %2$s,</p>
+                <p><strong>%3$s</strong> was %4$s at approval level %5$s (publish target: %6$s).</p>
+                %7$s
+                <a href="%8$s" class="btn">Open OpenVie</a>
+                <div class="footer">You received this email because you submitted this
+                document for approval.</div>
+                """.formatted(approved ? "approved" : "rejected", html(displayName), html(fileName),
+                        verdict, approvalLevel, html(publishTarget), reasonBlock, loginLink))
+        );
+        return trySend(orgId, message, "workflow-decision notice");
+    }
+
+    /**
      * Shared dark-brand shell: page background, card, logo, type colors and
      * button mirror the app's dark theme tokens (#07090c background, #c8f53c
      * primary with #07090c text on it).

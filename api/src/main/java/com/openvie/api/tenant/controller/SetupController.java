@@ -5,6 +5,11 @@ import com.openvie.api.tenant.service.SetupService;
 import com.openvie.api.tenant.service.SetupService.SetupCommand;
 import com.openvie.api.tenant.service.SetupService.SetupResult;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -40,6 +45,13 @@ public class SetupController {
 
     private final SetupService setupService;
 
+    @Operation(summary = "Check whether setup is required",
+            description = "Signals the web client to show the one-time setup form; answers 404 once the installation "
+                    + "has any account. Public endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Setup required (`{\"required\": true}`)"),
+            @ApiResponse(responseCode = "404", description = "Installation already claimed")
+    })
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> status() {
         if (!setupService.required()) {
@@ -48,6 +60,16 @@ public class SetupController {
         return ResponseEntity.ok(Map.of("required", true));
     }
 
+    @Operation(summary = "Claim the installation",
+            description = "Creates the organization, its default workspace, and the owner account from the setup form. "
+                    + "Fails once an account exists. Public endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Installation claimed", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Validation failed",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "This installation has already been set up",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping
     public ResponseEntity<SetupResponse> complete(@Valid @RequestBody SetupRequest request) {
         if (!setupService.required()) {
@@ -62,26 +84,34 @@ public class SetupController {
 
     @Getter
     @Setter
+    @Schema(description = "One-time setup form: claims the installation with the organization, its default workspace, "
+            + "and the owner account.")
     public static class SetupRequest {
+        @Schema(description = "Organization display name.", example = "OpenVie")
         @NotBlank(message = "Organization name is required")
         @Size(max = 255)
         private String organizationName;
 
+        @Schema(description = "Owner's display name.")
         @NotBlank(message = "Your name is required")
         @Size(max = 255)
         private String fullName;
 
+        @Schema(description = "Owner account email; used as the login name.", example = "owner@example.com")
         @Email(message = "Invalid email format")
         @NotBlank(message = "Email must not be blank")
         private String email;
 
+        @Schema(description = "Initial owner password (12–128 characters).")
         @NotBlank(message = "Password must not be blank")
         @Size(min = 12, max = 128, message = "Password must be at least 12 characters")
         private String password;
 
+        @Schema(description = "When true, `/api/v1/auth/register` accepts self-registrations from the start.")
         private boolean allowSelfRegistration = false;
     }
 
+    @Schema(description = "Ids created by the setup claim.")
     public record SetupResponse(UUID organizationId, UUID workspaceId, UUID ownerId) {
     }
 }
