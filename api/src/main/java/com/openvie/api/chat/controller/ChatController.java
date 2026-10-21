@@ -8,11 +8,17 @@ import com.openvie.api.common.controller.BaseController;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.common.exception.custom.UnauthorizedException;
 import io.grpc.Context;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.http.HttpStatus;
@@ -40,15 +46,24 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@Tag(name = "Chat", description = "Playground chat sessions: creation, streamed answers, history, and housekeeping")
 @RestController
 @RequestMapping("/api/v1/chat")
 @RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
 public class ChatController extends BaseController {
     private final ChatControlPlaneService chatService;
     private final Map<Thread, Context.CancellableContext> activeStreams = new ConcurrentHashMap<>();
     @Value("${app.ai.grpc.answer-deadline-seconds:100}")
     private long answerDeadlineSeconds = 100;
 
+    @Operation(summary = "Create a chat session",
+            description = "Creates an OPEN playground session owned by the caller in the active workspace.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Session created"),
+            @ApiResponse(responseCode = "400", description = "Request validation failed, or the workspace or knowledge base is not active"),
+            @ApiResponse(responseCode = "403", description = "Caller has no active membership in the workspace")
+    })
     @PostMapping("/sessions")
     public ChatDtos.SessionResponse create(
             @Valid @RequestBody ChatDtos.CreateSessionRequest body,
@@ -56,8 +71,26 @@ public class ChatController extends BaseController {
         return chatService.createEmployeeSession(getTenantId(request), getUserId(request), body);
     }
 
+    @Operation(summary = "Send a message and get the answer",
+            description = "Runs one answer generation. Two response modes: `Accept: application/json` waits for the "
+                    + "final answer and returns it as JSON (server-to-server integration mode, bounded by the model "
+                    + "answer deadline); any other Accept (or none) streams `text/event-stream` frames: `content` "
+                    + "(draft previews, each replacing the previous), `reset` (the provider restarted the draft), "
+                    + "`complete` (the authoritative answer with citations), and `error` (a failure code). Keepalive "
+                    + "comments every 5 s; the stream cancels on client disconnect. An optional `Idempotency-Key` "
+                    + "header replays the same turn in either mode. `document_ids` in the body narrows retrieval to "
+                    + "at most 20 COMPLETED documents of the session's knowledge base; empty or absent means the "
+                    + "whole knowledge base.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "SSE stream opened; terminal event is `complete` or `error`"),
+            @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR, INVALID_DOCUMENT_SCOPE, or INVALID_REQUEST"),
+            @ApiResponse(responseCode = "404", description = "SESSION_NOT_FOUND — the session id, even when an "
+                    + "Idempotency-Key replays a different session"),
+            @ApiResponse(responseCode = "409", description = "IDEMPOTENCY_KEY_REUSED, MESSAGE_IN_PROGRESS, or KNOWLEDGE_BASE_CHANGED"),
+            @ApiResponse(responseCode = "502", description = "MODEL_PROVIDER_ERROR — the inference pipeline failed mid-answer")
+    })
     @PostMapping(value = "/sessions/{sessionId}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<SseEmitter> submit(
+    public ResponseEntity<Object> submit(
             @PathVariable UUID sessionId,
             @Valid @RequestBody ChatDtos.SubmitMessageRequest body,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -65,6 +98,24 @@ public class ChatController extends BaseController {
             HttpServletRequest request) {
         UUID tenantId = getTenantId(request);
         UUID userId = getUserId(request);
+
+        // Integration mode: `Accept: application/json` runs the exact same turn
+        // pipeline (fingerprint, idempotent replay, scope validation) but waits
+        // for the final answer instead of streaming drafts. SSE stays the
+        // default for everything else, including `Accept: */*`.
+        String accept = request.getHeader(HttpHeaders.ACCEPT);
+        if (accept != null && accept.contains(MediaType.APPLICATION_JSON_VALUE)
+                && !accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE)) {
+            var result = chatService.submitEmployeeMessage(
+                    tenantId, userId, sessionId, body.content(), body.metadata(),
+                    body.documentIds(), idempotencyKey, requestId,
+                    new ChatControlPlaneService.AnswerStreamListener() {
+                        @Override public void onContent(String content) { }
+                        @Override public void onReset() { }
+                    });
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(result);
+        }
+
         SseEmitter emitter = new SseEmitter((2 * answerDeadlineSeconds + 10) * 1000);
         Context.CancellableContext context = Context.current().withCancellation();
         AtomicBoolean cancelled = new AtomicBoolean();
@@ -86,6 +137,7 @@ public class ChatController extends BaseController {
                     try {
                         var result = chatService.submitEmployeeMessage(
                                 tenantId, userId, sessionId, body.content(), body.metadata(),
+                                body.documentIds(),
                                 idempotencyKey, requestId, new ChatControlPlaneService.AnswerStreamListener() {
                                     @Override
                                     public void onContent(String content) {
@@ -195,6 +247,13 @@ public class ChatController extends BaseController {
         });
     }
 
+    @Operation(summary = "List the messages of a session",
+            description = "Returns up to `limit` messages with sequence numbers greater than `after`.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Message history page, oldest first"),
+            @ApiResponse(responseCode = "400", description = "INVALID_FILTER — limit or after outside the allowed range"),
+            @ApiResponse(responseCode = "404", description = "SESSION_NOT_FOUND")
+    })
     @GetMapping("/sessions/{sessionId}/messages")
     public List<ChatDtos.MessageResponse> history(
             @PathVariable UUID sessionId,
@@ -204,6 +263,12 @@ public class ChatController extends BaseController {
         return chatService.history(getTenantId(request), getUserId(request), sessionId, limit, after);
     }
 
+    @Operation(summary = "Close a chat session",
+            description = "Marks the session CLOSED; history remains readable until its retention expires.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Session closed"),
+            @ApiResponse(responseCode = "404", description = "SESSION_NOT_FOUND")
+    })
     @DeleteMapping("/sessions/{sessionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void close(@PathVariable UUID sessionId, HttpServletRequest request) {
@@ -217,6 +282,14 @@ public class ChatController extends BaseController {
         return chatService.playground(getTenantId(request), getUserId(request), limit, offset);
     }
 
+    @Operation(summary = "List playground sessions across history",
+            description = "Cursor-paged overview of the caller's sessions with search, status, activity-window, and "
+                    + "sort filters; the cursor and result window ignore already hidden sessions. "
+                    + "`X-Next-Cursor` is absent on the last page.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Session page; X-Next-Cursor header on everything but the last page"),
+            @ApiResponse(responseCode = "400", description = "INVALID_FILTER (cursor, status, sort, direction, or activity window)")
+    })
     @GetMapping("/playground/sessions")
     public ResponseEntity<List<ChatDtos.PlaygroundSessionResponse>> playgroundResponse(
             @RequestParam(defaultValue = "30") int limit,
@@ -238,6 +311,12 @@ public class ChatController extends BaseController {
         return response.body(result.sessions());
     }
 
+    @Operation(summary = "Hide a playground session",
+            description = "Removes the session from the playground history list without closing it.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Session hidden"),
+            @ApiResponse(responseCode = "404", description = "SESSION_NOT_FOUND")
+    })
     @DeleteMapping("/playground/sessions/{sessionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void hide(@PathVariable UUID sessionId, HttpServletRequest request) {

@@ -2,6 +2,7 @@ export const NEW_CHAT_EVENT = "openvie:newchat"
 
 const PENDING_NEW_CHAT_KEY = "openvie.chat.pending-new"
 const PENDING_SESSION_SELECT_KEY = "openvie.chat.pending-session"
+const PENDING_DOCUMENT_SCOPE_KEY = "openvie.chat.pending-document-scope"
 const SESSION_SELECT_EVENT = "openvie:chat-session-select"
 const CHAT_HISTORY_CHANGED_EVENT = "openvie:chat-history-changed"
 const ACTIVE_CHAT_SESSION_EVENT = "openvie:chat-active-session"
@@ -35,6 +36,34 @@ export function consumePendingSessionSelect(): string | null {
   const pending = window.sessionStorage.getItem(PENDING_SESSION_SELECT_KEY)
   if (pending) window.sessionStorage.removeItem(PENDING_SESSION_SELECT_KEY)
   return pending
+}
+
+/**
+ * Opens the chat scoped to one or more indexed documents (currently built for
+ * the document viewer's "chat with this document" affordance). The playground
+ * stashes the ids, validates each indexed status, then answers every message
+ * inside this scope until the user clears it.
+ */
+export function requestChatWithDocumentScope(documentId: string, ...extraDocumentIds: string[]) {
+  window.sessionStorage.setItem(
+    PENDING_DOCUMENT_SCOPE_KEY,
+    JSON.stringify([documentId, ...extraDocumentIds]),
+  )
+}
+
+export function consumePendingDocumentScope(): string[] | null {
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_DOCUMENT_SCOPE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return null
+    const ids = parsed.filter((id): id is string => typeof id === "string")
+    return ids.length > 0 ? ids : null
+  } catch {
+    return null
+  } finally {
+    window.sessionStorage.removeItem(PENDING_DOCUMENT_SCOPE_KEY)
+  }
 }
 
 /** The playground tells the sidebar its open session (null = none/blank). */

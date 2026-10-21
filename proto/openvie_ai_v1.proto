@@ -38,6 +38,9 @@ message GenerateAnswerRequest {
   string tenant_name = 11;
   string prompt_schema_version = 12;
   TraceMetadata trace = 13;
+  // Optional document scope for retrieval: restricts the answer to the given
+  // indexed documents. An empty list means the whole knowledge base.
+  repeated string document_ids = 14;
 }
 
 message Citation {

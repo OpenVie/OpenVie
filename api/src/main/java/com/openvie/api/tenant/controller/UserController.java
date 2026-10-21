@@ -12,6 +12,13 @@ import com.openvie.api.tenant.dto.UserManagementDtos.PasswordResetRequest;
 import com.openvie.api.tenant.dto.UserManagementDtos.RoleUpdateRequest;
 import com.openvie.api.tenant.dto.UserManagementDtos.StatusUpdateRequest;
 import com.openvie.api.tenant.service.TenantUserManagementService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,13 +43,21 @@ import java.util.UUID;
  * Mutations resolve live membership again in the service, including the
  * public-workspace rule for regular members.
  */
+@Tag(name = "Workspace members", description = "Member directory, invitations, and role management inside the caller's active workspace")
 @RestController
 @RequestMapping({"/api/v1/users", "/api/users"})
 @RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
 public class UserController extends BaseController {
     private final TenantUserManagementService userManagementService;
 
     /** Add-member autocomplete: organization accounts not yet in the workspace. */
+    @Operation(summary = "Suggest organization accounts for add-member",
+            description = "Autocomplete for the add-member dialog: organization accounts that are not members of the "
+                    + "caller's active workspace yet. Workspace admins only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Suggestions", useReturnTypeSchema = true)
+    })
     @GetMapping("/suggest")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public List<OrganizationMemberResponse> suggest(
@@ -52,11 +67,25 @@ public class UserController extends BaseController {
                 getTenantId(request), getUserId(request), query);
     }
 
+    @Operation(summary = "Read the workspace member directory",
+            description = "Members of the caller's active workspace plus the pending invitations an admin can browse.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Members and pending invitations", useReturnTypeSchema = true)
+    })
     @GetMapping("/directory")
     public DirectoryResponse directory(HttpServletRequest request) {
         return userManagementService.getDirectory(getTenantId(request), getUserId(request));
     }
 
+    @Operation(summary = "Invite a new member by email",
+            description = "Creates (or re-issues) an invitation into the caller's active workspace; the role applies "
+                    + "once the invitation is accepted. Workspace admins only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Invitation created or re-sent when one exists", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Email/role validation failed",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only workspace admins may invite")
+    })
     @PostMapping("/invitations")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public ResponseEntity<InvitationResponse> invite(@Valid @RequestBody InviteRequest body,
@@ -65,12 +94,30 @@ public class UserController extends BaseController {
                 getTenantId(request), getUserId(request), body.email(), body.role()));
     }
 
+    @Operation(summary = "Resend an invitation",
+            description = "Re-sends the invitation email for a pending or expired invitation, rate-limited per email.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Invitation re-sent", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Only pending or expired invitations can be resent, "
+                    + "or the resend cooldown has not elapsed",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only workspace admins may resend")
+    })
     @PostMapping("/invitations/{invitationId}/resend")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public InvitationResponse resend(@PathVariable UUID invitationId, HttpServletRequest request) {
         return userManagementService.resend(getTenantId(request), getUserId(request), invitationId);
     }
 
+    @Operation(summary = "Cancel a pending invitation")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Invitation cancelled"),
+            @ApiResponse(responseCode = "400", description = "Only pending invitations can be cancelled",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only workspace admins may cancel"),
+            @ApiResponse(responseCode = "404", description = "Invitation not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @DeleteMapping("/invitations/{invitationId}")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public ResponseEntity<Void> cancel(@PathVariable UUID invitationId, HttpServletRequest request) {
@@ -78,6 +125,16 @@ public class UserController extends BaseController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Change a member's workspace role",
+            description = "Promotes/demotes a member between ADMIN and MEMBER; the caller cannot change their own role.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Role updated", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "You cannot change your own role",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only workspace admins may change roles"),
+            @ApiResponse(responseCode = "404", description = "Member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PatchMapping("/{userId}/role")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public MemberResponse updateRole(@PathVariable UUID userId, @Valid @RequestBody RoleUpdateRequest body,
@@ -85,6 +142,17 @@ public class UserController extends BaseController {
         return userManagementService.updateRole(getTenantId(request), getUserId(request), userId, body.role());
     }
 
+    @Operation(summary = "Activate or deactivate a member account (owner)",
+            description = "Account status is an organization-level concern; the owner's own and the organization-owner "
+                    + "account cannot be deactivated here.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Status updated", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Status must be ACTIVE or INACTIVE, or a protected account was targeted",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may change account status"),
+            @ApiResponse(responseCode = "404", description = "Member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PatchMapping("/{userId}/status")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public MemberResponse updateStatus(@PathVariable UUID userId, @Valid @RequestBody StatusUpdateRequest body,
@@ -102,6 +170,17 @@ public class UserController extends BaseController {
      * workspace instead (see {@code DELETE /users/members/{userId}}); the admin
      * panel uses the org-scoped {@code /api/v1/admin/users} variants.
      */
+    @Operation(summary = "Set a member's password (owner)",
+            description = "Owner sets a member's password without any email configured — the onboard path for closed "
+                    + "workspaces; the member must change it on next login. Setting the caller's own password here is refused.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Password set; forced change on next login"),
+            @ApiResponse(responseCode = "400", description = "Setting the caller's own password here is refused",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may set passwords"),
+            @ApiResponse(responseCode = "404", description = "Member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PutMapping("/{userId}/password")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public ResponseEntity<Void> setMemberPassword(
@@ -112,6 +191,16 @@ public class UserController extends BaseController {
                 getTenantId(request), getUserId(request), userId, body.password());
         return ResponseEntity.noContent().build();
     }
+    @Operation(summary = "Add an organization account to the workspace",
+            description = "Adds an existing organization account (by email) to the caller's active workspace. "
+                    + "Workspace admins only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Member added", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "409", description = "That account is already a member of this workspace",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Organization account not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping("/members")
     public ResponseEntity<MemberResponse> addMember(
             @Valid @RequestBody AddMemberToWorkspaceRequest body,
@@ -127,6 +216,18 @@ public class UserController extends BaseController {
      * refuses removal. Deactivating the account is an owner action on the admin
      * surface instead.
      */
+    @Operation(summary = "Remove a member from the active workspace",
+            description = "Workspace admin removes one member from their own active workspace. The account itself stays "
+                    + "in the organization; the default workspace (General) refuses removal. Deactivating the account "
+                    + "is an owner action on the admin surface instead.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Member removed"),
+            @ApiResponse(responseCode = "400", description = "The default workspace refuses member removal",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Only workspace admins may remove members"),
+            @ApiResponse(responseCode = "404", description = "Member not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @DeleteMapping("/members/{userId}")
     @PreAuthorize("hasRole('WORKSPACE_ADMIN')")
     public ResponseEntity<Void> removeMember(@PathVariable UUID userId,
@@ -141,6 +242,13 @@ public class UserController extends BaseController {
     // dedicated admin controller under /api/v1/admin/users/organization.
     // Deprecated: prefer AdminUserController (/api/v1/admin/users/organization).
     // Kept for backward compatibility; removal is tracked post-SSO.
+    @Operation(summary = "List organization accounts (deprecated)",
+            description = "Deprecated — prefer AdminUserController (`/api/v1/admin/users/organization`). Kept for "
+                    + "backward compatibility; removal is tracked post-SSO.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Organization members"),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may list accounts")
+    })
     @GetMapping("/organization")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public List<OrganizationMemberResponse> organizationMembers(HttpServletRequest request) {
@@ -148,6 +256,16 @@ public class UserController extends BaseController {
                 getOrgId(request), getTenantId(request), getUserId(request));
     }
 
+    @Operation(summary = "Create an organization account (deprecated)",
+            description = "Deprecated — prefer AdminUserController (`POST /api/v1/admin/users/organization`). Creates an "
+                    + "organization account with no workspace membership; the account joins the default workspace.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Account created", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "400", description = "Validation failed",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "That email already belongs to an organization account",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
     @PostMapping("/organization")
     @PreAuthorize("hasRole('ORG_OWNER')")
     public ResponseEntity<OrganizationMemberResponse> createOrganizationUser(

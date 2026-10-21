@@ -115,6 +115,7 @@ def _context(request: pb.GenerateAnswerRequest) -> GenerationContext:
         ),
         tenant_name=request.tenant_name,
         prompt_schema_version=request.prompt_schema_version,
+        document_ids=tuple(request.document_ids),
     )
 
 

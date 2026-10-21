@@ -5,15 +5,22 @@ import com.openvie.api.common.event.AuditLogEvent;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.common.model.AuditLog;
+import com.openvie.api.common.repository.AuditLogRepository;
+import com.openvie.api.document.api.ApprovalStatus;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.document.api.DocumentApi.ApprovalDocumentSnapshot;
 import com.openvie.api.tenant.api.OrgRole;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.workflow.api.event.WorkflowDecisionEvent;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskResponse;
 import com.openvie.api.workflow.dto.WorkflowDtos.ProcessDetail;
+import com.openvie.api.workflow.dto.WorkflowDtos.ProcessLog;
+import com.openvie.api.workflow.dto.WorkflowDtos.ProcessLogEntry;
+import com.openvie.api.workflow.dto.WorkflowDtos.ProcessListResult;
 import com.openvie.api.workflow.dto.WorkflowDtos.SlConfigResponse;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.StartProcessResponse;
@@ -29,6 +36,7 @@ import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.task.api.Task;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
@@ -36,9 +44,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,6 +62,16 @@ import java.util.UUID;
  * the live workspace membership on every call — the SSO bridge issues the
  * same OpenVie workspace-scoped token for every role, so the engine never
  * trusts the client for candidacy.
+ *
+ * <p>Authority short-circuit (no ceremony where the submitter already holds
+ * the reviewing authority): a workspace admin or the org owner publishing a
+ * non-sensitive document inside the workspace becomes APPROVED in the same
+ * transaction, audited with {@code selfApproved=true}. Self-approval during
+ * a real review is refused — the submitter may withdraw (reject) or hand the
+ * task upward, but only the org owner, as the terminal authority of the
+ * chain, may decide an own submission (audited with {@code selfDecision}).
+ * Every reviewed event lands in the {@code audit_logs} trail, surfaced by
+ * {@link #processLog}.
  */
 @Service
 @Slf4j(topic = "WORKFLOW")
@@ -63,6 +84,9 @@ public class WorkflowService {
     public static final String GROUP_WORKSPACE_ADMIN = "WORKSPACE_ADMIN";
     public static final String GROUP_ORG_OWNER = "ORG_OWNER";
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final HistoryService historyService;
@@ -70,6 +94,7 @@ public class WorkflowService {
     private final WorkflowProperties properties;
     private final DocumentApi documentApi;
     private final TenantIdentityApi identityApi;
+    private final AuditLogRepository auditLogRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     // ------------------------------------------------------------------
@@ -83,6 +108,9 @@ public class WorkflowService {
                 documentApi.requireApprovalCandidate(workspaceId, request.documentId());
         SlEffective sla = effectiveSla(membership.orgId());
         String publishTarget = request.publishTarget().toLowerCase(Locale.ROOT);
+        // Write-back: the document's own state reflects that review is open, so
+        // listings and caches never re-derive it from engine history.
+        documentApi.markApprovalPending(workspaceId, document.documentId(), publishTarget);
 
         Map<String, Object> variables = new HashMap<>();
         variables.put("workspaceId", workspaceId.toString());
@@ -119,25 +147,99 @@ public class WorkflowService {
                         "slaReminder", sla.reminderDuration(),
                         "slaEscalation", sla.escalationDuration()));
 
+        // Authority short-circuit: an unsensitive workspace-scoped submission
+        // by someone who already holds the reviewing authority never queues.
+        // The flow still runs its APPROVE path, so history, document state and
+        // the audit trail keep one uniform shape, and the reviewer is the
+        // submitter themselves — recorded with selfApproved=true.
+        if (membership.isWorkspaceAdmin() && !sensitive && "workspace".equals(publishTarget)) {
+            Map<String, Object> outcome = new HashMap<>();
+            outcome.put("approvalOutcome", "APPROVE");
+            outcome.put("rejectReason", "");
+            outcome.put("selfApproved", true);
+            taskService.complete(firstTask.getId(), outcome);
+
+            // The APPROVE path ended the process synchronously: the runtime
+            // execution is gone, so the settled state lives in engine history.
+            HistoricProcessInstance finished = historyService
+                    .createHistoricProcessInstanceQuery()
+                    .processInstanceId(instance.getId())
+                    .includeProcessVariables()
+                    .singleResult();
+            String documentStatus = finished == null || finished.getProcessVariables() == null
+                    ? "APPROVED"
+                    : String.valueOf(finished.getProcessVariables().get("documentStatus"));
+            audit(workspaceId, userId, LogAction.WORKFLOW_APPROVED, UUID.fromString(instance.getId()),
+                    Map.of("decision", "APPROVE",
+                            "selfApproved", true,
+                            "manual", false,
+                            "overdue", false,
+                            "reason", "Published by the submitting authority inside its own workspace",
+                            "approvalLevel", level,
+                            "sensitive", sensitive,
+                            "policyVersion", policyVersion,
+                            "documentId", document.documentId(),
+                            "taskDefinitionKey", firstTask.getTaskDefinitionKey()));
+            // The APPROVE path ended the process in this same transaction, so
+            // the document state and the submitter notice settle with it.
+            documentApi.recordApprovalDecision(
+                    workspaceId, document.documentId(), ApprovalStatus.APPROVED, userId);
+            publishDecisionEvent(membership.orgId(), workspaceId, instance.getId(), document.documentId(),
+                    document.fileName(), userId, "APPROVE",
+                    "Published by the submitting authority inside its own workspace",
+                    level, publishTarget);
+            return new StartProcessResponse(
+                    UUID.fromString(instance.getId()), document.documentId(), document.fileName(), publishTarget,
+                    sensitive, level, policyVersion, sla.reminderDuration(), sla.escalationDuration(),
+                    UUID.fromString(firstTask.getId()), true, documentStatus);
+        }
+
         return new StartProcessResponse(
                 UUID.fromString(instance.getId()), document.documentId(), document.fileName(), publishTarget,
                 sensitive, level, policyVersion, sla.reminderDuration(), sla.escalationDuration(),
-                UUID.fromString(firstTask.getId()));
+                UUID.fromString(firstTask.getId()), false, null);
     }
 
     @Transactional(readOnly = true)
     public List<WorkflowProcessView> listProcesses(UUID workspaceId, UUID userId, boolean includeFinished) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         List<WorkflowProcessView> views = new ArrayList<>();
-        for (HistoricProcessInstance historic : historyQuery(workspaceId, includeFinished)) {
+        for (HistoricProcessInstance historic : historyQuery(workspaceId, membership, includeFinished)) {
             views.add(processView(historic));
         }
         return views;
     }
 
+    /**
+     * Optional server-side paging over the same approval journal, mirroring
+     * the document list contract: page defaults to 0, size to
+     * {@value #DEFAULT_PAGE_SIZE}, and the total is reported back through the
+     * X-Total-Count response header.
+     */
+    @Transactional(readOnly = true)
+    public ProcessListResult listProcessesPage(UUID workspaceId, UUID userId, boolean includeFinished,
+            Integer page, Integer size) {
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
+        int requestedPage = page == null ? 0 : page;
+        int requestedSize = size == null ? DEFAULT_PAGE_SIZE : size;
+        if (requestedPage < 0) {
+            throw new BadRequestException("Page must be zero or greater");
+        }
+        if (requestedSize < 1 || requestedSize > MAX_PAGE_SIZE) {
+            throw new BadRequestException("Size must be between 1 and 100");
+        }
+        long total = processHistoryQuery(workspaceId, membership, includeFinished).count();
+        List<WorkflowProcessView> views = new ArrayList<>();
+        for (HistoricProcessInstance historic : processHistoryQuery(workspaceId, membership, includeFinished)
+                .listPage(requestedPage * requestedSize, requestedSize)) {
+            views.add(processView(historic));
+        }
+        return new ProcessListResult(views, total);
+    }
+
     @Transactional(readOnly = true)
     public ProcessDetail getProcess(UUID workspaceId, UUID userId, UUID processInstanceId) {
-        identityApi.requireMembership(userId, workspaceId);
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         HistoricProcessInstance historic = historyService
                 .createHistoricProcessInstanceQuery()
                 .processInstanceId(processInstanceId.toString())
@@ -150,6 +252,7 @@ public class WorkflowService {
             // A known process of another workspace: forbidden, never silently filtered.
             throw new AccessDeniedException("This approval process belongs to another workspace");
         }
+        requireCanViewProcess(membership, historic);
         List<WorkspaceTaskView> tasks = new ArrayList<>();
         for (Task task : taskService.createTaskQuery()
                 .processInstanceId(processInstanceId.toString())
@@ -159,6 +262,63 @@ public class WorkflowService {
             tasks.add(taskView(task));
         }
         return new ProcessDetail(processView(historic), tasks);
+    }
+
+    /**
+     * The audited history of one process: who submitted, claimed, approved,
+     * rejected or was reminded by SLA — with the actor's display name
+     * resolved server-side. Workspace-scoped: a known process of a foreign
+     * workspace stays forbidden, an unknown id stays a 404.
+     */
+    @Transactional(readOnly = true)
+    public ProcessLog processLog(UUID workspaceId, UUID userId, UUID processInstanceId) {
+        MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
+        HistoricProcessInstance historic = historyService
+                .createHistoricProcessInstanceQuery()
+                .processInstanceId(processInstanceId.toString())
+                .includeProcessVariables()
+                .singleResult();
+        if (historic == null) {
+            throw new ResourceNotFoundException("Approval process not found");
+        }
+        if (!workspaceId.toString().equals(String.valueOf(historic.getProcessVariables().get("workspaceId")))) {
+            // A known process of another workspace: forbidden, never silently filtered.
+            throw new AccessDeniedException("This approval process belongs to another workspace");
+        }
+        requireCanViewProcess(membership, historic);
+
+        Map<UUID, String> actorNames = new HashMap<>();
+        List<ProcessLogEntry> entries = new ArrayList<>();
+        for (AuditLog row : auditLogRepository
+                .findByTenantIdAndResourceIdOrderByIdAsc(workspaceId, processInstanceId)) {
+            UUID actorId = row.getUserId();
+            if (actorId != null && !actorNames.containsKey(actorId)) {
+                actorNames.put(actorId, actorName(actorId));
+            }
+            Instant occurredAt = row.getCreatedAt() == null
+                    ? null
+                    : row.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant();
+            entries.add(new ProcessLogEntry(occurredAt, actorId,
+                    actorId == null ? null : actorNames.get(actorId),
+                    row.getAction().name(), row.getMetadata()));
+        }
+        return new ProcessLog(processView(historic), entries);
+    }
+
+    /** Display fallback chain for an audit actor: full name, then email. */
+    private String actorName(UUID actorId) {
+        try {
+            TenantIdentityApi.IdentitySnapshot identity = identityApi.findUserById(actorId);
+            if (identity == null) {
+                return null;
+            }
+            return identity.fullName() == null || identity.fullName().isBlank()
+                    ? identity.email()
+                    : identity.fullName();
+        } catch (RuntimeException failure) {
+            log.warn("Could not resolve actor {} of a workflow audit entry", actorId, failure);
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -174,6 +334,7 @@ public class WorkflowService {
         for (Task task : taskService.createTaskQuery()
                 .processVariableValueEquals("workspaceId", workspaceId.toString())
                 .taskAssignee(userId.toString())
+                .includeProcessVariables()
                 .orderByTaskCreateTime().asc()
                 .list()) {
             mine.add(taskView(task));
@@ -185,6 +346,7 @@ public class WorkflowService {
                     .processVariableValueEquals("workspaceId", workspaceId.toString())
                     .taskCandidateGroupIn(groups)
                     .taskUnassigned()
+                    .includeProcessVariables()
                     .orderByTaskCreateTime().asc()
                     .list()) {
                 groupTasks.add(taskView(task));
@@ -241,6 +403,26 @@ public class WorkflowService {
             throw new BadRequestException("Only level 1 tasks can be handed off to level 2");
         }
 
+        // A claimed task may only be completed by its claimant. An unclaimed
+        // task of the caller's approval group is claim-on-complete.
+        String assignee = task.getAssignee();
+        if (assignee != null && !assignee.equals(userId.toString())) {
+            throw new AccessDeniedException("Task already claimed by another approver");
+        }
+        if (assignee == null) {
+            taskService.claim(taskId.toString(), userId.toString());
+        }
+
+        // The initiator may withdraw (reject) or hand the task upward, but a
+        // real approval must come from someone else — only the org owner, the
+        // terminal authority of the chain, may decide an own submission.
+        boolean selfDecision = userId.toString().equals(requireVariable(task, "initiatorId"));
+        if (selfDecision && "APPROVE".equals(decision)
+                && membership.orgRole() != OrgRole.ORG_OWNER) {
+            throw new AccessDeniedException(
+                    "You cannot approve your own submission. Hand it to another reviewer or escalate it upward.");
+        }
+
         UUID documentId = UUID.fromString(requireVariable(task, "documentId"));
         String policyVersion = variable(task, "policyVersion", "unknown");
         boolean sensitive = Boolean.parseBoolean(variable(task, "sensitive", "false"));
@@ -253,6 +435,9 @@ public class WorkflowService {
             // The flow passed level 1 on the way to level 2, so journaling keeps
             // the same meaning as the timer escalation: the process was escalated.
             outcome.put("escalated", true);
+        }
+        if (selfDecision) {
+            outcome.put("selfDecision", true);
         }
         taskService.complete(taskId.toString(), outcome);
 
@@ -271,9 +456,26 @@ public class WorkflowService {
         metadata.put("policyVersion", policyVersion);
         metadata.put("documentId", documentId);
         metadata.put("taskDefinitionKey", taskDefinitionKey);
+        if (selfDecision) {
+            metadata.put("selfDecision", true);
+        }
         audit(workspaceId, userId, action, UUID.fromString(task.getProcessInstanceId()), metadata);
 
-        return terminalState(taskId, decision, task.getProcessInstanceId(), documentId);
+        CompleteTaskResponse response = terminalState(taskId, decision, task.getProcessInstanceId(), documentId);
+        if (response.processEnded()) {
+            // Terminal verdict: write it back onto the document and tell the
+            // submitter. A hand-off to level 2 is not a decision, so it only
+            // lands in the audit trail.
+            ApprovalStatus verdict = "APPROVE".equals(decision)
+                    ? ApprovalStatus.APPROVED
+                    : ApprovalStatus.REJECTED;
+            documentApi.recordApprovalDecision(workspaceId, documentId, verdict, userId);
+            publishDecisionEvent(membership.orgId(), workspaceId, task.getProcessInstanceId(), documentId,
+                    variable(task, "documentFileName", null),
+                    UUID.fromString(requireVariable(task, "initiatorId")),
+                    decision, reason, level, variable(task, "publishTarget", null));
+        }
+        return response;
     }
 
     // ------------------------------------------------------------------
@@ -352,13 +554,34 @@ public class WorkflowService {
                 config != null ? config.getUpdatedAt() : null);
     }
 
-    private List<HistoricProcessInstance> historyQuery(UUID workspaceId, boolean includeFinished) {
+    private HistoricProcessInstanceQuery processHistoryQuery(
+            UUID workspaceId, MembershipSnapshot membership, boolean includeFinished) {
         var query = historyService.createHistoricProcessInstanceQuery()
                 .variableValueEquals("workspaceId", workspaceId.toString());
+        // Regular members only see their own submissions; workspace admins and
+        // org owners oversee every process in the workspace.
+        if (membership != null && !membership.isWorkspaceAdmin()) {
+            query.variableValueEquals("initiatorId", membership.userId().toString());
+        }
         if (!includeFinished) {
             query.unfinished();
         }
-        return query.includeProcessVariables().orderByProcessInstanceStartTime().asc().list();
+        return query.includeProcessVariables().orderByProcessInstanceStartTime().asc();
+    }
+
+    private List<HistoricProcessInstance> historyQuery(
+            UUID workspaceId, MembershipSnapshot membership, boolean includeFinished) {
+        return processHistoryQuery(workspaceId, membership, includeFinished).list();
+    }
+
+    private void requireCanViewProcess(MembershipSnapshot membership, HistoricProcessInstance historic) {
+        if (membership == null || membership.isWorkspaceAdmin()) {
+            return;
+        }
+        String initiatorId = String.valueOf(historic.getProcessVariables().get("initiatorId"));
+        if (!membership.userId().toString().equals(initiatorId)) {
+            throw new AccessDeniedException("You can only view approval processes that you submitted");
+        }
     }
 
     private WorkflowProcessView processView(HistoricProcessInstance historic) {
@@ -479,6 +702,23 @@ public class WorkflowService {
 
     private int inMinutes(String isoDuration) {
         return (int) Duration.parse(isoDuration).toMinutes();
+    }
+
+    /**
+     * Publishes the submitter-facing decision notice. The recipient address is
+     * resolved here so the notification module needs no lookup of its own; an
+     * account that no longer resolves simply skips the notice.
+     */
+    private void publishDecisionEvent(UUID organizationId, UUID workspaceId, String processInstanceId,
+            UUID documentId, String documentFileName, UUID recipientUserId, String decision,
+            String reason, int approvalLevel, String publishTarget) {
+        TenantIdentityApi.IdentitySnapshot recipient = identityApi.findUserById(recipientUserId);
+        eventPublisher.publishEvent(new WorkflowDecisionEvent(
+                organizationId, workspaceId, UUID.fromString(processInstanceId), documentId, documentFileName,
+                recipientUserId,
+                recipient == null ? null : recipient.email(),
+                recipient == null ? null : recipient.fullName(),
+                decision, reason, approvalLevel, publishTarget));
     }
 
     private void audit(UUID tenantId, UUID actorId, LogAction action, UUID resourceId,

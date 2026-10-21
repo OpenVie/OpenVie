@@ -68,6 +68,8 @@ export async function hidePlaygroundSessionApi(
 export type ChatMessageStreamOptions = {
   onContent: (content: string) => void;
   onReset: () => void;
+  /** Restrict the answer to these indexed documents; empty/undefined = whole knowledge base. */
+  documentIds?: string[];
   signal?: AbortSignal;
 };
 
@@ -82,7 +84,7 @@ export async function submitChatMessageApi(
   request: ApiRequest,
   sessionId: string,
   content: string,
-  { onContent, onReset, signal }: ChatMessageStreamOptions,
+  { onContent, onReset, documentIds, signal }: ChatMessageStreamOptions,
 ): Promise<AssistantMessageResponse> {
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -110,7 +112,11 @@ export async function submitChatMessageApi(
     const res = await request(`${getApiBase()}/chat/sessions/${sessionId}/messages`, {
       method: "POST",
       headers: { Accept: "text/event-stream" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(
+        documentIds && documentIds.length > 0
+          ? { content, document_ids: documentIds }
+          : { content },
+      ),
       signal: controller.signal,
     });
     throwIfAborted();

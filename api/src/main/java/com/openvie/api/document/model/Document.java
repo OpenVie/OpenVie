@@ -1,12 +1,14 @@
 package com.openvie.api.document.model;
 
 import com.openvie.api.common.model.BaseEntity;
+import com.openvie.api.document.api.ApprovalStatus;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.enums.DocumentType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 
@@ -23,7 +25,8 @@ import java.util.UUID;
                 @Index(name = "idx_document_tenant_status", columnList = "tenant_id,status"),
                 @Index(name = "idx_document_tenant_knowledge_base", columnList = "tenant_id,knowledge_base_id"),
                 @Index(name = "idx_documents_tenant_kb_filename", columnList = "tenant_id,knowledge_base_id,file_name"),
-                @Index(name = "idx_documents_tenant_kb_content_hash", columnList = "tenant_id,knowledge_base_id,content_hash")
+                @Index(name = "idx_documents_tenant_kb_content_hash", columnList = "tenant_id,knowledge_base_id,content_hash"),
+                @Index(name = "idx_documents_tenant_approval_status", columnList = "tenant_id,approval_status")
         }
 )
 public class Document extends BaseEntity {
@@ -65,4 +68,22 @@ public class Document extends BaseEntity {
 
     @Column(name = "content_hash", length = 64)
     private String contentHash;
+
+    /**
+     * Approval state written back by the workflow module. {@code null} means
+     * the document was never submitted for approval.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", length = 20)
+    private ApprovalStatus approvalStatus;
+
+    /** Publish target chosen at submission: workspace, shared, or public. */
+    @Column(name = "approval_target", length = 20)
+    private String approvalTarget;
+
+    @Column(name = "approval_decided_by")
+    private UUID approvalDecidedBy;
+
+    @Column(name = "approval_decided_at")
+    private LocalDateTime approvalDecidedAt;
 }

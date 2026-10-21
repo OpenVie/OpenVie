@@ -215,7 +215,7 @@ class ChatStreamingServiceTest {
 
     private com.openvie.api.chat.dto.ChatDtos.AssistantMessageResponse submit() {
         return service.submitEmployeeMessage(session.getTenantId(), session.getUserId(), session.getId(),
-                "Question", Map.of(), "idempotency-key", "request-id", listener);
+                "Question", Map.of(), null, "idempotency-key", "request-id", listener);
     }
 
     private long assistantCount() {

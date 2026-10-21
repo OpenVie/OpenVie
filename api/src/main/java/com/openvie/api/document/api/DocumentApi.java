@@ -8,6 +8,16 @@ public interface DocumentApi {
             UUID tenantId, UUID knowledgeBaseId, List<UUID> documentIds);
 
     /**
+     * Authoritative chat-scope check: every requested document must be a
+     * COMPLETED document of the same tenant and knowledge base.
+     *
+     * @throws com.openvie.api.common.exception.custom.BadRequestException
+     *             when any requested document is missing or not indexed yet
+     */
+    void validateChatScope(
+            UUID tenantId, UUID knowledgeBaseId, List<UUID> documentIds);
+
+    /**
      * Resolves the workspace-bounded document facts an approval process needs
      * at start time (issue #8): existence inside the workspace plus the file
      * name the sensitivity scorer runs on.
@@ -27,4 +37,26 @@ public interface DocumentApi {
             UUID knowledgeBaseId,
             String fileName) {
     }
+
+    /**
+     * Records that an approval process is now open for this document, with the
+     * publish target chosen by the submitter. Idempotent while the document is
+     * already PENDING; a settled document may be re-submitted (the latest
+     * process owns the state).
+     *
+     * @throws com.openvie.api.common.exception.custom.ResourceNotFoundException
+     *             when the document does not exist in the workspace
+     */
+    void markApprovalPending(UUID tenantId, UUID documentId, String publishTarget);
+
+    /**
+     * Writes the terminal decision of an approval process onto the document
+     * row. The Flowable process remains the journal of who decided what and
+     * when; this makes the document's own state authoritative for listings,
+     * caches, and downstream consumers.
+     *
+     * @throws com.openvie.api.common.exception.custom.ResourceNotFoundException
+     *             when the document does not exist in the workspace
+     */
+    void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy);
 }

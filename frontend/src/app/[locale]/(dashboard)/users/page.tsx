@@ -2,11 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import toast from "react-hot-toast";
-import { AlertCircle, Loader2, UserMinus, UserPlus, Users } from "lucide-react";
+import { AlertCircle, Loader2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -18,16 +15,24 @@ import {
 } from "@/lib/users-api";
 import type { OrganizationMember, TeamDirectory, TeamMember, WorkspaceRole } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ListPager, usePagedList } from "@/components/ui/list-pager";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-type AddMemberForm = { email: string; role: WorkspaceRole };
+type SelectedMember = { email: string; fullName?: string; id?: string };
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function extractValidEmails(text: string): string[] {
+  return text
+    .split(/[\s,;]+/)
+    .map(p => p.trim())
+    .filter(p => EMAIL_REGEX.test(p));
+}
 const initials = (name: string) => name.split(" ").filter(Boolean).map(part => part[0]).join("").toUpperCase().slice(0, 2) || "?";
 
 function StatusBadge({ status }: { status: string }) {
@@ -46,9 +51,15 @@ function TableSkeleton() {
 }
 
 /** Debounced add-member suggestions: active org accounts not yet in this workspace. */
-function MemberSuggestions({ query, onPick, t }: {
+function MemberSuggestions({
+  query,
+  onPick,
+  excludedEmails = [],
+  t,
+}: {
   query: string;
   onPick: (member: OrganizationMember) => void;
+  excludedEmails?: string[];
   t: (key: string) => string;
 }) {
   const { request } = useApiClient();
@@ -70,29 +81,44 @@ function MemberSuggestions({ query, onPick, t }: {
     return () => { cancelled = true; window.clearTimeout(task); };
   }, [trimmed, request]);
 
+  const displayItems = useMemo(() => {
+    if (!items) return null;
+    const lowerExcluded = new Set(excludedEmails.map(e => e.toLowerCase()));
+    return items.filter(m => !lowerExcluded.has(m.email.toLowerCase()));
+  }, [items, excludedEmails]);
+
   if (trimmed.length < 2) return null;
   return (
     <div className="absolute z-40 top-full mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-md">
-      {items === null ? (
+      {displayItems === null ? (
         <p className="px-3 py-2 text-sm text-muted-foreground">{t("suggestLoading")}</p>
-      ) : items.length === 0 ? (
+      ) : displayItems.length === 0 ? (
         <p className="px-3 py-2 text-sm text-muted-foreground">{t("suggestEmpty")}</p>
-      ) : items.map(member => (
-        <button
-          key={member.id}
-          type="button"
-          className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted"
-          onMouseDown={event => { event.preventDefault(); onPick(member); }}
-        >
-          <Avatar className="size-7 shrink-0">
-            <AvatarFallback className="bg-primary/15 text-[10px] text-primary">{initials(member.fullName || member.email)}</AvatarFallback>
-          </Avatar>
-          <span className="min-w-0">
-            <span className="block truncate text-sm font-medium text-foreground">{member.fullName || t("unnamed")}</span>
-            <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
-          </span>
-        </button>
-      ))}
+      ) : (
+        displayItems.map(member => (
+          <button
+            key={member.id}
+            type="button"
+            className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:bg-muted"
+            onMouseDown={event => {
+              event.preventDefault();
+              onPick(member);
+            }}
+          >
+            <Avatar className="size-7 shrink-0">
+              <AvatarFallback className="bg-primary/15 text-[10px] text-primary">
+                {initials(member.fullName || member.email)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {member.fullName || t("unnamed")}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">{member.email}</span>
+            </span>
+          </button>
+        ))
+      )}
     </div>
   );
 }
@@ -132,6 +158,7 @@ export default function UsersPage() {
   // server-side, so the button is hidden here as well.
   const canRemoveMember = isAdmin && !directory.defaultWorkspace;
   const activeAdminCount = useMemo(() => directory.members.filter(member => member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE").length, [directory.members]);
+  const pagedMembers = usePagedList(directory.members);
   const roleLabel = (role: WorkspaceRole) => role === "WORKSPACE_ADMIN" ? t("roles.admin") : t("roles.user");
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
@@ -152,31 +179,124 @@ export default function UsersPage() {
     return () => window.clearTimeout(task);
   }, [loadDirectory]);
 
-  const addMemberSchema = z.object({
-    email: z.string().email(t("validEmail")),
-    role: z.enum(["WORKSPACE_ADMIN", "MEMBER"]),
-  });
-  const addMemberForm = useForm<AddMemberForm>({
-    resolver: zodResolver(addMemberSchema),
-    defaultValues: { role: "MEMBER" },
-  });
-  const emailRegister = addMemberForm.register("email");
+  const [selectedMembers, setSelectedMembers] = useState<SelectedMember[]>([]);
   const [typedEmail, setTypedEmail] = useState("");
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [addMemberSubmitting, setAddMemberSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const suggestCloseTimer = useRef<number | null>(null);
+  const addMemberInputRef = useRef<HTMLInputElement | null>(null);
 
-  const onAddMember = async (values: AddMemberForm) => {
+  const addSelectedMember = useCallback((member: SelectedMember) => {
+    setSelectedMembers(current => {
+      if (current.some(m => m.email.toLowerCase() === member.email.toLowerCase())) {
+        return current;
+      }
+      return [...current, member];
+    });
+    setValidationError(null);
+  }, []);
+
+  const removeSelectedMember = useCallback((email: string) => {
+    setSelectedMembers(current => current.filter(m => m.email.toLowerCase() !== email.toLowerCase()));
+  }, []);
+
+  const handleEmailInput = (value: string) => {
+    setValidationError(null);
+    if (/[\s,;]/.test(value)) {
+      const extracted = extractValidEmails(value);
+      if (extracted.length > 0) {
+        for (const email of extracted) {
+          addSelectedMember({ email });
+        }
+        const parts = value.split(/[\s,;]+/);
+        const last = parts[parts.length - 1];
+        if (last && !EMAIL_REGEX.test(last)) {
+          setTypedEmail(last);
+        } else {
+          setTypedEmail("");
+        }
+        setSuggestOpen(false);
+        return;
+      }
+    }
+    setTypedEmail(value);
+    setSuggestOpen(true);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      const trimmed = typedEmail.trim();
+      if (trimmed) {
+        if (EMAIL_REGEX.test(trimmed)) {
+          addSelectedMember({ email: trimmed });
+          setTypedEmail("");
+          setSuggestOpen(false);
+        } else {
+          setValidationError(t("validEmail"));
+        }
+      }
+    } else if (event.key === "Backspace" && typedEmail === "" && selectedMembers.length > 0) {
+      removeSelectedMember(selectedMembers[selectedMembers.length - 1].email);
+    }
+  };
+
+  const onAddMembers = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setValidationError(null);
+
+    const toAdd = [...selectedMembers];
+    const pendingText = typedEmail.trim();
+    if (pendingText) {
+      const extracted = extractValidEmails(pendingText);
+      if (extracted.length > 0) {
+        for (const email of extracted) {
+          if (!toAdd.some(m => m.email.toLowerCase() === email.toLowerCase())) {
+            toAdd.push({ email });
+          }
+        }
+        setTypedEmail("");
+      } else if (toAdd.length === 0) {
+        setValidationError(t("validEmail"));
+        return;
+      }
+    }
+
+    if (toAdd.length === 0) {
+      setValidationError(t("validEmail"));
+      return;
+    }
+
+    setAddMemberSubmitting(true);
     try {
-      await addMemberToWorkspaceApi(request, values.email, addMemberRole);
-      toast.success(t("memberAdded"));
-      addMemberForm.reset();
-      setAddMemberRole("MEMBER");
-      setTypedEmail("");
-      setSuggestOpen(false);
-      setShowAddMember(false);
-      await loadDirectory();
+      const results = await Promise.allSettled(
+        toAdd.map(m => addMemberToWorkspaceApi(request, m.email, addMemberRole))
+      );
+      const succeeded = results.filter(r => r.status === "fulfilled").length;
+      const failed = results.filter(r => r.status === "rejected") as PromiseRejectedResult[];
+
+      if (failed.length === 0) {
+        toast.success(succeeded === 1 ? t("memberAdded") : t("membersAddedCount", { count: succeeded }));
+        setSelectedMembers([]);
+        setTypedEmail("");
+        setAddMemberRole("MEMBER");
+        setSuggestOpen(false);
+        setShowAddMember(false);
+        await loadDirectory();
+      } else if (succeeded > 0) {
+        toast.success(t("membersAddedCount", { count: succeeded }));
+        toast.error(failed[0].reason?.message || t("fallback.addMember"));
+        const failedEmails = failed.map((_, i) => toAdd[results.findIndex((r, idx) => r.status === "rejected" && idx >= i)].email);
+        setSelectedMembers(toAdd.filter(m => failedEmails.includes(m.email)));
+        await loadDirectory();
+      } else {
+        toast.error(failed[0].reason?.message || t("fallback.addMember"));
+      }
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("fallback.addMember"));
+    } finally {
+      setAddMemberSubmitting(false);
     }
   };
 
@@ -218,9 +338,10 @@ export default function UsersPage() {
             size="sm"
             onClick={() => {
               setShowAddMember(true);
-              addMemberForm.reset({ role: "MEMBER" });
+              setSelectedMembers([]);
               setAddMemberRole("MEMBER");
               setTypedEmail("");
+              setValidationError(null);
             }}
             className="gap-1.5"
           >
@@ -250,7 +371,7 @@ export default function UsersPage() {
       ) : (
         <>
         <div className="divide-y divide-border sm:hidden">
-          {directory.members.map(member => {
+          {pagedMembers.slice.map(member => {
             const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
             const protectedAction = member.currentUser || finalAdmin;
             return (
@@ -277,7 +398,7 @@ export default function UsersPage() {
                       disabled={busyId === member.id || protectedAction}
                       onValueChange={value => void changeRole(member, value as WorkspaceRole)}
                     >
-                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-36"><SelectValue>{roleLabel(member.workspaceRole)}</SelectValue></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
                         <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
@@ -309,7 +430,7 @@ export default function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {directory.members.map(member => {
+            {pagedMembers.slice.map(member => {
               const finalAdmin = member.workspaceRole === "WORKSPACE_ADMIN" && member.status === "ACTIVE" && activeAdminCount === 1;
               const protectedAction = member.currentUser || finalAdmin;
               return (
@@ -337,7 +458,7 @@ export default function UsersPage() {
                         disabled={busyId === member.id || protectedAction}
                         onValueChange={value => void changeRole(member, value as WorkspaceRole)}
                       >
-                        <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-52"><SelectValue>{roleLabel(member.workspaceRole)}</SelectValue></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="WORKSPACE_ADMIN">{t("roles.admin")}</SelectItem>
                           <SelectItem value="MEMBER">{t("roles.user")}</SelectItem>
@@ -371,53 +492,111 @@ export default function UsersPage() {
           </TableBody>
         </Table>
         </div>
+        <ListPager
+          page={pagedMembers.page}
+          pageCount={pagedMembers.pageCount}
+          size={pagedMembers.size}
+          total={pagedMembers.total}
+          onPageChange={pagedMembers.setPage}
+          onSizeChange={(nextSize) => { pagedMembers.setSize(nextSize); pagedMembers.setPage(1); }}
+        />
         </>
       )}
     </Card>
 
     {/* Add Member to Workspace Dialog */}
-    <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
+    <Dialog open={showAddMember} onOpenChange={open => {
+      setShowAddMember(open);
+      if (!open) {
+        setSelectedMembers([]);
+        setTypedEmail("");
+        setValidationError(null);
+        setSuggestOpen(false);
+      }
+    }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("addToWorkspaceTitle")}</DialogTitle>
           <DialogDescription>{t("existingMemberHint")}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={addMemberForm.handleSubmit(onAddMember)} className="space-y-4">
+        <form onSubmit={onAddMembers} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="addMemberEmail">{t("emailAddress")}</Label>
             <div className="relative">
-              <Input
-                id="addMemberEmail"
-                type="email"
-                autoComplete="off"
-                placeholder="colleague@company.com"
-                {...emailRegister}
-                onChange={event => {
-                  emailRegister.onChange(event);
-                  setTypedEmail(event.target.value);
-                  setSuggestOpen(true);
-                }}
-                onFocus={() => {
-                  if (suggestCloseTimer.current) { window.clearTimeout(suggestCloseTimer.current); suggestCloseTimer.current = null; }
-                  setSuggestOpen(true);
-                }}
-                onBlur={() => { suggestCloseTimer.current = window.setTimeout(() => setSuggestOpen(false), 150); }}
-              />
+              <div
+                className="min-h-10 flex flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background p-1.5 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+                onClick={() => addMemberInputRef.current?.focus()}
+              >
+                {selectedMembers.map(member => (
+                  <Badge
+                    key={member.email}
+                    variant="secondary"
+                    className="flex h-7 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-normal"
+                  >
+                    <Avatar className="size-4 shrink-0">
+                      <AvatarFallback className="bg-primary/20 text-[9px] text-primary">
+                        {initials(member.fullName || member.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate max-w-[200px]" title={member.email}>
+                      {member.fullName ? `${member.fullName} (${member.email})` : member.email}
+                    </span>
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-sm p-0.5 opacity-70 hover:opacity-100 hover:bg-muted focus:outline-none"
+                      onClick={event => {
+                        event.stopPropagation();
+                        removeSelectedMember(member.email);
+                      }}
+                      aria-label={`Remove ${member.email}`}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <input
+                  ref={addMemberInputRef}
+                  id="addMemberEmail"
+                  type="text"
+                  autoComplete="off"
+                  value={typedEmail}
+                  placeholder={selectedMembers.length === 0 ? "colleague@company.com" : t("addMorePlaceholder")}
+                  className="flex-1 min-w-[140px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  onChange={event => handleEmailInput(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => {
+                    if (suggestCloseTimer.current) {
+                      window.clearTimeout(suggestCloseTimer.current);
+                      suggestCloseTimer.current = null;
+                    }
+                    setSuggestOpen(true);
+                  }}
+                  onBlur={() => {
+                    suggestCloseTimer.current = window.setTimeout(() => setSuggestOpen(false), 200);
+                  }}
+                />
+              </div>
               {suggestOpen && (
                 <MemberSuggestions
                   query={typedEmail}
+                  excludedEmails={[
+                    ...directory.members.map(m => m.email),
+                    ...selectedMembers.map(m => m.email),
+                  ]}
                   t={t as (key: string) => string}
                   onPick={member => {
-                    addMemberForm.setValue("email", member.email, { shouldValidate: true });
-                    setTypedEmail(member.email);
+                    addSelectedMember({ email: member.email, fullName: member.fullName, id: member.id });
+                    setTypedEmail("");
                     setSuggestOpen(false);
+                    addMemberInputRef.current?.focus();
                   }}
                 />
               )}
             </div>
-            {addMemberForm.formState.errors.email && (
-              <p className="text-xs text-destructive">{addMemberForm.formState.errors.email.message}</p>
+            {validationError && (
+              <p className="text-xs text-destructive">{validationError}</p>
             )}
+            <p className="text-xs text-muted-foreground">{t("addMultipleMembersHint")}</p>
           </div>
           <div className="space-y-1.5">
             <Label>{t("role")}</Label>
@@ -436,7 +615,12 @@ export default function UsersPage() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setShowAddMember(false)}>{t("cancel")}</Button>
-            <Button type="submit" disabled={addMemberForm.formState.isSubmitting}>{t("addMember")}</Button>
+            <Button type="submit" disabled={addMemberSubmitting}>
+              {addMemberSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {selectedMembers.length > 1
+                ? `${t("addMember")} (${selectedMembers.length})`
+                : t("addMember")}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

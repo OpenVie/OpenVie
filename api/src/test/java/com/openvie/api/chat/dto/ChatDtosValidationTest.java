@@ -4,7 +4,9 @@ import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -15,15 +17,34 @@ class ChatDtosValidationTest {
     @Test
     void submitMessageRequiresContentWithinLengthLimit() {
         assertEquals(0, validator.validate(
-                new ChatDtos.SubmitMessageRequest("Hello", Map.of())).size());
+                new ChatDtos.SubmitMessageRequest("Hello", Map.of(), null)).size());
 
-        assertTrue(validator.validate(new ChatDtos.SubmitMessageRequest("   ", Map.of()))
+        assertTrue(validator.validate(new ChatDtos.SubmitMessageRequest("   ", Map.of(), null))
                 .stream()
                 .anyMatch(violation -> violation.getPropertyPath().toString().equals("content")));
 
-        assertTrue(validator.validate(new ChatDtos.SubmitMessageRequest("x".repeat(32001), Map.of()))
+        assertTrue(validator.validate(new ChatDtos.SubmitMessageRequest("x".repeat(32001), Map.of(), null))
                 .stream()
                 .anyMatch(violation -> violation.getPropertyPath().toString().equals("content")));
+    }
+
+    @Test
+    void submitMessageLimitsDocumentScopeSize() {
+        List<UUID> oversized = java.util.stream.Stream
+                .generate(UUID::randomUUID)
+                .limit(21)
+                .toList();
+
+        assertTrue(validator.validate(new ChatDtos.SubmitMessageRequest("Hello", Map.of(), oversized))
+                .stream()
+                .anyMatch(violation -> violation.getPropertyPath().toString().equals("documentIds")));
+
+        List<UUID> withinLimit = java.util.stream.Stream
+                .generate(UUID::randomUUID)
+                .limit(20)
+                .toList();
+        assertEquals(0, validator.validate(
+                new ChatDtos.SubmitMessageRequest("Hello", Map.of(), withinLimit)).size());
     }
 
     @Test

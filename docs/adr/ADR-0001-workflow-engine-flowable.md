@@ -40,7 +40,7 @@ Lý do chính:
 - Backend Spring Boot sở hữu API nghiệp vụ và quyền truy cập; không để frontend gọi trực tiếp engine bằng quyền đặc biệt.
 - Phải xác định quyền người duyệt, tenant/workspace isolation, lịch sử ai làm gì/khi nào, retention, xử lý retry và giao dịch trước khi coi là production-ready.
 - Không xây dựng adapter đa engine hoặc hỗ trợ song song Flowable và n8n trong MVP.
-- Việc chọn engine không đồng nghĩa đã hoàn tất tích hợp runtime; implementation và kiểm thử end-to-end thuộc các issue triển khai v0.3.0 tiếp theo.
+- Việc chọn engine không đồng nghĩa đã hoàn tất tích hợp runtime; implementation và kiểm thử end-to-end thuộc các thay đổi triển khai v0.3.0 tiếp theo.
 
 ## Spike và kiểm chứng còn lại
 

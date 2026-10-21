@@ -3,6 +3,7 @@ package com.openvie.api.auth.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,6 +13,8 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@Schema(description = "Self-registration request. Honored only while the organization enables self-registration; "
+        + "otherwise the API answers 409. The account joins the default workspace and every public workspace.")
 public class RegisterRequest {
 
     @Email(message = "Invalid email format")

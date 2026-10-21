@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     QDRANT_TENANT_FIELD: str = "tenant_id"
     QDRANT_KNOWLEDGE_BASE_FIELD: str = "knowledge_base_id"
     KUZU_DATABASE_PATH: str = "./data/kuzu/openvie.kuzu"
+    GRAPH_EXTRACTION_ENABLED: bool = True
     GRAPH_SERVICE_URL: str = "http://localhost:8010"
     GRAPH_INTERNAL_TOKEN: str = "development-graph-token"
     GRAPH_TIMEOUT_SECONDS: float = 30.0

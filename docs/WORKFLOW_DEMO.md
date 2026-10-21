@@ -6,6 +6,8 @@
 
 Trình diễn PoC phê duyệt e-Office độc lập theo quy trình **gửi yêu cầu → phê duyệt → xem kết quả**. Kết quả hiển thị là trạng thái tiến trình trong Flowable và nhật ký của worker; đây **không phải** là thao tác xuất bản tài liệu trên môi trường production.
 
+Đây là demo engine **độc lập** dành cho PoC. Luồng phê duyệt trong sản phẩm chạy nhúng trong API runtime chính và không cần stack compose này; luồng runtime xem [Kiến trúc](ARCHITECTURE.md).
+
 ## Chuẩn bị trước buổi demo
 
 - Đã cài Docker và Docker Compose plugin.
@@ -126,6 +128,8 @@ Không thêm `-v` nếu cần giữ lại volume cơ sở dữ liệu demo cục
 ## Goal
 
 Demonstrate the isolated e-Office approval PoC using the sequence **submit → approve → visible result**. The visible result is the Flowable process state and worker logs; it is not a production document publication.
+
+This demo exercises the **isolated** engine built for the PoC. The product-integrated approval flow runs embedded inside the main API runtime and does not need this Compose stack; see [Architecture](ARCHITECTURE.md) for the runtime flow.
 
 ## Before the demo
 

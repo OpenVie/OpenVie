@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -11,7 +12,7 @@ import {
 import { useFormatter, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
 import { useRouter } from "@/i18n/navigation";
-import type { Document, DocumentStatus, TenantWorkspace } from "@/types";
+import type { Document, DocumentStatus, TenantWorkspace, WorkflowProcess } from "@/types";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +40,7 @@ import {
 } from "@/lib/documents-api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getTenantWorkspaceApi } from "@/lib/workspace-api";
-import { startApprovalApi } from "@/lib/workflow-api";
-import type { PublishTarget } from "@/types";
+import { listApprovalProcessesApi, startApprovalApi } from "@/lib/workflow-api";
 import { ClearFiltersButton, DateRangeFields, FilterPanel, FilterSelect, PaginationControls, ResultsSummary, UrlSearchField } from "@/components/list/ListControls";
 import { oneOf, safeDate, safePage, safeSize, useUrlListState } from "@/hooks/useUrlListState";
 
@@ -130,8 +130,8 @@ export default function DocumentsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DashboardDocument | null>(null);
   const [approvalTarget, setApprovalTarget] = useState<DashboardDocument | null>(null);
-  const [publishTarget, setPublishTarget] = useState<PublishTarget>("workspace");
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [approvals, setApprovals] = useState<WorkflowProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -149,19 +149,87 @@ export default function DocumentsPage() {
   const urlQuery = (searchParams.get("q") ?? "").slice(0, 200);
   const [sort, direction] = sortValue.split("-") as ["uploaded" | "filename" | "size", "asc" | "desc"];
   const hasFilters = Boolean(urlQuery || statusFilter !== "all" || typeFilter !== "all" || uploadedFrom || uploadedTo || sortValue !== "uploaded-desc");
-  const displayDocuments = [...optimisticDocuments, ...documents];
   const requestKey = [workspace?.knowledgeBase.id, urlQuery, statusFilter, typeFilter, uploadedFrom, uploadedTo, sortValue, page, size, revision].join("|");
   const refreshing = !loading && loadedKey !== requestKey;
+  const isAdmin = user?.workspaceRole === "WORKSPACE_ADMIN" || user?.orgRole === "ORG_OWNER";
+  const approvalByDoc = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const process of approvals) map.set(process.documentId, process.documentStatus);
+    return map;
+  }, [approvals]);
+
+  const displayDocuments = useMemo(() => {
+    const all = [...optimisticDocuments, ...documents];
+    if (isAdmin) return all;
+    return all.filter((doc) => {
+      if (doc.uploadedBy === user?.userId) return true;
+      const approvalStatus = approvalByDoc.get(doc.id) ?? doc.approvalStatus;
+      return approvalStatus === "APPROVED";
+    });
+  }, [optimisticDocuments, documents, isAdmin, user?.userId, approvalByDoc]);
   const formatBytes = (bytes: number) => bytes < 1024 ? `${format.number(bytes)} B`
     : bytes < 1024 * 1024 ? `${format.number(bytes / 1024, { maximumFractionDigits: 1 })} KB`
     : `${format.number(bytes / (1024 * 1024), { maximumFractionDigits: 1 })} MB`;
   const formatDate = (iso: string) => format.dateTime(new Date(iso), { dateStyle: "medium" });
 
+  const canDeleteDoc = (doc: DashboardDocument) =>
+    doc.uploadedBy === user?.userId
+    || user?.workspaceRole === "WORKSPACE_ADMIN"
+    || user?.orgRole === "ORG_OWNER";
+
+  function approvalControl(doc: DashboardDocument) {
+    if (doc.status !== "COMPLETED" || Boolean(doc.uploadState)) return null;
+    const approvalStatus = approvalByDoc.get(doc.id) ?? doc.approvalStatus;
+    if (approvalStatus === "IN_REVIEW" || approvalStatus === "APPROVED") {
+      return (
+        <Badge variant={approvalStatus === "APPROVED" ? "default" : "secondary"}>
+          {approvalStatus === "APPROVED" ? t("approvalBadge.approved") : t("approvalBadge.inReview")}
+        </Badge>
+      );
+    }
+    // Only the uploader can submit approval for their own document
+    if (doc.uploadedBy !== user?.userId) {
+      return null;
+    }
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation();
+          setApprovalTarget(doc);
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {t("submitApproval")}
+      </Button>
+    );
+  }
+
+  function documentDetailText(doc: DashboardDocument) {
+    if (doc.status !== "COMPLETED") {
+      return doc.status === "FAILED"
+        ? doc.errorMessage ?? t("indexingFailed")
+        : t("waitingForIndexing");
+    }
+    const approvalStatus = approvalByDoc.get(doc.id) ?? doc.approvalStatus;
+    if (approvalStatus === "APPROVED") {
+      return t("readyToAnswer");
+    }
+    if (approvalStatus === "IN_REVIEW") {
+      return t("approvalBadge.inReview");
+    }
+    if (approvalStatus === "REJECTED") {
+      return t("rejectedStatus");
+    }
+    return t("draftStatus");
+  }
+
   async function confirmApproval() {
     if (!approvalTarget) return;
     setSubmittingApproval(true);
     try {
-      await startApprovalApi(request, approvalTarget.id, publishTarget);
+      await startApprovalApi(request, approvalTarget.id, "workspace");
       toast.success(t("approvalSubmitted"));
       setApprovalTarget(null);
       setRevision((value) => value + 1);
@@ -171,6 +239,22 @@ export default function DocumentsPage() {
       setSubmittingApproval(false);
     }
   }
+
+  // Which documents already live in the approval flow (or were decided), so
+  // the submit action never offers a re-entry the backend would refuse.
+  useEffect(() => {
+    let cancelled = false;
+    listApprovalProcessesApi(request, true)
+      .then((processes) => {
+        if (!cancelled) setApprovals(processes);
+      })
+      .catch(() => {
+        // Stale-tolerant: the approval overlays reappear on the next revision bump.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [request, revision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,27 +296,34 @@ export default function DocumentsPage() {
     return () => controller.abort();
   }, [direction, page, request, requestKey, size, sort, statusFilter, t, typeFilter, update, uploadedFrom, uploadedTo, urlQuery, workspace]);
 
+  const pollableIds = useMemo(() => {
+    return documents
+      .filter((document) => !document.uploadState && !isTerminalDocumentStatus(document.status))
+      .map((document) => document.id)
+      .join(",");
+  }, [documents]);
+
   useEffect(() => {
-    const pollable = documents.filter(
-      (document) => !document.uploadState && !isTerminalDocumentStatus(document.status),
-    );
-    if (pollable.length === 0) return;
+    if (!pollableIds) return;
+    const ids = pollableIds.split(",").filter(Boolean);
+    if (ids.length === 0) return;
 
     let cancelled = false;
     const poll = async () => {
       const updates = await Promise.allSettled(
-        pollable.map((document) => getDocumentStatusApi(request, document.id)),
+        ids.map((id) => getDocumentStatusApi(request, id)),
       );
       if (cancelled) return;
-      if (updates.some((result, index) => result.status === "fulfilled" && result.value.status !== pollable[index]?.status)) {
-        setRevision((value) => value + 1);
-      }
+      let anyStatusChanged = false;
       setDocuments((current) =>
         current.map((document) => {
-          const index = pollable.findIndex((item) => item.id === document.id);
+          const index = ids.indexOf(document.id);
           if (index < 0) return document;
           const result = updates[index];
           if (!result || result.status !== "fulfilled") return document;
+          if (document.status !== result.value.status) {
+            anyStatusChanged = true;
+          }
           return {
             ...document,
             status: result.value.status,
@@ -241,18 +332,20 @@ export default function DocumentsPage() {
           };
         }),
       );
+      if (anyStatusChanged) {
+        setRevision((value) => value + 1);
+      }
     };
 
     const timer = window.setInterval(() => {
       void poll();
-    }, 1800);
-    void poll();
+    }, 3000);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [documents, request]);
+  }, [pollableIds, request]);
 
   async function uploadFiles(files: File[]) {
     if (!workspace) {
@@ -293,8 +386,15 @@ export default function DocumentsPage() {
         const { file, localId } = upload;
 
         try {
-          await uploadDocumentApi(request, file, workspace.knowledgeBase.id);
+          const uploaded = await uploadDocumentApi(request, file, workspace.knowledgeBase.id);
           successfulUploads += 1;
+          if (isAdmin && uploaded?.id) {
+            try {
+              await startApprovalApi(request, uploaded.id, "workspace");
+            } catch {
+              // Non-blocking auto-approval for admin uploads
+            }
+          }
           setOptimisticDocuments((current) => current.filter((document) => document.localId !== localId));
           setRevision((value) => value + 1);
         } catch (error) {
@@ -449,20 +549,8 @@ export default function DocumentsPage() {
                   <p className="min-w-0 truncate text-sm font-medium text-foreground">{doc.fileName}</p>
                   <div className="flex shrink-0 items-center gap-1">
                     <Badge variant="secondary" className="text-xs uppercase">{doc.fileType}</Badge>
-                    {doc.status === "COMPLETED" && !doc.uploadState && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setApprovalTarget(doc);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        {t("submitApproval")}
-                      </Button>
-                    )}
-                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
+                    {approvalControl(doc)}
+                    {canDeleteDoc(doc) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -484,11 +572,7 @@ export default function DocumentsPage() {
                   <StatusBadge status={doc.status} uploadState={doc.uploadState} />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {formatBytes(doc.fileSizeBytes)} · {formatDate(doc.uploadedAt)} · {doc.status === "COMPLETED"
-                    ? t("readyToAnswer")
-                    : doc.status === "FAILED"
-                      ? doc.errorMessage ?? t("indexingFailed")
-                      : t("waitingForIndexing")}
+                  {formatBytes(doc.fileSizeBytes)} · {formatDate(doc.uploadedAt)} · {documentDetailText(doc)}
                 </p>
               </div>
             ))}
@@ -538,27 +622,11 @@ export default function DocumentsPage() {
                     {formatDate(doc.uploadedAt)}
                   </TableCell>
                   <TableCell className="max-w-xs text-sm text-muted-foreground">
-                    {doc.status === "COMPLETED"
-                      ? t("readyToAnswer")
-                      : doc.status === "FAILED"
-                        ? doc.errorMessage ?? t("indexingFailed")
-                        : t("waitingForIndexing")}
+                    {documentDetailText(doc)}
                   </TableCell>
                   <TableCell className="space-x-1">
-                    {doc.status === "COMPLETED" && !doc.uploadState && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setApprovalTarget(doc);
-                        }}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        {t("submitApproval")}
-                      </Button>
-                    )}
-                    {(user?.workspaceRole === "WORKSPACE_ADMIN" || (doc.uploadedBy != null && doc.uploadedBy === user?.userId)) && (
+                    {approvalControl(doc)}
+                    {canDeleteDoc(doc) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -615,19 +683,9 @@ export default function DocumentsPage() {
               <span className="font-medium text-foreground">{approvalTarget?.fileName}</span>
             </DialogDescription>
           </DialogHeader>
-          <label className="space-y-2 text-sm font-medium">
-            {t("publishTarget")}
-            <select
-              className="flex h-9 w-full rounded-lg border bg-background px-3 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
-              value={publishTarget}
-              onChange={(event) => setPublishTarget(event.target.value as PublishTarget)}
-              disabled={submittingApproval}
-            >
-              <option value="workspace">{t("publishTargets.workspace")}</option>
-              <option value="shared">{t("publishTargets.shared")}</option>
-              <option value="public">{t("publishTargets.public")}</option>
-            </select>
-          </label>
+          <p className="text-sm text-muted-foreground">
+            {t("submitApprovalDescription")}
+          </p>
           <DialogFooter>
             <Button variant="outline" disabled={submittingApproval} onClick={() => setApprovalTarget(null)}>{t("cancel")}</Button>
             <Button disabled={submittingApproval} onClick={() => void confirmApproval()}>

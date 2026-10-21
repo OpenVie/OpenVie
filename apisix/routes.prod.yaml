@@ -2,6 +2,17 @@
 #
 # Mounted at /usr/local/apisix/conf/apisix.yaml in docker-compose.prod.yml.
 # Upstreams resolve to container DNS names (`api` and `frontend`) within the Docker network.
+
+# Global rules run for every route in this file, gateway-local ones included.
+# Rule id 1 enables the Prometheus plugin (exposition is configured in config.yaml
+# -> plugin_attr.prometheus and published by the `edge-metrics` route below), so
+# all routes are instrumented with apisix_http_status / apisix_http_latency /
+# apisix_bandwidth without repeating the plugin on each route.
+global_rules:
+  - id: 1
+    plugins:
+      prometheus: {}
+
 routes:
   # Edge health probe. Answers on the gateway itself.
   - uri: /apisix/status
@@ -18,6 +29,57 @@ routes:
               ngx.say("{\"status\": \"pass\"}")
               ngx.exit(200)
             end
+
+  # Prometheus scrape endpoint (edge-metrics). The exposition is produced by the
+  # prometheus plugin enabled in `global_rules` above and served from APISIX's
+  # cached metric data by the `public-api` plugin (config.yaml disables the
+  # plugin's standalone export server on purpose, see plugin_attr.prometheus).
+  #
+  # The scrape belongs on the container, not on this public entry point:
+  #     http://apisix:9080/apisix/prometheus/metrics   # inside the Compose net
+  # This route exists so the path is *covered* at the edge too: the rewrite-phase
+  # guard answers 404 to any client that is not on a loopback/private address, so
+  # the gateway never leaks its internals to the internet. Priority 100 sits
+  # above every business route (highest is 20).
+  - uri: /apisix/prometheus/metrics
+    name: edge-metrics
+    priority: 100
+    plugins:
+      serverless-pre-function:
+        phase: rewrite
+        functions:
+          - |
+            -- Loopback/private-only guard: RFC1918, loopback, link-local and
+            -- CGNAT IPv4; loopback, unique-local and link-local IPv6. Any real
+            -- public client hitting the published port gets a flat 404.
+            local function is_private(addr)
+              if not addr or addr == "" then
+                return false
+              end
+              addr = addr:gsub("^::ffff:", "")
+              local a, b = addr:match("^(%d+)%.(%d+)%.")
+              if a then
+                a, b = tonumber(a), tonumber(b)
+                return a == 10 or a == 127
+                  or (a == 172 and b >= 16 and b <= 31)
+                  or (a == 192 and b == 168)
+                  or (a == 169 and b == 254)
+                  or (a == 100 and b >= 64 and b <= 127)
+              end
+              return addr == "::1" or addr == "0:0:0:0:0:0:0:1"
+                or addr:find("^[fF][cCdD]") ~= nil   -- fc00::/7 unique-local
+                or addr:find("^[fF][eE]80:") ~= nil  -- fe80::/10 link-local
+            end
+
+            return function()
+              if not is_private(ngx.var.remote_addr) then
+                ngx.status = 404
+                ngx.header.content_type = "text/plain"
+                ngx.say("404 Not Found")
+                ngx.exit(404)
+              end
+            end
+      public-api: {}
 
   # Unauthenticated surface — installation claim and sign-in.
   - uri: /api/v1/auth/*

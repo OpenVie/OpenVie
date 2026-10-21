@@ -288,7 +288,17 @@
     "chats": "Cuộc trò chuyện",
     "noChats": "Chưa có cuộc trò chuyện.",
     "hideChat": "Ẩn {title}",
-    "deleteChat": "Xóa cuộc trò chuyện"
+    "deleteChat": "Xóa cuộc trò chuyện",
+    "scopeTriggerAll": "Chọn tài liệu",
+    "scopeTriggerCount": "{count} tài liệu",
+    "scopeDialogTitle": "Chọn tài liệu để trò chuyện",
+    "scopeDialogDescription": "AI sẽ trả lời dựa trên các tài liệu được chọn ({count} tài liệu tối đa). Bỏ chọn hết để dùng toàn bộ cơ sở tri thức.",
+    "scopeSearchPlaceholder": "Tìm theo tên tệp…",
+    "scopeEmpty": "Không có tài liệu nào khớp.",
+    "scopeClose": "Đóng",
+    "scopeClear": "Bỏ chọn",
+    "scopeApply": "Áp dụng",
+    "scopeSelectedCount": "Đã chọn {count} tài liệu"
   },
   "AssistantResponse": {
     "sources": "Nguồn",
@@ -375,6 +385,9 @@
     "showPassword": "Hiện mật khẩu",
     "hidePassword": "Ẩn mật khẩu",
     "existingMemberHint": "Người dùng phải có sẵn tài khoản trong tổ chức này.",
+    "addMultipleMembersHint": "Nhập hoặc dán email (cách nhau bởi dấu phẩy hoặc khoảng trắng), hoặc chọn từ danh sách gợi ý.",
+    "addMorePlaceholder": "Nhập thêm thành viên...",
+    "membersAddedCount": "Đã thêm {count} thành viên vào không gian làm việc",
     "suggestLoading": "Đang tìm…",
     "suggestEmpty": "Không có người phù hợp trong tổ chức này",
     "organizationDescription": "Quản lý tất cả tài khoản trong tổ chức này.",
@@ -402,6 +415,7 @@
     "cancel": "Hủy",
     "submitApproval": "Gửi để phê duyệt",
     "submitApprovalTitle": "Gửi tài liệu để phê duyệt",
+    "submitApprovalDescription": "Tài liệu sẽ được gửi phê duyệt để lưu hành chính thức trong không gian làm việc này.",
     "publishTarget": "Ai có thể sử dụng tài liệu sau khi duyệt?",
     "publishTargets": {
       "workspace": "Không gian này",
@@ -464,7 +478,13 @@
       "upload": "Tải lên thất bại",
       "delete": "Không thể xóa tài liệu",
       "approval": "Không thể gửi yêu cầu phê duyệt"
-    }
+    },
+    "approvalBadge": {
+      "inReview": "Đang phê duyệt",
+      "approved": "Đã phê duyệt"
+    },
+    "draftStatus": "Bản nháp (chưa duyệt)",
+    "rejectedStatus": "Bị từ chối"
   },
   "Approval": {
     "eyebrow": "Quy trình số",
@@ -492,8 +512,31 @@
     "updated": "Đã cập nhật phê duyệt",
     "fallback": {
       "load": "Không thể tải yêu cầu phê duyệt",
-      "action": "Không thể cập nhật phê duyệt"
-    }
+      "action": "Không thể cập nhật phê duyệt",
+      "log": "Không thể tải nhật ký phê duyệt"
+    },
+    "viewLog": "Xem nhật ký",
+    "logTitle": "Nhật ký phê duyệt",
+    "logEmpty": "Chưa có sự kiện phê duyệt nào.",
+    "reasonLabel": "Lý do",
+    "selfDecision": "Người nộp tự quyết định",
+    "system": "Hệ thống",
+    "status": {
+      "inReview": "Đang phê duyệt",
+      "approved": "Đã phê duyệt",
+      "rejected": "Bị từ chối"
+    },
+    "action": {
+      "WORKFLOW_STARTED": "Gửi phê duyệt",
+      "WORKFLOW_TASK_CLAIMED": "Nhận xử lý",
+      "WORKFLOW_APPROVED": "Phê duyệt",
+      "WORKFLOW_REJECTED": "Từ chối",
+      "WORKFLOW_ESCALATED": "Chuyển cấp",
+      "WORKFLOW_REMINDER_SENT": "Nhắc nhở SLA",
+      "WORKFLOW_SLA_CONFIG_CHANGED": "Thay đổi cấu hình SLA"
+    },
+    "viewDocument": "Xem tài liệu",
+    "previewTitle": "Xem trước tài liệu"
   },
   "DocumentViewer": {
     "spreadsheetTable": "Bảng tính",
@@ -530,7 +573,11 @@
       "content": "Không thể tải nội dung đã lập chỉ mục",
       "download": "Không thể tải tài liệu xuống"
     },
-    "citationOf": "Bằng chứng {current} / {total}"
+    "citationOf": "Bằng chứng {current} / {total}",
+    "viewModeLabel": "Chế độ xem",
+    "extractedView": "Nhận diện",
+    "originalView": "Bản gốc",
+    "chatWithDocument": "Chat với tài liệu"
   },
   "Setup": {
     "tagline": "AI dựa trên tài liệu cho đội ngũ của bạn",
@@ -583,11 +630,13 @@
     "label": "Chuyển không gian làm việc",
     "workspaces": "Không gian làm việc",
     "admin": "Quản trị",
-    "member": "Thành viên"
+    "member": "Thành viên",
+    "general": "Chung"
   },
   "Workspaces": {
     "title": "Không gian làm việc",
     "description": "Tạo, đổi tên và lưu trữ các không gian làm việc của tổ chức.",
+    "general": "Chung",
     "create": "Không gian mới",
     "createTitle": "Tạo không gian làm việc",
     "name": "Tên",
@@ -691,5 +740,15 @@
         "delete": "Không thể xóa kênh"
       }
     }
+  },
+  "DocumentPreview": {
+    "loading": "Đang tải bản xem trước…",
+    "loadError": "Không tải được bản xem trước.",
+    "retry": "Thử lại",
+    "unsupported": "Chưa hỗ trợ xem trước định dạng này.",
+    "saveAs": "Tải về để xem",
+    "empty": "Tệp trống hoặc không đọc được nội dung.",
+    "truncated": "Tệp quá dài — chỉ hiển thị 500 dòng đầu tiên.",
+    "sheetAria": "Chọn sheet"
   }
 }

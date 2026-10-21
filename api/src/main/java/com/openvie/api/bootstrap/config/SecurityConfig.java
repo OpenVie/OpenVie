@@ -2,6 +2,7 @@ package com.openvie.api.bootstrap.config;
 
 import com.openvie.api.auth.filter.JwtAuthFilter;
 import com.openvie.api.common.config.CorsProperties;
+import com.openvie.api.common.filter.ConsumerRateLimitFilter;
 import com.openvie.api.common.filter.PublicRateLimitFilter;
 import com.openvie.api.common.security.AppUserDetailsService;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;                  // auth module
     private final PublicRateLimitFilter publicRateLimitFilter;
+    private final ConsumerRateLimitFilter consumerRateLimitFilter;
     private final AppUserDetailsService userDetailsService;     // common interface
     private final CorsProperties corsProperties;
 
@@ -91,7 +93,11 @@ public class SecurityConfig {
             )
             .authenticationProvider(authenticationProvider)
             .addFilterBefore(publicRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            // Authenticated traffic is metered per tenant+user after the
+            // principal attributes exist; SSE async dispatches re-enter here
+            // and are skipped (only initial requests carry attributes).
+            .addFilterAfter(consumerRateLimitFilter, JwtAuthFilter.class);
 
         return http.build();
     }

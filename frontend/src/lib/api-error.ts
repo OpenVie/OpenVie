@@ -1,3 +1,5 @@
+import { localizeErrorMessage } from "./localize-error";
+
 type SpringErrorBody = {
   message?: string | string[];
 };
@@ -24,11 +26,11 @@ export async function parseApiError(res: Response): Promise<Error | ApiFallback>
   const body = await parseJsonSafe(res);
   if (body && typeof body === "object") {
     const fastApiMessage = (body as FastApiErrorBody).error?.message;
-    if (fastApiMessage) return new Error(fastApiMessage);
+    if (fastApiMessage) return new Error(localizeErrorMessage(fastApiMessage));
 
     const springMessage = (body as SpringErrorBody).message;
-    if (typeof springMessage === "string") return new Error(springMessage);
-    if (Array.isArray(springMessage)) return new Error(springMessage.join(" "));
+    if (typeof springMessage === "string") return new Error(localizeErrorMessage(springMessage));
+    if (Array.isArray(springMessage)) return new Error(localizeErrorMessage(springMessage.join(" ")));
   }
   return new ApiFallback(res.status);
 }

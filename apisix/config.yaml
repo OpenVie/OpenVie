@@ -15,3 +15,32 @@ deployment:
 
 apisix:
   enable_admin: false
+
+# Observability (Prometheus). One coherent wiring, chosen deliberately:
+#
+#   * The exposition surface is the gateway's own data-plane listener, NOT a
+#     second HTTP listener. `enable_export_server: false` stops APISIX from
+#     opening the plugin's standalone export server (default 127.0.0.1:9091);
+#     the prometheus plugin then publishes `export_uri` through APISIX's
+#     internal API router, which only the `edge-metrics` route in routes.yaml /
+#     routes.prod.yaml exposes — and that route answers 404 to every client that
+#     is not on a loopback/private address, so the exposition never reaches the
+#     public internet.
+#   * Consequence: the container binds no extra port, the single published entry
+#     point (8088 -> 9080) stays the only way in, and Prometheus scrapes the
+#     container directly from inside the Compose network, e.g.
+#       http://apisix:9080/apisix/prometheus/metrics
+#   * `export_addr` is still declared so the address is pinned and documented,
+#     ready for the standalone exporter if `enable_export_server` is ever flipped
+#     back to true. It is inert (never read, never bound) while the flag is
+#     false.
+#
+# The `prometheus: {}` plugin itself is enabled as global rule id 1 in both route
+# files, so every route is instrumented without repeating the plugin per route.
+plugin_attr:
+  prometheus:
+    export_uri: /apisix/prometheus/metrics
+    export_addr:
+      ip: 0.0.0.0
+      port: 9091
+    enable_export_server: false

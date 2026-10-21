@@ -1,0 +1,51 @@
+# Prometheus scrape configuration — PRODUCTION stack.
+#
+# Mounted read-only by the `prometheus` service in docker-compose.prod.yml,
+# where the applications also run as containers, so the scrape targets use the
+# in-network service DNS names:
+#   * openvie-api -> Spring Boot `api` container, Micrometer Prometheus endpoint
+#   * openvie-ai  -> FastAPI `ai-api` container, prometheus_client endpoint
+#
+# For the developer stack (applications on the host) docker-compose.yml mounts
+# `prometheus.dev.yml` instead, which points at host.docker.internal.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    stack: openvie
+    environment: production
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Prometheus scrapes itself so the monitoring stack is observable too.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: openvie-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['api:8080']
+
+  - job_name: openvie-ai
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['ai-api:18000']
+
+  # Edge gateway (Apache APISIX) via its data-plane listener. The gateway
+  # exposes the privileged-agent metrics on a guarded route instead of the
+  # separate :9091 exporter; APISIX caches them for 15s, matching the scrape
+  # interval. In-network scrapes come from a private container IP.
+  - job_name: openvie-gateway
+    metrics_path: /apisix/prometheus/metrics
+    static_configs:
+      - targets: ['apisix:9080']

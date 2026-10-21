@@ -33,13 +33,15 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | Chạy cục bộ, hiểu cấu hình, chạy kiểm tra | [Phát triển cục bộ](DEVELOPMENT.md) |
 | Hiểu quyền sở hữu service, lưu trữ, bảo mật, chuỗi runtime | [Kiến trúc](ARCHITECTURE.md) |
 | Hiểu quyết định chọn workflow engine | [ADR-0001: Flowable thay cho n8n](adr/ADR-0001-workflow-engine-flowable.md) |
-| Chạy demo submit → approve/reject → xem kết quả trong 15 phút | [Workflow demo](WORKFLOW_DEMO.md) |
+| Hợp đồng ghi kết quả duyệt vào trạng thái tài liệu | [ADR-0002: Write-back phê duyệt & thông báo](adr/ADR-0002-approval-writeback-contract.md) |
+| Chạy demo PoC "submit → approve/reject → xem kết quả" cho engine Flowable độc lập trong 15 phút | [Workflow demo](WORKFLOW_DEMO.md) |
 | Sửa parsing tài liệu, đánh chỉ mục, model, truy hồi | [Hấp thụ và truy hồi](RETRIEVAL.md) |
 | Cấu hình bản self-hosted hoặc lập kế hoạch kiểm chứng và phục hồi | [Triển khai](DEPLOYMENT.md) |
 | Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | Self-host, đánh giá giấy phép, hay xuất bản nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
 | Đối chiếu repo với kiến trúc DX-OS / Open-Core và không gian H-P-D-I | [Ánh xạ DX-OS](DX_OS.md) |
+| Tự tích hợp ứng dụng vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
 
 ## Cái gì nằm ở đâu
 
@@ -110,12 +112,15 @@ Start with the guide for your task.
 | --- | --- |
 | Run locally, understand configuration, or execute checks | [Local development](DEVELOPMENT.md) |
 | Understand service ownership, storage, security, or runtime sequences | [Architecture](ARCHITECTURE.md) |
+| Understand workflow engine decision | [ADR-0001: Flowable over n8n](adr/ADR-0001-workflow-engine-flowable.md) |
+| Understand approval decision write-back and notification contract | [ADR-0002: Approval write-back & notification](adr/ADR-0002-approval-writeback-contract.md) |
 | Change document parsing, indexing, models, or retrieval | [Ingestion and retrieval](RETRIEVAL.md) |
 | Configure a self-hosted release or plan verification and recovery | [Deployment](DEPLOYMENT.md) |
 | Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
 | Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
 | Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
 | Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
+| Integrate your own app with the headless core (API keys, webhooks, synchronous chat, BPMN engine) | [Integration](INTEGRATION.md) |
 
 ## What belongs where
 

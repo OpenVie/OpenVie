@@ -5,12 +5,14 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import com.openvie.api.document.service.DocumentService;
+import com.openvie.api.integration.webhook.WebhookEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Component
@@ -20,20 +22,23 @@ public class DocumentStatusEventListener {
     private final ObjectMapper objectMapper;
     private final DocumentService documentService;
     private final InternalEventInboxRepository inboxRepository;
+    private final WebhookEventPublisher webhookEventPublisher;
 
     @Autowired
     public DocumentStatusEventListener(
             ObjectMapper objectMapper,
             DocumentService documentService,
-            InternalEventInboxRepository inboxRepository
+            InternalEventInboxRepository inboxRepository,
+            WebhookEventPublisher webhookEventPublisher
     ) {
         this.objectMapper = objectMapper;
         this.documentService = documentService;
         this.inboxRepository = inboxRepository;
+        this.webhookEventPublisher = webhookEventPublisher;
     }
 
     public DocumentStatusEventListener(ObjectMapper objectMapper, DocumentService documentService) {
-        this(objectMapper, documentService, null);
+        this(objectMapper, documentService, null, null);
     }
 
     @RabbitListener(queues = RabbitMqTopology.STATUS_QUEUE)
@@ -73,6 +78,33 @@ public class DocumentStatusEventListener {
                     event.tenantId(),
                     event.documentId()
             );
+        }
+
+        // Integration surface: ingestion progress is a headless-platform event,
+        // journaled into the webhook outbox in this same transaction. The
+        // eventId doubles as the receiver-side dedupe key (plus the inbox id
+        // guard above, which already replays nothing).
+        publishWebhook(event);
+    }
+
+    private void publishWebhook(DocumentStatusEvent event) {
+        if (webhookEventPublisher == null) {
+            return;
+        }
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("document_id", event.documentId().toString());
+            data.put("job_id", event.jobId() == null ? null : event.jobId().toString());
+            data.put("status", event.status());
+            data.put("chunk_count", event.chunkCount());
+            data.put("error_message", event.errorMessage());
+            data.put("schema_version", event.schemaVersion());
+            webhookEventPublisher.publish(
+                    event.tenantId(), "document.status.changed", event.eventId(), data);
+        } catch (Exception exception) {
+            // Webhook journaling must never fail the ingestion callback path.
+            log.warn("Webhook outbox write failed for document status event: {}",
+                    exception.getMessage());
         }
     }
 }

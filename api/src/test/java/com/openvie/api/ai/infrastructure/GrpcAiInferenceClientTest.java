@@ -23,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,7 +34,8 @@ class GrpcAiInferenceClientTest {
     private BiConsumer<GenerateAnswerRequest, StreamObserver<GenerateAnswerEvent>> provider;
     private final AiInferenceApi.GenerationRequest request = new AiInferenceApi.GenerationRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            7L, "EMPLOYEE_PLAYGROUND", "en-US", "question", List.of(), "Tenant", "schema", "request", "trace");
+            7L, "EMPLOYEE_PLAYGROUND", "en-US", "question", List.of(), "Tenant", "schema",
+            null, "request", "trace");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -176,5 +178,29 @@ class GrpcAiInferenceClientTest {
         return GenerateAnswerEvent.newBuilder().setCompleted(GenerateAnswerResponse.newBuilder()
                 .setGenerationId(request.generationId().toString())
                 .setAuthoritativeRevision(request.authoritativeRevision()).setAnswer(value)).build();
+    }
+
+    @Test
+    void documentScopeIsForwardedToTheInferenceService() {
+        UUID scopedDocumentId = UUID.randomUUID();
+        AtomicReference<GenerateAnswerRequest> captured = new AtomicReference<>();
+        provider = (input, output) -> {
+            captured.set(input);
+            output.onNext(completed("Answer"));
+            output.onCompleted();
+        };
+        // Duplicates are kept at this layer: input mapping, not normalization, lives here.
+        AiInferenceApi.GenerationRequest scoped = new AiInferenceApi.GenerationRequest(
+                request.generationId(), request.turnId(), request.tenantId(), request.chatbotId(),
+                request.knowledgeBaseId(), request.authoritativeRevision(), request.channel(),
+                request.locale(), request.question(), request.priorMessages(), request.tenantName(),
+                request.promptSchemaVersion(), List.of(scopedDocumentId, scopedDocumentId),
+                request.requestId(), request.traceId());
+
+        client.generate(scoped, ignored -> { });
+
+        // The transport maps verbatim; deduplication belongs to the chat control plane.
+        assertEquals(List.of(scopedDocumentId.toString(), scopedDocumentId.toString()),
+                captured.get().getDocumentIdsList());
     }
 }

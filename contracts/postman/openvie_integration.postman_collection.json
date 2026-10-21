@@ -1,0 +1,392 @@
+{
+  "info": {
+    "name": "OpenVie Headless Core Integration API",
+    "_postman_id": "openvie-core-v1",
+    "description": "Integration collection for third-party platforms self-hosting OpenVie core (DX-OS Open-Core OLP 2026).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8088",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "ovk_your_api_key_or_user_jwt",
+      "type": "string"
+    },
+    {
+      "key": "workspaceId",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login with Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rotate Credentials (M2M Header)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Refresh-Token",
+                "value": "your_refresh_token_here"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"optional_in_body_if_header_omitted\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Machine Credentials (API Keys)",
+      "item": [
+        {
+          "name": "Create M2M API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/api-keys",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Enterprise ERP Service Key\",\n  \"workspaceId\": \"{{workspaceId}}\",\n  \"role\": \"MEMBER\",\n  \"expiresAt\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "List API Keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/api-keys"
+          }
+        },
+        {
+          "name": "Revoke API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/api-keys/00000000-0000-0000-0000-000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Document-Grounded Chat",
+      "item": [
+        {
+          "name": "Submit Message (Sync JSON Integration Mode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "sample-unique-request-key-123"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}/messages",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"T\\u00f3m t\\u1eaft \\u0111i\\u1ec1u kho\\u1ea3n thanh to\\u00e1n trong h\\u1ee3p \\u0111\\u1ed3ng n\\u00e0y.\",\n  \"documentIds\": [\n    \"00000000-0000-0000-0000-000000000000\"\n  ],\n  \"metadata\": {}\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Message (SSE Streaming Mode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}/messages",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Tr\\u1ee3 l\\u00fd gi\\u00fap t\\u00f4i tra c\\u1ee9u quy \\u0111\\u1ecbnh ngh\\u1ec9 ph\\u00e9p.\",\n  \"documentIds\": []\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Signed Webhooks",
+      "item": [
+        {
+          "name": "Register Webhook Endpoint",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/webhook-endpoints",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Enterprise Event Bus\",\n  \"url\": \"https://integrator.example.com/api/webhooks/openvie\",\n  \"events\": [\n    \"document.status.changed\",\n    \"workflow.approved\",\n    \"workflow.rejected\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "List Webhook Endpoints",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/webhook-endpoints"
+          }
+        },
+        {
+          "name": "Send Test Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/webhook-endpoints/00000000-0000-0000-0000-000000000000/test"
+          }
+        },
+        {
+          "name": "View Delivery Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/webhook-endpoints/00000000-0000-0000-0000-000000000000/deliveries"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Generic BPMN Workflow Engine",
+      "item": [
+        {
+          "name": "Deploy BPMN Definition",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/definitions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"customInvoiceApproval\",\n  \"bpmnXml\": \"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?><definitions xmlns=\\\"http://www.omg.org/spec/BPMN/20100524/MODEL\\\" id=\\\"def\\\" targetNamespace=\\\"http://openvie.dev/bpmn\\\"><process id=\\\"invoiceProcess\\\" name=\\\"Invoice Process\\\" isExecutable=\\\"true\\\"><startEvent id=\\\"start\\\"/><sequenceFlow id=\\\"f1\\\" sourceRef=\\\"start\\\" targetRef=\\\"reviewTask\\\"/><userTask id=\\\"reviewTask\\\" name=\\\"Review Invoice\\\"/><sequenceFlow id=\\\"f2\\\" sourceRef=\\\"reviewTask\\\" targetRef=\\\"end\\\"/><endEvent id=\\\"end\\\"/></process></definitions>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Process Definitions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/definitions"
+          }
+        },
+        {
+          "name": "Start Process Instance",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/processes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"definitionKey\": \"invoiceProcess\",\n  \"businessKey\": \"INV-2026-001\",\n  \"variables\": {\n    \"amount\": 15000000,\n    \"vendor\": \"Cong ty ABC\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "List Running Processes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/processes"
+          }
+        },
+        {
+          "name": "Query Task Inbox",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/tasks?unassigned=false&limit=25"
+          }
+        },
+        {
+          "name": "Claim Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/tasks/00000000-0000-0000-0000-000000000000/claim",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee\": \"optional_custom_service_user_id\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Complete Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/tasks/00000000-0000-0000-0000-000000000000/complete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"variables\": {\n    \"approved\": true,\n    \"reviewNote\": \"Chung tu hop le\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Process Execution History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/workflow/engine/history/processes/00000000-0000-0000-0000-000000000000"
+          }
+        }
+      ]
+    }
+  ]
+}
