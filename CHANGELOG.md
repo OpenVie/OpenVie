@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The workspace member role dropdown on the team page showed the raw backend enum (`MEMBER`/`WORKSPACE_ADMIN`) in its closed trigger: the Base UI `Select.Value` renders the raw value rather than the selected item's label, so the localized label is now passed explicitly — matching the pattern already used by the visibility select and the add-member dialog.
+- Loaded process variables via `.includeProcessVariables()` in `listTasks` TaskQueries so task cards in the approval inbox render the document file name and enable document preview.
 
 ### Added
 
