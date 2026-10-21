@@ -385,6 +385,9 @@
     "showPassword": "Hiện mật khẩu",
     "hidePassword": "Ẩn mật khẩu",
     "existingMemberHint": "Người dùng phải có sẵn tài khoản trong tổ chức này.",
+    "addMultipleMembersHint": "Nhập hoặc dán email (cách nhau bởi dấu phẩy hoặc khoảng trắng), hoặc chọn từ danh sách gợi ý.",
+    "addMorePlaceholder": "Nhập thêm thành viên...",
+    "membersAddedCount": "Đã thêm {count} thành viên vào không gian làm việc",
     "suggestLoading": "Đang tìm…",
     "suggestEmpty": "Không có người phù hợp trong tổ chức này",
     "organizationDescription": "Quản lý tất cả tài khoản trong tổ chức này.",
@@ -412,6 +415,7 @@
     "cancel": "Hủy",
     "submitApproval": "Gửi để phê duyệt",
     "submitApprovalTitle": "Gửi tài liệu để phê duyệt",
+    "submitApprovalDescription": "Tài liệu sẽ được gửi phê duyệt để lưu hành chính thức trong không gian làm việc này.",
     "publishTarget": "Ai có thể sử dụng tài liệu sau khi duyệt?",
     "publishTargets": {
       "workspace": "Không gian này",
@@ -478,7 +482,9 @@
     "approvalBadge": {
       "inReview": "Đang phê duyệt",
       "approved": "Đã phê duyệt"
-    }
+    },
+    "draftStatus": "Bản nháp (chưa duyệt)",
+    "rejectedStatus": "Bị từ chối"
   },
   "Approval": {
     "eyebrow": "Quy trình số",
@@ -624,11 +630,13 @@
     "label": "Chuyển không gian làm việc",
     "workspaces": "Không gian làm việc",
     "admin": "Quản trị",
-    "member": "Thành viên"
+    "member": "Thành viên",
+    "general": "Chung"
   },
   "Workspaces": {
     "title": "Không gian làm việc",
     "description": "Tạo, đổi tên và lưu trữ các không gian làm việc của tổ chức.",
+    "general": "Chung",
     "create": "Không gian mới",
     "createTitle": "Tạo không gian làm việc",
     "name": "Tên",

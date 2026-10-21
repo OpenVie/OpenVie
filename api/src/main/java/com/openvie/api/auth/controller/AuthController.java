@@ -15,6 +15,10 @@ import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.RegistrationStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -72,13 +77,31 @@ public class AuthController extends BaseController {
         return ResponseEntity.ok(authService.ssoExchange(request, response));
     }
 
-    @Operation(summary = "Rotate credentials using the refresh cookie",
-            description = "Reads the HttpOnly refresh_token cookie and re-issues the credential pair (roles re-resolved). "
-            + "Public endpoint; requires no bearer token.")
+    public record RefreshRequest(String refreshToken) {
+    }
+
+    @Operation(summary = "Rotate credentials",
+            description = "Re-issues the credential pair (roles re-resolved). The refresh token is read from the "
+                    + "HttpOnly `refresh_token` cookie (browser), the `X-Refresh-Token` header, or a JSON body "
+                    + "`{\"refresh_token\": ...}` — in that order. The header and body forms are the server-to-server "
+                    + "path: no cookie handling required. Public endpoint; requires no bearer token.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "New credential pair issued"),
+            @ApiResponse(responseCode = "401", description = "Refresh token missing, invalid, expired, or revoked")
+    })
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
-            @CookieValue(name = "refresh_token", required = false) String refreshToken,
+            @CookieValue(name = "refresh_token", required = false) String cookieToken,
+            @RequestHeader(value = "X-Refresh-Token", required = false) String headerToken,
+            @RequestBody(required = false) RefreshRequest body,
             HttpServletResponse response) {
+        String refreshToken = cookieToken != null && !cookieToken.isBlank()
+                ? cookieToken
+                : headerToken != null && !headerToken.isBlank()
+                ? headerToken
+                : body != null && body.refreshToken() != null && !body.refreshToken().isBlank()
+                ? body.refreshToken()
+                : null;
         if (refreshToken == null) {
             throw new UnauthorizedException("Refresh token missing");
         }

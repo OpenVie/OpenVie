@@ -89,6 +89,14 @@ export function WorkspaceSwitcher() {
       setOpen(false)
     }
   }
+  const displayName = (ws: WorkspaceSummary | undefined) => {
+    if (!ws) return "";
+    if (ws.slug === "general" || ws.name.toLowerCase() === "general") {
+      return t("general");
+    }
+    return ws.name;
+  };
+
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -102,7 +110,7 @@ export function WorkspaceSwitcher() {
         }
       >
         <span className="min-w-0 flex-1 truncate text-left">
-          {activeWorkspace?.name ?? user.activeWorkspaceId}
+          {displayName(activeWorkspace) || user.activeWorkspaceId}
         </span>
         {switching ? (
           <Loader2 className="size-3.5 shrink-0 animate-spin" />
@@ -124,7 +132,7 @@ export function WorkspaceSwitcher() {
                 workspace.id === user.activeWorkspaceId && "font-medium",
               )}
             >
-              <span className="truncate">{workspace.name}</span>
+              <span className="truncate">{displayName(workspace)}</span>
               <span className="ml-2 text-xs text-[#a9b3ab]">
                 {workspace.role === "WORKSPACE_ADMIN" ? t("admin") : t("member")}
               </span>

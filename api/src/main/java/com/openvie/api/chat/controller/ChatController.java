@@ -18,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.http.HttpStatus;
@@ -70,14 +71,16 @@ public class ChatController extends BaseController {
         return chatService.createEmployeeSession(getTenantId(request), getUserId(request), body);
     }
 
-    @Operation(summary = "Send a message and stream the answer",
-            description = "Runs one answer generation and streams it back as text/event-stream frames: "
-                    + "`content` (draft previews, each replacing the previous), `reset` (the provider restarted "
-                    + "the draft), `complete` (the authoritative answer with citations), and `error` (a failure "
-                    + "code — see responses). Keepalive comments are emitted every 5 s; the stream is cancelled "
-                    + "when the client disconnects. An optional `Idempotency-Key` header replays the same turn. "
-                    + "`document_ids` in the body narrows retrieval to at most 20 COMPLETED documents of the "
-                    + "session's knowledge base; empty or absent means the whole knowledge base.")
+    @Operation(summary = "Send a message and get the answer",
+            description = "Runs one answer generation. Two response modes: `Accept: application/json` waits for the "
+                    + "final answer and returns it as JSON (server-to-server integration mode, bounded by the model "
+                    + "answer deadline); any other Accept (or none) streams `text/event-stream` frames: `content` "
+                    + "(draft previews, each replacing the previous), `reset` (the provider restarted the draft), "
+                    + "`complete` (the authoritative answer with citations), and `error` (a failure code). Keepalive "
+                    + "comments every 5 s; the stream cancels on client disconnect. An optional `Idempotency-Key` "
+                    + "header replays the same turn in either mode. `document_ids` in the body narrows retrieval to "
+                    + "at most 20 COMPLETED documents of the session's knowledge base; empty or absent means the "
+                    + "whole knowledge base.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "SSE stream opened; terminal event is `complete` or `error`"),
             @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR, INVALID_DOCUMENT_SCOPE, or INVALID_REQUEST"),
@@ -87,7 +90,7 @@ public class ChatController extends BaseController {
             @ApiResponse(responseCode = "502", description = "MODEL_PROVIDER_ERROR — the inference pipeline failed mid-answer")
     })
     @PostMapping(value = "/sessions/{sessionId}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public ResponseEntity<SseEmitter> submit(
+    public ResponseEntity<Object> submit(
             @PathVariable UUID sessionId,
             @Valid @RequestBody ChatDtos.SubmitMessageRequest body,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -95,6 +98,24 @@ public class ChatController extends BaseController {
             HttpServletRequest request) {
         UUID tenantId = getTenantId(request);
         UUID userId = getUserId(request);
+
+        // Integration mode: `Accept: application/json` runs the exact same turn
+        // pipeline (fingerprint, idempotent replay, scope validation) but waits
+        // for the final answer instead of streaming drafts. SSE stays the
+        // default for everything else, including `Accept: */*`.
+        String accept = request.getHeader(HttpHeaders.ACCEPT);
+        if (accept != null && accept.contains(MediaType.APPLICATION_JSON_VALUE)
+                && !accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE)) {
+            var result = chatService.submitEmployeeMessage(
+                    tenantId, userId, sessionId, body.content(), body.metadata(),
+                    body.documentIds(), idempotencyKey, requestId,
+                    new ChatControlPlaneService.AnswerStreamListener() {
+                        @Override public void onContent(String content) { }
+                        @Override public void onReset() { }
+                    });
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(result);
+        }
+
         SseEmitter emitter = new SseEmitter((2 * answerDeadlineSeconds + 10) * 1000);
         Context.CancellableContext context = Context.current().withCancellation();
         AtomicBoolean cancelled = new AtomicBoolean();

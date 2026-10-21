@@ -156,7 +156,9 @@ Dùng Flowable REST để xem task và trạng thái process; xem `spikes/eoffic
 
 ### 9. Vận hành, sao lưu và cập nhật
 
-- **Sao lưu:** Cần lên lịch sao lưu tự động định kỳ cho PostgreSQL (pg_dump), SeaweedFS volumes, và `.env.production`.
+- **Công cụ sao lưu/phục hồi:** `scripts/ops/backup.sh` tạo thư mục sao lưu có dấu thời gian UTC gồm `postgres.dump` (pg_dump), `seaweedfs.tar.gz`, `.env.production.bak` và `MANIFEST.txt` chứa kích thước cùng sha256 từng tệp; `scripts/ops/restore.sh` phục hồi (`pg_restore --clean --if-exists`, giải nén volumes, khôi phục tệp env) và bắt buộc có `--yes`.
+- **Kiểm chứng tính toàn vẹn:** `restore.sh` đối chiếu sha256 trong `MANIFEST.txt` trước khi phục hồi và hủy bỏ nếu sai lệch; quy trình diễn tập định kỳ (phục hồi vào database tạm và đối chiếu số bảng/cột, số dòng `flyway_schema_history`) nằm trong `scripts/ops/README.md`.
+- **Lịch chạy thuộc về người vận hành:** nền tảng không tự chạy sao lưu. Runbook có sẵn dòng crontab và systemd timer mẫu; cờ `--keep N` giữ N bản mới nhất và chỉ xóa các thư mục do script tự tạo theo đúng mẫu tên của nó (không truyền cờ thì không xóa gì).
 - **Cập nhật & Tái lập chỉ mục:** Khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ qua `DocumentReindexCommand` của Spring Boot với cấu hình `app.maintenance.reindex.enabled=true`.
 
 ### 10. Cổng biên Apache APISIX (Edge Gateway)
@@ -170,7 +172,31 @@ APISIX chạy ở chế độ standalone trên cổng `8088`:
 - `/api/v1/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
 - `/admin/*`: Trỏ tới mặt quản trị `frontend-admin` (OIDC client `openvie-admin`).
 - `/*`: Trỏ tới Web client Next.js (`:3000`).
-*Lưu ý:* Các cổng gRPC (`:50051`), Qdrant, Redis, Postgres không được định tuyến qua gateway này.
+- `/apisix/prometheus/metrics`: Endpoint metric Prometheus (chỉ cho phép truy cập từ loopback/mạng nội bộ).
+*Lưu ý:* Các cổng gRPC (`:50051`), Qdrant, Redis, Postgres không được định tuyến qua gateway này. Khi sửa file cấu hình route, cần chạy `docker compose restart apisix` để tải lại.
+
+### 11. Giám sát (Prometheus · Alertmanager · Grafana)
+
+Stack giám sát là **tuỳ chọn** và nằm trong profile `monitoring`, nên mặc định `docker compose up` giữ nguyên hành vi cũ. Bật bằng:
+
+```bash
+# Production (full stack):
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile monitoring up -d
+
+# Development (hạ tầng dữ liệu + giám sát; app chạy trên host):
+docker compose --profile monitoring up -d
+```
+
+- **Prometheus** (`127.0.0.1:${PROMETHEUS_PORT:-9090}`) scrape:
+  - `openvie-api` → `http://api:8080/actuator/prometheus` (prod) hoặc `http://host.docker.internal:8080/actuator/prometheus` (dev, app trên host).
+  - `openvie-ai` → `http://ai-api:18000/metrics` (prod) hoặc `http://host.docker.internal:18000/metrics` (dev).
+  - job `prometheus` tự scrape chính nó.
+  - `openvie-gateway` → `http://apisix:9080/apisix/prometheus/metrics` (route data-plane được bảo vệ; không dùng exporter `:9091` đã bỏ).
+  Cấu hình: `monitoring/prometheus/prometheus.yml` (prod) và `monitoring/prometheus/prometheus.dev.yml` (dev); chu kỳ scrape 15 giây.
+- **Alert rules**: `monitoring/prometheus/rules/openvie-alerts.yml` (target down, tỉ lệ lỗi 5xx, heap JVM, tỉ lệ lỗi cache, lỗi Redis, timeout chat model, fallback retrieval).
+- **Alertmanager** (`127.0.0.1:${ALERTMANAGER_PORT:-9093}`): cấu hình `monitoring/alertmanager/alertmanager.yml` chỉ có route `default`. **Bước thuộc về người vận hành:** receiver `default` cố tình chưa gắn địa chỉ gửi — thêm webhook/email/Slack vào đây để cảnh báo rời khỏi host. Quy tắc `inhibit_rules` cho phép cảnh báo `critical` chặn cảnh báo `warning` cùng `alertname` cho tới khi hết.
+- **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): datasource Prometheus (`http://prometheus:9090`) và hai dashboard (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) được provision từ file trong `monitoring/grafana/`. Đăng nhập bằng `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; truy cập ẩn danh đã bị tắt.
+- **Bảo mật:** cả ba cổng chỉ bind `127.0.0.1`. Muốn truy cập từ xa, đặt sau reverse proxy TLS của bạn (như với APISIX); không mở trực tiếp ra Internet.
 
 ---
 
@@ -324,7 +350,9 @@ Use Flowable REST to inspect tasks and process state. See `spikes/eoffice-approv
 
 ## 9. Backup and operations
 
-- **Backups:** Implement off-host backups for PostgreSQL (`pg_dump`), SeaweedFS object volumes, and `.env.production`.
+- **Backup & restore tooling:** `scripts/ops/backup.sh` writes a UTC-timestamped directory with `postgres.dump` (pg_dump), `seaweedfs.tar.gz`, `.env.production.bak`, and a `MANIFEST.txt` holding per-artifact sizes and sha256; `scripts/ops/restore.sh` restores (`pg_restore --clean --if-exists`, volume extraction, env file) and refuses to run without `--yes`.
+- **Integrity verification:** `restore.sh` verifies every sha256 in `MANIFEST.txt` before restoring and aborts on mismatch; the recurring drill (restore into a scratch database and assert table/column counts and `flyway_schema_history` row counts) is in `scripts/ops/README.md`.
+- **Schedules stay operator-owned:** the platform never runs backups. The runbook ships a copy-pasteable crontab line and a systemd timer alternative; `--keep N` retains the N most recent backups and prunes only directories created by the script under its own naming pattern (without the flag nothing is deleted).
 - **Reindexing:** To re-extract knowledge graphs after pipeline updates, trigger Spring's `DocumentReindexCommand` via `app.maintenance.reindex.enabled=true`.
 
 ## 10. Edge gateway (Apache APISIX)
@@ -338,4 +366,28 @@ APISIX operates standalone on port `8088`:
 - `/api/v1/*`: Spring Boot (:8080), rate-limited at 50 r/s (burst 100).
 - `/admin/*`: `frontend-admin` surface (OIDC client `openvie-admin`).
 - `/*`: Next.js web application (:3000).
-*Note:* Internal endpoints (`:50051`, Qdrant, Redis, Postgres) are not routed through the gateway.
+- `/apisix/prometheus/metrics`: Prometheus metrics endpoint (restricted to loopback/private network callers).
+*Note:* Internal endpoints (`:50051`, Qdrant, Redis, Postgres) are not routed through the gateway. Route modifications in standalone YAML mode require `docker compose restart apisix`.
+
+## 11. Monitoring (Prometheus · Alertmanager · Grafana)
+
+The monitoring stack is **optional** and lives in the `monitoring` profile, so a plain `docker compose up` keeps the previous behavior. Enable it with:
+
+```bash
+# Production (full stack):
+docker compose -f docker-compose.prod.yml --env-file .env.production --profile monitoring up -d
+
+# Development (data infrastructure + monitoring; apps run on the host):
+docker compose --profile monitoring up -d
+```
+
+- **Prometheus** (`127.0.0.1:${PROMETHEUS_PORT:-9090}`) scrapes:
+  - `openvie-api` → `http://api:8080/actuator/prometheus` (prod) or `http://host.docker.internal:8080/actuator/prometheus` (dev, apps on host).
+  - `openvie-ai` → `http://ai-api:18000/metrics` (prod) or `http://host.docker.internal:18000/metrics` (dev).
+  - the `prometheus` job scrapes itself.
+  - `openvie-gateway` → `http://apisix:9080/apisix/prometheus/metrics` (guarded data-plane route; the retired `:9091` exporter is not used).
+  Configuration: `monitoring/prometheus/prometheus.yml` (prod) and `monitoring/prometheus/prometheus.dev.yml` (dev); scrape interval is 15 seconds.
+- **Alert rules**: `monitoring/prometheus/rules/openvie-alerts.yml` (target down, 5xx error ratio, JVM heap, cache error ratio, Redis errors, chat-model timeouts, retrieval fallbacks).
+- **Alertmanager** (`127.0.0.1:${ALERTMANAGER_PORT:-9093}`): `monitoring/alertmanager/alertmanager.yml` ships a single `default` route. **Operator-owned step:** the `default` receiver intentionally has no delivery address — add a webhook/email/Slack integration there so alerts leave the host. An `inhibit_rules` entry lets a `critical` alert mute the `warning` version of the same `alertname` until it resolves.
+- **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): a Prometheus datasource (`http://prometheus:9090`) and two dashboards (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) are file-provisioned from `monitoring/grafana/`. Sign in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; anonymous access is disabled.
+- **Security:** all three ports bind to `127.0.0.1` only. To reach them remotely, put them behind your own TLS reverse proxy (as with APISIX); never expose them directly to the Internet.

@@ -525,6 +525,7 @@ class WorkflowServiceTest {
         member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
         stubHistoric(processInstanceId.toString(),
                 Map.of("workspaceId", workspaceId.toString(), "documentId", documentId.toString(),
+                        "initiatorId", userId.toString(),
                         "documentFileName", "hop-dong.pdf", "sensitive", false, "approvalLevel", 1,
                         "policyVersion", "sensitive-keyword-v1", "publishTarget", "workspace",
                         "escalated", false),
@@ -572,6 +573,22 @@ class WorkflowServiceTest {
                 Map.of("workspaceId", otherWorkspaceId.toString()));
         when(historyService.createHistoricProcessInstanceQuery()).thenReturn(historicQuery);
         when(historicQuery.singleResult()).thenReturn(historic);
+
+        assertThrows(AccessDeniedException.class,
+                () -> service.processLog(workspaceId, userId, processInstanceId));
+        verify(auditLogRepository, never()).findByTenantIdAndResourceIdOrderByIdAsc(any(), any());
+    }
+
+    @Test
+    void processLogOfAnotherMembersProcessIsForbiddenForPlainMember() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        stubHistoric(processInstanceId.toString(),
+                Map.of("workspaceId", workspaceId.toString(), "documentId", documentId.toString(),
+                        "initiatorId", UUID.randomUUID().toString(),
+                        "documentFileName", "hop-dong.pdf", "sensitive", false, "approvalLevel", 1,
+                        "policyVersion", "sensitive-keyword-v1", "publishTarget", "workspace",
+                        "escalated", false),
+                null);
 
         assertThrows(AccessDeniedException.class,
                 () -> service.processLog(workspaceId, userId, processInstanceId));

@@ -66,6 +66,7 @@ class DocumentIngestionPipeline(IngestionApi):
         vector_store: KnowledgeIndexCommandApi,
         graph_store: GraphProjectionApi,
         graph_extractor: EntityRelationExtractor,
+        graph_extraction_enabled: bool = True,
     ):
         self._store = store
         self._extractor = extractor
@@ -75,6 +76,7 @@ class DocumentIngestionPipeline(IngestionApi):
         self._vector_store = vector_store
         self._graph_store = graph_store
         self._graph_extractor = graph_extractor
+        self._graph_extraction_enabled = graph_extraction_enabled
 
     async def process(self, command: IngestDocumentCommand) -> IngestionOutcome:
         try:
@@ -162,7 +164,7 @@ class DocumentIngestionPipeline(IngestionApi):
 
     async def replace_graph(self, prepared: PreparedDocument) -> None:
         event = prepared.command
-        if prepared.parsed.modality == "document":
+        if self._graph_extraction_enabled and prepared.parsed.modality == "document":
             batch = await self._graph_extractor.extract(event, prepared.chunks)
         else:
             batch = GraphBatch(

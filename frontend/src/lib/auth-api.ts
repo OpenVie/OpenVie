@@ -4,6 +4,7 @@ import type {
   RegistrationStatus,
   WorkspaceSummary,
 } from "@/types";
+import { localizeErrorMessage } from "./localize-error";
 
 export function getApiBase(): string {
   const canonical = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
@@ -44,14 +45,18 @@ function parseErrorMessage(body: unknown): string | null {
   return null;
 }
 
-function authApiError(body: unknown): Error {
+function authApiError(body: unknown, locale?: string): Error {
   const message = parseErrorMessage(body);
-  return message ? new Error(message) : new AuthApiFallbackError();
+  return message ? new Error(localizeErrorMessage(message, locale)) : new AuthApiFallbackError();
 }
 
-export function authApiErrorMessage(error: unknown, fallback: string): string {
+export function authApiErrorMessage(error: unknown, fallback: string, locale?: string): string {
   if (error instanceof AuthApiFallbackError) return fallback;
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof Error) {
+    const localized = localizeErrorMessage(error.message, locale);
+    return localized || fallback;
+  }
+  return fallback;
 }
 
 async function parseJsonSafe(res: Response): Promise<unknown> {
