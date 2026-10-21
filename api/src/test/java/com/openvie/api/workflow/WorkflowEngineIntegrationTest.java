@@ -170,9 +170,13 @@ class WorkflowEngineIntegrationTest {
         assertEquals(WorkflowService.LEVEL_1_TASK_KEY, groupView.taskDefinitionKey());
         assertEquals("WORKSPACE_ADMIN", groupView.candidateGroup());
         assertNull(groupView.assignee());
+        assertEquals("nasdaq onboarding checklist.pdf", groupView.documentFileName());
+        assertEquals(documentId, groupView.documentId());
 
         WorkspaceTaskView claimed = workflowService.claim(workspaceId, adminId, level1TaskId);
         assertEquals(adminId.toString(), claimed.assignee());
+        assertEquals("nasdaq onboarding checklist.pdf", claimed.documentFileName());
+        assertEquals(documentId, claimed.documentId());
 
         // One claim = one assignee: a second claimer hits a conflict; the group
         // keeps seeing the claimed task as a backup but can no longer grab it.

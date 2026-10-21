@@ -334,6 +334,7 @@ public class WorkflowService {
         for (Task task : taskService.createTaskQuery()
                 .processVariableValueEquals("workspaceId", workspaceId.toString())
                 .taskAssignee(userId.toString())
+                .includeProcessVariables()
                 .orderByTaskCreateTime().asc()
                 .list()) {
             mine.add(taskView(task));
@@ -345,6 +346,7 @@ public class WorkflowService {
                     .processVariableValueEquals("workspaceId", workspaceId.toString())
                     .taskCandidateGroupIn(groups)
                     .taskUnassigned()
+                    .includeProcessVariables()
                     .orderByTaskCreateTime().asc()
                     .list()) {
                 groupTasks.add(taskView(task));
