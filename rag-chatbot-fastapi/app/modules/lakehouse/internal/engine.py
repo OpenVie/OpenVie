@@ -23,7 +23,7 @@ from typing import Protocol
 import duckdb
 import pyarrow.parquet as pq
 
-from app.modules.lakehouse.models import (
+from app.modules.lakehouse.api import (
     AuditAnalyticsSummary,
     ChatAnalyticsSummary,
     DocumentAnalyticsSummary,

@@ -23,11 +23,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.modules.lakehouse.api import router as lakehouse_router
-from app.modules.lakehouse.api import set_lakehouse_runtime
-from app.modules.lakehouse.engine import DuckDbLakehouseEngine
-from app.modules.lakehouse.models import LakehouseDataset
-from app.modules.lakehouse.sink import LakehouseArchiveSink
+from app.modules.lakehouse.api import LakehouseDataset
+from app.modules.lakehouse.internal.engine import DuckDbLakehouseEngine
+from app.modules.lakehouse.internal.sink import LakehouseArchiveSink
+from app.modules.lakehouse.transport.http import router as lakehouse_router
+from app.modules.lakehouse.transport.http import set_lakehouse_runtime
 
 
 class MemoryStore:

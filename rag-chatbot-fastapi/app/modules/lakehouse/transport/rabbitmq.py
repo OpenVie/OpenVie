@@ -22,8 +22,8 @@ from typing import Any
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
-from app.modules.lakehouse.models import LakehouseDataset
-from app.modules.lakehouse.sink import LakehouseArchiveSink
+from app.modules.lakehouse.api import LakehouseDataset
+from app.modules.lakehouse.internal.sink import LakehouseArchiveSink
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,6 @@ class LakehouseCdcWorker:
             self._flush_task.cancel()
         if self._task:
             self._task.cancel()
-        # Flush remaining buffers
         await self.flush_all()
         if self._connection and not self._connection.is_closed:
             await self._connection.close()
@@ -116,7 +115,6 @@ class LakehouseCdcWorker:
                 dataset,
                 exc,
             )
-            # Re-queue on failure
             if key not in self._buffer:
                 self._buffer[key] = []
             self._buffer[key].extend(records)
@@ -147,7 +145,6 @@ class LakehouseCdcWorker:
                 )
                 queue = await channel.declare_queue(LAKEHOUSE_CDC_QUEUE, durable=True)
                 await queue.bind(exchange, routing_key=CDC_ROUTING_KEY_PATTERN)
-                # Also bind document completed events for automatic ingestion telemetry
                 await queue.bind(exchange, routing_key="document.ingest.completed")
 
                 async with queue.iterator() as queue_iter:
@@ -171,7 +168,6 @@ class LakehouseCdcWorker:
                 routing_key = message.routing_key or ""
 
                 if routing_key == "document.ingest.completed":
-                    # Derive document lifecycle event from ingestion completion
                     tenant_id = str(payload.get("tenant_id", ""))
                     if tenant_id:
                         await self.record_event(

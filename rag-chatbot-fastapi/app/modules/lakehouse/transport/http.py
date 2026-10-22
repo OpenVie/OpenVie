@@ -20,8 +20,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.modules.lakehouse.engine import DuckDbLakehouseEngine
-from app.modules.lakehouse.models import (
+from app.modules.lakehouse.api import (
     AuditAnalyticsSummary,
     ChatAnalyticsSummary,
     DocumentAnalyticsSummary,
@@ -31,7 +30,8 @@ from app.modules.lakehouse.models import (
     LakehouseQueryResult,
     WorkflowAnalyticsSummary,
 )
-from app.modules.lakehouse.sink import LakehouseArchiveSink
+from app.modules.lakehouse.internal.engine import DuckDbLakehouseEngine
+from app.modules.lakehouse.internal.sink import LakehouseArchiveSink
 
 logger = logging.getLogger(__name__)
 
