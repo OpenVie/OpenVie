@@ -25,7 +25,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from app.common.storage_keys import lakehouse_partition_key
-from app.modules.lakehouse.models import LakehouseDataset
+from app.modules.lakehouse.api import LakehouseDataset
 
 logger = logging.getLogger(__name__)
 

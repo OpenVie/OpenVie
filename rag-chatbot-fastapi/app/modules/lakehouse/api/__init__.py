@@ -111,3 +111,17 @@ class WorkflowAnalyticsSummary(BaseModel):
     escalated_count: int
     approval_rate_percent: float
     avg_duration_minutes: float
+
+
+__all__ = [
+    "AuditAnalyticsSummary",
+    "CdcOperation",
+    "CdcRecord",
+    "ChatAnalyticsSummary",
+    "DocumentAnalyticsSummary",
+    "LakehouseBatchIngestRequest",
+    "LakehouseDataset",
+    "LakehouseQueryRequest",
+    "LakehouseQueryResult",
+    "WorkflowAnalyticsSummary",
+]

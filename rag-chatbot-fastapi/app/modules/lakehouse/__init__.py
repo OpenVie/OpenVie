@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app.modules.lakehouse.api import router as lakehouse_router
-from app.modules.lakehouse.api import set_lakehouse_runtime
-from app.modules.lakehouse.cdc_worker import LakehouseCdcWorker
-from app.modules.lakehouse.engine import DuckDbLakehouseEngine
-from app.modules.lakehouse.models import (
+from app.modules.lakehouse.api import (
     AuditAnalyticsSummary,
     CdcOperation,
     CdcRecord,
@@ -28,7 +24,15 @@ from app.modules.lakehouse.models import (
     LakehouseQueryResult,
     WorkflowAnalyticsSummary,
 )
-from app.modules.lakehouse.sink import LakehouseArchiveSink
+from app.modules.lakehouse.internal.engine import DuckDbLakehouseEngine
+from app.modules.lakehouse.internal.sink import LakehouseArchiveSink
+from app.modules.lakehouse.transport.http import (
+    router as lakehouse_router,
+)
+from app.modules.lakehouse.transport.http import (
+    set_lakehouse_runtime,
+)
+from app.modules.lakehouse.transport.rabbitmq import LakehouseCdcWorker
 
 __all__ = [
     "AuditAnalyticsSummary",
