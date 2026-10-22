@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
 ### Added
+- **End-to-end image citations and lightbox zoom (issue #50)**:
+  - **Protobuf contract**: Defined `CitationImage` message (`object_key`, `media_type`, `width`, `height`) and allocated field `optional CitationImage image = 16` in `proto/openvie_ai_v1.proto`, with updated Python pb2/pyi stubs and Maven protobuf Java bindings.
+  - **Multi-modal extraction & Ingestion**: Introduced `ImageAsset` and `ParsedDocument.media` across DOCX (`word/media/*`), XLSX (`xl/media/*`), PDF embedded images, and standalone image documents; bound block-level metadata (`image_name`, `image_media_type`, `image_width`, `image_height`) without storing raw bytes in the OCR artifact JSON cache.
+  - **Storage & Lifecycle**: Added deterministic storage keys in `storage_keys.py` (`document_media_prefix`, `document_media_key`); pipeline uploads media assets directly to SeaweedFS S3 under `tenants/{tenantId}/knowledge-bases/{kbId}/documents/{docId}/media/{digest}.{ext}` and cleans them up on document deletion.
+  - **Index, Retrieval & Cache v3**: Propagated image fields into Qdrant vector payloads, `RetrievedKnowledgeUnit`, and `Citation`; bumped `RETRIEVAL_CACHE_SCHEMA_VERSION` and `SEMANTIC_ANSWER_CACHE_SCHEMA_VERSION` to schema version 3 with strict field validation.
+  - **Spring Control Plane API**: Added `AiInferenceApi.CitationImage` record and `ChatDtos.CitationImageDto`; added authenticated `GET /api/v1/documents/{documentId}/media/{mediaId}` endpoint with 16-hex key validation and MIME detection.
+  - **Frontend UI & Lightbox**: Rendered image thumbnail in cited source cards, added a prominent `citedImages` preview gallery in `AssistantResponse.tsx`, and integrated a responsive full-screen Dialog lightbox zoom modal for inspecting high-resolution diagrams.
+- **ASF Apache-2.0 license standardization and verification (issue #48)**:
+  - Prepended official Apache-2.0 license headers across all 561 source files (Java, Python, TS/TSX, Protobuf, Shell) with `Copyright 2026 LinkedNodeDigital`.
+  - Added comprehensive third-party component attribution in `NOTICE`.
+  - Pinned infrastructure container image versions (`redis:7.2-alpine`, `qdrant/qdrant:v1.19.2`, `chrislusf/seaweedfs:3.85`).
+  - Added `scripts/license_headers.py` enforcement tool (`--add`, `--check`) and enforced license header verification as the first job in `.github/workflows/ci.yml`.
+- **Comprehensive documentation overhaul & 3-OS support (issue #49)**:
+  - Added `docs/WORKFLOW.md` documenting bilingual (VI/EN) embedded BPMN approval flows and generic engine integration.
+  - Comprehensive guide for Linux, macOS, and Windows-WSL2 in `docs/DEVELOPMENT.md` and `docs/DEPLOYMENT.md` covering native Tesseract OCR via `winget`, Docker Desktop WSL2 backend, and Ollama concurrency.
+  - Verified and fixed all 193 relative and heading anchor links across 20 markdown files with 0 broken links.
 
 - **Integration surface for third-party apps (self-host, headless)**:
   - **API keys (machine-to-machine):** owner-only `POST/GET/DELETE /api/v1/admin/api-keys` creates a masked `ovk_…` credential, lists an organization's keys, and revokes one. A key provisions a **service-member user** (unusable password credential, organization role `MEMBER`) plus one workspace membership, so every downstream foreign key — uploads, chat sessions, audit — records a real user id; authentication re-resolves the live membership exactly like a user JWT, so `Authorization: Bearer ovk_…` passes every existing `@PreAuthorize` rule unchanged. Only the SHA-256 hash of the secret is stored (`V6__api_keys.sql`); the plaintext is returned exactly once, and revoking the key suspends the service account immediately.
@@ -22,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Authoritative document state: Flyway migration `V8__document_approval_writeback.sql` adds `approval_status`, `approval_target`, `approval_decided_by`, and `approval_decided_at` to the `documents` table, indexed by `(tenant_id, approval_status)`. Ingestion status (`DocumentStatus`: PENDING/PROCESSING/COMPLETED/FAILED) and review state (`ApprovalStatus`: PENDING/APPROVED/REJECTED, absent when never submitted) remain orthogonal axes.
   - Seam and lifecycle: `DocumentApi` gains `markApprovalPending(tenantId, documentId, publishTarget)` and `recordApprovalDecision(tenantId, documentId, decision, decidedBy)`. Submitting for approval marks the document PENDING; the auto-approved short circuit or reviewer verdict records APPROVED or REJECTED with the actor's user id, invalidating document caches immediately.
   - Submitter verdict notifications: settling an approval process emits a decoupled `WorkflowDecisionEvent`; `NotificationListener` records a `Notification` of type `WORKFLOW_DECIDED` post-commit and sends an email via `EmailService.sendWorkflowDecisionEmail` with the verdict, approval level, and rejection reason.
-  - Contract and architectural rationale documented in `docs/adr/ADR-0002-approval-writeback-contract.md`.
+  - Contract and architectural rationale documented in `docs/WORKFLOW.md`.
 - **Operational observability and backup automation (issue #31 / #32 / #33)**:
   - Monitoring stack: Optional `monitoring` Compose profile (`docker-compose.prod.yml` and `docker-compose.yml`) providing Prometheus (`v2.55.1`), Alertmanager (`v0.27.0`), and Grafana (`11.3.1`) bound exclusively to loopback; ships 8 alert rules (`openvie-alerts.yml`) and 2 provisioned dashboards for platform metrics and AI inference/ingestion pipeline.
   - Gateway observability: Apache APISIX records Prometheus metrics globally and exposes `/apisix/prometheus/metrics` guarded by private-network restrictions; documented in `apisix/README.md`.
@@ -71,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The workspace member role dropdown on the team page showed the raw backend enum (`MEMBER`/`WORKSPACE_ADMIN`) in its closed trigger: the Base UI `Select.Value` renders the raw value rather than the selected item's label, so the localized label is now passed explicitly — matching the pattern already used by the visibility select and the add-member dialog.
 - Loaded process variables via `.includeProcessVariables()` in `listTasks` TaskQueries so task cards in the approval inbox render the document file name and enable document preview.
+- Fixed `AssistantResponse` lightbox modal layout by replacing `grid` with `flex flex-col sm:max-w-4xl overflow-hidden`, truncating long OCR snippet headers, and centering the responsive full-resolution image within the dialog.
+- Fixed `npm ci` failures in GitHub Actions CI by restoring `@swc/helpers@0.5.23` in `frontend/package-lock.json`.
 
 ### Added
 
@@ -81,7 +101,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Shared sensitivity contract `contracts/approval/v1/sensitive-policy.json` (`sensitive-keyword-v1`) dual-consumed by the Python `sensitive_policy` router and the Java scorer (byte-identical runtime copy in `api/src/main/resources/approval/`); cross-language sync tests assert the term set and all 18 canonical fixtures on both sides — Java keeps no second keyword list.
   - Per-organization SLA tuning: `PUT /api/v1/workflow/sla-config` (org owner only) persists reminder/escalation minutes in `workflow_sla_configs` (Flyway V5); the 24h reminder timer is non-interrupting, the 48h escalation timer moves an overdue level-1 task to the owner queue, both escalated paths land at level 2 and record audit entries (`overdue`, never a manual decision). Defaults stay in `openvie.workflow.*` (ISO-8601 durations), demo-shortenable to minutes.
   - Audit trail of every workflow transition via `AuditLogEvent` (`WORKFLOW_STARTED`, `WORKFLOW_TASK_CLAIMED`, `WORKFLOW_APPROVED`, `WORKFLOW_REJECTED`, `WORKFLOW_ESCALATED`, `WORKFLOW_REMINDER_SENT`, `WORKFLOW_SLA_CONFIG_CHANGED`) with `POLICY_VERSION`, level decision, and decision reason recorded as process variables.
-  - Durable state proof: integration tests restart a full application context over the same database and rediscover the running process, its claimed task, and finish the approval without replay.## [0.2.3] - 2026-10-19
+  - Durable state proof: integration tests restart a full application context over the same database and rediscover the running process, its claimed task, and finish the approval without replay.
+
+### Removed
+- Removed obsolete developer-plan ADRs (`ADR-0001`, `ADR-0002`) and duplicate `docs/WORKFLOW_DEMO.md` in favor of product behavior documentation in `docs/WORKFLOW.md`.
+
+## [0.2.3] - 2026-10-19
 
 ### Added
 

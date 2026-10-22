@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -18,6 +32,7 @@ describe("resolvePreviewKind", () => {
     expect(resolvePreviewKind("report.docx", "DOCX")).toBe("docx")
     expect(resolvePreviewKind("report.xlsx", "XLSX")).toBe("xlsx")
     expect(resolvePreviewKind("report.csv", "CSV")).toBe("csv")
+    expect(resolvePreviewKind("scan.jpg", "IMAGE")).toBe("image")
   })
 
   it("falls back to the file extension for approval views without a fileType", () => {
@@ -26,6 +41,7 @@ describe("resolvePreviewKind", () => {
     expect(resolvePreviewKind("notes.md")).toBe("markdown")
     expect(resolvePreviewKind("data.XLS")).toBe("xlsx")
     expect(resolvePreviewKind("page.htm")).toBe("html")
+    expect(resolvePreviewKind("photo.webp")).toBe("image")
     expect(resolvePreviewKind("raw.log")).toBe("unsupported")
   })
 

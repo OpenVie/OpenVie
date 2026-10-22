@@ -15,12 +15,28 @@ OpenVie nhận đóng góp cho ứng dụng Apache-2.0 trong repository này. Qu
 - Chỉ dùng dữ liệu, trọng số model, tài sản và mã nguồn mà bạn có quyền đóng góp. Không đưa tài liệu khách hàng, thông tin cá nhân, API token, file `.env` cục bộ, hay checkpoint model vào issue, pull request, test, hay ảnh chụp màn hình. Hãy dùng fixture tự dựng.
 - Khi gửi đóng góp để đưa vào, bạn đồng ý với điều khoản đóng góp tại mục 5 của [Apache License 2.0](LICENSE). Đảm bảo chủ lao động hoặc chủ thể quyền khác cho phép. Repository này không yêu cầu thỏa thuận cấp phép đóng góp riêng.
 
+### License header và pin image
+
+- Mọi file nguồn do con người viết — Java, Python, TypeScript/TSX, protobuf, shell — phải mang
+  header Apache-2.0 chuẩn ASF. CI chặn PR thiếu header; tự kiểm tra trước khi gửi:
+
+  ```
+  python3 scripts/license_headers.py --check
+  ```
+
+  Script này cũng có thể tự thêm header còn thiếu (`--add`). Artifact sinh tự động
+  (`rag-chatbot-fastapi/app/generated/**`, `frontend/next-env.d.ts`) không cần header và đã được
+  loại trừ.
+- Container image trong `docker-compose*.yml` và CI phải pin tag cụ thể, không dùng `latest`.
+  Redis được pin ở 7.2.x một cách có chủ ý: Redis ≥7.4 chuyển sang RSALv2/SSPL, không phải giấy
+  phép được OSI chấp thuận. Chỉ nâng cấp sau khi thảo luận và cập nhật [NOTICE](NOTICE).
+
 ### Pull request
 
 1. Giữ thay đổi gọn theo phạm vi, giải thích hành vi người dùng thấy được và ảnh hưởng tương thích.
 2. Giữ ranh giới nghiệp vụ có thẩm quyền Spring/PostgreSQL và ranh giới chỉ mục phái sinh của Python. Không tin tenant ID do client chưa xác thực gửi lên.
 3. Với thay đổi định dạng truyền tải, cập nhật hợp đồng và cả hai phía tiêu thụ cùng lúc; mô tả năng lực mới hoặc bị gỡ mà không trình bày công việc đề xuất như đã phát hành.
-4. Chạy các kiểm tra phù hợp với module đã sửa trong [phát triển cục bộ](docs/DEVELOPMENT.md#verification). Với thay đổi an toàn hay trích dẫn, kèm test thể hiện cả đường bị từ chối và đường được phép.
+4. Chạy các kiểm tra phù hợp với module đã sửa trong [phát triển cục bộ](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification). Với thay đổi an toàn hay trích dẫn, kèm test thể hiện cả đường bị từ chối và đường được phép.
 5. Cập nhật tài liệu liên quan và nêu rõ kiểm tra runtime/provider nào bạn chưa chạy được.
 
 Báo cáo vấn đề bảo mật qua kênh riêng, không đăng issue công khai; xem [SECURITY.md](SECURITY.md).
@@ -48,6 +64,23 @@ service or agreement.
   of the [Apache License 2.0](LICENSE). Ensure your employer or other rights holders authorize it.
   No separate contributor license agreement is required by this repository.
 
+### License headers and image pins
+
+- Every human-authored source file — Java, Python, TypeScript/TSX, protobuf, shell — must carry
+  the standard ASF Apache-2.0 header. CI rejects pull requests with missing headers; check
+  locally before submitting:
+
+  ```
+  python3 scripts/license_headers.py --check
+  ```
+
+  The same script can add missing headers (`--add`). Generated artifacts
+  (`rag-chatbot-fastapi/app/generated/**`, `frontend/next-env.d.ts`) do not need one and are
+  excluded already.
+- Container images in `docker-compose*.yml` and CI must pin specific tags, never `latest`.
+  Redis is deliberately pinned to 7.2.x: Redis ≥7.4 switched to RSALv2/SSPL, which is not an
+  OSI-approved license. Upgrade only after discussion and update [NOTICE](NOTICE).
+
 ### Pull requests
 
 1. Keep changes scoped and explain the user-visible behavior and any compatibility impact.
@@ -55,7 +88,7 @@ service or agreement.
    boundary. Never trust a tenant ID supplied by an unauthenticated client.
 3. Update contracts and both consumers together for wire-format changes; document new or
    removed capabilities without describing proposed work as shipped.
-4. Run the checks appropriate to the touched modules in [local development](docs/DEVELOPMENT.md#verification).
+4. Run the checks appropriate to the touched modules in [local development](docs/DEVELOPMENT.md#5-verification).
    For safety or citation changes, include a test demonstrating the denied and allowed paths.
 5. Update relevant documentation and describe any runtime/provider check you could not run.
 

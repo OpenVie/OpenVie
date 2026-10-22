@@ -20,7 +20,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 4. Đọc guide cho phần code bạn sẽ sửa:
    - [Java module guide](../api/GUIDE.md): hợp đồng module công khai, sự kiện, quyền sở hữu bảng.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): module năng lực, transport, vai trò runtime.
-   - [Phát triển web và kiểm tra](DEVELOPMENT.md#start-the-applications).
+   - [Phát triển web và kiểm tra](DEVELOPMENT.md#2-các-bước-thiết-lập).
 5. Chỉ tra tài liệu tính năng khi thay đổi của bạn cần đến nó.
 6. Đọc [ánh xạ DX-OS / Open-Core](DX_OS.md) trước khi trình bày hay so sánh repo này với
    kiến trúc ba tầng DX-OS.
@@ -32,12 +32,10 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | --- | --- |
 | Chạy cục bộ, hiểu cấu hình, chạy kiểm tra | [Phát triển cục bộ](DEVELOPMENT.md) |
 | Hiểu quyền sở hữu service, lưu trữ, bảo mật, chuỗi runtime | [Kiến trúc](ARCHITECTURE.md) |
-| Hiểu quyết định chọn workflow engine | [ADR-0001: Flowable thay cho n8n](adr/ADR-0001-workflow-engine-flowable.md) |
-| Hợp đồng ghi kết quả duyệt vào trạng thái tài liệu | [ADR-0002: Write-back phê duyệt & thông báo](adr/ADR-0002-approval-writeback-contract.md) |
-| Chạy demo PoC "submit → approve/reject → xem kết quả" cho engine Flowable độc lập trong 15 phút | [Workflow demo](WORKFLOW_DEMO.md) |
+| Hiểu luồng phê duyệt tài liệu, SLA và ghi kết quả | [Workflow](WORKFLOW.md) |
 | Sửa parsing tài liệu, đánh chỉ mục, model, truy hồi | [Hấp thụ và truy hồi](RETRIEVAL.md) |
 | Cấu hình bản self-hosted hoặc lập kế hoạch kiểm chứng và phục hồi | [Triển khai](DEPLOYMENT.md) |
-| Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
+| Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | Self-host, đánh giá giấy phép, hay xuất bản nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
 | Đối chiếu repo với kiến trúc DX-OS / Open-Core và không gian H-P-D-I | [Ánh xạ DX-OS](DX_OS.md) |
@@ -100,7 +98,7 @@ Start with the guide for your task.
 4. Follow the guide for the code you will change:
    - [Java module guide](../api/GUIDE.md): public module contracts, events, and table ownership.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): capability modules, transports, and runtime roles.
-   - [Web development and checks](DEVELOPMENT.md#start-the-applications).
+   - [Web development and checks](DEVELOPMENT.md#2-step-by-step-setup).
 5. Consult the feature reference only when your change needs it.
 6. Read the [DX-OS / Open-Core mapping](DX_OS.md) before presenting or comparing this repository
    with the three-tier DX-OS architecture.
@@ -112,11 +110,10 @@ Start with the guide for your task.
 | --- | --- |
 | Run locally, understand configuration, or execute checks | [Local development](DEVELOPMENT.md) |
 | Understand service ownership, storage, security, or runtime sequences | [Architecture](ARCHITECTURE.md) |
-| Understand workflow engine decision | [ADR-0001: Flowable over n8n](adr/ADR-0001-workflow-engine-flowable.md) |
-| Understand approval decision write-back and notification contract | [ADR-0002: Approval write-back & notification](adr/ADR-0002-approval-writeback-contract.md) |
+| Understand document approval, SLA, and decision write-back | [Workflow](WORKFLOW.md) |
 | Change document parsing, indexing, models, or retrieval | [Ingestion and retrieval](RETRIEVAL.md) |
 | Configure a self-hosted release or plan verification and recovery | [Deployment](DEPLOYMENT.md) |
-| Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §9 — Edge gateway](DEPLOYMENT.md#9-edge-gateway-apache-apisix) |
+| Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
 | Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
 | Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
@@ -162,8 +159,3 @@ OpenVie application source is Apache-2.0 under LinkedNodeDigital copyright; see
 Shared wire-format definitions remain in [`contracts/`](../contracts/) (JSON schemas and fixtures)
 and [`proto/`](../proto/) (gRPC). Documentation explains those boundaries; it does not replace their
 machine-readable definitions or compatibility checks.
-
-
-## Identity and authentication
-
-- [Keycloak OIDC baseline](KEYCLOAK.md) — realm/client provisioning, redirect URI configuration, and verification.

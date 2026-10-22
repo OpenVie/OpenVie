@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.chat.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -76,7 +90,23 @@ public final class ChatDtos {
             @JsonProperty("sheet_name") String sheetName,
             @JsonProperty("cell_range") String cellRange,
             @JsonProperty("table_id") String tableId,
-            @JsonProperty("public_url") String publicUrl
+            @Schema(description = "Ingestion parser that produced the cited unit (ocr-v1 marks OCR-derived text).")
+            @JsonProperty("parser_version") String parserVersion,
+            @JsonProperty("public_url") String publicUrl,
+            @Schema(description = "The cited image when the unit was derived from a persisted picture; "
+                    + "media_id inserts into /api/v1/documents/{id}/media/{media_id}.")
+            @JsonProperty("image") CitationImageDto image
+    ) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @Schema(description = "A citable image backing a chat citation.")
+    public record CitationImageDto(
+            @Schema(description = "Key suffix under the document's media/ storage namespace.")
+            @JsonProperty("media_id") String mediaId,
+            @JsonProperty("media_type") String mediaType,
+            @JsonProperty("width") Integer width,
+            @JsonProperty("height") Integer height
     ) {
     }
 

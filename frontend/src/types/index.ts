@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 export interface Document {
   id: string;
   fileName: string;
@@ -12,6 +26,10 @@ export interface Document {
   uploadedBy?: string | null;
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   approvalTarget?: "workspace" | "shared" | "public" | null;
+  /** How the text was obtained: text (native layer), ocr, or mixed. */
+  textSource?: string | null;
+  /** Number of source pages when known (PDF and images). */
+  pageCount?: number | null;
 }
 
 export type DocumentStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -112,6 +130,8 @@ export interface DocumentStatusResponse {
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
   approvalTarget?: "workspace" | "shared" | "public" | null;
   chunkCount?: number | null;
+  textSource?: string | null;
+  pageCount?: number | null;
   errorMessage?: string | null;
 }
 
@@ -130,6 +150,7 @@ export interface DocumentUnit {
   table_id: string | null;
   source_start: number | null;
   source_end: number | null;
+  parser_version?: string | null;
 }
 
 /** Organization-level role carried by the account. */
@@ -286,6 +307,13 @@ export interface ChatSessionResponse {
   locale: string;
 }
 
+export interface ChatCitationImage {
+  media_id: string;
+  media_type?: string | null;
+  width?: number | null;
+  height?: number | null;
+}
+
 export interface ChatCitation {
   id: string;
   document_id: string;
@@ -301,7 +329,9 @@ export interface ChatCitation {
   sheet_name?: string | null;
   cell_range?: string | null;
   table_id?: string | null;
+  parser_version?: string | null;
   public_url?: string | null;
+  image?: ChatCitationImage | null;
 }
 
 export interface AssistantMessageResponse {

@@ -302,6 +302,7 @@
   },
   "AssistantResponse": {
     "sources": "Sources",
+    "citedImages": "Cited images",
     "openCitedSource": "Open cited source",
     "openSourceIn": "Open source in {source}"
   },

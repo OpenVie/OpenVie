@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.document.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -186,6 +200,68 @@ class DocumentServiceTest {
     }
 
     @Test
+    void uploadRejectsImageWhenOcrGateDisabled() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "scan.png", "image/png", pngBytes());
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        assertEquals("Image ingestion is not enabled", exception.getMessage());
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    void uploadStoresImageDocumentWhenOcrGateEnabled() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "imageUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "scan.png", "image/png", pngBytes());
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals("scan.png", response.fileName());
+        ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(documentCaptor.capture());
+        assertEquals(DocumentType.IMAGE, documentCaptor.getValue().getFileType());
+
+        ArgumentCaptor<DocumentIngestRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(DocumentIngestRequestedEvent.class);
+        verify(ingestionPublisher).publish(eventCaptor.capture());
+        assertEquals("image/png", eventCaptor.getValue().contentType());
+    }
+
+    @Test
+    void uploadRejectsImageWithInvalidSignature() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "imageUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "scan.png", "image/png", "definitely not an image".getBytes());
+
+        assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    private static byte[] pngBytes() {
+        // Magic header (validated) plus filler; the validator checks the
+        // leading signature only.
+        byte[] bytes = new byte[32];
+        bytes[0] = (byte) 0x89;
+        bytes[1] = 'P';
+        bytes[2] = 'N';
+        bytes[3] = 'G';
+        bytes[4] = '\r';
+        bytes[5] = '\n';
+        bytes[6] = 0x1A;
+        bytes[7] = '\n';
+        bytes[8] = 'I';
+        bytes[9] = 'H';
+        bytes[10] = 'D';
+        bytes[11] = 'R';
+        return bytes;
+    }
+
+    @Test
     void uploadRejectsOverTwentyMb() {
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
@@ -351,12 +427,16 @@ class DocumentServiceTest {
                 documentId,
                 "COMPLETED",
                 12,
-                null
+                null,
+                "ocr",
+                4
         ));
 
         assertTrue(updated);
         assertEquals(DocumentStatus.COMPLETED, document.getStatus());
         assertEquals(12, document.getChunkCount());
+        assertEquals("ocr", document.getTextSource());
+        assertEquals(4, document.getPageCount());
     }
 
     @Test
@@ -372,7 +452,9 @@ class DocumentServiceTest {
                 documentId,
                 "FAILED",
                 null,
-                "parse error"
+                "parse error",
+                null,
+                null
         ));
 
         assertEquals(DocumentStatus.FAILED, document.getStatus());

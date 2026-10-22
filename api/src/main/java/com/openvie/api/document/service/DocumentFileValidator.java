@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.document.service;
 
 import java.io.ByteArrayInputStream;
@@ -47,6 +61,23 @@ final class DocumentFileValidator {
             case DOCX -> validateOfficeArchive(data, "word/document.xml");
             case XLSX -> validateOfficeArchive(data, "xl/workbook.xml");
             case TXT, MARKDOWN, HTML, CSV -> validateUtf8(data);
+            case IMAGE -> validateImage(data);
+        }
+    }
+
+    private static void validateImage(byte[] data) {
+        if (data.length < 12) {
+            throw new BadRequestException("Image file signature is invalid");
+        }
+        boolean png = (data[0] & 0xFF) == 0x89 && data[1] == 'P' && data[2] == 'N'
+                && data[3] == 'G' && data[4] == '\r' && data[5] == '\n'
+                && data[6] == 0x1A && data[7] == '\n';
+        boolean jpeg = (data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8
+                && (data[2] & 0xFF) == 0xFF;
+        boolean webp = data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
+        if (!png && !jpeg && !webp) {
+            throw new BadRequestException("Image file signature is invalid");
         }
     }
 
@@ -140,6 +171,8 @@ final class DocumentFileValidator {
                 "application/octet-stream"));
         values.put(DocumentType.CSV, Set.of("text/csv", "application/csv", "text/plain",
                 "application/vnd.ms-excel", "application/octet-stream"));
+        values.put(DocumentType.IMAGE, Set.of("image/png", "image/jpeg", "image/webp",
+                "application/octet-stream"));
         return values;
     }
 }

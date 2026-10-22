@@ -1,6 +1,21 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
+import { render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import { loadCitationImageApi } from "@/lib/documents-api"
 import { AssistantResponse } from "@/components/chat/AssistantResponse"
 import type { ChatCitation } from "@/types"
 
@@ -17,6 +32,19 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }))
 
+vi.mock("@/hooks/useApiClient", () => ({
+  useApiClient: () => ({ request: vi.fn() }),
+}))
+
+vi.mock("@/lib/documents-api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  loadCitationImageApi: vi.fn(async (_request: unknown, documentId: string, mediaId: string) => {
+    if (mediaId === "fail") throw new Error("not found")
+    expect(documentId).toBe("doc-42")
+    return new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })
+  }),
+}))
+
 const citation: ChatCitation = {
   id: "S1",
   document_id: "doc-42",
@@ -27,6 +55,25 @@ const citation: ChatCitation = {
   snippet: " Vacation requests need approval.",
   unit_id: "unit-9",
 }
+
+beforeEach(() => {
+  if (typeof URL.createObjectURL !== "function") {
+    Object.defineProperty(URL, "createObjectURL", {
+      writable: true,
+      value: vi.fn(() => "blob:mock-citation-image"),
+    })
+  } else {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-citation-image")
+  }
+  if (typeof URL.revokeObjectURL !== "function") {
+    Object.defineProperty(URL, "revokeObjectURL", {
+      writable: true,
+      value: vi.fn(),
+    })
+  } else {
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
+  }
+})
 
 describe("AssistantResponse cited sources", () => {
   it("links an inline citation marker to the authorized document viewer", () => {
@@ -66,5 +113,65 @@ describe("AssistantResponse cited sources", () => {
   it("renders no source section when the answer has no citations", () => {
     render(<AssistantResponse content="I cannot answer that." citations={[]} />)
     expect(screen.queryAllByRole("link")).toHaveLength(0)
+  })
+
+  it("previews the citation image as the source card thumbnail", async () => {
+    const imageCitation: ChatCitation = {
+      ...citation,
+      parser_version: "ocr-v1",
+      image: { media_id: "9fe8d0ab12c34e5d.png", media_type: "image/png", width: 240, height: 120 },
+    }
+    const { container } = render(
+      <AssistantResponse content="Kiến trúc [S1]." citations={[imageCitation]} />,
+    )
+
+    await waitFor(() => expect(loadCitationImageApi).toHaveBeenCalled())
+    expect(loadCitationImageApi).toHaveBeenCalledWith(
+      expect.anything(),
+      "doc-42",
+      "9fe8d0ab12c34e5d.png",
+    )
+    await waitFor(() => {
+      expect(container.querySelector("img[aria-hidden]")).toBeTruthy()
+    })
+    const card = screen
+      .getAllByRole("link")
+      .find((link) => link.textContent?.includes("openCitedSource"))
+    expect(card).toBeDefined()
+    expect(card).toHaveTextContent("handbook.pdf")
+  })
+
+  it("keeps the file icon when the image preview fails to load", async () => {
+    const imageCitation: ChatCitation = {
+      ...citation,
+      image: { media_id: "fail", media_type: "image/png" },
+    }
+    const { container } = render(
+      <AssistantResponse content="Answer [S1]." citations={[imageCitation]} />,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getAllByRole("link")
+          .some((link) => link.textContent?.includes("openCitedSource")),
+      ).toBe(true)
+    })
+    expect(screen.queryByRole("img")).toBeNull()
+    expect(container.querySelector("img[aria-hidden]")).toBeNull()
+  })
+
+  it("renders a cited image preview card when an answer has image citations", async () => {
+    const imageCitation: ChatCitation = {
+      ...citation,
+      parser_version: "ocr-v1",
+      image: { media_id: "9fe8d0ab12c34e5d.png", media_type: "image/png", width: 240, height: 120 },
+    }
+    render(<AssistantResponse content="Kiến trúc [S1]." citations={[imageCitation]} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("citedImages")).toBeDefined()
+    })
+    expect(screen.getByRole("button")).toBeDefined()
   })
 })

@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -490,6 +504,19 @@ def _retrieved(row: Any) -> RetrievedChunk:
             sheet_name=str(row["sheet_name"]) if row.get("sheet_name") else None,
             cell_range=str(row["cell_range"]) if row.get("cell_range") else None,
             table_id=str(row["table_id"]) if row.get("table_id") else None,
+            parser_version=str(row["parser_version"]) if row.get("parser_version") else None,
+            image_object_key=(
+                str(row["image_object_key"]) if row.get("image_object_key") else None
+            ),
+            image_media_type=(
+                str(row["image_media_type"]) if row.get("image_media_type") else None
+            ),
+            image_width=(
+                int(row["image_width"]) if row.get("image_width") is not None else None
+            ),
+            image_height=(
+                int(row["image_height"]) if row.get("image_height") is not None else None
+            ),
         )
     return RetrievedChunk(
         document_id=str(row.document_id),
@@ -505,6 +532,11 @@ def _retrieved(row: Any) -> RetrievedChunk:
         sheet_name=row.sheet_name,
         cell_range=row.cell_range,
         table_id=row.table_id,
+        parser_version=getattr(row, "parser_version", None),
+        image_object_key=getattr(row, "image_object_key", None),
+        image_media_type=getattr(row, "image_media_type", None),
+        image_width=getattr(row, "image_width", None),
+        image_height=getattr(row, "image_height", None),
     )
 
 
