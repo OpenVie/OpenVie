@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.database;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -127,7 +141,7 @@ class FreshPostgresBaselineTest {
     void flywayMigratesTheBaselineIntoAnEmptyDatabase() {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "select version, description, success from flyway_schema_history order by installed_rank");
-        assertEquals(8, history.size(), "baseline must contain the schema, model seed, document content hash, SSO identity link, workflow SLA config, API keys, webhooks, and the approval write-back");
+        assertEquals(9, history.size(), "baseline must contain the schema, model seed, document content hash, SSO identity link, workflow SLA config, API keys, webhooks, the approval write-back, and the document text source");
         assertEquals("1", String.valueOf(history.get(0).get("version")));
         assertEquals("2", String.valueOf(history.get(1).get("version")));
         assertEquals("3", String.valueOf(history.get(2).get("version")));
@@ -136,6 +150,7 @@ class FreshPostgresBaselineTest {
         assertEquals("6", String.valueOf(history.get(5).get("version")));
         assertEquals("7", String.valueOf(history.get(6).get("version")));
         assertEquals("8", String.valueOf(history.get(7).get("version")));
+        assertEquals("9", String.valueOf(history.get(8).get("version")));
         history.forEach(row -> assertTrue((Boolean) row.get("success"),
                 "migration " + row.get("version") + " must be recorded as successful"));
     }

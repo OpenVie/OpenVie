@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import hashlib
@@ -21,7 +35,7 @@ from app.modules.retrieval.api import RetrievedKnowledgeUnit as RetrievedChunk
 from app.modules.retrieval.internal.config import RetrievalConfig
 
 CACHE_NAME = "retrieval"
-RETRIEVAL_CACHE_SCHEMA_VERSION = 1
+RETRIEVAL_CACHE_SCHEMA_VERSION = 3
 RETRIEVAL_PIPELINE_VERSION = 2
 
 
@@ -146,6 +160,11 @@ class RetrievedChunkCacheCodec:
         "sheet_name",
         "cell_range",
         "table_id",
+        "parser_version",
+        "image_object_key",
+        "image_media_type",
+        "image_width",
+        "image_height",
     }
 
     @classmethod
@@ -167,6 +186,11 @@ class RetrievedChunkCacheCodec:
                     "sheet_name": chunk.sheet_name,
                     "cell_range": chunk.cell_range,
                     "table_id": chunk.table_id,
+                    "parser_version": chunk.parser_version,
+                    "image_object_key": chunk.image_object_key,
+                    "image_media_type": chunk.image_media_type,
+                    "image_width": chunk.image_width,
+                    "image_height": chunk.image_height,
                 }
                 for chunk in chunks
             ],
@@ -239,6 +263,11 @@ class RetrievedChunkCacheCodec:
             sheet_name=cls._optional_string(item["sheet_name"]),
             cell_range=cls._optional_string(item["cell_range"]),
             table_id=cls._optional_string(item["table_id"]),
+            parser_version=cls._optional_string(item["parser_version"]),
+            image_object_key=cls._optional_string(item["image_object_key"]),
+            image_media_type=cls._optional_string(item["image_media_type"]),
+            image_width=cls._optional_integer(item["image_width"], minimum=1),
+            image_height=cls._optional_integer(item["image_height"], minimum=1),
         )
 
     @staticmethod

@@ -28,11 +28,11 @@ năng lực H-P-D-I nào.
 | --- | --- |
 | Chat trên tài liệu | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối |
 | Tuyến nhạy cảm có giới hạn | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện |
-| Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị |
+| Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP) — tắt theo mặc định |
 | Định danh và quản trị | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán |
 | Đánh giá ngoại tuyến | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model |
 | Bộ đệm tùy chọn | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng |
-| Chưa cung cấp | Hấp thụ OCR/ảnh/âm thanh/video, ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng, và kết thúc TLS hay WAF ở biên (cổng [APISIX](docs/DEPLOYMENT.md#9-edge-gateway-apache-apisix) chỉ định tuyến HTTP); thích ứng model vẫn là nghiên cứu |
+| Chưa cung cấp | Hấp thụ âm thanh/video tổng quát (OCR cho PDF scan/ảnh đã triển khai nhưng tắt theo mặc định), ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng, và kết thúc TLS hay WAF ở biên (cổng [APISIX](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) chỉ định tuyến HTTP); thích ứng model vẫn là nghiên cứu |
 
 Chỉ có mã nguồn trong repo chưa phải là bằng chứng dịch vụ production: tích hợp provider tùy
 chọn và gia cố triển khai phải được kiểm chứng trong môi trường của riêng bạn.
@@ -55,7 +55,7 @@ công khai; khi tắt tùy chọn này, liên kết bị ẩn và API từ chố
 Kiến trúc bốn mặt phẳng là mục tiêu: hôm nay mặt phẳng điều khiển, dữ liệu bất đồng bộ và truy
 hồi chạy như mô tả; định tuyến câu hỏi nhạy cảm và đánh giá trace ngoại tuyến chỉ thêm kiểm tra
 chính sách có giới hạn, không phải model pháp lý/an toàn đã huấn luyện. Xem
-[trạng thái kiến trúc](docs/ARCHITECTURE.md#four-plane-target-and-delivered-boundary).
+[trạng thái kiến trúc](docs/ARCHITECTURE.md#2-mô-hình-4-mặt-phẳng-four-plane-boundary).
 
 ## Sơ đồ kho mã
 
@@ -63,7 +63,7 @@ chính sách có giới hạn, không phải model pháp lý/an toàn đã huấ
 | --- | --- | --- |
 | [`api/`](api/) | Java 21 / Spring Boot API nghiệp vụ; PostgreSQL, phân quyền workspace, kênh thông báo | [Module guide](api/GUIDE.md) |
 | [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Suy luận Python, document worker, truy hồi, graph service | [Module guide](rag-chatbot-fastapi/GUIDE.md) |
-| [`frontend/`](frontend/) | Web client Next.js | [Phát triển web](docs/DEVELOPMENT.md#start-the-applications) |
+| [`frontend/`](frontend/) | Web client Next.js | [Phát triển web](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) |
 | [`contracts/`](contracts/) | Sự kiện JSON và fixture dùng chung giữa Java và Python | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md) |
 | [`proto/`](proto/) | Định nghĩa gRPC nội bộ | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md) |
 | [`docs/`](docs/) | Tài liệu phát triển, kiến trúc, tính năng | [Mục lục tài liệu](docs/README.md) |
@@ -100,7 +100,7 @@ tiết. Quy tắc module theo ngôn ngữ nằm trong guide của từng service
 Yêu cầu: Git, Docker kèm Compose, Make, Java 21, Python 3.11 hoặc 3.12, và Node.js LTS hỗ trợ
 kèm npm (Node 22.13 trở lên trên nhánh 22.x là baseline phổ biến).
 
-1. Làm theo [thiết lập cục bộ](docs/DEVELOPMENT.md#local-setup) để tạo cấu hình mà không ghi đè
+1. Làm theo [thiết lập cục bộ](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) để tạo cấu hình mà không ghi đè
    file có sẵn, cài dependency, khởi hạ tầng, chuẩn bị model, và migrate/seed database phát triển.
 2. Chạy từng ứng dụng trong **terminal riêng**, từ thư mục gốc repo:
 
@@ -119,7 +119,7 @@ kèm npm (Node 22.13 trở lên trên nhánh 22.x là baseline phổ biến).
    npm --prefix frontend run dev
    ```
 
-3. Mở web client và làm theo [kiểm tra lần đầu](docs/DEVELOPMENT.md#first-run-checks).
+3. Mở web client và làm theo [kiểm tra lần đầu](docs/DEVELOPMENT.md#3-thiết-lập-lần-đầu-và-khôi-phục-tài-khoản).
 
 `make dev` của Python service **không** khởi Docker hạ tầng. Target riêng
 `make -C rag-chatbot-fastapi dev-infra` mới khởi. Dùng `PYTHON=python3.12` nếu đó là interpreter
@@ -150,11 +150,11 @@ Xem chi tiết tại [hướng dẫn triển khai (DEPLOYMENT.md)](docs/DEPLOYME
 | --- | --- |
 | Java | Đọc [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify` |
 | Python | Đọc [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
-| Web | Script trong [`frontend/package.json`](frontend/package.json); xem [verification](docs/DEVELOPMENT.md#verification) |
+| Web | Script trong [`frontend/package.json`](frontend/package.json); xem [kiểm tra xác minh](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) |
 | Thông điệp liên service | Cập nhật model sở hữu, schema/fixture dùng chung hoặc protobuf, kết quả sinh ra, và cả hai phía tiêu thụ cùng lúc |
 
 Test cần Redis, Qdrant hoặc provider thật yêu cầu môi trường được mô tả. Đọc
-[hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#verification) trước khi hiểu check tích hợp bị skip
+[hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) trước khi hiểu check tích hợp bị skip
 là kiểm chứng end-to-end thành công.
 
 ## Lộ trình MVP
@@ -170,7 +170,7 @@ Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milesto
 ## Đọc thêm
 - [Keycloak OIDC baseline](docs/KEYCLOAK.md) — cấu hình realm, client ID, redirect URI và chạy kiểm thử.
 
-- [ADR-0001: Flowable workflow engine](docs/adr/ADR-0001-workflow-engine-flowable.md) — quyết định chọn Flowable thay cho n8n trong v0.3.0.
+- [Workflow](docs/WORKFLOW.md) — luồng phê duyệt Flowable nhúng runtime: nộp/duyệt/leo thang hai cấp, SLA theo tổ chức, ghi kết quả vào tài liệu.
 - [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, dữ liệu demo, worker và hướng dẫn chạy thử.
 
 - [Mục lục tài liệu](docs/README.md) — chọn guide theo việc cần làm.
@@ -213,11 +213,11 @@ H-P-D-I capability space each screen of the web client belongs to.
 | --- | --- |
 | Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence |
 | Bounded sensitive route | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment |
-| Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection |
+| Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP) — off by default |
 | Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
 | Offline evaluation | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model |
 | Optional caches | Implemented but disabled by default; enable only after the applicable correctness and performance gates |
-| Not delivered | OCR/image/audio/video ingestion, a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#9-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
+| Not delivered | General audio/video ingestion (OCR for scanned PDFs and images is delivered but disabled by default), a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
 
 Repository code alone is not evidence of a production-ready service: optional provider
 integrations and deployment hardening must be verified in their own environment.
@@ -239,7 +239,7 @@ turning the setting off hides the link and makes the API reject self-registratio
 
 The supplied four-plane architecture is a target: today's control, async data, and retrieval
 planes run as described below; sensitive-question routing and offline trace evaluation add
-bounded policy checks, not a trained legal or safety model. See [architecture status](docs/ARCHITECTURE.md#four-plane-target-and-delivered-boundary).
+bounded policy checks, not a trained legal or safety model. See [architecture status](docs/ARCHITECTURE.md#2-four-plane-target-and-delivered-boundary).
 
 ## Repository map
 
@@ -247,7 +247,7 @@ bounded policy checks, not a trained legal or safety model. See [architecture st
 | --- | --- | --- |
 | [`api/`](api/) | Java 21 / Spring Boot business API; PostgreSQL, workspace authorization, and notification channels | [Module guide](api/GUIDE.md) |
 | [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Python inference, document workers, retrieval, and graph service | [Module guide](rag-chatbot-fastapi/GUIDE.md) |
-| [`frontend/`](frontend/) | Next.js web client | [Web development](docs/DEVELOPMENT.md#start-the-applications) |
+| [`frontend/`](frontend/) | Next.js web client | [Web development](docs/DEVELOPMENT.md#2-step-by-step-setup) |
 | [`contracts/`](contracts/) | Shared JSON event schemas and fixtures used across Java and Python | [Architecture and boundaries](docs/ARCHITECTURE.md) |
 | [`proto/`](proto/) | Internal gRPC interface and message definitions | [Architecture and boundaries](docs/ARCHITECTURE.md) |
 | [`docs/`](docs/) | Development, architecture, and feature references | [Documentation index](docs/README.md) |
@@ -284,7 +284,7 @@ chat and ingestion sequences. Language-specific module rules remain in the servi
 Prerequisites: Git, Docker with Compose, Make, Java 21, Python 3.11 or 3.12, and a supported
 Node.js LTS release with npm (Node 22.13 or newer on the 22.x line is a common baseline).
 
-1. Follow [local setup](docs/DEVELOPMENT.md#local-setup) to create local configuration without
+1. Follow [local setup](docs/DEVELOPMENT.md#2-step-by-step-setup) to create local configuration without
    overwriting existing files, install dependencies, start infrastructure, prepare models, and
    migrate/seed the development database.
 2. Start each application in a **separate terminal**, from the repository root:
@@ -304,7 +304,7 @@ Node.js LTS release with npm (Node 22.13 or newer on the 22.x line is a common b
    npm --prefix frontend run dev
    ```
 
-3. Open the web client and follow the [first-run checks](docs/DEVELOPMENT.md#first-run-checks).
+3. Open the web client and follow the [first-run checks](docs/DEVELOPMENT.md#3-first-run-setup-and-owner-recovery).
 
 `make dev` in the Python service does **not** start Docker infrastructure. The separate
 `make -C rag-chatbot-fastapi dev-infra` target does. Use `PYTHON=python3.12` instead if that
@@ -335,11 +335,11 @@ For details on operations, backups, and security hardening, see the [deployment 
 | --- | --- |
 | Java | Read [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify` |
 | Python | Read [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
-| Web | Scripts are in [`frontend/package.json`](frontend/package.json); see [verification](docs/DEVELOPMENT.md#verification) |
+| Web | Scripts are in [`frontend/package.json`](frontend/package.json); see [verification](docs/DEVELOPMENT.md#5-verification) |
 | Cross-service messages | Update the owning models, shared schemas/fixtures or protobuf source, generated outputs, and both consumers together |
 
 Tests with real Redis, Qdrant, or external providers require their documented environments.
-Read the [verification guide](docs/DEVELOPMENT.md#verification) before interpreting skipped
+Read the [verification guide](docs/DEVELOPMENT.md#5-verification) before interpreting skipped
 integration checks as successful end-to-end verification.
 
 ## MVP roadmap
@@ -354,7 +354,7 @@ Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone 
 
 ## Further reading
 - [Keycloak OIDC baseline](docs/KEYCLOAK.md) — realm/client setup and verification.
-- [ADR-0001: Flowable workflow engine](docs/adr/ADR-0001-workflow-engine-flowable.md) — decision to use Flowable instead of n8n for v0.3.0.
+- [Workflow](docs/WORKFLOW.md) — embedded Flowable approval flow: two-level submit/approve/escalate, per-organization SLA, decision write-back.
 - [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, demo data, worker, and run instructions.
 
 

@@ -52,6 +52,24 @@ x-local-environment: &local-environment
   GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT: ${GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT:-2}
   GRAPH_EXTRACTION_BATCH_SIZE: ${GRAPH_EXTRACTION_BATCH_SIZE:-4}
   INGESTION_WORKER_CONCURRENCY: ${INGESTION_WORKER_CONCURRENCY:-4}
+  # OCR: all off by default (settings.py defaults); the Docker image ships
+  # tesseract-ocr vie/eng. OCR_VLM_BASE_URL must reach the host Ollama from a
+  # container, hence host.docker.internal instead of localhost.
+  INGESTION_OCR_ENABLED: ${INGESTION_OCR_ENABLED:-false}
+  INGESTION_OCR_PROVIDER: ${INGESTION_OCR_PROVIDER:-tesseract}
+  INGESTION_OCR_LANGUAGES: ${INGESTION_OCR_LANGUAGES:-vie+eng}
+  INGESTION_OCR_DPI: ${INGESTION_OCR_DPI:-300}
+  INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE: ${INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE:-32}
+  INGESTION_OCR_MAX_PAGES: ${INGESTION_OCR_MAX_PAGES:-300}
+  INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE: ${INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE:-25.0}
+  INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE: ${INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE:-60.0}
+  INGESTION_OCR_PAGE_CONCURRENCY: ${INGESTION_OCR_PAGE_CONCURRENCY:-2}
+  INGESTION_OCR_PSM: ${INGESTION_OCR_PSM:-3}
+  INGESTION_OCR_EMBEDDED_IMAGES: ${INGESTION_OCR_EMBEDDED_IMAGES:-false}
+  OCR_VLM_BASE_URL: ${OCR_VLM_BASE_URL:-http://host.docker.internal:11434}
+  OCR_VLM_MODEL_ID: ${OCR_VLM_MODEL_ID:-}
+  OCR_VLM_TIMEOUT_SECONDS: ${OCR_VLM_TIMEOUT_SECONDS:-180.0}
+  OCR_VLM_MAX_OUTPUT_TOKENS: ${OCR_VLM_MAX_OUTPUT_TOKENS:-2048}
   LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
   LLM_USE_OLLAMA_NATIVE_CHAT: ${LLM_USE_OLLAMA_NATIVE_CHAT:-true}
   LLM_DISABLE_THINKING: ${LLM_DISABLE_THINKING:-true}
@@ -129,7 +147,7 @@ services:
       retries: 30
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine # pinned: Redis ≥7.4 is RSALv2/SSPL (not OSI); 7.2.x is BSD-3
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
     ports:
@@ -160,7 +178,7 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.2 # pinned: no floating latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:${QDRANT_HTTP_PORT:-16333}:6333"
@@ -221,7 +239,7 @@ services:
       retries: 20
 
   seaweedfs-master:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
     command: master -mdir=/data
     ports:
@@ -236,7 +254,7 @@ services:
       retries: 20
 
   seaweedfs-volume:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
     command: volume -mserver=seaweedfs-master:9333 -dir=/data -port=8080
     ports:
@@ -253,7 +271,7 @@ services:
       retries: 20
 
   seaweedfs-filer:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
     command: filer -master=seaweedfs-master:9333
     ports:
@@ -272,7 +290,7 @@ services:
       retries: 20
 
   seaweedfs-s3:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
     command: s3 -filer=seaweedfs-filer:8888
     ports:

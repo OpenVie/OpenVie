@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -133,9 +147,19 @@ class DocumentWorker:
                 if hasattr(self._pipeline, "process"):
                     outcome = await self._pipeline.process(command)
                     chunk_count = outcome.chunk_count
+                    completed_text_source = outcome.text_source
+                    completed_page_count = outcome.page_count
                 else:
                     chunk_count = await self._pipeline.ingest(event)  # type: ignore[attr-defined]
-                await self.publish_status(event, "COMPLETED", chunk_count=chunk_count)
+                    completed_text_source = None
+                    completed_page_count = None
+                await self.publish_status(
+                    event,
+                    "COMPLETED",
+                    chunk_count=chunk_count,
+                    text_source=completed_text_source,
+                    page_count=completed_page_count,
+                )
                 await message.ack()
                 return
             claim = await self._checkpoints.claim(
@@ -176,7 +200,13 @@ class DocumentWorker:
                 phase = IngestionPhase.GRAPH_REPLACED
             chunk_count = len(prepared.chunks)
             if _before(phase, IngestionPhase.COMPLETED_PUBLISHED):
-                await self.publish_status(event, "COMPLETED", chunk_count=chunk_count)
+                await self.publish_status(
+                    event,
+                    "COMPLETED",
+                    chunk_count=chunk_count,
+                    text_source=prepared.parsed.text_source,
+                    page_count=prepared.parsed.page_count,
+                )
                 await self._transition(
                     event,
                     lease_token,
@@ -318,6 +348,8 @@ class DocumentWorker:
         *,
         chunk_count: int | None = None,
         error_message: str | None = None,
+        text_source: str | None = None,
+        page_count: int | None = None,
     ) -> None:
         payload = status_event(
             schema_version=event.schema_version,
@@ -327,6 +359,8 @@ class DocumentWorker:
             status=status,
             chunk_count=chunk_count,
             error_message=error_message,
+            text_source=text_source,
+            page_count=page_count,
         )
         routing_key = {
             "PROCESSING": INGEST_PROCESSING,

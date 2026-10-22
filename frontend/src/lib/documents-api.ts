@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 import type {
   Document,
   DocumentUnit,
@@ -99,6 +113,18 @@ export async function downloadDocumentApi(
   return { blob: await res.blob(), fileName };
 }
 
+export async function loadCitationImageApi(
+  request: ApiRequest,
+  documentId: string,
+  mediaId: string,
+): Promise<Blob> {
+  const res = await request(
+    `${getApiBase()}/documents/${documentId}/media/${encodeURIComponent(mediaId)}`,
+  );
+  if (!res.ok) await readJsonOrThrow<unknown>(res);
+  return res.blob();
+}
+
 export async function deleteDocumentApi(
   request: ApiRequest,
   documentId: string,
@@ -120,15 +146,19 @@ export function fileTypeFromName(name: string): string {
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "HTML";
   if (lower.endsWith(".xlsx")) return "XLSX";
   if (lower.endsWith(".csv")) return "CSV";
+  if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+    || lower.endsWith(".webp")) return "IMAGE";
   return "UNKNOWN";
 }
 
 export const SUPPORTED_DOCUMENT_ACCEPT = [
   ".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm", ".xlsx", ".csv",
+  ".png", ".jpg", ".jpeg", ".webp",
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/plain", "text/markdown", "text/html", "text/csv",
+  "image/png", "image/jpeg", "image/webp",
 ].join(",");
 
 export function isSupportedDocumentName(name: string): boolean {

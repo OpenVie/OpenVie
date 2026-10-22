@@ -1,9 +1,52 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from app.modules.ingestion.internal.extraction import ExtractedPage, KnowledgeBlock, ParsedDocument
+
+
+def _image_fields(block: KnowledgeBlock, media_object_keys: Mapping[str, str]) -> dict[str, Any]:
+    """Citable image fields copied from block metadata, keyed into storage.
+
+    Only OCR-derived blocks that reference an image name get fields; the
+    object key comes from the deterministic mapping computed per document so
+    cache-hit parses without asset bytes still land on the same key.
+    """
+    name = block.metadata.get("image_name")
+    if not name:
+        return {
+            "image_object_key": None,
+            "image_media_type": None,
+            "image_width": None,
+            "image_height": None,
+        }
+    return {
+        "image_object_key": media_object_keys.get(str(name)),
+        "image_media_type": block.metadata.get("image_media_type"),
+        "image_width": _optional_int(block.metadata.get("image_width")),
+        "image_height": _optional_int(block.metadata.get("image_height")),
+    }
+
+
+def _optional_int(value: Any) -> int | None:
+    return int(value) if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +67,13 @@ class TextChunk:
     source_end: int | None = None
     parser_version: str = "digital-v1"
     chunker_version: str = "structural-v2"
+    # Citable image asset bound to the source block (OCR-derived text only).
+    # ``image_object_key`` is resolved from the source image name with the
+    # document's storage context; the remaining fields mirror block metadata.
+    image_object_key: str | None = None
+    image_media_type: str | None = None
+    image_width: int | None = None
+    image_height: int | None = None
 
 
 class DeterministicChunker:
@@ -35,9 +85,14 @@ class DeterministicChunker:
         self._chunk_size = chunk_size
         self._overlap = overlap
 
-    def chunk(self, source: ParsedDocument | list[ExtractedPage]) -> list[TextChunk]:
+    def chunk(
+        self,
+        source: ParsedDocument | list[ExtractedPage],
+        *,
+        media_object_keys: Mapping[str, str] | None = None,
+    ) -> list[TextChunk]:
         if isinstance(source, ParsedDocument):
-            return self._chunk_blocks(source)
+            return self._chunk_blocks(source, media_object_keys or {})
         blocks = tuple(
             KnowledgeBlock(
                 unit_id=hashlib.sha256(f"page:{page.page_number}".encode()).hexdigest()[:32],
@@ -48,11 +103,15 @@ class DeterministicChunker:
             )
             for page in source
         )
-        return self._chunk_blocks(ParsedDocument("document", blocks))
+        return self._chunk_blocks(ParsedDocument("document", blocks), {})
 
-    def _chunk_blocks(self, document: ParsedDocument) -> list[TextChunk]:
+    def _chunk_blocks(
+        self, document: ParsedDocument, media_object_keys: Mapping[str, str] | None = None
+    ) -> list[TextChunk]:
         chunks: list[TextChunk] = []
+        keys = media_object_keys or {}
         for block in document.blocks:
+            image_fields = _image_fields(block, keys)
             pieces = self._split_block(block.text, block_type=block.block_type)
             for piece_index, text in enumerate(pieces):
                 unit_id = block.unit_id if len(pieces) == 1 else f"{block.unit_id}:{piece_index}"
@@ -73,6 +132,7 @@ class DeterministicChunker:
                         source_start=block.source_start,
                         source_end=block.source_end,
                         parser_version=block.parser_version,
+                        **image_fields,
                     )
                 )
         return chunks

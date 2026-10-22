@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from prometheus_client import Counter, Gauge, Histogram
 
 AI_EMBEDDING_SECONDS = Histogram(
@@ -69,6 +83,18 @@ AI_RETRIEVAL_FALLBACKS_TOTAL = Counter(
     "openvie_ai_retrieval_fallbacks_total",
     "Fail-open retrieval fallbacks by component.",
     ["component"],
+)
+
+AI_INGESTION_OCR_SECONDS = Histogram(
+    "openvie_ai_ingestion_ocr_seconds",
+    "Time spent running OCR per page or image.",
+    ["provider", "outcome"],
+)
+
+AI_INGESTION_OCR_PAGES_TOTAL = Counter(
+    "openvie_ai_ingestion_ocr_pages_total",
+    "Pages and standalone images recognized by OCR.",
+    ["provider", "outcome"],
 )
 
 AI_CONTEXT_UNITS = Histogram(

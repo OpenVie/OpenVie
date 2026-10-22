@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.chat.query;
 
 import com.openvie.api.ai.api.AiInferenceApi;
@@ -279,7 +293,28 @@ public class ChatControlPlaneService {
                 citation.id(), citation.documentId(), citation.sourceName(), citation.pageNumber(),
                 citation.chunkIndex(), citation.score(), citation.snippet(), citation.unitId(),
                 citation.modality(), citation.sectionPath(), citation.blockType(), citation.sheetName(),
-                citation.cellRange(), citation.tableId(), null);
+                citation.cellRange(), citation.tableId(), citation.parserVersion(), null,
+                toChatCitationImage(citation.image()));
+    }
+
+    /**
+     * Derives the client-facing media identity from the internal storage
+     * locator: the AI pipeline persists assets as a hashed suffix under the
+     * document's ``media/`` namespace, and the sources panel loads them
+     * through ``/api/v1/documents/{id}/media/{media_id}``.
+     */
+    private ChatDtos.CitationImageDto toChatCitationImage(AiInferenceApi.CitationImage image) {
+        if (image == null) {
+            return null;
+        }
+        String objectKey = image.objectKey();
+        int separator = objectKey == null ? -1 : objectKey.lastIndexOf('/');
+        String mediaId = separator < 0 ? objectKey : objectKey.substring(separator + 1);
+        if (mediaId == null || mediaId.isBlank()) {
+            return null;
+        }
+        return new ChatDtos.CitationImageDto(
+                mediaId, image.mediaType(), image.width(), image.height());
     }
 
     private GenerationContext rebuildContext(UUID turnId, String requestId) {

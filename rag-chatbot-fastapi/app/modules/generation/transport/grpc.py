@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -158,8 +172,19 @@ def _citation(citation: Citation) -> pb.Citation:
         "sheet_name",
         "cell_range",
         "table_id",
+        "parser_version",
     ):
         item = getattr(citation, field)
         if item is not None:
             setattr(value, field, item)
+    if citation.image_object_key:
+        image = pb.CitationImage(
+            object_key=str(citation.image_object_key),
+            media_type=str(citation.image_media_type or ""),
+        )
+        if citation.image_width is not None:
+            image.width = int(citation.image_width)
+        if citation.image_height is not None:
+            image.height = int(citation.image_height)
+        value.image.CopyFrom(image)
     return value

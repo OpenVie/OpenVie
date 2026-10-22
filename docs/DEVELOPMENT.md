@@ -2,7 +2,7 @@
 
 [Documentation index](README.md) · [Project overview](../README.md) · [Deployment](DEPLOYMENT.md)
 
-> **Ngôn ngữ / Language:** [Tiếng Việt](#hướng-dẫn-phát-triển-cục-bộ--tiếng-việt) · [English](#local-development-guide-1)
+> **Ngôn ngữ / Language:** [Tiếng Việt](#hướng-dẫn-phát-triển-cục-bộ--tiếng-việt) · [English](#local-development-guide)
 
 ---
 
@@ -14,13 +14,33 @@ Tài liệu này hướng dẫn chạy toàn bộ hạ tầng trong Docker và 3
 
 | Công cụ | Yêu cầu |
 | --- | --- |
-| **Hệ điều hành / Shell** | Linux, macOS, hoặc Windows qua WSL2 (sử dụng POSIX shell và GNU Make) |
-| **Docker** | Docker Engine + Compose plugin (Linux) hoặc Docker Desktop (macOS, Windows WSL2) |
+| **Hệ điều hành / Shell** | Linux, macOS, hoặc **Windows 10/11 qua WSL2** (POSIX shell + GNU Make chạy ngay trong WSL2) |
+| **Docker** | Docker Engine + Compose plugin (Linux) hoặc Docker Desktop (macOS; Windows dùng backend WSL2) |
 | **Java** | JDK 21 (API đã tích hợp sẵn Maven Wrapper) |
 | **Python** | Python 3.11 hoặc 3.12 |
 | **Node.js** | Node.js 22 LTS kèm npm |
 | **Ollama** | Cài đặt trực tiếp trên host để tận dụng GPU/Metal (mục Bước 4) |
 | **TEI Reranker (tùy chọn)** | Chạy qua Docker (mọi OS có Docker) hoặc nhị phân native (macOS Apple Silicon) |
+
+#### Cài nhanh Windows (WSL2)
+
+Trên Windows 10 22H2 / Windows 11, **tất cả** lệnh trong tài liệu này chạy trong terminal
+Ubuntu WSL2 thay vì PowerShell:
+
+```powershell
+wsl --install -d Ubuntu-24.04   # PowerShell (Admin); khởi động lại máy khi xong
+```
+
+1. Trong Ubuntu WSL2, cài JDK 21, Python 3.11, Node 22 và Make ngay trong distro (apt, sdkman,
+   nvm) — không dùng bản cài Windows native cho các toolchain này.
+2. Docker Desktop → Settings → General → bật **Use the WSL 2 based engine** để containers
+   dùng chung được với distro WSL2.
+3. Clone repo vào **filesystem của WSL** (ví dụ `~/projects/OpenVie`), không để trên
+   `/mnt/c/...`: mount Windows chậm gấp nhiều lần cho Maven/npm/pytest.
+4. Ollama vẫn cài trên **Windows host** (xem Bước 4); từ WSL2 và containers trỏ đến
+   `localhost:11434` / `host.docker.internal:11434` như mô tả.
+5. Bước 6 cần 3 ứng dụng chạy song song — dùng **Windows Terminal** mở 3 tab
+   Ubuntu WSL2 (menu dropdown chọn profile Ubuntu), thay vì 3 cửa sổ riêng lẻ.
 
 ### 2. Các bước thiết lập
 
@@ -86,7 +106,18 @@ ollama rm hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
 ```
 
 *Kích hoạt xử lý song song và ghim bộ nhớ:*
-- Đặt biến môi trường `OLLAMA_NUM_PARALLEL=4` và `OLLAMA_MAX_LOADED_MODELS=3` trong service manager của hệ điều hành.
+- Đặt biến môi trường `OLLAMA_NUM_PARALLEL=4` và `OLLAMA_MAX_LOADED_MODELS=3` trong service
+  manager theo hệ điều hành:
+  - **Linux (systemd):** tạo drop-in `systemctl edit ollama` và thêm
+    `Environment="OLLAMA_NUM_PARALLEL=4"`, `Environment="OLLAMA_MAX_LOADED_MODELS=3"`, rồi
+    `systemctl restart ollama`.
+  - **macOS (launchd):** `launchctl setenv OLLAMA_NUM_PARALLEL 4` + `launchctl setenv
+    OLLAMA_MAX_LOADED_MODELS 3`, rồi khởi động lại Ollama.
+  - **Windows:** đặt biến hệ thống rồi khởi động lại Ollama (thoát icon system tray trước):
+    ```powershell
+    setx OLLAMA_NUM_PARALLEL 4
+    setx OLLAMA_MAX_LOADED_MODELS 3
+    ```
 - Làm ấm (warm-up) mô hình:
 ```bash
 curl -s -o /dev/null http://127.0.0.1:11434/api/generate -d '{"model":"vylinh","keep_alive":-1}'
@@ -172,6 +203,55 @@ make -C api recover-owner RECOVER_ARGS="--recover-owner-email=owner@example.com 
   (Windows native không có nhị phân TEI chính thức — dùng cách Docker này.)
 Khi chạy `make dev` trong Python, `DEV_RERANKER_ENABLED=true` được bật theo mặc định trên cổng `127.0.0.1:8082`. Nếu không dùng TEI, tắt bằng `DEV_RERANKER_ENABLED=false`.
 
+### OCR cục bộ (Tùy chọn — dành cho máy mạnh)
+
+OCR tắt mặc định; bật để chạy pipeline nhận dạng thật trên chính máy dev
+(máy 4+ nhân vẫn thoải mái, tesseract không cần GPU). Chuẩn bị tesseract:
+
+```bash
+brew install tesseract tesseract-lang   # macOS (tesseract-lang mang gói vie)
+sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng  # Debian/Ubuntu — và cả WSL2 trên Windows
+```
+
+Chạy Python trực tiếp trên Windows (ngoài WSL2 — ngoài luồng khuyến nghị) dùng bản UB Mannheim:
+
+```powershell
+winget install -e --id UB-Mannheim.TesseractOCR
+```
+
+Trong lúc cài, chọn thêm gói ngôn ngữ **Vietnamese (vie)** và **English (eng)**; sau cài đặt
+`tesseract --list-langs` phải thấy cả `vie` và `eng` (worker gọi tesseract từ PATH). Khi chạy
+trong production thì không cần cài này: container `ai-api` đã cài sẵn tesseract kèm `vie`/`eng`.
+
+Bật trong `rag-chatbot-fastapi/.env` (worker — chạy `make -C rag-chatbot-fastapi dev`):
+
+```ini
+INGESTION_OCR_ENABLED=true
+# Trang scan dày: đặt theo cấu hình máy (1-16)
+INGESTION_OCR_PAGE_CONCURRENCY=4
+# Ảnh lồng (.docx/.xlsx + PDF có text): bật khi cần test citation có trang/sheet
+INGESTION_OCR_EMBEDDED_IMAGES=true
+# Chất lượng cao thay thế tesseract (máy cần GPU riêng và model VLM đã tải):
+# INGESTION_OCR_PROVIDER=ollama-vlm
+# OCR_VLM_MODEL_ID=ten-model-vlm-trong-ollama
+```
+
+Bật cổng upload ảnh trong `api/.env` (Spring): `OCR_UPLOADS_ENABLED=true`.
+
+Kiểm thử:
+1. Upload một PDF scan (hoặc `.png`/`.jpg`) trong UI → tài liệu hiển thị badge **OCR**
+   (`text_source` là `ocr` hoặc `mixed`), xác nhận qua sự kiện `COMPLETED`.
+2. Upload `.docx` chứa ảnh (kèm `INGESTION_OCR_EMBEDDED_IMAGES=true`) → hỏi kèm ảnh
+   bằng câu hỏi trích dẫn `[S1]` → panel nguồn hiển thị badge OCR và số trang
+   ước tính từ dấu ngắt trang Word.
+3. Upload lại cùng file → OCR cache bỏ qua nhận dạng (fingerprint trùng), thời gian
+   hấp thụ trở về mức thường.
+4. Tắt hết lại (comment các biến) → hành vi quay về byte-identical như cũ; test backend
+   (`make -C rag-chatbot-fastapi check`) vẫn xanh ở mọi cấu hình.
+
+Chi tiết knob và ceiling (DPI, megapixel, timeout, 3 lỗi provider liên tiếp):
+`docs/RETRIEVAL.md` §7.
+
 ### 5. Kiểm tra và xác minh (Verification)
 
 | Lĩnh vực | Lệnh kiểm tra |
@@ -236,6 +316,7 @@ Hệ thống hỗ trợ đăng nhập một lần (Single Sign-On - SSO) qua gia
 ### 6. Xử lý sự cố thường gặp
 
 - **Cổng bị chiếm (Address already in use):** Kiểm tra tiến trình ngầm bằng `lsof -i :18000` hoặc `lsof -i :50051` và đóng chúng trước khi chạy `make dev`.
+- **Windows (WSL2):** mọi lệnh POSIX trong tài liệu (`make`, `lsof`, `curl`, `chmod`…) chạy từ terminal Ubuntu WSL2; nếu thiếu `lsof` thì `sudo apt install lsof`. Kiểm tra port bị chiếm trên Windows host bằng PowerShell: `netstat -ano | findstr :18000` (thay số cổng tương ứng). Containers trỏ Ollama trên Windows host qua `host.docker.internal` (Bước 4).
 - **Lỗi kết nối Postgres/Redis:** Đảm bảo các dịch vụ container đang chạy qua `docker compose ps`. File `.env` của service phải trỏ vào `localhost`, không dùng tên DNS nội bộ Docker như trong root `.env`.
 - **Dừng hệ thống giữ nguyên dữ liệu:** Nhấn `Ctrl-C` ở các terminal ứng dụng, sau đó hạ container bằng `make -C rag-chatbot-fastapi dev-down`. Tránh dùng lệnh `docker compose down -v`.
 
@@ -254,13 +335,33 @@ This guide covers running infrastructure in Docker and the three application tie
 
 | Tool | Requirement |
 | --- | --- |
-| **OS / Shell** | Linux, macOS, or Windows via WSL2 (POSIX shell with GNU Make) |
-| **Docker** | Docker Engine + Compose plugin (Linux) or Docker Desktop (macOS, Windows WSL2) |
+| **OS / Shell** | Linux, macOS, or **Windows 10/11 via WSL2** (POSIX shell + GNU Make inside the WSL distro) |
+| **Docker** | Docker Engine + Compose plugin (Linux) or Docker Desktop (macOS; Windows uses the WSL2 backend) |
 | **Java** | JDK 21 (bundled Maven wrapper included) |
 | **Python** | Python 3.11 or 3.12 |
 | **Node.js** | Node.js 22 LTS with npm |
 | **Ollama** | Native host installation for GPU/Metal hardware acceleration (see Step 4) |
 | **TEI Reranker (optional)** | Docker container (any OS with Docker) or native binary (Apple Silicon) |
+
+#### Quick Windows (WSL2) setup
+
+On Windows 10 22H2 / Windows 11, run **all** commands from this guide inside the Ubuntu WSL2
+terminal rather than PowerShell:
+
+```powershell
+wsl --install -d Ubuntu-24.04   # from PowerShell (Admin); reboot afterwards
+```
+
+1. Inside Ubuntu WSL2, install JDK 21, Python 3.11, Node 22, and Make in the distro (apt,
+   sdkman, nvm) — do not use the Windows-native toolchains.
+2. Docker Desktop → Settings → General → enable **Use the WSL 2 based engine** so containers
+   share the WSL2 distro.
+3. Clone the repo into the **WSL filesystem** (e.g. `~/projects/OpenVie`), not under
+   `/mnt/c/...`: the Windows mount is far slower for Maven/npm/pytest.
+4. Ollama still installs on the **Windows host** (see Step 4); from WSL2 and containers reach
+   it at `localhost:11434` / `host.docker.internal:11434` as described.
+5. Step 6 runs three applications at once — use **Windows Terminal** to open three Ubuntu WSL2
+   tabs (Ubuntu profile from the dropdown) instead of three separate windows.
 
 ## 2. Step-by-step setup
 
@@ -326,7 +427,18 @@ ollama rm hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
 ```
 
 *Enable parallelism and warm memory:*
-- Set `OLLAMA_NUM_PARALLEL=4` and `OLLAMA_MAX_LOADED_MODELS=3` in the platform service manager.
+- Set `OLLAMA_NUM_PARALLEL=4` and `OLLAMA_MAX_LOADED_MODELS=3` in the platform service manager:
+  - **Linux (systemd):** create a drop-in with `systemctl edit ollama`, adding
+    `Environment="OLLAMA_NUM_PARALLEL=4"` and `Environment="OLLAMA_MAX_LOADED_MODELS=3"`, then
+    `systemctl restart ollama`.
+  - **macOS (launchd):** `launchctl setenv OLLAMA_NUM_PARALLEL 4` and `launchctl setenv
+    OLLAMA_MAX_LOADED_MODELS 3`, then restart Ollama.
+  - **Windows:** set system-wide variables and relaunch Ollama (quit the system-tray icon
+    first):
+    ```powershell
+    setx OLLAMA_NUM_PARALLEL 4
+    setx OLLAMA_MAX_LOADED_MODELS 3
+    ```
 - Pin resident weights:
 ```bash
 curl -s -o /dev/null http://127.0.0.1:11434/api/generate -d '{"model":"vylinh","keep_alive":-1}'
@@ -413,6 +525,60 @@ make -C api recover-owner RECOVER_ARGS="--recover-owner-email=owner@example.com 
   (There is no official native Windows TEI binary — use the Docker route.)
 Runs on `127.0.0.1:8082`. Controlled via `DEV_RERANKER_ENABLED` in `make dev`.
 
+## Local OCR (Optional — for strong machines)
+
+OCR is off by default; enable it to exercise the real recognition pipeline on
+the dev machine (a 4-core box is fine, tesseract needs no GPU). Install tesseract:
+
+```bash
+brew install tesseract tesseract-lang   # macOS (tesseract-lang carries vie)
+sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng  # Debian/Ubuntu — also on Windows WSL2
+```
+
+Running Python directly on Windows (outside WSL2 — off the recommended path) uses the
+UB-Mannheim build instead:
+
+```powershell
+winget install -e --id UB-Mannheim.TesseractOCR
+```
+
+During setup add the **Vietnamese (vie)** and **English (eng)** language packs; afterwards
+`tesseract --list-langs` must list both `vie` and `eng` (the worker invokes tesseract from
+PATH). Production needs none of this: the `ai-api` container ships tesseract with
+`vie`/`eng` already installed.
+
+Enable in `rag-chatbot-fastapi/.env` (worker — `make -C rag-chatbot-fastapi dev`):
+
+```ini
+INGESTION_OCR_ENABLED=true
+# Heavy scan backlog: size for the machine (1-16)
+INGESTION_OCR_PAGE_CONCURRENCY=4
+# Embedded images (.docx/.xlsx + PDF pages with text): enable to test citations
+# carrying a page number / sheet name
+INGESTION_OCR_EMBEDDED_IMAGES=true
+# Higher-quality alternative to tesseract (needs a dedicated GPU and a VLM model):
+# INGESTION_OCR_PROVIDER=ollama-vlm
+# OCR_VLM_MODEL_ID=your-vlm-model-in-ollama
+```
+
+Enable the image upload gate in `api/.env` (Spring): `OCR_UPLOADS_ENABLED=true`.
+
+Verification:
+1. Upload a scanned PDF (or a `.png`/`.jpg`) through the UI → the document shows
+   the **OCR** badge (`text_source` is `ocr` or `mixed`), also visible in the
+   `COMPLETED` event.
+2. Upload a `.docx` with images (with `INGESTION_OCR_EMBEDDED_IMAGES=true`) → ask
+   about its images citing `[S1]` → the sources panel shows the OCR badge and
+   the page estimated from Word page-break markers.
+3. Re-upload the same file → the OCR cache skips recognition (fingerprint hit),
+   ingestion returns to the usual duration.
+4. Comment the variables out again → behavior returns to the byte-identical
+   legacy path; the backend checks (`make -C rag-chatbot-fastapi check`) stay
+   green under either configuration.
+
+Knob details and ceilings (DPI, megapixels, timeout, 3 consecutive provider
+failures): `docs/RETRIEVAL.md` §7.
+
 ## 5. Verification
 
 | Area | Command |
@@ -477,6 +643,7 @@ OpenVie supports Single Sign-On (SSO) via OIDC (Authorization Code flow with PKC
 ## 6. Troubleshooting
 
 - **Port conflicts:** Terminate existing processes on 18000 or 50051 before starting `make dev`.
+- **Windows (WSL2):** run the POSIX commands in this guide (`make`, `lsof`, `curl`, `chmod`…) from the Ubuntu WSL2 terminal; if `lsof` is missing, `sudo apt install lsof`. To find a port grabber on the Windows host use PowerShell: `netstat -ano | findstr :18000` (adjust the port). Containers reach the Windows-host Ollama via `host.docker.internal` (Step 4).
 - **Database connectivity:** Check container health via `docker compose ps`. Service-level `.env` files must reference `localhost` ports rather than container names.
 - **Graceful shutdown:** Stop host applications with `Ctrl-C`, then bring down containers with `make -C rag-chatbot-fastapi dev-down`. Avoid `docker compose down -v` to prevent volume loss.
 

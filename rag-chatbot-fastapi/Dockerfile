@@ -1,6 +1,12 @@
 FROM python:3.11-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Tesseract carries the OCR for scanned PDFs and images (Apache-2.0); the vie
+# and eng language packs cover the ingestion defaults (INGESTION_OCR_LANGUAGES).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-vie \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml ./
 COPY app app
 RUN python -m pip install --no-cache-dir --upgrade pip && python -m pip install --no-cache-dir .

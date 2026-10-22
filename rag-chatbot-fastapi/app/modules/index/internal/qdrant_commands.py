@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from typing import Any
@@ -112,6 +126,10 @@ class QdrantKnowledgeIndex:
                         source_end=chunk.source_end,
                         parser_version=chunk.parser_version,
                         chunker_version=chunk.chunker_version,
+                        image_object_key=chunk.image_object_key,
+                        image_media_type=chunk.image_media_type,
+                        image_width=chunk.image_width,
+                        image_height=chunk.image_height,
                     )
                     for chunk in chunks
                 ),
@@ -185,6 +203,7 @@ class QdrantKnowledgeIndex:
             (self._knowledge_base_field, models.PayloadSchemaType.KEYWORD),
             ("document_id", models.PayloadSchemaType.KEYWORD),
             ("table_id", models.PayloadSchemaType.KEYWORD),
+            ("parser_version", models.PayloadSchemaType.KEYWORD),
             ("chunk_index", models.PayloadSchemaType.INTEGER),
         ):
             await self._client.create_payload_index(
@@ -228,6 +247,10 @@ class QdrantKnowledgeIndex:
             "source_end": chunk.source_end,
             "parser_version": chunk.parser_version,
             "chunker_version": chunk.chunker_version,
+            "image_object_key": chunk.image_object_key,
+            "image_media_type": chunk.image_media_type,
+            "image_width": chunk.image_width,
+            "image_height": chunk.image_height,
             "text": chunk.text,
             "content_hash": chunk.content_hash,
         }

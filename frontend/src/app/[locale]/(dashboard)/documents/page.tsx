@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 "use client";
 
 
@@ -141,7 +155,7 @@ export default function DocumentsPage() {
   const page = safePage(searchParams.get("page"));
   const size = safeSize(searchParams.get("size"));
   const statusFilter = oneOf(searchParams.get("status"), ["all", "PENDING", "PROCESSING", "COMPLETED", "FAILED"] as const, "all");
-  const typeFilter = oneOf(searchParams.get("type"), ["all", "PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV"] as const, "all");
+  const typeFilter = oneOf(searchParams.get("type"), ["all", "PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV", "IMAGE"] as const, "all");
   const uploadedFrom = safeDate(searchParams.get("from"));
   const rawUploadedTo = safeDate(searchParams.get("to"));
   const uploadedTo = rawUploadedTo && (!uploadedFrom || rawUploadedTo >= uploadedFrom) ? rawUploadedTo : "";
@@ -510,7 +524,7 @@ export default function DocumentsPage() {
       <FilterPanel>
         <UrlSearchField key={urlQuery} initialValue={urlQuery} onDebouncedChange={(value) => update({ q: value || null })} placeholder={t("searchFilenames")} label={t("search")} />
         <FilterSelect label={t("indexingStatus")} value={statusFilter} onChange={(value) => update({ status: value === "all" ? null : value })} width={140}><option value="all">{t("allStatuses")}</option><option value="PENDING">{t("statuses.pending")}</option><option value="PROCESSING">{t("statuses.processing")}</option><option value="COMPLETED">{t("statuses.completed")}</option><option value="FAILED">{t("statuses.failed")}</option></FilterSelect>
-        <FilterSelect label={t("fileType")} value={typeFilter} onChange={(value) => update({ type: value === "all" ? null : value })} width={120}><option value="all">{t("allTypes")}</option>{["PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV"].map((value) => <option key={value}>{value}</option>)}</FilterSelect>
+        <FilterSelect label={t("fileType")} value={typeFilter} onChange={(value) => update({ type: value === "all" ? null : value })} width={120}><option value="all">{t("allTypes")}</option>{["PDF", "DOCX", "TXT", "MARKDOWN", "HTML", "XLSX", "CSV", "IMAGE"].map((value) => <option key={value}>{value}</option>)}</FilterSelect>
         <DateRangeFields prefix={t("uploaded")} from={uploadedFrom} to={uploadedTo} onFromChange={(value) => update({ from: value || null })} onToChange={(value) => update({ to: value || null })} />
         <FilterSelect label={t("sort")} value={sortValue} onChange={(value) => update({ sort: value === "uploaded-desc" ? null : value })} width={156}><option value="uploaded-desc">{t("sortOptions.newest")}</option><option value="uploaded-asc">{t("sortOptions.oldest")}</option><option value="filename-asc">{t("sortOptions.filenameAsc")}</option><option value="filename-desc">{t("sortOptions.filenameDesc")}</option><option value="size-desc">{t("sortOptions.largest")}</option><option value="size-asc">{t("sortOptions.smallest")}</option></FilterSelect>
         <ClearFiltersButton disabled={!hasFilters} onClick={clear} />
@@ -549,6 +563,11 @@ export default function DocumentsPage() {
                   <p className="min-w-0 truncate text-sm font-medium text-foreground">{doc.fileName}</p>
                   <div className="flex shrink-0 items-center gap-1">
                     <Badge variant="secondary" className="text-xs uppercase">{doc.fileType}</Badge>
+                    {(doc.textSource === "ocr" || doc.textSource === "mixed") && (
+                      <Badge variant="outline" className="text-xs uppercase" title={doc.textSource === "ocr" ? "OCR" : "OCR + text"}>
+                        OCR
+                      </Badge>
+                    )}
                     {approvalControl(doc)}
                     {canDeleteDoc(doc) && (
                       <Button
@@ -611,6 +630,11 @@ export default function DocumentsPage() {
                     <Badge variant="secondary" className="text-xs uppercase">
                       {doc.fileType}
                     </Badge>
+                    {(doc.textSource === "ocr" || doc.textSource === "mixed") && (
+                      <Badge variant="outline" className="ml-1 text-xs uppercase" title={doc.textSource === "ocr" ? "OCR" : "OCR + text"}>
+                        OCR
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={doc.status} uploadState={doc.uploadState} />

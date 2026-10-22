@@ -1,12 +1,32 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Awaitable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.common.errors import StorageUnavailableError
 from app.common.storage import ObjectStorage, ObjectStorageWriter
-from app.common.storage_keys import spreadsheet_table_prefix
+from app.common.storage_keys import (
+    document_media_key,
+    document_media_prefix,
+    ocr_artifact_prefix,
+    spreadsheet_table_prefix,
+)
 from app.modules.graph.api import (
     GraphBatch,
     GraphProjectionApi,
@@ -38,6 +58,8 @@ from app.modules.ingestion.internal.artifacts import (
 from app.modules.ingestion.internal.chunking import DeterministicChunker, TextChunk
 from app.modules.ingestion.internal.entity_extraction import EntityRelationExtractor, graph_units
 from app.modules.ingestion.internal.extraction import DocumentTextExtractor, ParsedDocument
+from app.modules.ingestion.internal.ocr import OcrIngestionService
+from app.modules.ingestion.internal.ocr_artifacts import load_ocr_artifact, save_ocr_artifact
 from app.modules.model.api import (
     ModelRejectedError,
     ModelUnavailableError,
@@ -67,6 +89,7 @@ class DocumentIngestionPipeline(IngestionApi):
         graph_store: GraphProjectionApi,
         graph_extractor: EntityRelationExtractor,
         graph_extraction_enabled: bool = True,
+        ocr: OcrIngestionService | None = None,
     ):
         self._store = store
         self._extractor = extractor
@@ -77,6 +100,7 @@ class DocumentIngestionPipeline(IngestionApi):
         self._graph_store = graph_store
         self._graph_extractor = graph_extractor
         self._graph_extraction_enabled = graph_extraction_enabled
+        self._ocr = ocr
 
     async def process(self, command: IngestDocumentCommand) -> IngestionOutcome:
         try:
@@ -106,16 +130,33 @@ class DocumentIngestionPipeline(IngestionApi):
                 )
                 raise
             raise
-        return IngestionOutcome(IngestionOutcomeStatus.COMPLETED, len(prepared.chunks))
+        return IngestionOutcome(
+            IngestionOutcomeStatus.COMPLETED,
+            len(prepared.chunks),
+            text_source=prepared.parsed.text_source,
+            page_count=prepared.parsed.page_count,
+        )
 
     async def prepare(self, event: IngestDocumentCommand) -> PreparedDocument:
         data = await self._store.download(event.storage_key)
-        parsed = self._extractor.parse(
-            data,
-            content_type=event.content_type,
-            file_name=event.file_name,
-        )
-        chunks = self._chunker.chunk(parsed)
+        if self._ocr is None:
+            parsed = self._extractor.parse(
+                data,
+                content_type=event.content_type,
+                file_name=event.file_name,
+            )
+        else:
+            parsed = await self._parse_with_ocr_cache(event, data)
+        media_object_keys = {
+            asset.name: document_media_key(
+                event.tenant_id,
+                event.knowledge_base_id,
+                event.document_id,
+                asset.name,
+            )
+            for asset in parsed.media
+        }
+        chunks = self._chunker.chunk(parsed, media_object_keys=media_object_keys)
         if not chunks:
             raise PermanentIngestionFailure("Document contains no extractable text")
         artifacts = prepare_spreadsheet_artifacts(
@@ -130,6 +171,58 @@ class DocumentIngestionPipeline(IngestionApi):
             chunks=tuple(chunks),
             artifacts=artifacts,
         )
+
+    async def _parse_with_ocr_cache(
+        self, event: IngestDocumentCommand, data: bytes
+    ) -> ParsedDocument:
+        """Cache OCR effort per (raw bytes, OCR settings) fingerprint.
+
+        A hit skips recognition entirely on reindex; a miss parses (OCR runs
+        through ``asyncio.to_thread`` so the provider subprocess work stays off
+        the ingestion event loop) and best-effort caches the outcome when the
+        document actually leaned on OCR.
+        """
+        assert self._ocr is not None
+        raw_sha256 = hashlib.sha256(data).hexdigest()
+        fingerprint = self._ocr.fingerprint(raw_sha256)
+        cached = await load_ocr_artifact(
+            self._store,
+            tenant_id=event.tenant_id,
+            knowledge_base_id=event.knowledge_base_id,
+            document_id=event.document_id,
+            fingerprint=fingerprint,
+        )
+        if cached is not None:
+            return cached
+        parsed = await asyncio.to_thread(
+            self._extractor.parse,
+            data,
+            content_type=event.content_type,
+            file_name=event.file_name,
+        )
+        # Citable image assets persist alongside the OCR artifact: upload the
+        # bytes first (artifact⇒assets invariant), then cache blob-free
+        # descriptors so a cache hit compares equal to the original parse.
+        media_blobs = {asset.name: asset.blob for asset in parsed.media if asset.blob}
+        if media_blobs:
+            parsed = replace(
+                parsed,
+                media=tuple(
+                    replace(asset, blob=b"") if asset.blob else asset
+                    for asset in parsed.media
+                ),
+            )
+        if parsed.text_source != "text":
+            await save_ocr_artifact(
+                self._store,
+                tenant_id=event.tenant_id,
+                knowledge_base_id=event.knowledge_base_id,
+                document_id=event.document_id,
+                fingerprint=fingerprint,
+                parsed=parsed,
+                media_blobs=media_blobs,
+            )
+        return parsed
 
     async def replace_artifacts(self, prepared: PreparedDocument) -> None:
         event = prepared.command
@@ -177,28 +270,50 @@ class DocumentIngestionPipeline(IngestionApi):
         await self._graph_store.replace_source(batch)
 
     async def cleanup(self, event: IngestDocumentCommand) -> None:
-        await _complete_cleanup(
+        operations: list[tuple[str, Awaitable[None]]] = [
             (
+                "spreadsheet artifacts",
+                self._store.delete_prefix(
+                    spreadsheet_table_prefix(
+                        event.tenant_id,
+                        event.knowledge_base_id,
+                        event.document_id,
+                    )
+                ),
+            ),
+            (
+                "document media",
+                self._store.delete_prefix(
+                    document_media_prefix(
+                        event.tenant_id,
+                        event.knowledge_base_id,
+                        event.document_id,
+                    )
+                ),
+            ),
+            (
+                "graph projection",
+                self._graph_store.delete_source(event.tenant_id, event.document_id),
+            ),
+            (
+                "vector index",
+                self._vector_store.delete_document(event.tenant_id, event.document_id),
+            ),
+        ]
+        if self._ocr is not None:
+            operations.append(
                 (
-                    "spreadsheet artifacts",
+                    "OCR artifacts",
                     self._store.delete_prefix(
-                        spreadsheet_table_prefix(
+                        ocr_artifact_prefix(
                             event.tenant_id,
                             event.knowledge_base_id,
                             event.document_id,
                         )
                     ),
-                ),
-                (
-                    "graph projection",
-                    self._graph_store.delete_source(event.tenant_id, event.document_id),
-                ),
-                (
-                    "vector index",
-                    self._vector_store.delete_document(event.tenant_id, event.document_id),
-                ),
+                )
             )
-        )
+        await _complete_cleanup(tuple(operations))
 
 
 class DocumentIndexLifecycleService(DocumentIndexLifecycleApi):
@@ -207,30 +322,46 @@ class DocumentIndexLifecycleService(DocumentIndexLifecycleApi):
         index: KnowledgeIndexCommandApi,
         graph: GraphProjectionApi,
         artifacts: ObjectStorageWriter,
+        ocr: OcrIngestionService | None = None,
     ) -> None:
         self._index = index
         self._graph = graph
         self._artifacts = artifacts
+        self._ocr = ocr
 
     async def delete_document(
         self, tenant_id: str, knowledge_base_id: str, document_id: str
     ) -> None:
-        await _complete_cleanup(
+        operations: list[tuple[str, Awaitable[None]]] = [
             (
-                (
-                    "spreadsheet artifacts",
-                    self._artifacts.delete_prefix(
-                        spreadsheet_table_prefix(
-                            tenant_id,
-                            knowledge_base_id,
-                            document_id,
-                        )
-                    ),
+                "spreadsheet artifacts",
+                self._artifacts.delete_prefix(
+                    spreadsheet_table_prefix(tenant_id, knowledge_base_id, document_id)
                 ),
-                ("vector index", self._index.delete_document(tenant_id, document_id)),
-                ("graph projection", self._graph.delete_source(tenant_id, document_id)),
+            ),
+            (
+                "document media",
+                self._artifacts.delete_prefix(
+                    document_media_prefix(tenant_id, knowledge_base_id, document_id)
+                ),
+            ),
+        ]
+        if self._ocr is not None:
+            operations.append(
+                (
+                    "OCR artifacts",
+                    self._artifacts.delete_prefix(
+                        ocr_artifact_prefix(tenant_id, knowledge_base_id, document_id)
+                    ),
+                )
             )
+        operations.append(
+            ("vector index", self._index.delete_document(tenant_id, document_id))
         )
+        operations.append(
+            ("graph projection", self._graph.delete_source(tenant_id, document_id))
+        )
+        await _complete_cleanup(tuple(operations))
 
 
 async def _complete_cleanup(
@@ -269,4 +400,8 @@ def _index_unit(chunk: TextChunk) -> IndexUnit:
         source_end=chunk.source_end,
         parser_version=str(chunk.parser_version),
         chunker_version=str(chunk.chunker_version),
+        image_object_key=chunk.image_object_key,
+        image_media_type=chunk.image_media_type,
+        image_width=chunk.image_width,
+        image_height=chunk.image_height,
     )

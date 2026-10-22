@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -35,6 +49,24 @@ class Settings(BaseSettings):
     INGESTION_LEASE_SECONDS: int = 300
     INGESTION_HEARTBEAT_SECONDS: int = 30
     INGESTION_WORKER_CONCURRENCY: int = 4
+
+    # OCR for scanned PDFs and standalone images. Disabled by default: behavior
+    # stays identical to the text-only pipeline until this flag is turned on.
+    INGESTION_OCR_ENABLED: bool = False
+    INGESTION_OCR_PROVIDER: Literal["tesseract", "ollama-vlm"] = "tesseract"
+    INGESTION_OCR_LANGUAGES: str = "vie+eng"
+    INGESTION_OCR_DPI: int = 300
+    INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE: int = 32
+    INGESTION_OCR_MAX_PAGES: int = 300
+    INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE: float = 25.0
+    INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE: float = 60.0
+    INGESTION_OCR_PAGE_CONCURRENCY: int = 2
+    INGESTION_OCR_PSM: int = 3
+    INGESTION_OCR_EMBEDDED_IMAGES: bool = False
+    OCR_VLM_BASE_URL: str = "http://localhost:11434"
+    OCR_VLM_MODEL_ID: str = ""
+    OCR_VLM_TIMEOUT_SECONDS: float = 180.0
+    OCR_VLM_MAX_OUTPUT_TOKENS: int = 2048
 
     CACHE_ENABLED: bool = False
     CACHE_KEY_PREFIX: str = "ccn:v1"
@@ -196,6 +228,25 @@ class Settings(BaseSettings):
             raise ValueError("Ingestion heartbeat must be shorter than the lease")
         if not 1 <= self.INGESTION_WORKER_CONCURRENCY <= 64:
             raise ValueError("INGESTION_WORKER_CONCURRENCY must be between 1 and 64")
+        if self.INGESTION_OCR_ENABLED:
+            if not self.INGESTION_OCR_LANGUAGES.strip():
+                raise ValueError("INGESTION_OCR_LANGUAGES must not be blank when OCR is enabled")
+            if not 72 <= self.INGESTION_OCR_DPI <= 600:
+                raise ValueError("INGESTION_OCR_DPI must be between 72 and 600")
+            if self.INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE < 0:
+                raise ValueError("INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE must not be negative")
+            if not 1 <= self.INGESTION_OCR_MAX_PAGES <= 5_000:
+                raise ValueError("INGESTION_OCR_MAX_PAGES must be between 1 and 5000")
+            if not 1 <= self.INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE <= 200:
+                raise ValueError("INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE must be between 1 and 200")
+            if self.INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE <= 0:
+                raise ValueError("INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE must be positive")
+            if not 1 <= self.INGESTION_OCR_PAGE_CONCURRENCY <= 16:
+                raise ValueError("INGESTION_OCR_PAGE_CONCURRENCY must be between 1 and 16")
+            if not 0 <= self.INGESTION_OCR_PSM <= 13:
+                raise ValueError("INGESTION_OCR_PSM must be between 0 and 13")
+            if self.INGESTION_OCR_PROVIDER == "ollama-vlm" and not self.OCR_VLM_MODEL_ID.strip():
+                raise ValueError("OCR_VLM_MODEL_ID is required when OCR runs on a vision model")
         if not 1 <= self.GRAPH_EXTRACTION_BATCH_SIZE <= 64:
             raise ValueError("GRAPH_EXTRACTION_BATCH_SIZE must be between 1 and 64")
         if self.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS < 64:

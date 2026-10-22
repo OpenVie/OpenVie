@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from app.bootstrap.configuration import graph_config, index_config, model_config, storage_config
@@ -8,10 +22,44 @@ from app.modules.index.internal.qdrant_commands import QdrantKnowledgeIndex
 from app.modules.ingestion.internal.chunking import DeterministicChunker
 from app.modules.ingestion.internal.entity_extraction import EntityRelationExtractor
 from app.modules.ingestion.internal.extraction import DocumentTextExtractor
+from app.modules.ingestion.internal.ocr import (
+    OcrIngestionService,
+    OllamaVlmOcrProvider,
+    TesseractOcrProvider,
+)
 from app.modules.ingestion.internal.pipeline import DocumentIngestionPipeline
 from app.modules.model.internal.chat import create_chat_model
 from app.modules.model.internal.embedding import EmbeddingClient, OllamaEmbeddingClient
 from app.modules.model.internal.sparse import FastEmbedSparseEncoder
+
+
+def create_ocr_service(settings: Settings) -> OcrIngestionService | None:
+    """Build the OCR adapter from settings; ``None`` keeps the text-only path."""
+    if not settings.INGESTION_OCR_ENABLED:
+        return None
+    if settings.INGESTION_OCR_PROVIDER == "tesseract":
+        provider: TesseractOcrProvider | OllamaVlmOcrProvider = TesseractOcrProvider(
+            languages=settings.INGESTION_OCR_LANGUAGES,
+            psm=settings.INGESTION_OCR_PSM,
+            timeout_seconds=settings.INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE,
+        )
+    else:
+        provider = OllamaVlmOcrProvider(
+            base_url=settings.OCR_VLM_BASE_URL,
+            model_id=settings.OCR_VLM_MODEL_ID,
+            timeout_seconds=settings.OCR_VLM_TIMEOUT_SECONDS,
+            max_output_tokens=settings.OCR_VLM_MAX_OUTPUT_TOKENS,
+        )
+    return OcrIngestionService(
+        provider,
+        dpi=settings.INGESTION_OCR_DPI,
+        min_text_chars=settings.INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE,
+        max_pages=settings.INGESTION_OCR_MAX_PAGES,
+        max_megapixels_per_page=settings.INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE,
+        timeout_seconds_per_page=settings.INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE,
+        page_concurrency=settings.INGESTION_OCR_PAGE_CONCURRENCY,
+        embedded_images=settings.INGESTION_OCR_EMBEDDED_IMAGES,
+    )
 
 
 def create_document_ingestion_pipeline(
@@ -22,9 +70,10 @@ def create_document_ingestion_pipeline(
     extraction_settings = settings.model_copy(
         update={"LLM_MAX_OUTPUT_TOKENS": settings.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS}
     )
+    ocr_service = create_ocr_service(settings)
     return DocumentIngestionPipeline(
         store=SeaweedS3DocumentStore(storage_config(settings)),
-        extractor=DocumentTextExtractor(),
+        extractor=DocumentTextExtractor(ocr=ocr_service),
         chunker=DeterministicChunker(),
         embedder=embedder or OllamaEmbeddingClient(model_config(settings)),
         sparse_encoder=FastEmbedSparseEncoder(model_config(settings)),
@@ -41,4 +90,5 @@ def create_document_ingestion_pipeline(
             max_relations_per_unit=settings.GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT,
         ),
         graph_extraction_enabled=settings.GRAPH_EXTRACTION_ENABLED,
+        ocr=ocr_service,
     )

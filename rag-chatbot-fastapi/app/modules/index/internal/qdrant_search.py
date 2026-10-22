@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -225,5 +239,22 @@ class QdrantKnowledgeIndexQuery:
             ),
             source_end=(
                 int(payload["source_end"]) if payload.get("source_end") is not None else None
+            ),
+            parser_version=(
+                str(payload["parser_version"])
+                if payload.get("parser_version")
+                else None
+            ),
+            image_object_key=(
+                str(payload["image_object_key"]) if payload.get("image_object_key") else None
+            ),
+            image_media_type=(
+                str(payload["image_media_type"]) if payload.get("image_media_type") else None
+            ),
+            image_width=(
+                int(payload["image_width"]) if payload.get("image_width") is not None else None
+            ),
+            image_height=(
+                int(payload["image_height"]) if payload.get("image_height") is not None else None
             ),
         )
