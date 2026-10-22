@@ -30,6 +30,8 @@ app:
       answer-deadline-seconds: ${AI_ANSWER_DEADLINE_SECONDS:100}
       document-units-deadline-seconds: ${AI_DOCUMENT_UNITS_DEADLINE_SECONDS:10}
       deletion-deadline-seconds: ${AI_DELETION_DEADLINE_SECONDS:15}
+    lakehouse:
+      url: ${LAKEHOUSE_URL:http://ai-api:18000}
 
 spring:
   config:

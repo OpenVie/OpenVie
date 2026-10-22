@@ -68,6 +68,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue lakehouseCdcQueue() {
+        return QueueBuilder.durable(RabbitMqTopology.LAKEHOUSE_CDC_QUEUE).build();
+    }
+
+    @Bean
     public Binding documentIngestionBinding(Queue documentIngestionQueue, TopicExchange ingestionExchange) {
         return BindingBuilder.bind(documentIngestionQueue)
                 .to(ingestionExchange)
@@ -102,6 +107,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(documentStatusDeadLetterQueue)
                 .to(deadLetterExchange)
                 .with("document.ingest.*");
+    }
+
+    @Bean
+    public Binding lakehouseCdcBinding(Queue lakehouseCdcQueue, TopicExchange ingestionExchange) {
+        return BindingBuilder.bind(lakehouseCdcQueue)
+                .to(ingestionExchange)
+                .with(RabbitMqTopology.CDC_EVENT_ROUTING_KEY);
     }
 
     private Binding statusBinding(Queue queue, TopicExchange exchange, String routingKey) {
