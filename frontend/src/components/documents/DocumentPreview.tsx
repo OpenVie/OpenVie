@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,6 +66,7 @@ type PreviewData =
   | { kind: "csv"; rows: string[][]; truncated: boolean }
   | { kind: "markdown" | "html"; srcDoc: string }
   | { kind: "text"; text: string }
+  | { kind: "image"; url: string }
   | { kind: "unsupported" };
 
 /** Evidence identity for effects: stable per unit, changes re-anchor the highlight. */
@@ -626,6 +641,7 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
   const [data, setData] = useState<PreviewData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const blobRef = useRef<Blob | null>(null);
+  const imageUrlRef = useRef<string | null>(null);
   const anchor = useMemo(
     () => evidenceAnchor(evidence ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -683,6 +699,15 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
           const text = await downloaded.blob.text();
           if (cancelled) return;
           setData({ kind: "text", text });
+        } else if (kind === "image") {
+          if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+          const url = URL.createObjectURL(downloaded.blob);
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          imageUrlRef.current = url;
+          setData({ kind: "image", url });
         } else {
           setData({ kind: "unsupported" });
         }
@@ -695,6 +720,10 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
     return () => {
       cancelled = true;
       blobRef.current = null;
+      if (imageUrlRef.current) {
+        URL.revokeObjectURL(imageUrlRef.current);
+        imageUrlRef.current = null;
+      }
     };
   }, [documentId, fileName, fileType, request, reloadKey]);
 
@@ -775,6 +804,12 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
       {data.kind === "text" && (
         <div className="flex-1 overflow-auto p-3 sm:p-4">
           <TextPane text={data.text} anchor={anchor} />
+        </div>
+      )}
+      {data.kind === "image" && (
+        <div className="flex-1 overflow-auto bg-white p-3 sm:p-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={data.url} alt={fileName} className="mx-auto max-w-full rounded-lg" />
         </div>
       )}
     </div>

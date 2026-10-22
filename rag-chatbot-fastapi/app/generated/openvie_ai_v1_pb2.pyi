@@ -65,7 +65,7 @@ class GenerateAnswerRequest(_message.Message):
     def __init__(self, generation_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., chatbot_id: _Optional[str] = ..., knowledge_base_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., channel: _Optional[str] = ..., locale: _Optional[str] = ..., question: _Optional[str] = ..., prior_messages: _Optional[_Iterable[_Union[PriorMessage, _Mapping]]] = ..., tenant_name: _Optional[str] = ..., prompt_schema_version: _Optional[str] = ..., trace: _Optional[_Union[TraceMetadata, _Mapping]] = ..., document_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Citation(_message.Message):
-    __slots__ = ("id", "document_id", "source_name", "page_number", "chunk_index", "score", "snippet", "unit_id", "modality", "section_path", "block_type", "sheet_name", "cell_range", "table_id")
+    __slots__ = ("id", "document_id", "source_name", "page_number", "chunk_index", "score", "snippet", "unit_id", "modality", "section_path", "block_type", "sheet_name", "cell_range", "table_id", "parser_version", "image")
     ID_FIELD_NUMBER: _ClassVar[int]
     DOCUMENT_ID_FIELD_NUMBER: _ClassVar[int]
     SOURCE_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -80,6 +80,8 @@ class Citation(_message.Message):
     SHEET_NAME_FIELD_NUMBER: _ClassVar[int]
     CELL_RANGE_FIELD_NUMBER: _ClassVar[int]
     TABLE_ID_FIELD_NUMBER: _ClassVar[int]
+    PARSER_VERSION_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
     id: str
     document_id: str
     source_name: str
@@ -94,7 +96,21 @@ class Citation(_message.Message):
     sheet_name: str
     cell_range: str
     table_id: str
-    def __init__(self, id: _Optional[str] = ..., document_id: _Optional[str] = ..., source_name: _Optional[str] = ..., page_number: _Optional[int] = ..., chunk_index: _Optional[int] = ..., score: _Optional[float] = ..., snippet: _Optional[str] = ..., unit_id: _Optional[str] = ..., modality: _Optional[str] = ..., section_path: _Optional[_Iterable[str]] = ..., block_type: _Optional[str] = ..., sheet_name: _Optional[str] = ..., cell_range: _Optional[str] = ..., table_id: _Optional[str] = ...) -> None: ...
+    parser_version: str
+    image: CitationImage
+    def __init__(self, id: _Optional[str] = ..., document_id: _Optional[str] = ..., source_name: _Optional[str] = ..., page_number: _Optional[int] = ..., chunk_index: _Optional[int] = ..., score: _Optional[float] = ..., snippet: _Optional[str] = ..., unit_id: _Optional[str] = ..., modality: _Optional[str] = ..., section_path: _Optional[_Iterable[str]] = ..., block_type: _Optional[str] = ..., sheet_name: _Optional[str] = ..., cell_range: _Optional[str] = ..., table_id: _Optional[str] = ..., parser_version: _Optional[str] = ..., image: _Optional[_Union[CitationImage, _Mapping]] = ...) -> None: ...
+
+class CitationImage(_message.Message):
+    __slots__ = ("object_key", "media_type", "width", "height")
+    OBJECT_KEY_FIELD_NUMBER: _ClassVar[int]
+    MEDIA_TYPE_FIELD_NUMBER: _ClassVar[int]
+    WIDTH_FIELD_NUMBER: _ClassVar[int]
+    HEIGHT_FIELD_NUMBER: _ClassVar[int]
+    object_key: str
+    media_type: str
+    width: int
+    height: int
+    def __init__(self, object_key: _Optional[str] = ..., media_type: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ...) -> None: ...
 
 class GenerateAnswerResponse(_message.Message):
     __slots__ = ("generation_id", "authoritative_revision", "answer", "citations", "input_tokens", "output_tokens", "cache_tier", "avoided_input_tokens", "avoided_output_tokens")

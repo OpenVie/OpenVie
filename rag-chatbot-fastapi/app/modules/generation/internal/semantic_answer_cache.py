@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +50,7 @@ from app.modules.retrieval.api import QueryProfile, RetrievalApi
 
 logger = logging.getLogger(__name__)
 
-SEMANTIC_ANSWER_CACHE_SCHEMA_VERSION = 1
+SEMANTIC_ANSWER_CACHE_SCHEMA_VERSION = 3
 SEMANTIC_ANSWER_SCOPE_VERSION = 1
 CHAT_PROMPT_SCHEMA_VERSION = "chat-prompts-v4"
 MAX_CACHED_CITATIONS = 32
@@ -659,6 +673,11 @@ class SemanticAnswerCache:
             "sheet_name",
             "cell_range",
             "table_id",
+            "parser_version",
+            "image_object_key",
+            "image_media_type",
+            "image_width",
+            "image_height",
         }
         if not isinstance(item, dict) or set(item) != fields:
             raise ValueError("Semantic answer citation is malformed")
@@ -691,12 +710,21 @@ class SemanticAnswerCache:
             "sheet_name",
             "cell_range",
             "table_id",
+            "parser_version",
+            "image_object_key",
+            "image_media_type",
         )
         if any(
             item[field] is not None and not isinstance(item[field], str)
             for field in optional_strings
         ):
             raise ValueError("Semantic answer optional citation field is malformed")
+        for field in ("image_width", "image_height"):
+            value = item[field]
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+            ):
+                raise ValueError("Semantic answer image dimension is malformed")
         section_path = item["section_path"]
         if not isinstance(section_path, list) or not all(
             isinstance(value, str) for value in section_path
@@ -717,6 +745,11 @@ class SemanticAnswerCache:
             sheet_name=item["sheet_name"],
             cell_range=item["cell_range"],
             table_id=item["table_id"],
+            parser_version=item["parser_version"],
+            image_object_key=item["image_object_key"],
+            image_media_type=item["image_media_type"],
+            image_width=item["image_width"],
+            image_height=item["image_height"],
         )
 
     def _validate_qdrant_payload(

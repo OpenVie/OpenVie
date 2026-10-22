@@ -1,3 +1,17 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.ai.api;
 
 import java.util.List;
@@ -64,7 +78,20 @@ public interface AiInferenceApi {
             @JsonProperty("block_type") String blockType,
             @JsonProperty("sheet_name") String sheetName,
             @JsonProperty("cell_range") String cellRange,
-            @JsonProperty("table_id") String tableId
+            @JsonProperty("table_id") String tableId,
+            @JsonProperty("parser_version") String parserVersion,
+            CitationImage image
+    ) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    record CitationImage(
+            // Storage locator of the persisted image asset, resolved by the
+            // business API into a fetchable media URL.
+            @JsonProperty("object_key") String objectKey,
+            @JsonProperty("media_type") String mediaType,
+            @JsonProperty("width") Integer width,
+            @JsonProperty("height") Integer height
     ) {
     }
 

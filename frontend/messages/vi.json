@@ -302,6 +302,7 @@
   },
   "AssistantResponse": {
     "sources": "Nguồn",
+    "citedImages": "Hình ảnh trích dẫn",
     "openCitedSource": "Mở bằng chứng được trích dẫn",
     "openSourceIn": "Mở bằng chứng trong {source}"
   },

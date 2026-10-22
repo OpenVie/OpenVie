@@ -89,4 +89,9 @@ app:
     logo-url: ${LOGO_URL:}
   notifications:
     encryption-key: ${NOTIFICATION_ENC_KEY:}
+  # Image ingestion (PNG/JPEG/WebP) rides the Python worker's OCR pipeline.
+  # Enable this together with INGESTION_OCR_ENABLED on the worker; while it is
+  # off, image uploads are rejected up front instead of failing ingestion.
+  documents:
+    image-uploads-enabled: ${OCR_UPLOADS_ENABLED:false}
 

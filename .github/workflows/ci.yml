@@ -9,12 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  license-headers:
+    # ASF gate: every authored source file carries the Apache-2.0 header.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python3 scripts/license_headers.py --check
+
   java:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
       redis:
-        image: redis:7-alpine
+        # pinned: Redis ≥7.4 is RSALv2/SSPL (not OSI); 7.2.x is BSD-3
+        image: redis:7.2-alpine
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s
