@@ -357,6 +357,7 @@ services:
       OCR_UPLOADS_ENABLED: ${OCR_UPLOADS_ENABLED:-false}
       AI_GRPC_TARGET: ${AI_GRPC_TARGET:-ai-api:50051}
       AI_GRPC_PLAINTEXT: ${AI_GRPC_PLAINTEXT:-true}
+      LAKEHOUSE_URL: ${LAKEHOUSE_URL:-http://ai-api:18000}
       TOKEN_KEY: ${TOKEN_KEY:-replace-with-at-least-32-random-bytes}
       NOTIFICATION_ENC_KEY: ${NOTIFICATION_ENC_KEY:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
