@@ -15,17 +15,18 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
-import pytest
 import pyarrow.parquet as pq
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from app.modules.lakehouse.api import router as lakehouse_router
+from app.modules.lakehouse.api import set_lakehouse_runtime
 from app.modules.lakehouse.engine import DuckDbLakehouseEngine
-from app.modules.lakehouse.models import (
-    LakehouseDataset,
-    LakehouseQueryRequest,
-)
+from app.modules.lakehouse.models import LakehouseDataset
 from app.modules.lakehouse.sink import LakehouseArchiveSink
 
 
@@ -79,13 +80,15 @@ async def test_sink_writes_valid_snappy_parquet_partition() -> None:
         dataset=LakehouseDataset.CHAT_ANALYTICS,
         records=records,
         batch_id="batch-001",
-        timestamp=datetime(2026, 10, 1, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC),
     )
 
-    assert key == f"lakehouse/tenants/{TENANT_A}/chat_analytics/year=2026/month=10/batch-001.parquet"
+    expected = (
+        f"lakehouse/tenants/{TENANT_A}/chat_analytics/year=2026/month=10/batch-001.parquet"
+    )
+    assert key == expected
     assert key in store.objects
 
-    # Verify Parquet file contents with pyarrow
     tbl = pq.read_table(io.BytesIO(store.objects[key]))
     assert tbl.num_rows == 2
     assert "tenant_id" in tbl.column_names
@@ -99,28 +102,49 @@ async def test_engine_enforces_tenant_isolation() -> None:
     sink = LakehouseArchiveSink(store)
     engine = DuckDbLakehouseEngine(store)
 
-    # Tenant A records
     key_a = await sink.write_partition(
         tenant_id=TENANT_A,
         dataset=LakehouseDataset.CHAT_ANALYTICS,
         records=[
-            {"turn_id": "a-1", "status": "COMPLETED", "prompt_tokens": 100, "completion_tokens": 50, "duration_ms": 100, "has_sensitive_flag": False, "query_type": "search"},
-            {"turn_id": "a-2", "status": "COMPLETED", "prompt_tokens": 150, "completion_tokens": 70, "duration_ms": 120, "has_sensitive_flag": False, "query_type": "search"},
+            {
+                "turn_id": "a-1",
+                "status": "COMPLETED",
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "duration_ms": 100,
+                "has_sensitive_flag": False,
+                "query_type": "search",
+            },
+            {
+                "turn_id": "a-2",
+                "status": "COMPLETED",
+                "prompt_tokens": 150,
+                "completion_tokens": 70,
+                "duration_ms": 120,
+                "has_sensitive_flag": False,
+                "query_type": "search",
+            },
         ],
     )
     engine.register_partition_bytes(key_a, store.objects[key_a])
 
-    # Tenant B records
     key_b = await sink.write_partition(
         tenant_id=TENANT_B,
         dataset=LakehouseDataset.CHAT_ANALYTICS,
         records=[
-            {"turn_id": "b-1", "status": "COMPLETED", "prompt_tokens": 999, "completion_tokens": 999, "duration_ms": 999, "has_sensitive_flag": True, "query_type": "greeting"},
+            {
+                "turn_id": "b-1",
+                "status": "COMPLETED",
+                "prompt_tokens": 999,
+                "completion_tokens": 999,
+                "duration_ms": 999,
+                "has_sensitive_flag": True,
+                "query_type": "greeting",
+            },
         ],
     )
     engine.register_partition_bytes(key_b, store.objects[key_b])
 
-    # Tenant A queries chat_analytics
     res_a = await engine.execute_query(
         query="SELECT turn_id, prompt_tokens FROM chat_analytics",
         tenant_id=TENANT_A,
@@ -129,7 +153,6 @@ async def test_engine_enforces_tenant_isolation() -> None:
     assert res_a.row_count == 2
     assert all(r[0].startswith("a-") for r in res_a.rows)
 
-    # Tenant B queries chat_analytics
     res_b = await engine.execute_query(
         query="SELECT turn_id, prompt_tokens FROM chat_analytics",
         tenant_id=TENANT_B,
@@ -171,9 +194,33 @@ async def test_engine_chat_summary_aggregations() -> None:
         tenant_id=TENANT_A,
         dataset=LakehouseDataset.CHAT_ANALYTICS,
         records=[
-            {"turn_id": "t1", "status": "COMPLETED", "duration_ms": 100, "prompt_tokens": 40, "completion_tokens": 60, "has_sensitive_flag": False, "query_type": "search"},
-            {"turn_id": "t2", "status": "COMPLETED", "duration_ms": 200, "prompt_tokens": 50, "completion_tokens": 50, "has_sensitive_flag": True, "query_type": "calculation"},
-            {"turn_id": "t3", "status": "FAILED", "duration_ms": 50, "prompt_tokens": 10, "completion_tokens": 0, "has_sensitive_flag": False, "query_type": "search"},
+            {
+                "turn_id": "t1",
+                "status": "COMPLETED",
+                "duration_ms": 100,
+                "prompt_tokens": 40,
+                "completion_tokens": 60,
+                "has_sensitive_flag": False,
+                "query_type": "search",
+            },
+            {
+                "turn_id": "t2",
+                "status": "COMPLETED",
+                "duration_ms": 200,
+                "prompt_tokens": 50,
+                "completion_tokens": 50,
+                "has_sensitive_flag": True,
+                "query_type": "calculation",
+            },
+            {
+                "turn_id": "t3",
+                "status": "FAILED",
+                "duration_ms": 50,
+                "prompt_tokens": 10,
+                "completion_tokens": 0,
+                "has_sensitive_flag": False,
+                "query_type": "search",
+            },
         ],
     )
     engine.register_partition_bytes(key, store.objects[key])
@@ -182,7 +229,7 @@ async def test_engine_chat_summary_aggregations() -> None:
     assert summary.total_turns == 3
     assert summary.completed_turns == 2
     assert summary.failed_turns == 1
-    assert summary.total_tokens == 210  # (40+60) + (50+50) + (10+0)
+    assert summary.total_tokens == 210
     assert summary.sensitive_turn_count == 1
     assert summary.avg_duration_ms == pytest.approx(116.67, 0.1)
     assert summary.query_types == {"search": 2, "calculation": 1}
@@ -206,16 +253,30 @@ async def test_engine_document_and_audit_analytics() -> None:
     sink = LakehouseArchiveSink(store)
     engine = DuckDbLakehouseEngine(store)
 
-    # Write document lifecycle partition
     doc_key = await sink.write_partition(
         tenant_id=TENANT_A,
         dataset=LakehouseDataset.DOCUMENT_LIFECYCLE,
         records=[
-            {"document_id": "d1", "content_type": "application/pdf", "file_size_bytes": 10240, "chunk_count": 8, "entity_count": 4, "duration_seconds": 1.5, "ingestion_status": "COMPLETED"},
-            {"document_id": "d2", "content_type": "text/markdown", "file_size_bytes": 2048, "chunk_count": 2, "entity_count": 1, "duration_seconds": 0.5, "ingestion_status": "COMPLETED"},
+            {
+                "document_id": "d1",
+                "content_type": "application/pdf",
+                "file_size_bytes": 10240,
+                "chunk_count": 8,
+                "entity_count": 4,
+                "duration_seconds": 1.5,
+                "ingestion_status": "COMPLETED",
+            },
+            {
+                "document_id": "d2",
+                "content_type": "text/markdown",
+                "file_size_bytes": 2048,
+                "chunk_count": 2,
+                "entity_count": 1,
+                "duration_seconds": 0.5,
+                "ingestion_status": "COMPLETED",
+            },
         ],
     )
-
     engine.register_partition_bytes(doc_key, store.objects[doc_key])
 
     doc_summary = await engine.get_document_summary(TENANT_A)
@@ -225,7 +286,6 @@ async def test_engine_document_and_audit_analytics() -> None:
     assert doc_summary.total_entities == 5
     assert doc_summary.content_types == {"application/pdf": 1, "text/markdown": 1}
 
-    # Write audit events partition
     audit_key = await sink.write_partition(
         tenant_id=TENANT_A,
         dataset=LakehouseDataset.AUDIT_EVENTS,
@@ -244,10 +304,6 @@ async def test_engine_document_and_audit_analytics() -> None:
 
 
 def test_lakehouse_fastapi_endpoints() -> None:
-    from fastapi.testclient import TestClient
-    from fastapi import FastAPI
-    from app.modules.lakehouse.api import router as lakehouse_router, set_lakehouse_runtime
-
     store = MemoryStore()
     sink = LakehouseArchiveSink(store)
     engine = DuckDbLakehouseEngine(store)
@@ -257,12 +313,10 @@ def test_lakehouse_fastapi_endpoints() -> None:
     app.include_router(lakehouse_router)
 
     with TestClient(app) as client:
-        # Health endpoint
         health_resp = client.get("/api/v1/lakehouse/health")
         assert health_resp.status_code == 200
         assert health_resp.json()["engine"] == "DuckDB-Snappy-Parquet"
 
-        # Archive batch endpoint
         archive_resp = client.post(
             "/api/v1/lakehouse/archive",
             json={
@@ -287,7 +341,6 @@ def test_lakehouse_fastapi_endpoints() -> None:
         assert data["status"] == "archived"
         assert data["record_count"] == 1
 
-        # Query endpoint
         query_resp = client.post(
             "/api/v1/lakehouse/query?dataset=chat_analytics",
             json={
@@ -300,7 +353,6 @@ def test_lakehouse_fastapi_endpoints() -> None:
         assert q_data["row_count"] == 1
         assert q_data["rows"][0][0] == "api-turn-1"
 
-        # Summary endpoint
         analytics_resp = client.get(f"/api/v1/lakehouse/analytics/chat?tenant_id={TENANT_A}")
         assert analytics_resp.status_code == 200
         a_data = analytics_resp.json()
