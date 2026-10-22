@@ -23,14 +23,6 @@ from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
 from app.bootstrap.configuration import model_config, storage_config
-from app.common.storage import SeaweedS3DocumentStore
-from app.modules.lakehouse import (
-    DuckDbLakehouseEngine,
-    LakehouseArchiveSink,
-    LakehouseCdcWorker,
-    lakehouse_router,
-    set_lakehouse_runtime,
-)
 from app.bootstrap.generation import RagRuntime
 from app.bootstrap.grpc import start_grpc_server
 from app.bootstrap.health import router as health_router
@@ -38,7 +30,15 @@ from app.bootstrap.settings import settings
 from app.bootstrap.workers import WorkerManager
 from app.common.cache import RedisCacheStore, TtlJitter
 from app.common.middleware import RequestIdMiddleware
+from app.common.storage import SeaweedS3DocumentStore
 from app.modules.ingestion.internal.checkpoints import RedisIngestionCheckpointStore
+from app.modules.lakehouse import (
+    DuckDbLakehouseEngine,
+    LakehouseArchiveSink,
+    LakehouseCdcWorker,
+    lakehouse_router,
+    set_lakehouse_runtime,
+)
 from app.modules.model.internal.embedding import create_embedding_client
 
 logging.basicConfig(

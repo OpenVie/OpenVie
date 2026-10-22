@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app.modules.lakehouse.api import router as lakehouse_router, set_lakehouse_runtime
+from app.modules.lakehouse.api import router as lakehouse_router
+from app.modules.lakehouse.api import set_lakehouse_runtime
 from app.modules.lakehouse.cdc_worker import LakehouseCdcWorker
 from app.modules.lakehouse.engine import DuckDbLakehouseEngine
 from app.modules.lakehouse.models import (

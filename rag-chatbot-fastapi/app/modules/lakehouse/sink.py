@@ -17,14 +17,14 @@ from __future__ import annotations
 import io
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from app.common.storage_keys import lakehouse_partition_key, lakehouse_partition_prefix
+from app.common.storage_keys import lakehouse_partition_key
 from app.modules.lakehouse.models import LakehouseDataset
 
 logger = logging.getLogger(__name__)
@@ -59,11 +59,10 @@ class LakehouseArchiveSink:
         if not records:
             raise ValueError("Cannot archive empty record batch to lakehouse")
 
-        ts = timestamp or datetime.now(timezone.utc)
+        ts = timestamp or datetime.now(UTC)
         bid = batch_id or str(uuid4())
         dataset_name = dataset.value if isinstance(dataset, LakehouseDataset) else str(dataset)
 
-        # Standardize records: ensure tenant_id, timestamp, and json serialization of complex types
         normalized: list[dict[str, Any]] = []
         for r in records:
             row = dict(r)
@@ -73,7 +72,6 @@ class LakehouseArchiveSink:
             elif isinstance(row["created_at"], datetime):
                 row["created_at"] = row["created_at"].isoformat()
 
-            # Ensure complex types (dict, list) are JSON strings for portable Arrow storage
             for k, v in list(row.items()):
                 if isinstance(v, (dict, list)):
                     row[k] = json.dumps(v, ensure_ascii=False)

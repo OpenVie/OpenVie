@@ -18,9 +18,6 @@ import com.openvie.api.common.event.AuditLogEvent;
 import com.openvie.api.common.model.AuditLog;
 import com.openvie.api.common.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
-import com.openvie.api.document.messaging.LakehouseCdcPublisher;
-import java.util.HashMap;
-import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -33,7 +30,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class AuditLogListener {
 
     private final AuditLogRepository auditLogRepository;
-    private final LakehouseCdcPublisher lakehouseCdcPublisher;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -51,17 +47,6 @@ public class AuditLogListener {
 
             auditLogRepository.save(auditLog);
             log.debug("Audit log saved: action={}, userId={}", event.getAction(), event.getUserId());
-
-            // Stream event asynchronously to cold Lakehouse store without blocking OLTP
-            Map<String, Object> cdcData = new HashMap<>();
-            cdcData.put("event_id", auditLog.getId() != null ? auditLog.getId().toString() : null);
-            cdcData.put("user_id", event.getUserId() != null ? event.getUserId().toString() : null);
-            cdcData.put("action", event.getAction() != null ? event.getAction().name() : null);
-            cdcData.put("resource_type", event.getResourceType());
-            cdcData.put("resource_id", event.getResourceId() != null ? event.getResourceId().toString() : null);
-            cdcData.put("ip_address", event.getIpAddress());
-            cdcData.put("user_agent", event.getUserAgent());
-            lakehouseCdcPublisher.publishCdcEvent(event.getTenantId(), "audit_events", cdcData);
         } catch (Exception e) {
             log.error("Failed to save audit log: action={}, userId={} — {}",
                     event.getAction(), event.getUserId(), e.getMessage());

@@ -14,22 +14,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class LakehouseDataset(str, Enum):
+class LakehouseDataset(StrEnum):
     AUDIT_EVENTS = "audit_events"
     CHAT_ANALYTICS = "chat_analytics"
     DOCUMENT_LIFECYCLE = "document_lifecycle"
     WORKFLOW_DECISIONS = "workflow_decisions"
 
 
-class CdcOperation(str, Enum):
+class CdcOperation(StrEnum):
     INSERT = "INSERT"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
@@ -43,7 +43,7 @@ class CdcRecord(BaseModel):
     tenant_id: UUID
     dataset: LakehouseDataset
     op: CdcOperation = CdcOperation.INSERT
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     data: dict[str, Any]
 
 

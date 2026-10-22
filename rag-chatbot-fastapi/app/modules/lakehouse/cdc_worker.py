@@ -59,8 +59,12 @@ class LakehouseCdcWorker:
         if self._running:
             return
         self._running = True
-        self._task = asyncio.create_task(self._consume_loop(), name="lakehouse-cdc-consumer")
-        self._flush_task = asyncio.create_task(self._flush_timer_loop(), name="lakehouse-cdc-flusher")
+        self._task = asyncio.create_task(
+            self._consume_loop(), name="lakehouse-cdc-consumer"
+        )
+        self._flush_task = asyncio.create_task(
+            self._flush_timer_loop(), name="lakehouse-cdc-flusher"
+        )
         logger.info("Lakehouse CDC worker started on queue %s", LAKEHOUSE_CDC_QUEUE)
 
     async def stop(self) -> None:
@@ -106,7 +110,12 @@ class LakehouseCdcWorker:
         try:
             await self._sink.write_partition(tenant_id, dataset, records)
         except Exception as exc:
-            logger.error("Failed to flush lakehouse batch for tenant %s dataset %s: %s", tenant_id, dataset, exc)
+            logger.error(
+                "Failed to flush lakehouse batch for tenant %s dataset %s: %s",
+                tenant_id,
+                dataset,
+                exc,
+            )
             # Re-queue on failure
             if key not in self._buffer:
                 self._buffer[key] = []
@@ -150,7 +159,9 @@ class LakehouseCdcWorker:
                 break
             except Exception as exc:
                 if self._running:
-                    logger.warning("Lakehouse CDC consumer connection failed: %s. Retrying in 5s...", exc)
+                    logger.warning(
+                        "Lakehouse CDC consumer connection failed: %s. Retrying in 5s...", exc
+                    )
                     await asyncio.sleep(5.0)
 
     async def _process_message(self, message: AbstractIncomingMessage) -> None:
@@ -170,7 +181,9 @@ class LakehouseCdcWorker:
                                 "document_id": str(payload.get("document_id", "")),
                                 "knowledge_base_id": str(payload.get("knowledge_base_id", "")),
                                 "file_name": str(payload.get("file_name", "unknown")),
-                                "content_type": str(payload.get("content_type", "application/octet-stream")),
+                                "content_type": str(
+                                    payload.get("content_type", "application/octet-stream")
+                                ),
                                 "file_size_bytes": int(payload.get("file_size_bytes", 0)),
                                 "chunk_count": int(payload.get("chunk_count", 1)),
                                 "entity_count": int(payload.get("entity_count", 0)),

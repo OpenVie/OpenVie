@@ -18,7 +18,7 @@ import io
 import logging
 import re
 import time
-from typing import Any, Protocol
+from typing import Protocol
 
 import duckdb
 import pyarrow.parquet as pq
@@ -81,18 +81,15 @@ class DuckDbLakehouseEngine:
         partitions: list[str] | None = None,
     ) -> LakehouseQueryResult:
         """Executes a read-only SQL query over the given dataset's Parquet partitions."""
-        # Security validation: read-only SQL
         if DISALLOWED_SQL_PATTERNS.search(query):
             raise ValueError("Query contains prohibited modifying or administrative SQL keywords")
 
         dataset_name = dataset.value if isinstance(dataset, LakehouseDataset) else str(dataset)
         start_time = time.perf_counter()
 
-        # Gather parquet tables for the requested dataset
         arrow_tables = []
         scanned_count = 0
 
-        # Read from partition cache or download
         matching_keys = [
             k for k in (partitions or self._partition_cache.keys())
             if f"/tenants/{tenant_id}/{dataset_name}/" in k
@@ -125,16 +122,14 @@ class DuckDbLakehouseEngine:
                     f"WHERE tenant_id = '{tenant_id}'"
                 )
             else:
-                # Create empty schema table if no partitions exist yet
                 self._create_empty_schema(con, dataset_name)
 
-            # Ensure query executes with limit enforced
             sanitized_query = query.strip().rstrip(";")
             final_query = f"SELECT * FROM ({sanitized_query}) AS _subq LIMIT {limit}"
 
             cursor = con.execute(final_query)
             columns = [desc[0] for desc in cursor.description] if cursor.description else []
-            rows = cursor.fetchall()
+            rows = [list(r) for r in cursor.fetchall()]
             execution_ms = (time.perf_counter() - start_time) * 1000.0
 
             return LakehouseQueryResult(
@@ -155,35 +150,41 @@ class DuckDbLakehouseEngine:
                 "CREATE VIEW chat_analytics AS SELECT "
                 "''::VARCHAR as turn_id, ''::VARCHAR as tenant_id, ''::VARCHAR as session_id, "
                 "''::VARCHAR as user_id, ''::VARCHAR as status, ''::VARCHAR as query_type, "
-                "0::INTEGER as prompt_tokens, 0::INTEGER as completion_tokens, 0::INTEGER as duration_ms, "
-                "0::INTEGER as citation_count, false::BOOLEAN as has_sensitive_flag, now()::TIMESTAMP as created_at WHERE 1=0"
+                "0::INTEGER as prompt_tokens, 0::INTEGER as completion_tokens, "
+                "0::INTEGER as duration_ms, 0::INTEGER as citation_count, "
+                "false::BOOLEAN as has_sensitive_flag, now()::TIMESTAMP as created_at WHERE 1=0"
             ),
             LakehouseDataset.DOCUMENT_LIFECYCLE.value: (
                 "CREATE VIEW document_lifecycle AS SELECT "
-                "''::VARCHAR as document_id, ''::VARCHAR as tenant_id, ''::VARCHAR as knowledge_base_id, "
-                "''::VARCHAR as uploader_id, ''::VARCHAR as file_name, ''::VARCHAR as content_type, "
-                "0::BIGINT as file_size_bytes, 0::INTEGER as chunk_count, 0::INTEGER as entity_count, "
-                "0::INTEGER as relation_count, ''::VARCHAR as ingestion_status, 0.0::DOUBLE as duration_seconds, "
+                "''::VARCHAR as document_id, ''::VARCHAR as tenant_id, "
+                "''::VARCHAR as knowledge_base_id, ''::VARCHAR as uploader_id, "
+                "''::VARCHAR as file_name, ''::VARCHAR as content_type, "
+                "0::BIGINT as file_size_bytes, 0::INTEGER as chunk_count, "
+                "0::INTEGER as entity_count, 0::INTEGER as relation_count, "
+                "''::VARCHAR as ingestion_status, 0.0::DOUBLE as duration_seconds, "
                 "now()::TIMESTAMP as created_at WHERE 1=0"
             ),
             LakehouseDataset.AUDIT_EVENTS.value: (
                 "CREATE VIEW audit_events AS SELECT "
                 "''::VARCHAR as event_id, ''::VARCHAR as tenant_id, ''::VARCHAR as user_id, "
-                "''::VARCHAR as action, ''::VARCHAR as resource_type, ''::VARCHAR as resource_id, "
-                "''::VARCHAR as ip_address, ''::VARCHAR as user_agent, now()::TIMESTAMP as created_at, "
+                "''::VARCHAR as action, ''::VARCHAR as resource_type, "
+                "''::VARCHAR as resource_id, ''::VARCHAR as ip_address, "
+                "''::VARCHAR as user_agent, now()::TIMESTAMP as created_at, "
                 "''::VARCHAR as metadata WHERE 1=0"
             ),
             LakehouseDataset.WORKFLOW_DECISIONS.value: (
                 "CREATE VIEW workflow_decisions AS SELECT "
-                "''::VARCHAR as process_id, ''::VARCHAR as tenant_id, ''::VARCHAR as document_id, "
-                "''::VARCHAR as submitter_id, ''::VARCHAR as decider_id, ''::VARCHAR as decision, "
-                "1::INTEGER as level, false::BOOLEAN as is_sensitive, 0.0::DOUBLE as duration_minutes, "
-                "now()::TIMESTAMP as created_at WHERE 1=0"
+                "''::VARCHAR as process_id, ''::VARCHAR as tenant_id, "
+                "''::VARCHAR as document_id, ''::VARCHAR as submitter_id, "
+                "''::VARCHAR as decider_id, ''::VARCHAR as decision, "
+                "1::INTEGER as level, false::BOOLEAN as is_sensitive, "
+                "0.0::DOUBLE as duration_minutes, now()::TIMESTAMP as created_at WHERE 1=0"
             ),
         }
         create_sql = schemas.get(
             dataset,
-            f"CREATE VIEW {dataset} AS SELECT ''::VARCHAR as tenant_id, now()::TIMESTAMP as created_at WHERE 1=0"
+            f"CREATE VIEW {dataset} AS SELECT ''::VARCHAR as tenant_id, "
+            "now()::TIMESTAMP as created_at WHERE 1=0",
         )
         con.execute(create_sql)
 
@@ -192,29 +193,31 @@ class DuckDbLakehouseEngine:
         query = (
             "SELECT "
             "count(*)::INTEGER as total_turns, "
-            "coalesce(sum(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::INTEGER as completed_turns, "
-            "coalesce(sum(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0)::INTEGER as failed_turns, "
+            "coalesce(sum(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as completed_turns, "
+            "coalesce(sum(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as failed_turns, "
             "coalesce(avg(duration_ms), 0.0)::DOUBLE as avg_duration_ms, "
             "coalesce(sum(prompt_tokens + completion_tokens), 0)::INTEGER as total_tokens, "
-            "coalesce(sum(CASE WHEN has_sensitive_flag THEN 1 ELSE 0 END), 0)::INTEGER as sensitive_count "
+            "coalesce(sum(CASE WHEN has_sensitive_flag THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as sensitive_count "
             "FROM chat_analytics"
         )
         res = await self.execute_query(query, tenant_id, LakehouseDataset.CHAT_ANALYTICS)
-        row = res.rows[0] if res.rows else (0, 0, 0, 0.0, 0, 0)
+        row = res.rows[0] if res.rows else [0, 0, 0, 0.0, 0, 0]
 
-        # Query types breakdown
         qt_query = "SELECT query_type, count(*)::INTEGER FROM chat_analytics GROUP BY query_type"
         qt_res = await self.execute_query(qt_query, tenant_id, LakehouseDataset.CHAT_ANALYTICS)
         query_types = {r[0]: r[1] for r in qt_res.rows if r[0]}
 
         return ChatAnalyticsSummary(
             tenant_id=tenant_id,
-            total_turns=row[0] or 0,
-            completed_turns=row[1] or 0,
-            failed_turns=row[2] or 0,
+            total_turns=int(row[0] or 0),
+            completed_turns=int(row[1] or 0),
+            failed_turns=int(row[2] or 0),
             avg_duration_ms=round(float(row[3] or 0.0), 2),
-            total_tokens=row[4] or 0,
-            sensitive_turn_count=row[5] or 0,
+            total_tokens=int(row[4] or 0),
+            sensitive_turn_count=int(row[5] or 0),
             daily_volume=[],
             query_types=query_types,
         )
@@ -231,18 +234,21 @@ class DuckDbLakehouseEngine:
             "FROM document_lifecycle"
         )
         res = await self.execute_query(query, tenant_id, LakehouseDataset.DOCUMENT_LIFECYCLE)
-        row = res.rows[0] if res.rows else (0, 0, 0, 0, 0.0)
+        row = res.rows[0] if res.rows else [0, 0, 0, 0, 0.0]
 
-        ct_query = "SELECT content_type, count(*)::INTEGER FROM document_lifecycle GROUP BY content_type"
+        ct_query = (
+            "SELECT content_type, count(*)::INTEGER FROM document_lifecycle "
+            "GROUP BY content_type"
+        )
         ct_res = await self.execute_query(ct_query, tenant_id, LakehouseDataset.DOCUMENT_LIFECYCLE)
         content_types = {r[0]: r[1] for r in ct_res.rows if r[0]}
 
         return DocumentAnalyticsSummary(
             tenant_id=tenant_id,
-            total_documents=row[0] or 0,
-            total_bytes=row[1] or 0,
-            total_chunks=row[2] or 0,
-            total_entities=row[3] or 0,
+            total_documents=int(row[0] or 0),
+            total_bytes=int(row[1] or 0),
+            total_chunks=int(row[2] or 0),
+            total_entities=int(row[3] or 0),
             content_types=content_types,
             avg_ingestion_seconds=round(float(row[4] or 0.0), 2),
         )
@@ -253,20 +259,30 @@ class DuckDbLakehouseEngine:
         res = await self.execute_query(query, tenant_id, LakehouseDataset.AUDIT_EVENTS)
         total = res.rows[0][0] if res.rows else 0
 
-        action_query = "SELECT action, count(*)::INTEGER FROM audit_events GROUP BY action ORDER BY 2 DESC LIMIT 10"
-        action_res = await self.execute_query(action_query, tenant_id, LakehouseDataset.AUDIT_EVENTS)
+        action_query = (
+            "SELECT action, count(*)::INTEGER FROM audit_events "
+            "GROUP BY action ORDER BY 2 DESC LIMIT 10"
+        )
+        action_res = await self.execute_query(
+            action_query, tenant_id, LakehouseDataset.AUDIT_EVENTS
+        )
         top_actions = {r[0]: r[1] for r in action_res.rows if r[0]}
 
-        actor_query = "SELECT user_id, count(*)::INTEGER FROM audit_events WHERE user_id IS NOT NULL GROUP BY user_id ORDER BY 2 DESC LIMIT 5"
-        actor_res = await self.execute_query(actor_query, tenant_id, LakehouseDataset.AUDIT_EVENTS)
+        actor_query = (
+            "SELECT user_id, count(*)::INTEGER FROM audit_events "
+            "WHERE user_id IS NOT NULL GROUP BY user_id ORDER BY 2 DESC LIMIT 5"
+        )
+        actor_res = await self.execute_query(
+            actor_query, tenant_id, LakehouseDataset.AUDIT_EVENTS
+        )
         top_actors = {r[0]: r[1] for r in actor_res.rows if r[0]}
 
         return AuditAnalyticsSummary(
             tenant_id=tenant_id,
-            total_events=total or 0,
+            total_events=int(total or 0),
             top_actions=top_actions,
             top_actors=top_actors,
-            recent_events_count_24h=total or 0,
+            recent_events_count_24h=int(total or 0),
         )
 
     async def get_workflow_summary(self, tenant_id: str) -> WorkflowAnalyticsSummary:
@@ -274,24 +290,27 @@ class DuckDbLakehouseEngine:
         query = (
             "SELECT "
             "count(*)::INTEGER as total, "
-            "coalesce(sum(CASE WHEN decision = 'APPROVE' THEN 1 ELSE 0 END), 0)::INTEGER as approved, "
-            "coalesce(sum(CASE WHEN decision = 'REJECT' THEN 1 ELSE 0 END), 0)::INTEGER as rejected, "
-            "coalesce(sum(CASE WHEN decision = 'ESCALATE' THEN 1 ELSE 0 END), 0)::INTEGER as escalated, "
+            "coalesce(sum(CASE WHEN decision = 'APPROVE' THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as approved, "
+            "coalesce(sum(CASE WHEN decision = 'REJECT' THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as rejected, "
+            "coalesce(sum(CASE WHEN decision = 'ESCALATE' THEN 1 ELSE 0 END), 0)::INTEGER "
+            "as escalated, "
             "coalesce(avg(duration_minutes), 0.0)::DOUBLE as avg_duration "
             "FROM workflow_decisions"
         )
         res = await self.execute_query(query, tenant_id, LakehouseDataset.WORKFLOW_DECISIONS)
-        row = res.rows[0] if res.rows else (0, 0, 0, 0, 0.0)
+        row = res.rows[0] if res.rows else [0, 0, 0, 0, 0.0]
         total = row[0] or 0
         approved = row[1] or 0
         rate = round((approved / total * 100.0), 2) if total > 0 else 0.0
 
         return WorkflowAnalyticsSummary(
             tenant_id=tenant_id,
-            total_processes=total,
-            approved_count=approved,
-            rejected_count=row[2] or 0,
-            escalated_count=row[3] or 0,
+            total_processes=int(total),
+            approved_count=int(approved),
+            rejected_count=int(row[2] or 0),
+            escalated_count=int(row[3] or 0),
             approval_rate_percent=rate,
             avg_duration_minutes=round(float(row[4] or 0.0), 2),
         )

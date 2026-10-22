@@ -18,7 +18,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.modules.lakehouse.engine import DuckDbLakehouseEngine
 from app.modules.lakehouse.models import (
@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/lakehouse", tags=["Lakehouse Analytics"])
 
-# Runtime dependencies injected via app state or factory
 _engine: DuckDbLakehouseEngine | None = None
 _sink: LakehouseArchiveSink | None = None
 
@@ -67,8 +66,9 @@ def get_sink() -> LakehouseArchiveSink:
 
 
 @router.get("/health")
-async def lakehouse_health(engine: DuckDbLakehouseEngine = Depends(get_engine)) -> dict[str, Any]:
+async def lakehouse_health() -> dict[str, Any]:
     """Lakehouse status and supported datasets."""
+    engine = get_engine()
     return {
         "status": "healthy",
         "engine": "DuckDB-Snappy-Parquet",
@@ -80,10 +80,10 @@ async def lakehouse_health(engine: DuckDbLakehouseEngine = Depends(get_engine)) 
 @router.post("/query", response_model=LakehouseQueryResult)
 async def query_lakehouse(
     req: LakehouseQueryRequest,
-    dataset: LakehouseDataset = Query(default=LakehouseDataset.CHAT_ANALYTICS),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
+    dataset: LakehouseDataset = LakehouseDataset.CHAT_ANALYTICS,
 ) -> LakehouseQueryResult:
-    """Executes a read-only DuckDB SQL query over the given dataset's Lakehouse Parquet partitions."""
+    """Executes a read-only DuckDB SQL query over Lakehouse Parquet partitions."""
+    engine = get_engine()
     try:
         return await engine.execute_query(
             query=req.query,
@@ -104,10 +104,10 @@ async def query_lakehouse(
 @router.post("/archive", status_code=status.HTTP_201_CREATED)
 async def archive_batch(
     req: LakehouseBatchIngestRequest,
-    sink: LakehouseArchiveSink = Depends(get_sink),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
 ) -> dict[str, Any]:
     """Writes a CDC record batch into the Lakehouse Parquet store."""
+    sink = get_sink()
+    engine = get_engine()
     try:
         storage_key = await sink.write_partition(
             tenant_id=str(req.tenant_id),
@@ -115,7 +115,6 @@ async def archive_batch(
             records=req.records,
             batch_id=str(req.batch_id),
         )
-        # Register in engine partition cache for local query visibility
         if hasattr(sink._store, "download"):
             try:
                 data = await sink._store.download(storage_key)
@@ -139,35 +138,31 @@ async def archive_batch(
 
 @router.get("/analytics/chat", response_model=ChatAnalyticsSummary)
 async def get_chat_analytics(
-    tenant_id: UUID = Query(...),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
+    tenant_id: UUID,
 ) -> ChatAnalyticsSummary:
     """Returns aggregated chat and LLM interaction analytics."""
-    return await engine.get_chat_summary(str(tenant_id))
+    return await get_engine().get_chat_summary(str(tenant_id))
 
 
 @router.get("/analytics/documents", response_model=DocumentAnalyticsSummary)
 async def get_document_analytics(
-    tenant_id: UUID = Query(...),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
+    tenant_id: UUID,
 ) -> DocumentAnalyticsSummary:
     """Returns aggregated document ingestion metrics."""
-    return await engine.get_document_summary(str(tenant_id))
+    return await get_engine().get_document_summary(str(tenant_id))
 
 
 @router.get("/analytics/audit", response_model=AuditAnalyticsSummary)
 async def get_audit_analytics(
-    tenant_id: UUID = Query(...),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
+    tenant_id: UUID,
 ) -> AuditAnalyticsSummary:
     """Returns security and audit event metrics."""
-    return await engine.get_audit_summary(str(tenant_id))
+    return await get_engine().get_audit_summary(str(tenant_id))
 
 
 @router.get("/analytics/workflows", response_model=WorkflowAnalyticsSummary)
 async def get_workflow_analytics(
-    tenant_id: UUID = Query(...),
-    engine: DuckDbLakehouseEngine = Depends(get_engine),
+    tenant_id: UUID,
 ) -> WorkflowAnalyticsSummary:
     """Returns document approval workflow and SLA metrics."""
-    return await engine.get_workflow_summary(str(tenant_id))
+    return await get_engine().get_workflow_summary(str(tenant_id))
