@@ -14,7 +14,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 
 | Tầng DX-OS | Thành phần trong OpenVie | Trạng thái |
 | --- | --- | --- |
-| **Tầng 1 – Nền tảng Dịch vụ Lõi số** (PaaS, headless) | `api/` (Spring Boot trên Java 21), `rag-chatbot-fastapi/` (AI HTTP + gRPC + worker), `apisix/` (cổng API), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Đạt (MVP)** — đủ các dịch vụ lõi bắt buộc; hardening vận hành (Vault/WAF, backup tự động, log tập trung) và CDC/Lakehouse còn mở |
+| **Tầng 1 – Nền tảng Dịch vụ Lõi số** (PaaS, headless) | `api/` (Spring Boot trên Java 21), `rag-chatbot-fastapi/` (AI HTTP + gRPC + worker + DuckDB Lakehouse), `apisix/` (cổng API), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Đạt** — đủ các dịch vụ lõi bắt buộc kèm hồ dữ liệu phân tích Lakehouse (Parquet/DuckDB); hardening vận hành (Vault/WAF) mở |
 | **Tầng 2 – Không gian Năng lực số** (H-P-D-I, có giao diện) | `frontend/` (Next.js) | **Đạt** (có ứng dụng minh họa giao diện) |
 | **Tầng 3 – Nền tảng Kinh doanh số** (OMS/WMS/POS/LMS/CRM…) | Không có | Ngoài phạm vi |
 
@@ -33,7 +33,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | **Định danh, SSO** | Keycloak OIDC IdP (Authorization Code + PKCE S256), Spring Boot SSO exchange (`/api/v1/auth/sso/exchange`), mật khẩu + JWT, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), xoay vòng token, API key machine-to-machine (`/api/v1/admin/api-keys`, `ovk_…` xác thực như service member theo membership sống) | **Đạt** | Xem [KEYCLOAK.md](KEYCLOAK.md) và [DEVELOPMENT §5](DEVELOPMENT.md#hướng-dẫn-chạy-và-kiểm-tra-đăng-nhập-sso-cục-bộ-local-sso-run--first-run-checks) |
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §10](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (23 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
-| **Quản trị dữ liệu phi cấu trúc** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), hấp thụ đa định dạng, OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định) | **Đạt** | Chưa có âm thanh / video |
+| **Quản trị dữ liệu phi cấu trúc & Hồ dữ liệu (Lakehouse)** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), phân vùng Parquet Lakehouse nén Snappy (chat, audit, document, workflow) kèm cỗ máy truy vấn OLAP nhúng DuckDB (`/api/v1/analytics/lakehouse/**`), hấp thụ đa định dạng, OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định) | **Đạt** | Chưa có âm thanh / video |
 | **Động cơ luồng công việc (Workflow)** | Engine Flowable nhúng trong API runtime chính: nộp → duyệt/từ chối/leo thang hai cấp, chính sách độ nhạy dùng chung, SLA theo tổ chức, audit log đầy đủ; API engine tổng quát `/api/v1/workflow/engine` (triển khai BPMN bất kỳ, khởi động process + biến, inbox tác vụ, lịch sử); write-back kết quả duyệt vào bảng `documents` (Flyway V8, `approval_status`), thông báo SMTP (`WORKFLOW_DECIDED`), và đẩy webhook có chữ ký HMAC-SHA256 | **Đạt** | Xem [WORKFLOW.md](WORKFLOW.md), [INTEGRATION.md](INTEGRATION.md) |
 
 **Bề mặt tích hợp cho bên thứ ba** (chi tiết ở [INTEGRATION.md](INTEGRATION.md)): API key machine-to-machine
@@ -50,7 +50,7 @@ BPMN tổng quát — mỗi thứ đều có kill-switch cấu hình (`app.webho
 
 ### 5. Bốn nguyên lý thiết kế
 
-1. **(i) Phân tách vòng đời & tốc độ dữ liệu:** *Chưa đạt* (chỉ có OLTP, chưa có CDC/Lakehouse).
+1. **(i) Phân tách vòng đời & tốc độ dữ liệu:** **Đạt (Lakehouse)** — Tách bạch hoàn toàn dữ liệu giao dịch tác nghiệp thời gian thực (PostgreSQL OLTP) khỏi dữ liệu lịch sử và phân tích tổng hợp (hồ dữ liệu Parquet lưu trên SeaweedFS S3, truy vấn bằng động cơ OLAP nhúng DuckDB). Luồng CDC truyền phát sự kiện bất đồng bộ qua RabbitMQ sang Lakehouse mà không gây nghẽn hệ thống lõi.
 2. **(ii) Hội tụ dữ liệu IT và OT:** *Chưa đạt* (phạm vi thuần IT, chưa có IoT/Digital Twin).
 3. **(iii) Quản trị dữ liệu thế hệ mới:** *Một phần* (có provenance, audit log, outbox/inbox; chưa có data lineage đầy đủ).
 4. **(iv) Zero-Trust & GitOps:** *Đạt (MVP)* (JWT + API key machine-to-machine, APISIX limit-req & Prometheus metrics, CI kiểm tra, bộ công cụ tự động sao lưu/phục hồi kiểm chứng sha256 `scripts/ops/backup.sh` và `restore.sh`, stack giám sát cách ly loopback).
@@ -61,8 +61,8 @@ BPMN tổng quát — mỗi thứ đều có kill-switch cấu hình (`app.webho
 - **Lớp 2 (Biên mạng & An toàn):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Một phần* - thiếu IdP/WAF).
 - **Lớp 3 (Tác nghiệp & Trạng thái):** PostgreSQL, RabbitMQ, gRPC (*Một phần*).
 - **Lớp 4 (Tự động hóa & DevSecOps):** GitHub Actions CI (*Một phần* - thiếu GitOps/WAF tệp, backup tự động).
-- **Lớp 5 (Dữ liệu hội tụ & Sổ cái):** RabbitMQ, SeaweedFS (*Một phần* - thiếu Lakehouse).
-- **Lớp 6 (Phân tích & Trí tuệ):** Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Một phần* - thiếu BI/GIS).
+- **Lớp 5 (Dữ liệu hội tụ & Sổ cái):** RabbitMQ (trục truyền phát sự kiện CDC), SeaweedFS S3 (kho hồ dữ liệu Parquet phân vùng theo tenant/năm/tháng) (*Đạt - MVP*).
+- **Lớp 6 (Phân tích & Trí tuệ):** DuckDB (cỗ máy truy vấn phân tích OLAP trực tiếp trên Parquet), Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Đạt - MVP*).
 - **Lớp 7 (Quản trị & Giám sát):** Qdrant, Prometheus metrics, Alertmanager, 2 dashboard Grafana provision tự động theo dõi nền tảng và AI (`monitoring/`) (*Đạt - MVP*).
 
 ---
@@ -75,7 +75,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 
 | DX-OS Tier | OpenVie Component | Status |
 | --- | --- | --- |
-| **Tier 1 – Digital Core Platform** (Headless PaaS) | `api/` (Spring Boot on Java 21), `rag-chatbot-fastapi/` (AI inference, gRPC, worker), `apisix/` (gateway), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Achieved (MVP)** — all mandatory core services delivered; platform hardening (Vault/WAF, automated backups, centralized logs) and CDC/Lakehouse remain open |
+| **Tier 1 – Digital Core Platform** (Headless PaaS) | `api/` (Spring Boot on Java 21), `rag-chatbot-fastapi/` (AI inference, gRPC, worker, DuckDB Lakehouse), `apisix/` (gateway), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Achieved** — all mandatory core services delivered alongside Lakehouse analytical data store (Parquet/DuckDB); operational hardening (Vault/WAF) remains open |
 | **Tier 2 – Digital Capability Space** (H-P-D-I with UI) | `frontend/` (Next.js) | **Achieved** (UI demo application) |
 | **Tier 3 – Digital Business Platform** (OMS, WMS, POS, LMS...) | None | Out of scope |
 
@@ -94,7 +94,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | **Identity & SSO** | Keycloak OIDC IdP (Authorization Code flow + PKCE S256), Spring Boot SSO token exchange (`/api/v1/auth/sso/exchange`), password + JWT, 3-role RBAC (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), token rotation, machine-to-machine API keys (`/api/v1/admin/api-keys`, `ovk_…` authenticating as a service member through live membership) | **Achieved** | See [KEYCLOAK.md](KEYCLOAK.md) and [DEVELOPMENT §5](DEVELOPMENT.md#local-sso-run--first-run-verification-guide) |
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §10](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | **Structured Data** | PostgreSQL 16 + Flyway (23 business tables with tenant scoping) | **Achieved** | — |
-| **Unstructured Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), asynchronous multi-format ingestion, optional OCR for scanned PDFs/images (off by default) | **Achieved** | Audio / video not delivered |
+| **Unstructured & Lakehouse Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), partitioned Snappy Parquet Lakehouse (chat, audit, document, workflow) with embedded DuckDB OLAP engine (`/api/v1/analytics/lakehouse/**`), asynchronous multi-format ingestion, optional OCR for scanned PDFs/images (off by default) | **Achieved** | Audio / video not delivered |
 | **Workflow Engine** | Flowable embedded in the main API runtime: two-level submit → approve/reject/escalate, shared sensitivity policy, per-organization SLA, full audit trail; generic engine API `/api/v1/workflow/engine` (deploy any BPMN definition, start processes with variables, generic task inbox, history); decision write-back directly onto the `documents` row (Flyway V8, `approval_status`), transactional SMTP notification (`WORKFLOW_DECIDED`), and signed HMAC-SHA256 webhook dispatch | **Achieved** | See [WORKFLOW.md](WORKFLOW.md), [INTEGRATION.md](INTEGRATION.md) |
 
 **Third-party integration surface** (details in [INTEGRATION.md](INTEGRATION.md)): machine-to-machine API keys
@@ -111,7 +111,7 @@ generic BPMN engine API — each with a configuration kill-switch (`app.webhooks
 
 ### 5. Four Design Principles
 
-1. **(i) Lifecycle & Velocity Separation:** *Not Met* (OLTP only; no Lakehouse / CDC).
+1. **(i) Lifecycle & Velocity Separation:** **Achieved (Lakehouse)** — Clean architectural separation between real-time transactional data (PostgreSQL OLTP) and cold historical analytical archives (Parquet partitions on SeaweedFS S3 queried via embedded DuckDB OLAP). Asynchronous CDC streaming over RabbitMQ keeps analytical load off the core database.
 2. **(ii) IT and OT Convergence:** *Not Met* (Pure IT scope; no sensor/IoT connections).
 3. **(iii) Next-Gen Data Governance:** *Partial* (Provenance, audit logs, outbox/inbox present; no automated lineage).
 4. **(iv) Zero-Trust & GitOps:** *Achieved (MVP)* (JWT + machine-to-machine API keys, APISIX edge rate limiting & Prometheus metrics, CI checks, automated sha256-verified backup/restore tooling in `scripts/ops/backup.sh` & `restore.sh`, loopback-isolated monitoring stack).
@@ -122,6 +122,6 @@ generic BPMN engine API — each with a configuration kill-switch (`app.webhooks
 - **Layer 2 (Perimeter & Security):** Apache APISIX, Keycloak OIDC IdP, Spring Security JWT (*Partial* - missing WAF).
 - **Layer 3 (Operations & State):** PostgreSQL, RabbitMQ, gRPC (*Partial*).
 - **Layer 4 (Automation & DevSecOps):** GitHub Actions CI (*Partial* - missing GitOps/file WAF and automated backups).
-- **Layer 5 (Hyperconverged Data & Ledger):** RabbitMQ, SeaweedFS (*Partial* - missing Lakehouse).
-- **Layer 6 (Analytics & Intelligence):** Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Partial* - missing BI/GIS).
+- **Layer 5 (Hyperconverged Data & Ledger):** RabbitMQ (CDC streaming event bus), SeaweedFS S3 (partitioned Parquet Lakehouse archive) (*Achieved - MVP*).
+- **Layer 6 (Analytics & Intelligence):** DuckDB (embedded OLAP query engine over Parquet), Ollama (`vylinh` + `bge-m3`), Qdrant, Kuzu (*Achieved - MVP*).
 - **Layer 7 (Governance & Monitoring):** Qdrant search, Prometheus metrics, Alertmanager, 2 provisioned Grafana dashboards (`monitoring/`) (*Achieved - MVP*).

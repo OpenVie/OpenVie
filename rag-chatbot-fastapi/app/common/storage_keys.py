@@ -85,6 +85,26 @@ def document_media_key(
     return f"{base}.{ext}" if ext else base
 
 
+def lakehouse_dataset_prefix(tenant_id: str, dataset: str) -> str:
+    tenant = _component("tenant_id", tenant_id)
+    ds = _component("dataset", dataset)
+    return f"lakehouse/tenants/{tenant}/{ds}/"
+
+
+def lakehouse_partition_prefix(
+    tenant_id: str, dataset: str, year: int, month: int
+) -> str:
+    prefix = lakehouse_dataset_prefix(tenant_id, dataset)
+    return f"{prefix}year={year:04d}/month={month:02d}/"
+
+
+def lakehouse_partition_key(
+    tenant_id: str, dataset: str, year: int, month: int, batch_id: str
+) -> str:
+    batch = _component("batch_id", batch_id)
+    return f"{lakehouse_partition_prefix(tenant_id, dataset, year, month)}{batch}.parquet"
+
+
 def _component(label: str, value: str) -> str:
     normalized = str(value).strip()
     if not normalized or "/" in normalized or normalized in {".", ".."}:

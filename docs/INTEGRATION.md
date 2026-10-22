@@ -128,6 +128,22 @@ Bộ sưu tập Postman mẫu đầy đủ kèm các biến môi trường (`bas
 [`contracts/postman/openvie_integration.postman_collection.json`](../contracts/postman/openvie_integration.postman_collection.json).
 Bao gồm đầy đủ các kịch bản mẫu: Xác thực, Cấp phát khóa API máy (M2M), Chat đồng bộ JSON / stream SSE, Đăng ký Webhook, và Thao tác động cơ quy trình BPMN Flowable L2.
 
+
+### 9. Truy vấn phân tích hồ dữ liệu Lakehouse (DuckDB OLAP)
+
+Hồ dữ liệu Lakehouse tách biệt hoàn toàn dữ liệu giao dịch thời gian thực (PostgreSQL) khỏi dữ liệu phân tích lịch sử:
+- **Dữ liệu phân vùng:** Parquet nén Snappy lưu trên SeaweedFS S3 (`lakehouse/tenants/{tenant_id}/{dataset}/year={YYYY}/month={MM}/`).
+- **Cỗ máy truy vấn:** DuckDB nhúng, thực thi SQL phân tích trực tiếp trên tệp Parquet mà không gây nghẽn database giao dịch.
+- **Điểm vào API:**
+
+| Thao tác | Tuyến đường (Route) |
+|---|---|
+| Kiểm tra trạng thái Lakehouse / DuckDB | `GET /api/v1/analytics/lakehouse/health` |
+| Truy vấn SQL phân tích (chỉ đọc, phân lập tenant) | `POST /api/v1/analytics/lakehouse/query?dataset=chat_analytics` |
+| Báo cáo tổng hợp tương tác Chat & Token LLM | `GET /api/v1/analytics/lakehouse/chat` |
+| Báo cáo dung lượng & định dạng tài liệu Hấp thụ | `GET /api/v1/analytics/lakehouse/documents` |
+| Báo cáo an ninh, nhật ký truy vết & kiểm toán | `GET /api/v1/analytics/lakehouse/audit` |
+| Báo cáo tiến độ & SLA phê duyệt quy trình | `GET /api/v1/analytics/lakehouse/workflows` |
 ---
 
 ## Integrating with the OpenVie core
@@ -257,3 +273,19 @@ integrator cannot bypass the document journal.
 A ready-to-import Postman collection with configured environment variables (`baseUrl`, `token`, `workspaceId`, `sessionId`) is provided at:
 [`contracts/postman/openvie_integration.postman_collection.json`](../contracts/postman/openvie_integration.postman_collection.json).
 It covers all integration scenarios: Authentication, Machine Credentials (M2M API Keys), Document Chat (Sync JSON & SSE), Signed Webhooks, and Flowable L2 BPMN Workflow Engine operations.
+
+### 9. Lakehouse Analytical Queries (DuckDB OLAP)
+
+The Lakehouse architecture decouples operational transaction processing (PostgreSQL) from cold analytical queries:
+- **Partitioned storage:** Snappy-compressed Parquet stored in SeaweedFS S3 (`lakehouse/tenants/{tenant_id}/{dataset}/year={YYYY}/month={MM}/`).
+- **Query engine:** Embedded DuckDB executing OLAP aggregate SQL directly over Parquet partitions without impacting the operational database.
+- **API endpoints:**
+
+| Operation | Route |
+|---|---|
+| Check Lakehouse / DuckDB engine status | `GET /api/v1/analytics/lakehouse/health` |
+| Execute read-only analytical SQL (tenant-scoped) | `POST /api/v1/analytics/lakehouse/query?dataset=chat_analytics` |
+| Aggregated Chat & LLM Token analytics | `GET /api/v1/analytics/lakehouse/chat` |
+| Document ingestion volume & format metrics | `GET /api/v1/analytics/lakehouse/documents` |
+| Security, audit trail & access metrics | `GET /api/v1/analytics/lakehouse/audit` |
+| Workflow approval progress & SLA metrics | `GET /api/v1/analytics/lakehouse/workflows` |

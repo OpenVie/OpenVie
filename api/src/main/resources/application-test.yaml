@@ -21,6 +21,8 @@ app:
     from-email: test@test.com
     from-name: OpenVie Test
     invitation-link: http://localhost:3000/accept-invitation
+  lakehouse:
+    url: ${LAKEHOUSE_URL:http://localhost:18000}
 
 spring:
   config:
