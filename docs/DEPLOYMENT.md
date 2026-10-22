@@ -16,7 +16,10 @@ Tài liệu này hướng dẫn người vận hành cài đặt và vận hành
   - `docker-compose.prod.yml`: Triển khai sản xuất trọn gói toàn bộ nền tảng (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Spring Boot API, Python AI Service, Next.js Web Console, và Apache APISIX Gateway).
   - `docker-compose.yml`: Chỉ chạy các dịch vụ dữ liệu nền tảng (dùng cho phát triển hoặc mô hình hybrid chạy app trên host).
   - File cấu hình mẫu `.env.production.example` và route gateway `apisix/routes.prod.yaml`.
-- **Trách nhiệm của người vận hành:** Cấu hình chứng chỉ SSL/TLS (HTTPS) phía trước Gateway, WAF, kiểm dịch mã độc tệp tải lên, hệ thống sao lưu/phục hồi tự động, và giám sát hạ tầng.
+  - Bộ công cụ sao lưu và phục hồi tự động kiểm chứng toàn vẹn SHA-256 (`scripts/ops/backup.sh` & `restore.sh`).
+  - Stack giám sát hệ thống và AI toàn diện (Prometheus, Alertmanager, Grafana kèm 2 dashboard) qua profile `monitoring`.
+  - Hồ dữ liệu phân tích Lakehouse Parquet nén Snappy và cỗ máy DuckDB OLAP trực tiếp trên S3.
+- **Trách nhiệm của người vận hành:** Cấu hình chứng chỉ SSL/TLS (HTTPS) phía trước Gateway, đặt lịch chạy định kỳ (crontab/systemd timer) cho công cụ sao lưu, tường lửa WAF bên ngoài và kiểm dịch mã độc tệp tải lên.
 ### 2. Yêu cầu tiên quyết
 
 - Máy chủ Linux (Ubuntu 22.04+ khuyến nghị) hoặc macOS. Trên **Windows 10/11**: dùng Docker

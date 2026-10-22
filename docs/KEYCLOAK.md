@@ -1,6 +1,6 @@
 
 ## Cấu hình Cơ sở cho Keycloak OIDC
-Cấu hình này dùng để khởi tạo (provision) Keycloak cho phân hệ OIDC của dự án OpenVie MVP-2. Đây chỉ là cấu hình cơ sở cho nhà cung cấp danh tính (identity-provider baseline): các ứng dụng hiện tại gồm Spring API và Next.js client vẫn sẽ tiếp tục sử dụng cơ chế xác thực dựa trên mật khẩu cũ cho đến khi phần việc tích hợp SSO (Đăng nhập một lần) riêng biệt được triển khai và kiểm thử toàn diện (end-to-end).
+Tài liệu này hướng dẫn cấu hình và vận hành nhà cung cấp danh tính Keycloak OIDC cho nền tảng OpenVie. Hệ thống hỗ trợ chế độ xác thực kép (dual-mode authentication): đăng nhập mật khẩu truyền thống và đăng nhập một lần (SSO) qua Keycloak OIDC (Authorization Code flow kết hợp PKCE S256).
 ## Các dịch vụ và lưu trữ dữ liệu (Persistence)
 
 * keycloak: Sử dụng Keycloak phiên bản 26.3.3, tự động nhập (import) cấu hình realm từ tệp keycloak/realm/openvie-realm.json.
@@ -72,7 +72,7 @@ URL của nhà phát hành (issuer URL) cho môi trường phát triển local l
 http://localhost:18080/realms/openvie
 Đối với môi trường production sẽ là:
 <KEYCLOAK_PUBLIC_URL>/realms/openvie
-Tuyệt đối không đặt mã bí mật của confidential client (confidential client secret) vào các biến môi trường của frontend hoặc commit lên Git. Confidential client này được khởi tạo như một cấu hình nền tảng; hãy lấy hoặc làm mới (rotate) mã bí mật của nó trực tiếp trong Keycloak trước khi một thành phần phía máy chủ (server-side component) bắt đầu sử dụng. Việc cấu hình Spring Security đóng vai trò như một OIDC resource server và ánh xạ các role của Keycloak sang các role trong workspace của OpenVie là một phần việc tích hợp end-to-end riêng biệt.
+Tuyệt đối không đặt mã bí mật của confidential client (confidential client secret) vào các biến môi trường của frontend hoặc commit lên Git. Confidential client này được cấu hình an toàn phía server; mã bí mật được nạp qua biến môi trường `SSO_BACKEND_CLIENT_SECRET`. Luồng OIDC công khai của frontend (`openvie-frontend`, `openvie-admin`) sử dụng PKCE S256 và đổi token qua endpoint `/api/v1/auth/sso/exchange` của Spring Boot API, tự động liên kết danh tính và ánh xạ role an toàn.
 ## Xác minh (Verification)
 Kiểm tra tính hợp lệ của việc chèn biến (interpolation) trong Compose và định dạng YAML:
 

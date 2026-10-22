@@ -164,7 +164,8 @@ là kiểm chứng end-to-end thành công.
 | --- | --- | --- |
 | `v0.1.x` (đã phát hành) | Nền tảng RAG self-host: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, xác thực mật khẩu + JWT, streaming SSE | Cài được từ clone mới, hấp thụ tài liệu có quyền, chat có trích dẫn, từ chối khi thiếu bằng chứng |
 | `v0.2.0` (đã phát hành) — Keycloak SSO | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật |
-| `v0.3.0` — Workflow BPMN | Tích hợp Flowable OSS làm BPMN engine cho một luồng phê duyệt e-Office minh họa trong không gian `[P]`; API + UI hộp thư phê duyệt | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật |
+| `v0.3.0` (đã phát hành) — Workflow BPMN | Tích hợp Flowable OSS làm BPMN engine cho luồng phê duyệt e-Office 2 cấp trong không gian `[P]`; API + UI hộp thư phê duyệt; trích dẫn ảnh đa phương thức & zoom lightbox; sao lưu/phục hồi SHA-256 | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật |
+| `v0.3.1` (đã phát hành) — Lakehouse & DuckDB OLAP | Kiến trúc hồ dữ liệu Lakehouse (Parquet Snappy trên SeaweedFS S3), Change Data Capture (CDC) streaming qua RabbitMQ, cỗ máy OLAP nhúng DuckDB | Phân tách vòng đời dữ liệu nóng (Postgres) và lạnh (Parquet), SQL phân tích không nghẽn database lõi |
 
 Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milestone chia nhỏ thành issue có tiêu chí nghiệm thu riêng.
 
@@ -350,7 +351,8 @@ integration checks as successful end-to-end verification.
 | --- | --- | --- |
 | `v0.1.x` (released) | Self-hosted RAG platform: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, password + JWT auth, SSE streaming | Fresh-clone install, authorized ingestion, cited chat, abstention without evidence |
 | `v0.2.0` (released) — Keycloak SSO | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated |
-| `v0.3.0` — BPMN workflow | Workflow engine (Flowable or n8n) for one e-Office approval flow demo in the `[P]` space; approval inbox API + UI | Approval flow demonstrable, durable state, operations docs updated |
+| `v0.3.0` (released) — BPMN workflow | Embedded Flowable OSS BPMN engine for 2-level e-Office approval flow in `[P]`; approval inbox API + UI; multi-modal image citations & lightbox zoom; automated sha256 backup/restore | Demonstrable approval flow, durable state, operational documentation updated |
+| `v0.3.1` (released) — Lakehouse & DuckDB OLAP | Lakehouse data architecture (Snappy Parquet on SeaweedFS S3), Change Data Capture (CDC) streaming via RabbitMQ, embedded DuckDB OLAP engine | Lifecycle separation of hot (Postgres) and cold (Parquet) data, analytical SQL queries with zero core database contention |
 
 Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone is broken into issues with their own acceptance criteria.
 
