@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
 ### Added
 - **End-to-end image citations and lightbox zoom (issue #50)**:
   - **Protobuf contract**: Defined `CitationImage` message (`object_key`, `media_type`, `width`, `height`) and allocated field `optional CitationImage image = 16` in `proto/openvie_ai_v1.proto`, with updated Python pb2/pyi stubs and Maven protobuf Java bindings.
