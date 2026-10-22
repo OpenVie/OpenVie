@@ -25,6 +25,9 @@ public final class RabbitMqTopology {
     public static final String INGEST_PROCESSING = "document.ingest.processing";
     public static final String INGEST_COMPLETED = "document.ingest.completed";
     public static final String INGEST_FAILED = "document.ingest.failed";
+    public static final String LAKEHOUSE_CDC_QUEUE = "openvie.lakehouse.cdc.v1";
+    public static final String CDC_EVENT_ROUTING_KEY = "cdc.events.#";
+    public static final String CDC_EVENT_PREFIX = "cdc.events.";
 
     private RabbitMqTopology() {
     }

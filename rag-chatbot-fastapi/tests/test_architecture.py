@@ -41,6 +41,13 @@ def test_http_surface_exposes_only_health_and_metrics() -> None:
         "/health/live",
         "/health/ready",
         "/metrics",
+        "/api/v1/lakehouse/health",
+        "/api/v1/lakehouse/query",
+        "/api/v1/lakehouse/archive",
+        "/api/v1/lakehouse/analytics/chat",
+        "/api/v1/lakehouse/analytics/documents",
+        "/api/v1/lakehouse/analytics/audit",
+        "/api/v1/lakehouse/analytics/workflows",
     }
 
 
@@ -63,6 +70,7 @@ def test_cross_module_imports_use_api_boundaries_and_graph_is_acyclic() -> None:
         "index": set(),
         "graph": set(),
         "model": set(),
+        "lakehouse": set(),
     }
     violations: list[str] = []
     modules = ROOT / "app" / "modules"
@@ -117,7 +125,10 @@ def test_persistent_sdk_and_generated_import_ownership() -> None:
             violations.append(f"Qdrant: {relative}")
         if "import kuzu" in source and parts[:3] != ("modules", "graph", "internal"):
             violations.append(f"Kuzu: {relative}")
-        if "aio_pika" in source and parts[:3] != ("modules", "ingestion", "transport"):
+        if "aio_pika" in source and parts[:3] not in (
+            ("modules", "ingestion", "transport"),
+            ("modules", "lakehouse", "transport"),
+        ):
             violations.append(f"aio-pika: {relative}")
         if "import boto3" in source and parts[:2] != ("common", "storage.py"):
             violations.append(f"boto3: {relative}")

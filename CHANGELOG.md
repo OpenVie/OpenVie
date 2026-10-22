@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-22
+
+### Added
+- **Lakehouse data architecture, CDC streaming pipeline & DuckDB OLAP engine (issue #52)**:
+  - **Decoupled data lifecycle**: Separated real-time operational transactions (PostgreSQL OLTP) from cold historical analytical data, satisfying DX-OS design principle (i) without placing analytical query load on the primary business database.
+  - **Asynchronous CDC streaming via RabbitMQ**: Introduced `LakehouseCdcPublisher` in the Java control plane to stream business lifecycle and audit events (`cdc.events.#`) across a dedicated durable queue `openvie.lakehouse.cdc.v1`; integrated directly into `AuditLogListener` to record audit trails to cold storage post-commit without blocking transactional flows.
+  - **Partitioned Snappy Parquet Lakehouse**: Built `LakehouseArchiveSink` in Python using PyArrow and Polars to write snappy-compressed, partitioned Parquet archives to SeaweedFS S3 under `lakehouse/tenants/{tenant_id}/{dataset}/year={YYYY}/month={MM}/{batch_id}.parquet` across 4 core datasets: `audit_events`, `chat_analytics`, `document_lifecycle`, and `workflow_decisions`.
+  - **DuckDB embedded OLAP analytical query engine**: Implemented `DuckDbLakehouseEngine` executing read-only SQL queries directly over Lakehouse Parquet partitions. Automatically enforces tenant isolation via scoped database views (`WHERE tenant_id = ?`) and guards against destructive SQL operations (`DROP`, `ALTER`, `DELETE`, `UPDATE`, `INSERT`).
+  - **Automated analytical reporting endpoints**: Added pre-aggregated summary calculation for chat turn volume, duration and token consumption (`/analytics/chat`), document ingestion counts and chunk statistics (`/analytics/documents`), audit event breakdowns by action and actor (`/analytics/audit`), and workflow SLA approval metrics (`/analytics/workflows`).
+  - **Spring control plane proxy & zero-trust access control**: Added `LakehouseAnalyticsController` (`/api/v1/analytics/lakehouse/**`) in Spring Boot resolving tenant scope and permissions from authenticated JWT tokens before dispatching to the analytical engine.
+  - **Comprehensive test suite**: Added 7 unit and integration tests in `test_lakehouse.py` verifying partition writing, tenant isolation, SQL safety guards, aggregation summaries, and FastAPI endpoints.
+  - **Documentation alignment**: Updated `docs/DX_OS.md` (raising Principle (i) to Achieved and adding Lớp 5 & Lớp 6 to reference architecture), `docs/ARCHITECTURE.md` (topology diagram and data ownership), `docs/INTEGRATION.md` (section 9 API guide), and `README.md`.
+
 ## [0.3.0] - 2026-10-22
 
 ### Added

@@ -22,7 +22,7 @@ import redis.asyncio as redis
 from fastapi import FastAPI
 from prometheus_client import make_asgi_app
 
-from app.bootstrap.configuration import model_config
+from app.bootstrap.configuration import model_config, storage_config
 from app.bootstrap.generation import RagRuntime
 from app.bootstrap.grpc import start_grpc_server
 from app.bootstrap.health import router as health_router
@@ -30,7 +30,15 @@ from app.bootstrap.settings import settings
 from app.bootstrap.workers import WorkerManager
 from app.common.cache import RedisCacheStore, TtlJitter
 from app.common.middleware import RequestIdMiddleware
+from app.common.storage import SeaweedS3DocumentStore
 from app.modules.ingestion.internal.checkpoints import RedisIngestionCheckpointStore
+from app.modules.lakehouse import (
+    DuckDbLakehouseEngine,
+    LakehouseArchiveSink,
+    LakehouseCdcWorker,
+    lakehouse_router,
+    set_lakehouse_runtime,
+)
 from app.modules.model.internal.embedding import create_embedding_client
 
 logging.basicConfig(
@@ -65,6 +73,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.WORKER_MODE == "embedded":
         manager = WorkerManager(settings, embedder=embedding_client, redis_client=redis_client)
         await manager.start()
+    cdc_worker: LakehouseCdcWorker | None = None
+    if settings.WORKER_MODE == "embedded" and settings.RABBITMQ_URL:
+        store = SeaweedS3DocumentStore(storage_config(settings))
+        lakehouse_sink = LakehouseArchiveSink(store)
+        cdc_worker = LakehouseCdcWorker(settings.RABBITMQ_URL, lakehouse_sink)
+        try:
+            await cdc_worker.start()
+        except Exception as exc:
+            logger.warning("Could not start background Lakehouse CDC worker: %s", exc)
+            cdc_worker = None
+        app.state.lakehouse_cdc_worker = cdc_worker
     app.state.redis_client = redis_client
     app.state.ingestion_diagnostics = RedisIngestionCheckpointStore(
         redis_client,
@@ -78,6 +97,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if cdc_worker is not None:
+            await cdc_worker.stop()
         if manager is not None:
             await manager.stop()
         await grpc_server.stop(grace=5)
@@ -98,6 +119,17 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(RequestIdMiddleware)
     application.include_router(health_router)
+    store = SeaweedS3DocumentStore(storage_config(settings))
+    lakehouse_sink = LakehouseArchiveSink(store)
+    lakehouse_engine = DuckDbLakehouseEngine(
+        store,
+        s3_endpoint=settings.SEAWEEDFS_S3_ENDPOINT,
+        s3_bucket=settings.SEAWEEDFS_BUCKET,
+        s3_access_key=settings.SEAWEEDFS_ACCESS_KEY,
+        s3_secret_key=settings.SEAWEEDFS_SECRET_KEY,
+    )
+    set_lakehouse_runtime(lakehouse_engine, lakehouse_sink)
+    application.include_router(lakehouse_router)
     application.mount("/metrics", make_asgi_app())
 
     @application.get("/health", include_in_schema=False)

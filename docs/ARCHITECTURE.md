@@ -22,6 +22,7 @@ flowchart TB
         Business[Spring Boot API :8080]
         AI[FastAPI AI & gRPC :50051]
         Worker[Document Ingestion Worker]
+        Lakehouse[DuckDB Lakehouse OLAP Engine]
     end
     subgraph Storage[Dữ liệu & Hàng đợi]
         PG[(PostgreSQL)]
@@ -29,7 +30,7 @@ flowchart TB
         RabbitMQ[(RabbitMQ)]
         Qdrant[(Qdrant)]
         Kuzu[(Đồ thị Kuzu)]
-        Objects[(SeaweedFS S3)]
+        Objects[(SeaweedFS S3 / Parquet Lakehouse)]
     end
     subgraph Models[Mô hình trí tuệ nhân tạo]
         LLM[Ollama / Vylinh 3B]
@@ -46,6 +47,8 @@ flowchart TB
     Worker --> Redis & Objects & Qdrant & Kuzu & Embed & LLM
     AI --> Redis & Objects & Qdrant & Kuzu & Embed & LLM
     AI -. tùy chọn .-> Reranker
+    Lakehouse --> Objects
+    RabbitMQ -->|CDC events| Lakehouse
 ```
 
 ### 2. Mô hình 4 mặt phẳng (Four-Plane Boundary)
@@ -61,7 +64,8 @@ flowchart TB
 
 - **PostgreSQL (Spring sở hữu):** Lưu trữ chính thống về tổ chức, người dùng, workspace, phiên hội thoại, tin nhắn, nhật ký kiểm toán, kênh thông báo và outbox/inbox sự kiện bền vững. Các bảng engine Flowable (`ACT_*`, `FLW_*`) cho phê duyệt tài liệu sống trong cùng PostgreSQL này, quản lý schema bởi engine (ngay cạnh schema nghiệp vụ, không cần thêm container).
 - **Qdrant & Kuzu (Python sở hữu):** Lưu trữ chỉ mục vector (dense/sparse) và đồ thị quan hệ phái sinh từ tài liệu. Không chứa dữ liệu nghiệp vụ thuần túy.
-- **SeaweedFS (S3):** Chứa tệp tài liệu gốc và bảng Parquet phái sinh từ bảng tính.
+- **SeaweedFS (S3):** Chứa tệp tài liệu gốc, bảng Parquet phái sinh từ bảng tính, và các phân vùng hồ dữ liệu Parquet nén Snappy (Lakehouse partitions: audit, chat, document, workflow) phục vụ phân tích OLAP.
+- **DuckDB (Python sở hữu):** Cỗ máy phân tích dữ liệu OLAP nhúng, thực thi các truy vấn SQL tổng hợp và báo cáo phân tích trực tiếp trên các tệp Parquet Lakehouse, hoàn toàn cách ly và không gây tải lên PostgreSQL giao dịch (OLTP).
 - **Redis:** Lưu trữ tạm bộ đệm (mặc định tắt), checkpoint và lease trạng thái xử lý của ingestion worker.
 
 ### 4. Chuỗi tương tác chính
@@ -129,7 +133,8 @@ See the shared topology diagram above. Key boundaries:
 
 - **PostgreSQL (Spring):** Authoritative state for organizations, workspaces, accounts, permissions, chat sessions, turns, audit logs, and transactional outbox/inbox. The Flowable engine tables (`ACT_*`, `FLW_*`) for the e-Office document approval live in the same PostgreSQL, with schemas managed by the engine — right next to the business tables, no extra container.
 - **Qdrant & Kuzu (Python):** Materialized dense/sparse vectors and entity knowledge graphs. No business SQL access.
-- **SeaweedFS:** Raw source document storage and derived Parquet tables.
+- **SeaweedFS (S3):** Raw source document storage, derived spreadsheet Parquet tables, and partitioned Snappy-compressed Lakehouse Parquet archives (audit, chat, document, workflow) for analytical workloads.
+- **DuckDB (Python):** Embedded OLAP analytical query engine executing SQL aggregations and reporting directly over Lakehouse Parquet partitions without touching or loading the transactional PostgreSQL database.
 - **Redis:** Checkpoint leases for workers, rate limiting, and optional caches (off by default).
 
 ## 4. Key execution flows
