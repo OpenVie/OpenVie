@@ -53,7 +53,7 @@ flowchart TB
 | Mặt phẳng | Hiện trạng đã có | Chưa cung cấp |
 |---|---|---|
 | **Điều khiển (Control)** | Spring Boot quản lý tổ chức, workspace, tài khoản, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), kênh thông báo, phiên chat và lưu trữ PostgreSQL. | Dịch vụ điều phối chuyển đổi checkpoint model động. |
-| **Dữ liệu bất đồng bộ** | RabbitMQ điều phối hàng đợi, worker xử lý đa luồng, SeaweedFS lưu trữ file gốc, Qdrant lưu vector, Kuzu lưu đồ thị. | Xử lý OCR, hình ảnh, âm thanh, video tổng quát. |
+| **Dữ liệu bất đồng bộ** | RabbitMQ điều phối hàng đợi, worker xử lý đa luồng, SeaweedFS lưu trữ file gốc, Qdrant lưu vector, Kuzu lưu đồ thị. OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định). | Âm thanh, video tổng quát. |
 | **Suy luận (Inference)** | FastAPI xử lý gRPC server-streaming cho câu trả lời, bộ lọc chào hỏi/nhiễu bảo thủ, RAG ngữ cảnh theo tenant, router từ khóa nhạy cảm, LLM sinh câu trả lời có trích dẫn nguồn. | Mô hình Verifier đã huấn luyện, ngữ liệu pháp luật Việt Nam độc lập, tự động failover giữa các nhà cung cấp cloud. |
 | **Đánh giá ngoại tuyến** | Công cụ chạy lại trace JSONL đo đạc nhãn nhạy cảm, độ chuẩn xác của trích dẫn mà không cần gọi API model. | Pipeline huấn luyện SFT/DPO/QLoRA, bộ benchmark tự động công bố. |
 
@@ -121,7 +121,7 @@ See the shared topology diagram above. Key boundaries:
 | Plane | Delivered | Not delivered |
 |---|---|---|
 | **Control** | Spring Boot workspace/auth/chat API, PostgreSQL persistence (orgs, workspaces, memberships, notification channels), Redis runtime state. | Dynamic runtime model switching/promotion service. |
-| **Async data** | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. | General OCR, image, audio, or video pipelines. |
+| **Async data** | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. Optional OCR for scanned PDFs/images (off by default). | General audio or video pipelines. |
 | **Inference** | FastAPI server-streaming answer gRPC, conservative greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. | Trained verifier runtime, standalone legal corpus, automated cloud provider failover. |
 | **Offline alignment** | Local trace replay evaluating sensitive routes and citation markers without remote API calls. | Model fine-tuning (SFT/DPO), automatic candidate promotion. |
 

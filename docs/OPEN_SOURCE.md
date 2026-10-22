@@ -44,6 +44,16 @@ tenant khi đó sẽ vượt ranh giới provider đó. Với workload được 
 retention, procurement, threat model và cơ sở pháp lý. Repo không kèm ngữ liệu luật Việt Nam,
 model chính sách Dream-RSI đã huấn luyện, hay checkpoint fine-tuned đã đánh giá.
 
+## Vệ sinh licensing: header và pin image
+
+Mọi file nguồn do con người viết — Java, Python, TypeScript/TSX, protobuf, shell — mang header
+Apache-2.0 chuẩn ASF. Job CI `license-headers` chặn PR thiếu header qua
+`python3 scripts/license_headers.py --check`; script cũng tự thêm với `--add`. Artifact sinh tự
+động (`rag-chatbot-fastapi/app/generated/**`, `frontend/next-env.d.ts`) được loại trừ. Container
+image phải pin tag cụ thể, không dùng `latest`; Redis giữ 7.2.x (BSD-3-Clause) một cách có chủ ý
+vì Redis ≥7.4 là RSALv2/SSPL. Các điều kiện third-party đáng chú nhất được liệt kê trong
+[NOTICE](../NOTICE).
+
 ## Cổng xuất bản
 
 Bản xuất nguồn cục bộ này không có lịch sử Git riêng tư hay remote. Trước khi xuất bản, người
@@ -106,6 +116,16 @@ model adapter at an external OpenAI-compatible endpoint is an operator choice, a
 excerpts would then cross that provider boundary. For regulated workloads review residency,
 retention, procurement, threat models, and legal basis. No Vietnamese-law corpus, trained
 Dream-RSI policy model, or evaluated fine-tuned checkpoint is bundled.
+
+## Licensing hygiene: headers and image pins
+
+Every human-authored source file — Java, Python, TypeScript/TSX, protobuf, shell — carries the
+standard ASF Apache-2.0 header. The CI `license-headers` job rejects pull requests with missing
+headers via `python3 scripts/license_headers.py --check`; the script can also add them with
+`--add`. Generated artifacts (`rag-chatbot-fastapi/app/generated/**`, `frontend/next-env.d.ts`)
+are excluded. Container images must pin specific tags, never `latest`; Redis is deliberately
+kept on 7.2.x (BSD-3-Clause) because Redis ≥7.4 is RSALv2/SSPL. The most notable third-party
+conditions are listed in [NOTICE](../NOTICE).
 
 ## Publication gate
 

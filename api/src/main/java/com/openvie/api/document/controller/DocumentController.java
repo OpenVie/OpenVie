@@ -1,10 +1,26 @@
+// Copyright 2026 LinkedNodeDigital
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.openvie.api.document.controller;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.nio.charset.StandardCharsets;
 
+import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -192,6 +208,34 @@ public class DocumentController extends BaseController {
                 .contentType(MediaType.parseMediaType(download.contentType()))
                 .contentLength(download.content().length)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(download.content());
+    }
+
+    @Operation(summary = "Load a citation image asset",
+            description = "Serves a persisted image (embedded picture or standalone image document) "
+                    + "referenced by chat citations in the sources panel.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Image bytes"),
+            @ApiResponse(responseCode = "400", description = "The media identifier is malformed",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Document or image asset not found in the caller's workspace",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Media read failed",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{documentId}/media/{mediaId}")
+    public ResponseEntity<byte[]> media(
+            @PathVariable UUID documentId,
+            @PathVariable String mediaId,
+            HttpServletRequest request
+    ) {
+        var download = documentService.downloadMedia(getTenantId(request), documentId, mediaId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .contentLength(download.content().length)
+                .header(HttpHeaders.CACHE_CONTROL, CacheControl.maxAge(Duration.ofDays(7))
+                        .cachePublic()
+                        .getHeaderValue())
                 .body(download.content());
     }
 

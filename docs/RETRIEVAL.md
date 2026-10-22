@@ -8,7 +8,7 @@
 
 ## Hấp thụ và truy hồi — Tiếng Việt
 
-Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. Hệ thống **không** hỗ trợ OCR, hình ảnh, âm thanh hay video.
+Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. OCR (PDF scan và ảnh đơn lẻ) là **stage tùy chọn, tắt theo mặc định**; âm thanh và video chưa được hỗ trợ.
 
 ### 1. Ngăn xếp mô hình và lưu trữ
 
@@ -19,13 +19,14 @@ Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số c�
 | Truy hồi từ vựng (Lexical/Sparse) | FastEmbed `Qdrant/bm25` | Bổ sung cho ngữ nghĩa đối với từ ngữ chính xác, mã hiệu, ngày tháng. |
 | Xếp hạng lại (Reranking - tùy chọn) | TEI cross-encoder endpoint | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt, cơ chế fail-open khi lỗi. |
 | Phân tích tài liệu số | Parser chuyên biệt: `pypdf`, `python-docx`... | Trích xuất văn bản có cấu trúc kèm nguồn gốc (provenance). |
+| OCR tùy chọn (PDF scan, ảnh, ảnh lồng trong PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) hoặc VLM qua Ollama; `pypdfium2` + Pillow | Chỉ hoạt động khi `INGESTION_OCR_ENABLED=true` (ảnh lồng cần thêm `INGESTION_OCR_EMBEDDED_IMAGES=true`); phụ thuộc Apache-2.0. |
 | Chỉ mục vector | Qdrant named vectors (dense + sparse) | Giới hạn theo tenant, knowledge base và document. |
 | Đồ thị tri thức (Graph) | Kuzu chạy ngầm sau graph-service | Thực thể và quan hệ được neo bằng bằng chứng trong tài liệu. |
 
 ### 2. Nguồn tài liệu được chấp nhận
 
-- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`). Giới hạn **20 MB/tệp**.
-- **Không hỗ trợ:** PDF scan/ảnh thuần, PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), file nén độc hại/hư hỏng.
+- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`) — và ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) khi OCR được bật. Giới hạn **20 MB/tệp**.
+- **Không hỗ trợ:** PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), file nén độc hại/hư hỏng. PDF scan và ảnh thuần được hấp thụ qua stage OCR tùy chọn (§7), tắt theo mặc định.
 
 ### 3. Quy trình hấp thụ bất đồng bộ
 
@@ -47,6 +48,7 @@ flowchart LR
   - File trùng SHA-256 trong cùng KB: trả về tài liệu hiện có, bỏ qua xử lý lại.
   - File cùng tên nhưng nội dung thay đổi: cập nhật tại chỗ, chuyển lại `PENDING`, ghi đè nguồn và thay thế vector/graph tương ứng.
 - **Giới hạn tài nguyên:** `INGESTION_WORKER_CONCURRENCY` (mặc định 4) điều tiết số tài liệu xử lý đồng thời. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) giới hạn token sinh ra mỗi batch trích xuất đồ thị (tối đa 2 thực thể, 2 quan hệ mỗi đơn vị tri thức).
+- **OCR tùy chọn:** Khi `INGESTION_OCR_ENABLED=true`, trang thiếu text được raster hóa và nhận dạng ngay trong bước parse; kết quả cache theo fingerprint (§7). Sự kiện `COMPLETED` mang thêm `text_source` và `page_count` khi OCR tham gia.
 
 ### 4. Xử lý cấu trúc và bảng tính
 
@@ -92,12 +94,25 @@ flowchart TD
 - **Streaming thật:** Ollama NDJSON hoặc SSE từ endpoint tương thích OpenAI → gRPC server-streaming → SSE tới client. Bản nháp tích lũy thay thế snapshot cũ; giữ lại đuôi và token/placeholder chưa đủ để làm sạch trước khi hiển thị. Bản nháp không có link/thẻ nguồn và không được lưu.
 - **Câu hỏi nhạy cảm:** Chờ toàn bộ kết quả, kiểm tra citation và cắt cụt trước khi hiển thị; câu trả lời bị cắt hoặc thiếu nguồn hợp lệ không lộ bản nháp.
 
+### 7. OCR tùy chọn — PDF scan và ảnh
+
+Stage OCR **tắt theo mặc định** (`INGESTION_OCR_ENABLED=false`): khi tắt, pipeline hành xử y như bản chỉ-text và PDF không có text trả ngay lỗi cũ "PDF document contains no extractable text; scanned PDFs are not supported".
+
+- **Bật:** `INGESTION_OCR_ENABLED=true` ở worker; upload ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) cần thêm `OCR_UPLOADS_ENABLED=true` ở API (Spring). Phụ thuộc Apache-2.0: `pypdfium2` (raster hóa) và Pillow; Docker image cài sẵn `tesseract-ocr` kèm gói `vie`/`eng`.
+- **Cổng từng trang:** Trang PDF có ít hơn `INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE` (mặc định 32) ký tự hiển thị sẽ được raster hóa ở `INGESTION_OCR_DPI` (300) rồi nhận dạng; trang có text giữ nguyên fast-path (không OCR).
+- **Ảnh lồng trong tài liệu:** Bật thêm `INGESTION_OCR_EMBEDDED_IMAGES=true` để quét **ảnh nhúng**: các trang PDF *có* text (trang thiếu text đã được OCR toàn trang) được lấy từng ảnh XObject ra nhận dạng; `.docx` (`word/media/`) và `.xlsx` (`xl/media/`) quét media trong package. Best-effort, không nhân bản text layer: ảnh nhỏ hơn 32px hoặc không giải mã được bị bỏ qua, tối đa 64 ảnh/tài liệu, kết quả dưới 8 ký tự (logo, icon) bị lọc; block OCR mang nguồn `ocr-v1` kèm `ocr_source=embedded-image`, tham gia chung cache fingerprint §7. **Vị trí trích dẫn:** DOCX đánh số trang ước tính bằng dấu ngắt trang trong file (`w:lastRenderedPageBreak`, `w:br[@w:type="page"]`) — best-effort, file không có dấu ngắt thì coi là trang 1; block OCR được chèn đúng vị trí ảnh trong tài liệu kèm `section_path` từ heading trước đó. XLSX gán `sheet_name` về sheet chứa ảnh (đọc theo chuỗi relationship của package, không giải mã được thì bỏ trống). `parser_version` được lộ đến ngoài cùng: payload index KEYWORD trên Qdrant (lọc được `parser_version=ocr-v1`), DTO retrieval (`RetrievedKnowledgeUnit`), gRPC `Citation`, Spring và frontend (thẻ OCR badge trên citation). Cache retrieval (codec chunk, schema v2) và cache semantic-answer (schema v2) tự vô hiệu hóa mục cũ — các mục schema v1 bị từ chối, tính lại bình thường (fail-open). Ảnh hỏng vẫn im lặng bỏ qua, nhưng **3 lần lỗi provider liên tiếp** (thiếu tesseract, VLM sập, timeout dồn dập) sẽ fail tài liệu và giữ đúng loại lỗi gốc (transient → retry).
+- **Giới hạn:** Tối đa `INGESTION_OCR_MAX_PAGES` (300) trang/tài liệu; giới hạn megapixel mỗi trang (`INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE=25`) tự thu nhỏ ảnh thay vì từ chối; timeout mỗi trang (`INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE=60`) thành lỗi vĩnh viễn (không tái thử); nhận dạng chạy song song `INGESTION_OCR_PAGE_CONCURRENCY=2` trang.
+- **Provider:** `INGESTION_OCR_PROVIDER=tesseract` (mặc định; đọc TSV kèm độ tin cậy; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) hoặc `ollama-vlm` (bắt buộc `OCR_VLM_MODEL_ID`; gọi `/api/chat` của Ollama với ảnh base64).
+- **Cache kết quả:** Parse OCR được cache JSON tại `<document>/ocr/<fingerprint>.json`; fingerprint bó SHA-256 của file gốc với cấu hình OCR (provider, DPI). Trùng fingerprint khi reindex → bỏ qua nhận dạng; artifact hỏng/lệch → parse lại toàn phần; lỗi ghi cache chỉ ghi log, không chặn hấp thụ.
+- **Siêu dữ liệu:** Sự kiện `COMPLETED` và API tài liệu mang `text_source` (`text`/`ocr`/`mixed`) và `page_count`; frontend hiển thị badge OCR và xem trước ảnh trực tiếp.
+- **Chưa hỗ trợ:** âm thanh và video (không có code path).
+
 
 ---
 
 # Ingestion and retrieval
 
-This guide describes OpenVie's digital-document RAG implementation. OCR, general image, audio, and video ingestion are **not delivered**.
+This guide describes OpenVie's digital-document RAG implementation. OCR (scanned PDFs and standalone images) is an **optional stage, off by default**; audio and video ingestion are not delivered.
 
 ## 1. Current model and storage stack
 
@@ -108,13 +123,14 @@ This guide describes OpenVie's digital-document RAG implementation. OCR, general
 | Lexical retrieval | FastEmbed `Qdrant/bm25` | Complements semantic search for exact codes, identifiers, dates. |
 | Reranking (optional) | TEI cross-encoder endpoint | Default: `Alibaba-NLP/gte-multilingual-reranker-base`. Fails open on errors. |
 | Document parsing | Dedicated parsers: `pypdf`, `python-docx` | Extracts structured text with source provenance. |
+| Optional OCR (scanned PDFs, images, images embedded in PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) or a VLM via Ollama; `pypdfium2` + Pillow | Active only when `INGESTION_OCR_ENABLED=true` (embedded images additionally require `INGESTION_OCR_EMBEDDED_IMAGES=true`); Apache-2.0 dependencies. |
 | Vector index | Qdrant dense and sparse vectors | Filtered by tenant, knowledge base, and document ID. |
 | Knowledge graph | Kuzu behind graph-service | Grounded entities and evidence-backed relations. |
 
 ## 2. Accepted knowledge sources
 
-- **Supported:** PDF with extractable text (`.pdf`), Word (`.docx`), Plain text (`.txt`), Markdown (`.md`), HTML (`.html`), Spreadsheets (`.xlsx`, `.csv`). Size limit: **20 MB per file**.
-- **Unsupported:** Scanned/image-only PDFs, encrypted PDFs, legacy binary files (`.doc`, `.xls`), corrupted archives.
+- **Supported:** PDF with extractable text (`.pdf`), Word (`.docx`), Plain text (`.txt`), Markdown (`.md`), HTML (`.html`), Spreadsheets (`.xlsx`, `.csv`) — and images (`.png`, `.jpg`, `.jpeg`, `.webp`) when OCR is enabled. Size limit: **20 MB per file**.
+- **Unsupported:** Encrypted PDFs, legacy binary files (`.doc`, `.xls`), corrupted archives. Scanned and image-only PDFs ingest through the optional OCR stage (§7), off by default.
 
 ## 3. Asynchronous ingestion
 
@@ -136,6 +152,7 @@ flowchart LR
   - Identical SHA-256 within the same knowledge base: returns existing document without reprocessing.
   - Same filename with changed content: updates document in place, resets status to `PENDING`, and replaces vector/graph entities.
 - **Resource limits:** `INGESTION_WORKER_CONCURRENCY` (default 4) governs document concurrency. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) caps tokens per graph batch (max 2 entities, 2 relations per unit).
+- **Optional OCR:** When `INGESTION_OCR_ENABLED=true`, text-free pages are rasterized and recognized inside the parse step; results are cached per fingerprint (§7). The `COMPLETED` event additionally carries `text_source` and `page_count` when OCR participates.
 
 ## 4. Structure and spreadsheet handling
 
@@ -182,12 +199,27 @@ flowchart TD
 - **Sensitive Questions:** Full generation, citation, and truncation checks precede display; truncated or unauthorized sensitive answers expose no draft.
 
 
-## 7. Implementation map
+## 7. Optional OCR — scanned PDFs and images
+
+The OCR stage is **off by default** (`INGESTION_OCR_ENABLED=false`): while disabled, the pipeline behaves exactly like the text-only build and text-free PDFs fail with the legacy "PDF document contains no extractable text; scanned PDFs are not supported" error.
+
+- **Activation:** `INGESTION_OCR_ENABLED=true` on the worker; image uploads (`.png`, `.jpg`, `.jpeg`, `.webp`) additionally require `OCR_UPLOADS_ENABLED=true` on the API (Spring). Apache-2.0 dependencies: `pypdfium2` (rasterization) and Pillow; the Docker image ships `tesseract-ocr` with the `vie`/`eng` packs.
+- **Per-page gate:** A PDF page with fewer than `INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE` (default 32) visible characters is rasterized at `INGESTION_OCR_DPI` (300) and recognized; text-bearing pages keep the untouched fast path.
+- **Embedded document images:** Additionally enable `INGESTION_OCR_EMBEDDED_IMAGES=true` to read **embedded images**: PDF pages that *do* have text (gate-failing pages are already fully rasterized) get their image XObjects recognized individually; `.docx` (`word/media/`) and `.xlsx` (`xl/media/`) media parts are scanned inside the package. Best-effort, no text-layer duplication: images below 32px or undecodable are skipped, at most 64 images per document, results under 8 characters (logos, icons) are dropped; OCR blocks carry the `ocr-v1` source with `ocr_source=embedded-image`, and share the §7 fingerprint cache. **Citation location:** DOCX estimates page numbers from page-break markers in the file (`w:lastRenderedPageBreak`, `w:br[@w:type="page"]`) — best-effort; files without markers count as page 1; OCR blocks are interleaved at the image position with `section_path` from the preceding headings. XLSX assigns `sheet_name` of the anchoring sheet (read from the package relationship chain; left empty when it cannot be resolved). `parser_version` is surfaced end-to-end: a KEYWORD payload index on Qdrant (filterable as `parser_version=ocr-v1`), the retrieval DTO (`RetrievedKnowledgeUnit`), gRPC `Citation`, Spring, and the frontend (OCR badge on the citations panel). The retrieval cache (chunk codec, schema v2) and semantic-answer cache (schema v2) invalidate older entries — schema-v1 payloads are rejected and recomputed normally (fail-open). Bad images are skipped silently, but **3 consecutive provider failures** (missing tesseract, VLM outage, all timeouts) fail the document preserving the original error kind (transient → retry).
+- **Bounds:** At most `INGESTION_OCR_MAX_PAGES` (300) pages per document; the per-page megapixel cap (`INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE=25`) downsizes oversized pages instead of rejecting them; a page timeout (`INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE=60`) becomes a permanent failure (no retry); recognition runs `INGESTION_OCR_PAGE_CONCURRENCY=2` pages in parallel.
+- **Providers:** `INGESTION_OCR_PROVIDER=tesseract` (default; TSV parsing with confidence; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) or `ollama-vlm` (requires `OCR_VLM_MODEL_ID`; calls Ollama's `/api/chat` with base64 images).
+- **Result cache:** OCR parses are cached as JSON under `<document>/ocr/<fingerprint>.json`; the fingerprint binds the raw file SHA-256 to the OCR configuration (provider, DPI). A matching fingerprint skips recognition entirely on reindex; a corrupted or mismatched artifact falls back to a full parse; cache write failures are logged and never block ingestion.
+- **Metadata:** The `COMPLETED` status event and document API carry `text_source` (`text`/`ocr`/`mixed`) and `page_count`; the frontend shows an OCR badge and previews images inline.
+- **Not delivered:** audio and video ingestion (no code path).
+
+
+## 8. Implementation map
 
 | Concern | Primary source files |
 |---|---|
 | Upload & lifecycle | `DocumentService.java`, `DocumentFileValidator.java` |
 | Parsing & chunking | `extraction.py`, `chunking.py`, `pipeline.py` |
+| Optional OCR ingest | `ocr.py`, `ocr_artifacts.py` |
 | Model adapters | `chat.py`, `embedding.py`, `sparse.py` |
 | Intent, retrieval & planning | `intent.py`, `query_plan.py`, `retrieval.py`, `reranking.py` |
 | Graph projection | `entity_extraction.py`, `search.py` |

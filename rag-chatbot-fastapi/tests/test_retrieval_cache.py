@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +32,9 @@ from app.common.cache import (
 )
 from app.common.concurrent_loads import ConcurrentLoadTracker
 from app.modules.generation.internal.models import RetrievedChunk
+from app.modules.retrieval.internal.cache import (
+    RETRIEVAL_CACHE_SCHEMA_VERSION as RECORDED_SCHEMA_VERSION,
+)
 from app.modules.retrieval.internal.cache import (
     RETRIEVAL_PIPELINE_VERSION,
     CachedRetriever,
@@ -132,6 +149,11 @@ def _chunk(document_id: str | None = None) -> RetrievedChunk:
         sheet_name=None,
         cell_range=None,
         table_id=None,
+        parser_version="ocr-v1",
+        image_object_key="tenants/t/knowledge-bases/kb/documents/d/media/abc.png",
+        image_media_type="image/jpeg",
+        image_width=240,
+        image_height=120,
     )
 
 
@@ -231,7 +253,7 @@ def test_chunk_codec_round_trip_and_strict_validation() -> None:
     ) == [chunk]
 
     raw = json.loads(payload)
-    raw["schema_version"] = 2
+    raw["schema_version"] = RECORDED_SCHEMA_VERSION + 1
     with pytest.raises(ValueError, match="schema"):
         RetrievedChunkCacheCodec.decode(
             json.dumps(raw).encode(), max_results=8, allowed_document_ids=None
