@@ -28,6 +28,11 @@ from app.modules.ingestion.internal.ocr import (
     TesseractOcrProvider,
 )
 from app.modules.ingestion.internal.pipeline import DocumentIngestionPipeline
+from app.modules.ingestion.internal.transcription import (
+    AsrIngestionService,
+    FasterWhisperTranscriptionProvider,
+    OpenAiCompatibleAsrProvider,
+)
 from app.modules.model.internal.chat import create_chat_model
 from app.modules.model.internal.embedding import EmbeddingClient, OllamaEmbeddingClient
 from app.modules.model.internal.sparse import FastEmbedSparseEncoder
@@ -62,6 +67,37 @@ def create_ocr_service(settings: Settings) -> OcrIngestionService | None:
     )
 
 
+def create_asr_service(settings: Settings) -> AsrIngestionService | None:
+    """Build the ASR adapter from settings; ``None`` keeps the text-only path."""
+    if not settings.INGESTION_ASR_ENABLED:
+        return None
+    if settings.INGESTION_ASR_PROVIDER == "faster-whisper":
+        provider: FasterWhisperTranscriptionProvider | OpenAiCompatibleAsrProvider = (
+            FasterWhisperTranscriptionProvider(
+                model_id=settings.INGESTION_ASR_MODEL_ID,
+                device=settings.INGESTION_ASR_DEVICE,
+                compute_type=settings.INGESTION_ASR_COMPUTE_TYPE,
+                language=settings.INGESTION_ASR_LANGUAGE,
+                vad_filter=settings.INGESTION_ASR_VAD_FILTER,
+            )
+        )
+    else:
+        provider = OpenAiCompatibleAsrProvider(
+            base_url=settings.ASR_BASE_URL,
+            model_id=settings.INGESTION_ASR_MODEL_ID,
+            timeout_seconds=settings.ASR_ENDPOINT_TIMEOUT_SECONDS,
+            language=settings.INGESTION_ASR_LANGUAGE,
+        )
+    return AsrIngestionService(
+        provider,
+        timestamp_bucket_seconds=settings.INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS,
+        max_duration_seconds=settings.INGESTION_ASR_MAX_DURATION_SECONDS,
+        timeout_seconds=settings.INGESTION_ASR_TIMEOUT_SECONDS,
+        keyframe_interval_seconds=settings.INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS,
+        max_keyframes=settings.INGESTION_VIDEO_MAX_KEYFRAMES,
+    )
+
+
 def create_document_ingestion_pipeline(
     settings: Settings,
     *,
@@ -71,9 +107,15 @@ def create_document_ingestion_pipeline(
         update={"LLM_MAX_OUTPUT_TOKENS": settings.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS}
     )
     ocr_service = create_ocr_service(settings)
+    asr_service = create_asr_service(settings)
     return DocumentIngestionPipeline(
         store=SeaweedS3DocumentStore(storage_config(settings)),
-        extractor=DocumentTextExtractor(ocr=ocr_service),
+        extractor=DocumentTextExtractor(
+            ocr=ocr_service,
+            asr=asr_service,
+            video_enabled=settings.INGESTION_VIDEO_ENABLED,
+            video_keyframe_ocr=settings.INGESTION_VIDEO_KEYFRAME_OCR,
+        ),
         chunker=DeterministicChunker(),
         embedder=embedder or OllamaEmbeddingClient(model_config(settings)),
         sparse_encoder=FastEmbedSparseEncoder(model_config(settings)),
@@ -91,4 +133,5 @@ def create_document_ingestion_pipeline(
         ),
         graph_extraction_enabled=settings.GRAPH_EXTRACTION_ENABLED,
         ocr=ocr_service,
+        asr=asr_service,
     )

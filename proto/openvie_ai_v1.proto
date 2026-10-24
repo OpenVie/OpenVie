@@ -97,6 +97,9 @@ message GenerateAnswerResponse {
   string cache_tier = 7;
   optional int64 avoided_input_tokens = 8;
   optional int64 avoided_output_tokens = 9;
+  // Short follow-up questions the user can send next, in the answer language;
+  // at most a handful (the plan is three). Empty when no suggestions were made.
+  repeated string suggested_questions = 10;
 }
 
 message GenerateAnswerEvent {

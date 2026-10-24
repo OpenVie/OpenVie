@@ -40,11 +40,41 @@ def spreadsheet_table_key(
     return f"{spreadsheet_table_prefix(tenant_id, knowledge_base_id, document_id)}{table}.parquet"
 
 
-def ocr_artifact_prefix(tenant_id: str, knowledge_base_id: str, document_id: str) -> str:
+ARTIFACT_KINDS = ("ocr", "asr")
+
+
+def artifact_prefix(
+    artifact_kind: str, tenant_id: str, knowledge_base_id: str, document_id: str
+) -> str:
+    """Derived-parse artifact namespace for one document ("<kind>/" directory).
+
+    ``artifact_kind`` selects the folder: ``ocr`` for recognized raster text
+    and ``asr`` for speech transcripts — each bound to its own fingerprint
+    with no cross-reading between stages.
+    """
+    if artifact_kind not in ARTIFACT_KINDS:
+        raise ValueError(f"Unknown artifact kind: {artifact_kind}")
     tenant = _component("tenant_id", tenant_id)
     knowledge_base = _component("knowledge_base_id", knowledge_base_id)
     document = _component("document_id", document_id)
-    return f"tenants/{tenant}/knowledge-bases/{knowledge_base}/documents/{document}/ocr/"
+    return (
+        f"tenants/{tenant}/knowledge-bases/{knowledge_base}/documents/{document}/{artifact_kind}/"
+    )
+
+
+def artifact_key(
+    artifact_kind: str,
+    tenant_id: str,
+    knowledge_base_id: str,
+    document_id: str,
+    fingerprint: str,
+) -> str:
+    prefix = artifact_prefix(artifact_kind, tenant_id, knowledge_base_id, document_id)
+    return f"{prefix}{fingerprint}.json"
+
+
+def ocr_artifact_prefix(tenant_id: str, knowledge_base_id: str, document_id: str) -> str:
+    return artifact_prefix("ocr", tenant_id, knowledge_base_id, document_id)
 
 
 def ocr_artifact_key(
@@ -53,8 +83,20 @@ def ocr_artifact_key(
     document_id: str,
     fingerprint: str,
 ) -> str:
-    prefix = ocr_artifact_prefix(tenant_id, knowledge_base_id, document_id)
-    return f"{prefix}{fingerprint}.json"
+    return artifact_key("ocr", tenant_id, knowledge_base_id, document_id, fingerprint)
+
+
+def asr_artifact_prefix(tenant_id: str, knowledge_base_id: str, document_id: str) -> str:
+    return artifact_prefix("asr", tenant_id, knowledge_base_id, document_id)
+
+
+def asr_artifact_key(
+    tenant_id: str,
+    knowledge_base_id: str,
+    document_id: str,
+    fingerprint: str,
+) -> str:
+    return artifact_key("asr", tenant_id, knowledge_base_id, document_id, fingerprint)
 
 
 def document_media_prefix(tenant_id: str, knowledge_base_id: str, document_id: str) -> str:

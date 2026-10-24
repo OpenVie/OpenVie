@@ -6,8 +6,8 @@ spring:
     name: openvie-api
   servlet:
     multipart:
-      max-file-size: ${MAX_UPLOAD_FILE_SIZE:20MB}
-      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:21MB}
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:${DOCUMENT_MAX_SIZE_MB:20}MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:-1}
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   data:
@@ -89,9 +89,13 @@ app:
     logo-url: ${LOGO_URL:}
   notifications:
     encryption-key: ${NOTIFICATION_ENC_KEY:}
-  # Image ingestion (PNG/JPEG/WebP) rides the Python worker's OCR pipeline.
-  # Enable this together with INGESTION_OCR_ENABLED on the worker; while it is
-  # off, image uploads are rejected up front instead of failing ingestion.
+  # Ingestion stages (OCR for images, ASR for audio/video) ride the Python
+  # worker pipelines. Enable each together with its worker counterpart
+  # (INGESTION_OCR_ENABLED, INGESTION_ASR_ENABLED, INGESTION_VIDEO_ENABLED);
+  # while off, uploads are rejected up front instead of failing ingestion.
   documents:
     image-uploads-enabled: ${OCR_UPLOADS_ENABLED:false}
+    audio-uploads-enabled: ${ASR_UPLOADS_ENABLED:false}
+    video-uploads-enabled: ${VIDEO_UPLOADS_ENABLED:false}
+    max-file-size-mb: ${DOCUMENT_MAX_SIZE_MB:20}
 

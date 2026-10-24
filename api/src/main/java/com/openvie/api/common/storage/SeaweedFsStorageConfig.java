@@ -39,6 +39,8 @@ public class SeaweedFsStorageConfig {
                 .region(Region.of(properties.resolvedRegion()))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(true)
+                        .chunkedEncodingEnabled(false)
+                        .checksumValidationEnabled(false)
                         .build());
 
         if (StringUtils.hasText(properties.accessKey()) && StringUtils.hasText(properties.secretKey())) {

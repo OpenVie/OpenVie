@@ -285,7 +285,7 @@ public class ChatControlPlaneService {
         turn.setAssistantMessageId(assistant.getId());
         turn.setStatus(ChatTurnStatus.COMPLETED);
         turn.setFailureCode(null);
-        return new FinalizeResult(false, toAssistant(assistant, session));
+        return new FinalizeResult(false, toAssistant(assistant, session, answer.suggestedQuestions()));
     }
 
     private ChatDtos.CitationResponse toChatCitation(AiInferenceApi.Citation citation) {
@@ -685,8 +685,13 @@ public class ChatControlPlaneService {
     }
 
     private ChatDtos.AssistantMessageResponse toAssistant(ChatMessage message, ChatSession session) {
+        return toAssistant(message, session, null);
+    }
+
+    private ChatDtos.AssistantMessageResponse toAssistant(
+            ChatMessage message, ChatSession session, List<String> suggestedQuestions) {
         return new ChatDtos.AssistantMessageResponse(
-                message.getRole(), message.getContent(), citations(message), null);
+                message.getRole(), message.getContent(), citations(message), null, suggestedQuestions);
     }
 
     private ChatDtos.MessageResponse toMessage(ChatMessage message, ChatSession session) {

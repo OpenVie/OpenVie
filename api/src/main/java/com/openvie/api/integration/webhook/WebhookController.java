@@ -45,7 +45,7 @@ import java.util.UUID;
  */
 @Tag(name = "Webhooks", description = "Signed event push to your systems: register endpoints, inspect deliveries (owner only)")
 @RestController
-@RequestMapping({"/api/v1/admin/webhook-endpoints", "/api/admin/webhook-endpoints"})
+@RequestMapping("/api/v1/admin/webhook-endpoints")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
 @SecurityRequirement(name = "bearerAuth")

@@ -54,7 +54,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 hay duyệt cho production. Cụ thể:
 
 - Bộ đệm tùy chọn yêu cầu cấu hình tường minh và bằng chứng rollout.
-- Hấp thụ ảnh/âm thanh/video tổng quát chưa triển khai; chỉ các định dạng có text được xử lý.
+- OCR (ảnh/PDF scan) và ASR (âm thanh/video) là các stage tùy chọn, tắt theo mặc định.
 - Fine-tuning/thích ứng model là đề xuất, không phải pipeline huấn luyện hiện có.
 - Health response, fixture hay artifact smoke cũ không phải bằng chứng workflow đúng toàn trình.
 
@@ -132,8 +132,7 @@ Start with the guide for your task.
 configured, load-tested, or approved for production. In particular:
 
 - Optional caches require explicit configuration and rollout evidence.
-- General image/audio/video ingestion is not implemented; only the documented text-bearing
-  formats are processed.
+- OCR (images/scanned PDFs) and ASR (audio/video) are optional stages, disabled by default.
 - Model fine-tuning/adaptation is proposed work, not an existing training pipeline.
 - A health response, fixture, or historical smoke artifact is not proof of full workflow correctness.
 

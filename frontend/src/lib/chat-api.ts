@@ -87,6 +87,15 @@ export type ChatMessageStreamOptions = {
   signal?: AbortSignal;
 };
 
+/** Keep only usable suggested follow-up questions from an optional server list. */
+function normalizeSuggestions(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const questions = value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+  return questions.length > 0 ? questions : undefined;
+}
+
 export class ChatMessageStreamError extends Error {
   constructor(readonly code: string, message: string) {
     super(message);
@@ -171,7 +180,10 @@ export async function submitChatMessageApi(
             break;
           case "complete":
             if (body.role !== "assistant" || typeof body.content !== "string" || !body.content.trim() || !Array.isArray(body.citations)) throw malformed();
-            completed = payload as AssistantMessageResponse;
+            completed = {
+              ...(payload as AssistantMessageResponse),
+              suggested_questions: normalizeSuggestions(body.suggested_questions),
+            };
             break;
           case "error":
             if (typeof body.code !== "string" || typeof body.message !== "string" || !body.message.trim()) throw malformed();

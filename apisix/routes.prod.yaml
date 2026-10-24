@@ -169,6 +169,20 @@ routes:
         nodelay: true
         rejected_code: 429
         rejected_msg: "rate limit exceeded at the edge"
+      uri-blocker:
+        block_rules:
+          - "\\.(env|git|svn|htaccess|bak|sql)$"
+          - "(phpinfo|eval-stdin|actuator/env)"
+        rejected_code: 403
+        case_insensitive: true
+      response-rewrite:
+        headers:
+          set:
+            X-Content-Type-Options: nosniff
+            X-Frame-Options: SAMEORIGIN
+            X-XSS-Protection: "1; mode=block"
+            Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+            Referrer-Policy: "strict-origin-when-cross-origin"
     upstream:
       type: roundrobin
       nodes:

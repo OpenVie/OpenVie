@@ -113,15 +113,60 @@ class WorkflowAnalyticsSummary(BaseModel):
     avg_duration_minutes: float
 
 
+class DataQualityCheckResult(BaseModel):
+    name: str
+    dataset: str
+    status: str
+    score: float
+    message: str
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class LakehouseDataQualitySummary(BaseModel):
+    tenant_id: str
+    status: str
+    overall_score: float
+    passed_checks: int
+    total_checks: int
+    checks: list[DataQualityCheckResult]
+    evaluated_at: str
+
+
+class LineageNode(BaseModel):
+    id: str
+    label: str
+    type: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class LineageEdge(BaseModel):
+    source: str
+    target: str
+    label: str
+
+
+class DocumentLineageGraph(BaseModel):
+    document_id: str
+    tenant_id: str
+    nodes: list[LineageNode]
+    edges: list[LineageEdge]
+    generated_at: str
+
+
 __all__ = [
     "AuditAnalyticsSummary",
     "CdcOperation",
     "CdcRecord",
     "ChatAnalyticsSummary",
+    "DataQualityCheckResult",
     "DocumentAnalyticsSummary",
+    "DocumentLineageGraph",
     "LakehouseBatchIngestRequest",
+    "LakehouseDataQualitySummary",
     "LakehouseDataset",
     "LakehouseQueryRequest",
     "LakehouseQueryResult",
+    "LineageEdge",
+    "LineageNode",
     "WorkflowAnalyticsSummary",
 ]

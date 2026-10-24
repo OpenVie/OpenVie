@@ -21,7 +21,18 @@
  * uses the browser's native viewer; DOCX renders through docx-preview.
  */
 
-export type PreviewKind = "pdf" | "docx" | "xlsx" | "csv" | "markdown" | "html" | "text" | "image" | "unsupported";
+export type PreviewKind =
+  | "pdf"
+  | "docx"
+  | "xlsx"
+  | "csv"
+  | "markdown"
+  | "html"
+  | "text"
+  | "image"
+  | "audio"
+  | "video"
+  | "unsupported";
 
 const EXTENSION_KIND: Record<string, PreviewKind> = {
   pdf: "pdf",
@@ -39,6 +50,19 @@ const EXTENSION_KIND: Record<string, PreviewKind> = {
   jpg: "image",
   jpeg: "image",
   webp: "image",
+  mp3: "audio",
+  wav: "audio",
+  m4a: "audio",
+  oga: "audio",
+  ogg: "audio",
+  opus: "audio",
+  flac: "audio",
+  audio: "audio",
+  mp4: "video",
+  mkv: "video",
+  mov: "video",
+  webm: "video",
+  video: "video",
 };
 
 /** Kind by the backend DocumentType, falling back to the stored file extension. */
@@ -52,6 +76,35 @@ export function resolvePreviewKind(fileName: string, fileType?: string | null): 
   const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
   const byExtension = EXTENSION_KIND[extension];
   return byExtension ?? "unsupported";
+}
+
+export function formatTimestamp(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+export function citationSeekSeconds(pageNumber: number | null | undefined): number {
+  if (!pageNumber || pageNumber <= 1) return 0;
+  return (pageNumber - 1) * 60;
+}
+
+const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".oga", ".ogg", ".opus", ".flac"];
+const VIDEO_EXTENSIONS = [".mp4", ".mkv", ".mov", ".webm"];
+
+export function isAudioSource(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+export function isVideoSource(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return VIDEO_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+export function isMediaSource(fileName: string): boolean {
+  return isAudioSource(fileName) || isVideoSource(fileName);
 }
 
 // ----------------------------------------------------------------------

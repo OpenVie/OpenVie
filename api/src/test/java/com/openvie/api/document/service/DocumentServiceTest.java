@@ -242,6 +242,123 @@ class DocumentServiceTest {
         verify(documentRepository, never()).save(any(Document.class));
     }
 
+    @Test
+    void uploadRejectsAudioWhenAsrGateDisabled() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "briefing.mp3", "audio/mpeg", mp3Bytes());
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        assertEquals("Audio ingestion is not enabled", exception.getMessage());
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    void uploadStoresAudioDocumentWhenAsrGateEnabled() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "audioUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "briefing.mp3", "audio/mpeg", mp3Bytes());
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals("briefing.mp3", response.fileName());
+        ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(documentCaptor.capture());
+        assertEquals(DocumentType.AUDIO, documentCaptor.getValue().getFileType());
+
+        ArgumentCaptor<DocumentIngestRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(DocumentIngestRequestedEvent.class);
+        verify(ingestionPublisher).publish(eventCaptor.capture());
+        assertEquals("audio/mpeg", eventCaptor.getValue().contentType());
+    }
+
+    @Test
+    void uploadRejectsAudioWithInvalidSignature() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "audioUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "briefing.mp3", "audio/mpeg", "definitely not audio".getBytes());
+
+        assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    void uploadRejectsVideoWhenVideoGateDisabled() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "clip.mp4", "video/mp4", mp4Bytes());
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        assertEquals("Video ingestion is not enabled", exception.getMessage());
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    void uploadStoresVideoDocumentWhenVideoGateEnabled() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "videoUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "clip.mp4", "video/mp4", mp4Bytes());
+
+        var response = documentService.upload(tenantId, userId, knowledgeBaseId, file);
+
+        assertEquals("clip.mp4", response.fileName());
+        ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(documentCaptor.capture());
+        assertEquals(DocumentType.VIDEO, documentCaptor.getValue().getFileType());
+
+        ArgumentCaptor<DocumentIngestRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(DocumentIngestRequestedEvent.class);
+        verify(ingestionPublisher).publish(eventCaptor.capture());
+        assertEquals("video/mp4", eventCaptor.getValue().contentType());
+    }
+
+    @Test
+    void uploadRejectsVideoWithInvalidSignature() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "videoUploadsEnabled", true);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "clip.mp4", "video/mp4", "definitely not video".getBytes());
+
+        assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        verify(documentRepository, never()).save(any(Document.class));
+    }
+
+    @Test
+    void uploadRejectsFileExceedingConfigurableSize() {
+        org.springframework.test.util.ReflectionTestUtils.setField(documentService, "maxFileSizeMb", 5L);
+        MultipartFile file = mock(MultipartFile.class);
+        when(file.isEmpty()).thenReturn(false);
+        when(file.getSize()).thenReturn(5L * 1024L * 1024L + 1L);
+        when(file.getOriginalFilename()).thenReturn("doc.txt");
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> documentService.upload(tenantId, userId, knowledgeBaseId, file));
+        assertEquals("Uploaded file exceeds 5 MB", exception.getMessage());
+    }
+
+    private static byte[] mp3Bytes() {
+        byte[] bytes = new byte[32];
+        bytes[0] = 'I';
+        bytes[1] = 'D';
+        bytes[2] = '3';
+        return bytes;
+    }
+
+    private static byte[] mp4Bytes() {
+        byte[] bytes = new byte[32];
+        bytes[4] = 'f';
+        bytes[5] = 't';
+        bytes[6] = 'y';
+        bytes[7] = 'p';
+        return bytes;
+    }
+
     private static byte[] pngBytes() {
         // Magic header (validated) plus filler; the validator checks the
         // leading signature only.
