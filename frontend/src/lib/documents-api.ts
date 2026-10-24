@@ -148,17 +148,27 @@ export function fileTypeFromName(name: string): string {
   if (lower.endsWith(".csv")) return "CSV";
   if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
     || lower.endsWith(".webp")) return "IMAGE";
+  if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".m4a")
+    || lower.endsWith(".oga") || lower.endsWith(".ogg") || lower.endsWith(".opus")
+    || lower.endsWith(".flac")) return "AUDIO";
+  if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".mov")
+    || lower.endsWith(".webm")) return "VIDEO";
   return "UNKNOWN";
 }
 
 export const SUPPORTED_DOCUMENT_ACCEPT = [
   ".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm", ".xlsx", ".csv",
   ".png", ".jpg", ".jpeg", ".webp",
+  ".mp3", ".wav", ".m4a", ".oga", ".ogg", ".opus", ".flac",
+  ".mp4", ".mkv", ".mov", ".webm",
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/plain", "text/markdown", "text/html", "text/csv",
   "image/png", "image/jpeg", "image/webp",
+  "audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4", "audio/x-m4a",
+  "audio/ogg", "audio/vorbis", "audio/opus", "audio/flac", "audio/x-flac",
+  "video/mp4", "video/x-matroska", "video/quicktime", "video/webm",
 ].join(",");
 
 export function isSupportedDocumentName(name: string): boolean {

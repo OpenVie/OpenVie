@@ -83,6 +83,23 @@ x-prod-environment: &prod-environment
   OCR_VLM_MODEL_ID: ${OCR_VLM_MODEL_ID:-}
   OCR_VLM_TIMEOUT_SECONDS: ${OCR_VLM_TIMEOUT_SECONDS:-180.0}
   OCR_VLM_MAX_OUTPUT_TOKENS: ${OCR_VLM_MAX_OUTPUT_TOKENS:-2048}
+  # Speech transcription (ASR) & video: off by default.
+  INGESTION_ASR_ENABLED: ${INGESTION_ASR_ENABLED:-false}
+  INGESTION_ASR_PROVIDER: ${INGESTION_ASR_PROVIDER:-faster-whisper}
+  INGESTION_ASR_MODEL_ID: ${INGESTION_ASR_MODEL_ID:-small}
+  INGESTION_ASR_DEVICE: ${INGESTION_ASR_DEVICE:-auto}
+  INGESTION_ASR_COMPUTE_TYPE: ${INGESTION_ASR_COMPUTE_TYPE:-default}
+  INGESTION_ASR_LANGUAGE: ${INGESTION_ASR_LANGUAGE:-}
+  INGESTION_ASR_VAD_FILTER: ${INGESTION_ASR_VAD_FILTER:-false}
+  INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS: ${INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS:-60}
+  INGESTION_ASR_MAX_DURATION_SECONDS: ${INGESTION_ASR_MAX_DURATION_SECONDS:-3600.0}
+  INGESTION_ASR_TIMEOUT_SECONDS: ${INGESTION_ASR_TIMEOUT_SECONDS:-3600.0}
+  ASR_BASE_URL: ${ASR_BASE_URL:-http://host.docker.internal:8000}
+  ASR_ENDPOINT_TIMEOUT_SECONDS: ${ASR_ENDPOINT_TIMEOUT_SECONDS:-3600.0}
+  INGESTION_VIDEO_ENABLED: ${INGESTION_VIDEO_ENABLED:-false}
+  INGESTION_VIDEO_KEYFRAME_OCR: ${INGESTION_VIDEO_KEYFRAME_OCR:-false}
+  INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS: ${INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS:-10.0}
+  INGESTION_VIDEO_MAX_KEYFRAMES: ${INGESTION_VIDEO_MAX_KEYFRAMES:-24}
   LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
   LLM_USE_OLLAMA_NATIVE_CHAT: ${LLM_USE_OLLAMA_NATIVE_CHAT:-true}
   LLM_DISABLE_THINKING: ${LLM_DISABLE_THINKING:-true}
@@ -258,7 +275,7 @@ services:
   seaweedfs-s3:
     image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
-    command: s3 -filer=seaweedfs-filer:8888
+    command: s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0
     ports:
       - "127.0.0.1:${SEAWEEDFS_S3_PORT:-18333}:8333"
     depends_on:
@@ -355,6 +372,9 @@ services:
       # Image upload gate (documents.image-uploads-enabled); enable together
       # with INGESTION_OCR_ENABLED on the ai-api.
       OCR_UPLOADS_ENABLED: ${OCR_UPLOADS_ENABLED:-false}
+      ASR_UPLOADS_ENABLED: ${ASR_UPLOADS_ENABLED:-false}
+      VIDEO_UPLOADS_ENABLED: ${VIDEO_UPLOADS_ENABLED:-false}
+      DOCUMENT_MAX_SIZE_MB: ${DOCUMENT_MAX_SIZE_MB:-20}
       AI_GRPC_TARGET: ${AI_GRPC_TARGET:-ai-api:50051}
       AI_GRPC_PLAINTEXT: ${AI_GRPC_PLAINTEXT:-true}
       LAKEHOUSE_URL: ${LAKEHOUSE_URL:-http://ai-api:18000}
@@ -371,6 +391,10 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-no-reply@app.example.com}
       FROM_NAME: ${FROM_NAME:-OpenVie}
       INVITATION_LINK: ${INVITATION_LINK:-http://localhost:8088/accept-invitation}
+      ANTIVIRUS_ENABLED: ${ANTIVIRUS_ENABLED:-true}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      ANTIVIRUS_FAIL_OPEN: ${ANTIVIRUS_FAIL_OPEN:-true}
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     healthcheck:
@@ -519,6 +543,7 @@ services:
       # Anonymous access is disabled: every viewer signs in.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: ""
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource"
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
     volumes:
@@ -530,6 +555,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # ── Edge Quarantine: Antivirus Scanner (ClamAV Daemon) ─────────────────────
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan /bin/sh || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Automated Self-Recovery: Docker Autoheal Daemon ────────────────────────
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 5
+      AUTOHEAL_START_PERIOD: 30
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:
@@ -546,3 +597,4 @@ volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  clamav_data:

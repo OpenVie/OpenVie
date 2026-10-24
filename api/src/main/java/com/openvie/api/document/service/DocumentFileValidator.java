@@ -62,6 +62,8 @@ final class DocumentFileValidator {
             case XLSX -> validateOfficeArchive(data, "xl/workbook.xml");
             case TXT, MARKDOWN, HTML, CSV -> validateUtf8(data);
             case IMAGE -> validateImage(data);
+            case AUDIO -> validateAudio(data);
+            case VIDEO -> validateVideo(data);
         }
     }
 
@@ -78,6 +80,36 @@ final class DocumentFileValidator {
                 && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
         if (!png && !jpeg && !webp) {
             throw new BadRequestException("Image file signature is invalid");
+        }
+    }
+
+    private static void validateAudio(byte[] data) {
+        if (data.length < 4) {
+            throw new BadRequestException("Audio file signature is invalid");
+        }
+        boolean mp3Id3 = data[0] == 'I' && data[1] == 'D' && data[2] == '3';
+        int b0 = data[0] & 0xFF;
+        int b1 = data[1] & 0xFF;
+        boolean mp3Sync = b0 == 0xFF && (b1 == 0xFB || b1 == 0xF3 || b1 == 0xF2);
+        boolean wav = data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'A' && data[10] == 'V' && data[11] == 'E';
+        boolean flac = data[0] == 'f' && data[1] == 'L' && data[2] == 'a' && data[3] == 'C';
+        boolean ogg = data[0] == 'O' && data[1] == 'g' && data[2] == 'g' && data[3] == 'S';
+        boolean ftyp = data.length >= 8 && data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p';
+        if (!mp3Id3 && !mp3Sync && !wav && !flac && !ogg && !ftyp) {
+            throw new BadRequestException("Audio file signature is invalid");
+        }
+    }
+
+    private static void validateVideo(byte[] data) {
+        if (data.length < 4) {
+            throw new BadRequestException("Video file signature is invalid");
+        }
+        boolean ebml = (data[0] & 0xFF) == 0x1A && (data[1] & 0xFF) == 0x45
+                && (data[2] & 0xFF) == 0xDF && (data[3] & 0xFF) == 0xA3;
+        boolean ftyp = data.length >= 8 && data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p';
+        if (!ebml && !ftyp) {
+            throw new BadRequestException("Video file signature is invalid");
         }
     }
 
@@ -172,6 +204,24 @@ final class DocumentFileValidator {
         values.put(DocumentType.CSV, Set.of("text/csv", "application/csv", "text/plain",
                 "application/vnd.ms-excel", "application/octet-stream"));
         values.put(DocumentType.IMAGE, Set.of("image/png", "image/jpeg", "image/webp",
+                "application/octet-stream"));
+        values.put(DocumentType.AUDIO, Set.of(
+                "audio/mpeg",
+                "audio/wav",
+                "audio/x-wav",
+                "audio/mp4",
+                "audio/x-m4a",
+                "audio/ogg",
+                "audio/vorbis",
+                "audio/opus",
+                "audio/flac",
+                "audio/x-flac",
+                "application/octet-stream"));
+        values.put(DocumentType.VIDEO, Set.of(
+                "video/mp4",
+                "video/x-matroska",
+                "video/quicktime",
+                "video/webm",
                 "application/octet-stream"));
         return values;
     }

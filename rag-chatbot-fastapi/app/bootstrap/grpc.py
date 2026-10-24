@@ -24,7 +24,7 @@ from redis.asyncio import Redis
 
 from app.bootstrap.configuration import graph_config, index_config, storage_config
 from app.bootstrap.generation import RagRuntime
-from app.bootstrap.ingestion import create_ocr_service
+from app.bootstrap.ingestion import create_asr_service, create_ocr_service
 from app.bootstrap.settings import Settings
 from app.common.storage import SeaweedS3DocumentStore
 from app.generated import openvie_ai_v1_pb2 as pb
@@ -92,6 +92,7 @@ def create_grpc_service(
                 graph,
                 SeaweedS3DocumentStore(storage_config(settings)),
                 ocr=create_ocr_service(settings),
+                asr=create_asr_service(settings),
             )
         ),
     )

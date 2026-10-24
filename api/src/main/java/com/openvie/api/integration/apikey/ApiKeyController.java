@@ -45,7 +45,7 @@ import java.util.UUID;
  */
 @Tag(name = "Api keys", description = "Machine-to-machine credentials for integrations (owner only)")
 @RestController
-@RequestMapping({"/api/v1/admin/api-keys", "/api/admin/api-keys"})
+@RequestMapping("/api/v1/admin/api-keys")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ORG_OWNER')")
 @SecurityRequirement(name = "bearerAuth")

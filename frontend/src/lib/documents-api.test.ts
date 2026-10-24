@@ -109,6 +109,18 @@ describe("supported document formats", () => {
     }
   })
 
+  it("accepts audio formats when ASR is enabled", () => {
+    for (const name of ["briefing.mp3", "track.wav", "voice.m4a", "audio.ogg", "speech.flac"]) {
+      expect(isSupportedDocumentName(name)).toBe(true)
+    }
+  })
+
+  it("accepts video formats when video ingestion is enabled", () => {
+    for (const name of ["recording.mp4", "movie.mkv", "clip.mov", "stream.webm"]) {
+      expect(isSupportedDocumentName(name)).toBe(true)
+    }
+  })
+
   it("rejects unsupported files before upload", () => {
     expect(isSupportedDocumentName("malware.exe")).toBe(false)
     expect(isSupportedDocumentName("archive.zip")).toBe(false)

@@ -28,12 +28,13 @@ năng lực H-P-D-I nào.
 | --- | --- |
 | Chat trên tài liệu | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối |
 | Tuyến nhạy cảm có giới hạn | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện |
-| Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP) — tắt theo mặc định |
+| Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP); phiên âm ASR tùy chọn cho âm thanh và video — đều tắt theo mặc định |
 | Định danh và quản trị | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán |
-| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL |
+| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL; sơ đồ phả hệ dữ liệu DAG và khung kiểm định chất lượng dữ liệu tự động |
 | Đánh giá ngoại tuyến | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model |
 | Bộ đệm tùy chọn | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng |
-| Chưa cung cấp | Hấp thụ âm thanh/video tổng quát (OCR cho PDF scan/ảnh đã triển khai nhưng tắt theo mặc định), ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng, và kết thúc TLS hay WAF ở biên (cổng [APISIX](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) chỉ định tuyến HTTP); thích ứng model vẫn là nghiên cứu |
+| Kiểm dịch biên mạng & GitOps | Trạm kiểm dịch ClamAV quét và cách ly mã độc tại biên mạng; APISIX edge gateway phòng thủ lọc URI; tự động hóa GitOps và tự phục hồi tức thì |
+| Chưa cung cấp | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng; thích ứng model vẫn là nghiên cứu |
 
 Chỉ có mã nguồn trong repo chưa phải là bằng chứng dịch vụ production: tích hợp provider tùy
 chọn và gia cố triển khai phải được kiểm chứng trong môi trường của riêng bạn.
@@ -215,12 +216,12 @@ H-P-D-I capability space each screen of the web client belongs to.
 | --- | --- |
 | Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence |
 | Bounded sensitive route | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment |
-| Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP) — off by default |
+| Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP); optional ASR transcription for audio and video — both off by default |
 | Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
 | Lakehouse & Analytics | Asynchronous CDC streaming over RabbitMQ archiving partitioned Snappy Parquet to SeaweedFS S3; embedded DuckDB OLAP engine for analytical reporting without loading PostgreSQL |
 | Offline evaluation | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model |
 | Optional caches | Implemented but disabled by default; enable only after the applicable correctness and performance gates |
-| Not delivered | General audio/video ingestion (OCR for scanned PDFs and images is delivered but disabled by default), a Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
+| Not delivered | A Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
 
 Repository code alone is not evidence of a production-ready service: optional provider
 integrations and deployment hardening must be verified in their own environment.

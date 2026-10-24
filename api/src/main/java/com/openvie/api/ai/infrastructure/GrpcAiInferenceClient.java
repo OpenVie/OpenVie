@@ -159,7 +159,11 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 response.hasOutputTokens() ? response.getOutputTokens() : null,
                 response.getCacheTier(),
                 response.hasAvoidedInputTokens() ? response.getAvoidedInputTokens() : null,
-                response.hasAvoidedOutputTokens() ? response.getAvoidedOutputTokens() : null);
+                response.hasAvoidedOutputTokens() ? response.getAvoidedOutputTokens() : null,
+                // Follow-up suggestions are optional; blank entries must not
+                // leak through even if the inference service misbehaves.
+                response.getSuggestedQuestionsList().stream()
+                        .filter(value -> !value.isBlank()).limit(5).toList());
     }
 
     private AiInferenceException invalidStream() {

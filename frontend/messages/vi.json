@@ -254,6 +254,7 @@
     "thinking": "Đang suy nghĩ…",
     "responding": "Đang viết câu trả lời",
     "canceled": "Đã hủy.",
+    "unansweredNotice": "Câu trả lời bị gián đoạn (do chuyển trang hoặc mất kết nối).",
     "questionPlaceholder": "Đặt câu hỏi về các nguồn đã lập chỉ mục…",
     "uploadPlaceholder": "Tải lên và lập chỉ mục nguồn trước khi trò chuyện…",
     "message": "Tin nhắn",
@@ -261,6 +262,8 @@
     "cancel": "Hủy",
     "cancelResponse": "Hủy câu trả lời",
     "sendMessage": "Gửi tin nhắn",
+    "composerExpand": "Mở rộng khung nhập",
+    "composerCollapse": "Thu gọn khung nhập",
     "uploadNotice": "Tệp được tải lên OpenVie và lập chỉ mục trước khi tạo câu trả lời.",
     "messageCount": "{count} tin nhắn",
     "deleteTitle": "Xóa cuộc trò chuyện?",
@@ -298,11 +301,15 @@
     "scopeClose": "Đóng",
     "scopeClear": "Bỏ chọn",
     "scopeApply": "Áp dụng",
-    "scopeSelectedCount": "Đã chọn {count} tài liệu"
+    "scopeSelectedCount": "Đã chọn {count} tài liệu",
+    "suggestedQuestionsLabel": "Gợi ý câu hỏi tiếp theo"
   },
   "AssistantResponse": {
     "sources": "Nguồn",
     "citedImages": "Hình ảnh trích dẫn",
+    "citedMedia": "Dẫn chứng Video & Âm thanh",
+    "evidenceAtTime": "Dẫn chứng tại mốc {time}",
+    "seekToEvidence": "Tua đến mốc này",
     "openCitedSource": "Mở bằng chứng được trích dẫn",
     "openSourceIn": "Mở bằng chứng trong {source}"
   },
@@ -750,6 +757,8 @@
     "saveAs": "Tải về để xem",
     "empty": "Tệp trống hoặc không đọc được nội dung.",
     "truncated": "Tệp quá dài — chỉ hiển thị 500 dòng đầu tiên.",
+    "evidenceTimestamp": "Dẫn chứng tại mốc: {time}",
+    "seekToEvidence": "Tua đến dẫn chứng",
     "sheetAria": "Chọn sheet"
   }
 }

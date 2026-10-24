@@ -113,7 +113,7 @@ class CitationImage(_message.Message):
     def __init__(self, object_key: _Optional[str] = ..., media_type: _Optional[str] = ..., width: _Optional[int] = ..., height: _Optional[int] = ...) -> None: ...
 
 class GenerateAnswerResponse(_message.Message):
-    __slots__ = ("generation_id", "authoritative_revision", "answer", "citations", "input_tokens", "output_tokens", "cache_tier", "avoided_input_tokens", "avoided_output_tokens")
+    __slots__ = ("generation_id", "authoritative_revision", "answer", "citations", "input_tokens", "output_tokens", "cache_tier", "avoided_input_tokens", "avoided_output_tokens", "suggested_questions")
     GENERATION_ID_FIELD_NUMBER: _ClassVar[int]
     AUTHORITATIVE_REVISION_FIELD_NUMBER: _ClassVar[int]
     ANSWER_FIELD_NUMBER: _ClassVar[int]
@@ -123,6 +123,7 @@ class GenerateAnswerResponse(_message.Message):
     CACHE_TIER_FIELD_NUMBER: _ClassVar[int]
     AVOIDED_INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     AVOIDED_OUTPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    SUGGESTED_QUESTIONS_FIELD_NUMBER: _ClassVar[int]
     generation_id: str
     authoritative_revision: int
     answer: str
@@ -132,7 +133,8 @@ class GenerateAnswerResponse(_message.Message):
     cache_tier: str
     avoided_input_tokens: int
     avoided_output_tokens: int
-    def __init__(self, generation_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., answer: _Optional[str] = ..., citations: _Optional[_Iterable[_Union[Citation, _Mapping]]] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., cache_tier: _Optional[str] = ..., avoided_input_tokens: _Optional[int] = ..., avoided_output_tokens: _Optional[int] = ...) -> None: ...
+    suggested_questions: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, generation_id: _Optional[str] = ..., authoritative_revision: _Optional[int] = ..., answer: _Optional[str] = ..., citations: _Optional[_Iterable[_Union[Citation, _Mapping]]] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., cache_tier: _Optional[str] = ..., avoided_input_tokens: _Optional[int] = ..., avoided_output_tokens: _Optional[int] = ..., suggested_questions: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GenerateAnswerEvent(_message.Message):
     __slots__ = ("content", "completed")

@@ -68,6 +68,36 @@ class Settings(BaseSettings):
     OCR_VLM_TIMEOUT_SECONDS: float = 180.0
     OCR_VLM_MAX_OUTPUT_TOKENS: int = 2048
 
+    # ASR for audio/video documents. Disabled by default; mirrors the optional
+    # OCR stage (providers, guards, timestamp buckets, artifact caching).
+    INGESTION_ASR_ENABLED: bool = False
+    INGESTION_ASR_PROVIDER: Literal["faster-whisper", "openai-compat"] = "faster-whisper"
+    # faster-whisper: model name or local path (tiny/base/small/...).
+    # openai-compat: model identifier forwarded to the endpoint; required
+    # whenever the openai-compat provider is selected.
+    INGESTION_ASR_MODEL_ID: str = "small"
+    INGESTION_ASR_DEVICE: Literal["auto", "cpu", "cuda"] = "auto"
+    INGESTION_ASR_COMPUTE_TYPE: str = "default"
+    # Blank means auto-detect; a language code (e.g. "vi") pins recognition.
+    INGESTION_ASR_LANGUAGE: str = ""
+    INGESTION_ASR_VAD_FILTER: bool = False
+    # Citation anchors: transcript seconds map to buckets of this length and
+    # surface through the existing page_number citation machinery.
+    INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS: int = 60
+    INGESTION_ASR_MAX_DURATION_SECONDS: float = 3600.0
+    INGESTION_ASR_TIMEOUT_SECONDS: float = 3600.0
+    # OpenAI-compatible endpoint (Speaches, whisper.cpp server, ...).
+    ASR_BASE_URL: str = "http://localhost:8000"
+    ASR_ENDPOINT_TIMEOUT_SECONDS: float = 3600.0
+    # Video parsing rides the ASR stage; this switch stays off so a
+    # deployment without ffmpeg never accepts uploads that can only fail.
+    INGESTION_VIDEO_ENABLED: bool = False
+    # Keyframe OCR requires both stages: ffmpeg-decoded frames recognized
+    # through the ingestion OCR provider (best effort, text blocks only).
+    INGESTION_VIDEO_KEYFRAME_OCR: bool = False
+    INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS: float = 10.0
+    INGESTION_VIDEO_MAX_KEYFRAMES: int = 24
+
     CACHE_ENABLED: bool = False
     CACHE_KEY_PREFIX: str = "ccn:v1"
     CACHE_TTL_JITTER_PERCENT: int = 10
@@ -247,6 +277,39 @@ class Settings(BaseSettings):
                 raise ValueError("INGESTION_OCR_PSM must be between 0 and 13")
             if self.INGESTION_OCR_PROVIDER == "ollama-vlm" and not self.OCR_VLM_MODEL_ID.strip():
                 raise ValueError("OCR_VLM_MODEL_ID is required when OCR runs on a vision model")
+        if self.INGESTION_ASR_ENABLED:
+            if not 1 <= self.INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS <= 600:
+                raise ValueError(
+                    "INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS must be between 1 and 600"
+                )
+            if self.INGESTION_ASR_MAX_DURATION_SECONDS <= 0:
+                raise ValueError("INGESTION_ASR_MAX_DURATION_SECONDS must be positive")
+            if self.INGESTION_ASR_TIMEOUT_SECONDS <= 0:
+                raise ValueError("INGESTION_ASR_TIMEOUT_SECONDS must be positive")
+            if self.INGESTION_ASR_PROVIDER == "openai-compat":
+                if not self.INGESTION_ASR_MODEL_ID.strip():
+                    raise ValueError(
+                        "INGESTION_ASR_MODEL_ID is required when ASR runs on an "
+                        "OpenAI-compatible endpoint"
+                    )
+                if not self.ASR_BASE_URL.strip():
+                    raise ValueError("ASR_BASE_URL must not be blank when openai-compat is used")
+            if not 10 <= self.ASR_ENDPOINT_TIMEOUT_SECONDS <= 6 * 3600:
+                raise ValueError("ASR_ENDPOINT_TIMEOUT_SECONDS must be between 10 and 21600")
+        if self.INGESTION_VIDEO_ENABLED or self.INGESTION_VIDEO_KEYFRAME_OCR:
+            if not self.INGESTION_ASR_ENABLED:
+                raise ValueError("INGESTION_VIDEO_* switches require INGESTION_ASR_ENABLED")
+            if self.INGESTION_VIDEO_KEYFRAME_OCR and not self.INGESTION_OCR_ENABLED:
+                raise ValueError(
+                    "INGESTION_VIDEO_KEYFRAME_OCR requires INGESTION_OCR_ENABLED to be on "
+                    "so sampled frames can be recognized"
+                )
+            if not 0 < self.INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS <= 600:
+                raise ValueError(
+                    "INGESTION_VIDEO_KEYFRAME_INTERVAL_SECONDS must be between 0.001 and 600"
+                )
+            if not 0 <= self.INGESTION_VIDEO_MAX_KEYFRAMES <= 200:
+                raise ValueError("INGESTION_VIDEO_MAX_KEYFRAMES must be between 0 and 200")
         if not 1 <= self.GRAPH_EXTRACTION_BATCH_SIZE <= 64:
             raise ValueError("GRAPH_EXTRACTION_BATCH_SIZE must be between 1 and 64")
         if self.GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS < 64:

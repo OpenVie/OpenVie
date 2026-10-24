@@ -36,6 +36,7 @@ import time
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 import httpx
@@ -117,13 +118,14 @@ class TesseractOcrProvider:
 
     async def _run(self, image_bytes: bytes, image_format: str) -> tuple[str, float | None]:
         del image_format  # the rendered/written file name already has the right suffix
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as handle:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
             await asyncio.to_thread(handle.write, image_bytes)
-            handle.flush()
+            file_path = handle.name
+        try:
             try:
                 process = await asyncio.create_subprocess_exec(
                     "tesseract",
-                    handle.name,
+                    file_path,
                     "stdout",
                     "-l",
                     self._languages,
@@ -147,12 +149,17 @@ class TesseractOcrProvider:
                 raise PermanentIngestionFailure(
                     f"OCR timed out after {self._timeout_seconds:g} seconds for one page"
                 ) from exc
-        if process.returncode != 0:
-            detail = (stderr or b"").decode("utf-8", errors="replace").strip()
-            raise PermanentIngestionFailure(
-                f"OCR could not recognize the page image: {detail[:200] or process.returncode}"
-            )
-        return _parse_tesseract_tsv(stdout.decode("utf-8", errors="replace"))
+            if process.returncode != 0:
+                detail = (stderr or b"").decode("utf-8", errors="replace").strip()
+                raise PermanentIngestionFailure(
+                    f"OCR could not recognize the page image: {detail[:200] or process.returncode}"
+                )
+            return _parse_tesseract_tsv(stdout.decode("utf-8", errors="replace"))
+        finally:
+            try:
+                Path(file_path).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _parse_tesseract_tsv(tsv: str) -> tuple[str, float | None]:

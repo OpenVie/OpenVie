@@ -48,6 +48,8 @@ def test_http_surface_exposes_only_health_and_metrics() -> None:
         "/api/v1/lakehouse/analytics/documents",
         "/api/v1/lakehouse/analytics/audit",
         "/api/v1/lakehouse/analytics/workflows",
+        "/api/v1/lakehouse/analytics/quality",
+        "/api/v1/lakehouse/analytics/lineage/documents/{document_id}",
     }
 
 

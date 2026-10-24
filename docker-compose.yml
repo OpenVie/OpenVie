@@ -292,7 +292,7 @@ services:
   seaweedfs-s3:
     image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
-    command: s3 -filer=seaweedfs-filer:8888
+    command: s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0
     ports:
       - "${SEAWEEDFS_S3_PORT:-18333}:8333"
     depends_on:
@@ -366,6 +366,7 @@ services:
       # Anonymous access is disabled: every viewer signs in.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: ""
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource"
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
     volumes:
@@ -377,6 +378,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # ── Edge Quarantine: Antivirus Scanner (ClamAV Daemon) ─────────────────────
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan /bin/sh || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Automated Self-Recovery: Docker Autoheal Daemon ────────────────────────
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 5
+      AUTOHEAL_START_PERIOD: 30
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:
@@ -392,3 +419,4 @@ volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  clamav_data:

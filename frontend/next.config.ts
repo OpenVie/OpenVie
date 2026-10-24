@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
   devIndicators: false, // The floating "N" dev badge confused phone QA; app UI must be the only chrome.
   allowedDevOrigins: ["127.0.0.1", ...allowedDevOrigins],
   reactCompiler: true,
+  experimental: {
+    proxyClientMaxBodySize: "200mb",
+  },
   async redirects() {
     // Pre-hard-split URLs moved under /admin/*. Keep temporary redirects so
     // bookmarks keep working during the transition. Locales are enumerated

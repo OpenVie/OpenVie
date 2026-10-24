@@ -117,6 +117,32 @@ describe("submitChatMessageApi streaming", () => {
     })).rejects.toThrow()
   })
 
+  it("normalizes optional suggested follow-up questions on the completion", async () => {
+    const withSuggestions = { ...complete, suggested_questions: ["Sản phẩm nào được đổi trả?", "  ", 42] }
+    const withoutSuggestions = { ...complete, suggested_questions: "không phải mảng" }
+    const request: ApiRequest = async (_url, init) => {
+      // Two turns share one recorder: the first turn carries valid + junk
+      // entries, the second carries a non-array value that must be dropped.
+      const frame = bodies.length === 0
+        ? `event: complete\ndata: ${JSON.stringify(withSuggestions)}\n\n`
+        : `event: complete\ndata: ${JSON.stringify(withoutSuggestions)}\n\n`
+      bodies.push(JSON.parse(String(init?.body)))
+      return streamResponse(frame)
+    }
+    const bodies: unknown[] = []
+
+    await expect(submitChatMessageApi(request, "session-1", "Question", {
+      onContent: vi.fn(),
+      onReset: vi.fn(),
+    })).resolves.toEqual({ ...complete, suggested_questions: ["Sản phẩm nào được đổi trả?"] })
+
+    await expect(submitChatMessageApi(request, "session-1", "Question", {
+      onContent: vi.fn(),
+      onReset: vi.fn(),
+    })).resolves.toEqual(complete)
+    expect(bodies).toEqual([{ content: "Question" }, { content: "Question" }])
+  })
+
   it("cancels and unlocks an open stream while preserving explicit caller cancellation", async () => {
     const caller = new AbortController()
     const cancel = vi.fn()

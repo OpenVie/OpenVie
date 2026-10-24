@@ -48,6 +48,7 @@ from app.modules.generation.internal.sensitive_policy import (
     is_sensitive_query,
 )
 from app.modules.generation.internal.sessions import ChatSessionStore
+from app.modules.generation.internal.suggestions import suggest_next_questions
 from app.modules.model.api import ModelCompletion, ModelTimeoutError, ModelUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -488,6 +489,13 @@ class RagChatService:
                         output_tokens=completion.output_tokens,
                     ),
                 )
+            suggestions = await suggest_next_questions(
+                self._chat_model,
+                question=content,
+                answer=answer,
+                conversation=prior_messages,
+                locale=session.locale,
+            )
             message = AssistantMessage(
                 role="assistant",
                 content=answer,
@@ -496,6 +504,7 @@ class RagChatService:
                     input_tokens=completion.input_tokens,
                     output_tokens=completion.output_tokens,
                 ),
+                suggested_questions=list(suggestions),
             )
             if (
                 cache_context is not None
