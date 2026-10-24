@@ -8,7 +8,7 @@
 
 ## Hấp thụ và truy hồi — Tiếng Việt
 
-Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. OCR (PDF scan và ảnh đơn lẻ) là **stage tùy chọn, tắt theo mặc định**; âm thanh và video chưa được hỗ trợ.
+Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. OCR (PDF scan và ảnh đơn lẻ) và ASR (âm thanh và video) là các **stage tùy chọn, tắt theo mặc định**.
 
 ### 1. Ngăn xếp mô hình và lưu trữ
 
@@ -20,12 +20,13 @@ Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số c�
 | Xếp hạng lại (Reranking - tùy chọn) | TEI cross-encoder endpoint | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt, cơ chế fail-open khi lỗi. |
 | Phân tích tài liệu số | Parser chuyên biệt: `pypdf`, `python-docx`... | Trích xuất văn bản có cấu trúc kèm nguồn gốc (provenance). |
 | OCR tùy chọn (PDF scan, ảnh, ảnh lồng trong PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) hoặc VLM qua Ollama; `pypdfium2` + Pillow | Chỉ hoạt động khi `INGESTION_OCR_ENABLED=true` (ảnh lồng cần thêm `INGESTION_OCR_EMBEDDED_IMAGES=true`); phụ thuộc Apache-2.0. |
+| Phiên âm ASR tùy chọn (âm thanh, video, OCR khung hình video) | `transcription.py`: faster-whisper (PyAV nội bộ) hoặc endpoint HTTP `/v1/audio/transcriptions`; `ffmpeg` | Chỉ hoạt động khi `INGESTION_ASR_ENABLED=true` (video cần thêm `INGESTION_VIDEO_ENABLED=true`, OCR khung hình cần `INGESTION_VIDEO_KEYFRAME_OCR=true`); phụ thuộc Apache-2.0 / MIT. |
 | Chỉ mục vector | Qdrant named vectors (dense + sparse) | Giới hạn theo tenant, knowledge base và document. |
 | Đồ thị tri thức (Graph) | Kuzu chạy ngầm sau graph-service | Thực thể và quan hệ được neo bằng bằng chứng trong tài liệu. |
 
 ### 2. Nguồn tài liệu được chấp nhận
 
-- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`) — và ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) khi OCR được bật. Giới hạn **20 MB/tệp**.
+- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`) — ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) khi OCR bật; âm thanh (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) và video (`.mp4`, `.mkv`, `.mov`, `.webm`) khi ASR bật. Giới hạn kích thước tệp có thể cấu hình qua `app.documents.max-file-size-mb` (mặc định **20 MB/tệp**).
 - **Không hỗ trợ:** PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), file nén độc hại/hư hỏng. PDF scan và ảnh thuần được hấp thụ qua stage OCR tùy chọn (§7), tắt theo mặc định.
 
 ### 3. Quy trình hấp thụ bất đồng bộ
@@ -105,14 +106,26 @@ Stage OCR **tắt theo mặc định** (`INGESTION_OCR_ENABLED=false`): khi tắ
 - **Provider:** `INGESTION_OCR_PROVIDER=tesseract` (mặc định; đọc TSV kèm độ tin cậy; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) hoặc `ollama-vlm` (bắt buộc `OCR_VLM_MODEL_ID`; gọi `/api/chat` của Ollama với ảnh base64).
 - **Cache kết quả:** Parse OCR được cache JSON tại `<document>/ocr/<fingerprint>.json`; fingerprint bó SHA-256 của file gốc với cấu hình OCR (provider, DPI). Trùng fingerprint khi reindex → bỏ qua nhận dạng; artifact hỏng/lệch → parse lại toàn phần; lỗi ghi cache chỉ ghi log, không chặn hấp thụ.
 - **Siêu dữ liệu:** Sự kiện `COMPLETED` và API tài liệu mang `text_source` (`text`/`ocr`/`mixed`) và `page_count`; frontend hiển thị badge OCR và xem trước ảnh trực tiếp.
-- **Chưa hỗ trợ:** âm thanh và video (không có code path).
+
+### 8. Phiên âm ASR tùy chọn — Âm thanh và video
+
+Stage ASR **tắt theo mặc định** (`INGESTION_ASR_ENABLED=false`, `INGESTION_VIDEO_ENABLED=false`): khi tắt, các định dạng media bị từ chối ngay từ cổng upload API hoặc trả lỗi không hỗ trợ.
+
+- **Bật:** `INGESTION_ASR_ENABLED=true` ở worker; upload âm thanh (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) cần `ASR_UPLOADS_ENABLED=true` ở API (Spring); video (`.mp4`, `.mkv`, `.mov`, `.webm`) cần thêm `INGESTION_VIDEO_ENABLED=true` ở worker và `VIDEO_UPLOADS_ENABLED=true` ở API.
+- **Provider kép:**
+  - `faster-whisper` (mặc định, MIT): giải mã container trực tiếp qua PyAV/FFmpeg nhúng trong thư viện, không cần cài ffmpeg hệ thống cho file âm thanh độc lập.
+  - `openai-compat`: gửi tới endpoint `/v1/audio/transcriptions` (Speaches, whisper.cpp server...); chuẩn hóa audio thành WAV 16 kHz mono bằng ffmpeg trước khi gửi.
+- **Xử lý video:** Demux track âm thanh qua ffmpeg thành 16 kHz mono để phiên âm ASR. Khi bật thêm `INGESTION_VIDEO_KEYFRAME_OCR=true` (yêu cầu bật cả stage OCR §7), ffmpeg trích xuất các khung hình mẫu (`fps=1/{interval}`) kèm timestamp từ bộ lọc `showinfo`; các khung hình được nhận dạng OCR tốt nhất có thể, chuỗi 3 lỗi liên tiếp từ provider sẽ dừng tài liệu bảo toàn loại lỗi; sinh ra các block `ocr-v1` mang `ocr_source=video-keyframe`, tài liệu mang `text_source=mixed`.
+- **Timestamp bucket:** Thời gian âm thanh (giây) được chia thành các bucket (`INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS`, mặc định 60 giây, 1-based) đóng vai trò số trang tương đương (`page_number`) để tái sử dụng toàn bộ cơ chế trích dẫn hiện có; mốc thời gian chi tiết bắt đầu/kết thúc được lưu trong metadata của block.
+- **Giới hạn & Cache:** Giới hạn thời lượng tối đa (`INGESTION_ASR_MAX_DURATION_SECONDS`, mặc định 3600s, kiểm tra qua ffprobe nếu có) và timeout phiên âm (`INGESTION_ASR_TIMEOUT_SECONDS=3600`). Parse được cache tại `<document>/asr/<fingerprint>.json` (schema `asr-artifact-v1`), fingerprint gắn kết SHA-256 file gốc, provider tag và độ dài bucket.
+- **Siêu dữ liệu & Giao diện:** Sự kiện mang `text_source="asr"` (hoặc `"mixed"` nếu có OCR khung hình); giao diện hiển thị badge ASR và trình phát `<audio>` / `<video>` nguyên bản.
 
 
 ---
 
 # Ingestion and retrieval
 
-This guide describes OpenVie's digital-document RAG implementation. OCR (scanned PDFs and standalone images) is an **optional stage, off by default**; audio and video ingestion are not delivered.
+This guide describes OpenVie's digital-document RAG implementation. OCR (scanned PDFs and standalone images) and ASR (audio and video) are **optional stages, off by default**.
 
 ## 1. Current model and storage stack
 
@@ -124,12 +137,13 @@ This guide describes OpenVie's digital-document RAG implementation. OCR (scanned
 | Reranking (optional) | TEI cross-encoder endpoint | Default: `Alibaba-NLP/gte-multilingual-reranker-base`. Fails open on errors. |
 | Document parsing | Dedicated parsers: `pypdf`, `python-docx` | Extracts structured text with source provenance. |
 | Optional OCR (scanned PDFs, images, images embedded in PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) or a VLM via Ollama; `pypdfium2` + Pillow | Active only when `INGESTION_OCR_ENABLED=true` (embedded images additionally require `INGESTION_OCR_EMBEDDED_IMAGES=true`); Apache-2.0 dependencies. |
+| Optional ASR transcription (audio, video, video-keyframe OCR) | `transcription.py`: faster-whisper (bundled PyAV) or OpenAI-compatible endpoint `/v1/audio/transcriptions`; `ffmpeg` | Active only when `INGESTION_ASR_ENABLED=true` (video additionally requires `INGESTION_VIDEO_ENABLED=true`, keyframe OCR requires `INGESTION_VIDEO_KEYFRAME_OCR=true`); Apache-2.0 / MIT dependencies. |
 | Vector index | Qdrant dense and sparse vectors | Filtered by tenant, knowledge base, and document ID. |
 | Knowledge graph | Kuzu behind graph-service | Grounded entities and evidence-backed relations. |
 
 ## 2. Accepted knowledge sources
 
-- **Supported:** PDF with extractable text (`.pdf`), Word (`.docx`), Plain text (`.txt`), Markdown (`.md`), HTML (`.html`), Spreadsheets (`.xlsx`, `.csv`) — and images (`.png`, `.jpg`, `.jpeg`, `.webp`) when OCR is enabled. Size limit: **20 MB per file**.
+- **Supported:** PDF with extractable text (`.pdf`), Word (`.docx`), Plain text (`.txt`), Markdown (`.md`), HTML (`.html`), Spreadsheets (`.xlsx`, `.csv`) — images (`.png`, `.jpg`, `.jpeg`, `.webp`) when OCR is enabled; audio (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) and video (`.mp4`, `.mkv`, `.mov`, `.webm`) when ASR is enabled. File size limit is configurable via `app.documents.max-file-size-mb` (default **20 MB per file**).
 - **Unsupported:** Encrypted PDFs, legacy binary files (`.doc`, `.xls`), corrupted archives. Scanned and image-only PDFs ingest through the optional OCR stage (§7), off by default.
 
 ## 3. Asynchronous ingestion
@@ -210,16 +224,29 @@ The OCR stage is **off by default** (`INGESTION_OCR_ENABLED=false`): while disab
 - **Providers:** `INGESTION_OCR_PROVIDER=tesseract` (default; TSV parsing with confidence; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) or `ollama-vlm` (requires `OCR_VLM_MODEL_ID`; calls Ollama's `/api/chat` with base64 images).
 - **Result cache:** OCR parses are cached as JSON under `<document>/ocr/<fingerprint>.json`; the fingerprint binds the raw file SHA-256 to the OCR configuration (provider, DPI). A matching fingerprint skips recognition entirely on reindex; a corrupted or mismatched artifact falls back to a full parse; cache write failures are logged and never block ingestion.
 - **Metadata:** The `COMPLETED` status event and document API carry `text_source` (`text`/`ocr`/`mixed`) and `page_count`; the frontend shows an OCR badge and previews images inline.
-- **Not delivered:** audio and video ingestion (no code path).
+
+## 8. Optional ASR — audio and video transcription
+
+The ASR stage is **off by default** (`INGESTION_ASR_ENABLED=false`, `INGESTION_VIDEO_ENABLED=false`): while disabled, media uploads are rejected up front at the API or fail with unsupported format errors.
+
+- **Activation:** `INGESTION_ASR_ENABLED=true` on the worker; audio uploads (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) require `ASR_UPLOADS_ENABLED=true` on the API (Spring); video uploads (`.mp4`, `.mkv`, `.mov`, `.webm`) additionally require `INGESTION_VIDEO_ENABLED=true` on the worker and `VIDEO_UPLOADS_ENABLED=true` on the API.
+- **Dual providers:**
+  - `faster-whisper` (default, MIT): decodes containers directly through bundled PyAV/FFmpeg, requiring no system ffmpeg binary for standalone audio files.
+  - `openai-compat`: posts payloads to a configured `/v1/audio/transcriptions` endpoint (Speaches, whisper.cpp server, etc.); normalizes audio into 16 kHz mono WAV via ffmpeg first.
+- **Video ingestion:** Demuxes the audio track via system ffmpeg into 16 kHz mono for ASR. When `INGESTION_VIDEO_KEYFRAME_OCR=true` is enabled (requires the OCR stage §7), ffmpeg samples keyframes (`fps=1/{interval}`) with timestamps from the `showinfo` filter; sampled frames are recognized best-effort, a streak of 3 consecutive provider failures fails the document preserving the error kind; generates `ocr-v1` blocks carrying `ocr_source=video-keyframe` and `text_source=mixed`.
+- **Timestamp buckets:** Media positions (seconds) map into page-equivalent buckets (`INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS`, default 60s, 1-based) to seamlessly reuse existing citation machinery without schema changes; segment start/end seconds are preserved in block metadata.
+- **Bounds & Caching:** Maximum media duration guard (`INGESTION_ASR_MAX_DURATION_SECONDS`, default 3600s, probed via ffprobe when available) and document transcription timeout (`INGESTION_ASR_TIMEOUT_SECONDS=3600`). Parse results are cached under `<document>/asr/<fingerprint>.json` (schema `asr-artifact-v1`), binding the raw SHA-256, provider tag, and bucket seconds.
+- **Metadata & UI:** Status events carry `text_source="asr"` (or `"mixed"` when keyframe OCR is active); the frontend displays an ASR badge and native `<audio>` / `<video>` controls.
 
 
-## 8. Implementation map
+## 9. Implementation map
 
 | Concern | Primary source files |
 |---|---|
 | Upload & lifecycle | `DocumentService.java`, `DocumentFileValidator.java` |
 | Parsing & chunking | `extraction.py`, `chunking.py`, `pipeline.py` |
 | Optional OCR ingest | `ocr.py`, `ocr_artifacts.py` |
+| Optional ASR ingest | `transcription.py`, `extraction.py` |
 | Model adapters | `chat.py`, `embedding.py`, `sparse.py` |
 | Intent, retrieval & planning | `intent.py`, `query_plan.py`, `retrieval.py`, `reranking.py` |
 | Graph projection | `entity_extraction.py`, `search.py` |

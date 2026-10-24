@@ -111,13 +111,17 @@ public final class ChatDtos {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    @Schema(description = "The assistant's answer for the current turn: content, citations, and an optional follow-up action.")
+    @Schema(description = "The assistant's answer for the current turn: content, citations, and optional "
+            + "follow-up action and suggested next questions.")
     public record AssistantMessageResponse(
             String role,
             String content,
             List<CitationResponse> citations,
             @Schema(description = "Optional structured follow-up action the answer suggests (for example opening a cited document).")
-            Map<String, Object> action
+            Map<String, Object> action,
+            @Schema(description = "Short follow-up questions (at most a few) the user can send next, "
+                    + "in the answer language. Absent when no suggestions were made.")
+            @JsonProperty("suggested_questions") List<String> suggestedQuestions
     ) {
     }
 

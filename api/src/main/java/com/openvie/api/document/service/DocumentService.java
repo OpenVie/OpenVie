@@ -73,7 +73,6 @@ import org.springframework.beans.factory.annotation.Value;
 @Service
 public class DocumentService {
 
-    private static final long MAX_FILE_SIZE_BYTES = 20L * 1024L * 1024L;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_SEARCH_LENGTH = 200;
@@ -90,6 +89,12 @@ public class DocumentService {
      */
     @Value("${app.documents.image-uploads-enabled:false}")
     private boolean imageUploadsEnabled;
+    @Value("${app.documents.audio-uploads-enabled:false}")
+    private boolean audioUploadsEnabled;
+    @Value("${app.documents.video-uploads-enabled:false}")
+    private boolean videoUploadsEnabled;
+    @Value("${app.documents.max-file-size-mb:20}")
+    private long maxFileSizeMb = 20;
     @Autowired(required = false)
     private VersionedJsonCache businessCache;
     @Autowired(required = false)
@@ -689,14 +694,21 @@ public class DocumentService {
             throw new BadRequestException("Uploaded file is empty");
         }
 
-        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new BadRequestException("Uploaded file exceeds 20 MB");
+        long maxSizeBytes = maxFileSizeMb * 1024L * 1024L;
+        if (file.getSize() > maxSizeBytes) {
+            throw new BadRequestException("Uploaded file exceeds " + maxFileSizeMb + " MB");
         }
 
         String filename = safeFileName(file.getOriginalFilename());
         DocumentType type = documentTypeFor(filename);
         if (type == DocumentType.IMAGE && !imageUploadsEnabled) {
             throw new BadRequestException("Image ingestion is not enabled");
+        }
+        if (type == DocumentType.AUDIO && !audioUploadsEnabled) {
+            throw new BadRequestException("Audio ingestion is not enabled");
+        }
+        if (type == DocumentType.VIDEO && !videoUploadsEnabled) {
+            throw new BadRequestException("Video ingestion is not enabled");
         }
         DocumentFileValidator.validate(file, type);
     }
@@ -740,6 +752,15 @@ public class DocumentService {
                 || lower.endsWith(".webp")) {
             return DocumentType.IMAGE;
         }
+        if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".m4a")
+                || lower.endsWith(".oga") || lower.endsWith(".ogg") || lower.endsWith(".opus")
+                || lower.endsWith(".flac")) {
+            return DocumentType.AUDIO;
+        }
+        if (lower.endsWith(".mp4") || lower.endsWith(".mkv") || lower.endsWith(".mov")
+                || lower.endsWith(".webm")) {
+            return DocumentType.VIDEO;
+        }
         throw new BadRequestException("Unsupported file extension");
     }
 
@@ -775,6 +796,44 @@ public class DocumentService {
             }
             return "application/octet-stream";
         }
+        if (type == DocumentType.AUDIO) {
+            String lower = fileName.toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".mp3")) {
+                return "audio/mpeg";
+            }
+            if (lower.endsWith(".wav")) {
+                return "audio/wav";
+            }
+            if (lower.endsWith(".m4a")) {
+                return "audio/mp4";
+            }
+            if (lower.endsWith(".flac")) {
+                return "audio/flac";
+            }
+            if (lower.endsWith(".ogg") || lower.endsWith(".oga")) {
+                return "audio/ogg";
+            }
+            if (lower.endsWith(".opus")) {
+                return "audio/opus";
+            }
+            return "audio/mpeg";
+        }
+        if (type == DocumentType.VIDEO) {
+            String lower = fileName.toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".mp4")) {
+                return "video/mp4";
+            }
+            if (lower.endsWith(".mkv")) {
+                return "video/x-matroska";
+            }
+            if (lower.endsWith(".mov")) {
+                return "video/quicktime";
+            }
+            if (lower.endsWith(".webm")) {
+                return "video/webm";
+            }
+            return "video/mp4";
+        }
         return switch (type) {
             case PDF -> "application/pdf";
             case DOCX -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -784,9 +843,10 @@ public class DocumentService {
             case XLSX -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             case CSV -> "text/csv";
             case IMAGE -> "application/octet-stream";
+            case AUDIO -> "audio/mpeg";
+            case VIDEO -> "video/mp4";
         };
     }
-
     private DocumentStatus parseStatus(String status) {
         try {
             return DocumentStatus.valueOf(status);

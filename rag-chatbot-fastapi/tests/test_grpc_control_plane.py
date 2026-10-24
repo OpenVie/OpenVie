@@ -86,6 +86,10 @@ class Generation:
                     snippet="Grounded source",
                 ),
             ),
+            suggested_questions=(
+                "Cách nộp đơn đổi trả sản phẩm như thế nào?",
+                "Sản phẩm nào không hỗ trợ đổi trả?",
+            ),
         )
 
 
@@ -157,6 +161,11 @@ async def test_generation_context_is_supplied_and_result_is_deduplicated() -> No
     assert generation.context is not None
     assert generation.context.authoritative_revision == 7
     assert [item.content for item in generation.context.prior_messages] == ["Earlier"]
+    assert list(first.suggested_questions) == [
+        "Cách nộp đơn đổi trả sản phẩm như thế nào?",
+        "Sản phẩm nào không hỗ trợ đổi trả?",
+    ]
+    assert list(second.suggested_questions) == list(first.suggested_questions)
 
 
 @pytest.mark.asyncio

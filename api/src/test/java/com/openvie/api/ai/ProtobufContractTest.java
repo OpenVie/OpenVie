@@ -60,7 +60,8 @@ class ProtobufContractTest {
                 Map.entry("generation_id", 1), Map.entry("authoritative_revision", 2),
                 Map.entry("answer", 3), Map.entry("citations", 4), Map.entry("input_tokens", 5),
                 Map.entry("output_tokens", 6), Map.entry("cache_tier", 7),
-                Map.entry("avoided_input_tokens", 8), Map.entry("avoided_output_tokens", 9)));
+                Map.entry("avoided_input_tokens", 8), Map.entry("avoided_output_tokens", 9),
+                Map.entry("suggested_questions", 10)));
         assertNull(OpenVieAiProto.getDescriptor().findMessageTypeByName("TicketDraft"));
         assertNull(OpenVieAiProto.getDescriptor().findMessageTypeByName(
                 "PrepareInterviewSessionRequest"));

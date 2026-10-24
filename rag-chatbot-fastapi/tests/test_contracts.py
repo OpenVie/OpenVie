@@ -61,6 +61,7 @@ def test_grpc_descriptor_is_wire_compatible() -> None:
             "cache_tier": 7,
             "avoided_input_tokens": 8,
             "avoided_output_tokens": 9,
+            "suggested_questions": 10,
         },
         "DocumentUnit": {
             "unit_id": 1,

@@ -97,6 +97,18 @@ AI_INGESTION_OCR_PAGES_TOTAL = Counter(
     ["provider", "outcome"],
 )
 
+AI_INGESTION_ASR_SECONDS = Histogram(
+    "openvie_ai_ingestion_asr_seconds",
+    "Time spent transcribing one audio or video document.",
+    ["provider", "outcome"],
+)
+
+AI_INGESTION_ASR_SEGMENTS_TOTAL = Counter(
+    "openvie_ai_ingestion_asr_segments_total",
+    "Transcript segments returned by a transcription provider.",
+    ["provider", "outcome"],
+)
+
 AI_CONTEXT_UNITS = Histogram(
     "openvie_ai_context_units",
     "Final cited context unit count.",

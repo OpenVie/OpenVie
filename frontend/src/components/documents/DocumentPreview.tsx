@@ -16,14 +16,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, Download, Loader2 } from "lucide-react";
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useApiClient } from "@/hooks/useApiClient";
 import { downloadDocumentApi } from "@/lib/documents-api";
 import {
+  citationSeekSeconds,
   detectCsvDelimiter,
+  formatTimestamp,
   markdownToHtml,
   parseCsv,
   resolvePreviewKind,
@@ -67,6 +69,8 @@ type PreviewData =
   | { kind: "markdown" | "html"; srcDoc: string }
   | { kind: "text"; text: string }
   | { kind: "image"; url: string }
+  | { kind: "audio"; url: string }
+  | { kind: "video"; url: string }
   | { kind: "unsupported" };
 
 /** Evidence identity for effects: stable per unit, changes re-anchor the highlight. */
@@ -195,6 +199,116 @@ function TextPane({ text, anchor }: { text: string; anchor: EvidenceAnchor | nul
       </mark>
       {text.slice(range.end)}
     </pre>
+  );
+}
+
+function AudioPane({
+  url,
+  anchor,
+}: {
+  url: string;
+  anchor: EvidenceAnchor | null;
+}) {
+  const t = useTranslations("DocumentPreview");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const seekSeconds = citationSeekSeconds(anchor?.unit?.page_number);
+
+  useEffect(() => {
+    if (audioRef.current && anchor?.unit) {
+      audioRef.current.currentTime = seekSeconds;
+    }
+  }, [seekSeconds, anchor?.key, anchor?.unit]);
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center p-6 sm:p-10">
+      {anchor?.unit && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-xs font-medium text-foreground shadow-xs">
+          <Clock className="size-4 text-primary shrink-0" />
+          <span>{t("evidenceTimestamp", { time: formatTimestamp(seekSeconds) })}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs font-semibold text-primary hover:bg-primary/20 hover:text-primary"
+            onClick={() => {
+              if (audioRef.current) {
+                audioRef.current.currentTime = seekSeconds;
+                audioRef.current.play().catch(() => {});
+              }
+            }}
+          >
+            {t("seekToEvidence")}
+          </Button>
+        </div>
+      )}
+      <audio
+        ref={audioRef}
+        controls
+        src={url}
+        onLoadedMetadata={() => {
+          if (audioRef.current && anchor?.unit) {
+            audioRef.current.currentTime = seekSeconds;
+          }
+        }}
+        className="w-full max-w-md"
+      >
+        Your browser does not support the audio element.
+      </audio>
+    </div>
+  );
+}
+
+function VideoPane({
+  url,
+  anchor,
+}: {
+  url: string;
+  anchor: EvidenceAnchor | null;
+}) {
+  const t = useTranslations("DocumentPreview");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const seekSeconds = citationSeekSeconds(anchor?.unit?.page_number);
+
+  useEffect(() => {
+    if (videoRef.current && anchor?.unit) {
+      videoRef.current.currentTime = seekSeconds;
+    }
+  }, [seekSeconds, anchor?.key, anchor?.unit]);
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center bg-black/90 p-3 sm:p-4">
+      {anchor?.unit && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-primary/40 bg-black/80 px-3.5 py-2 text-xs font-medium text-white shadow-xs backdrop-blur-xs">
+          <Clock className="size-4 text-primary shrink-0" />
+          <span>{t("evidenceTimestamp", { time: formatTimestamp(seekSeconds) })}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs font-semibold text-primary hover:bg-primary/20 hover:text-primary"
+            onClick={() => {
+              if (videoRef.current) {
+                videoRef.current.currentTime = seekSeconds;
+                videoRef.current.play().catch(() => {});
+              }
+            }}
+          >
+            {t("seekToEvidence")}
+          </Button>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        controls
+        src={url}
+        onLoadedMetadata={() => {
+          if (videoRef.current && anchor?.unit) {
+            videoRef.current.currentTime = seekSeconds;
+          }
+        }}
+        className="max-h-[65vh] max-w-full rounded-lg"
+      >
+        Your browser does not support the video element.
+      </video>
+    </div>
   );
 }
 
@@ -642,6 +756,7 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
   const [reloadKey, setReloadKey] = useState(0);
   const blobRef = useRef<Blob | null>(null);
   const imageUrlRef = useRef<string | null>(null);
+  const mediaUrlRef = useRef<string | null>(null);
   const anchor = useMemo(
     () => evidenceAnchor(evidence ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -708,6 +823,15 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
           }
           imageUrlRef.current = url;
           setData({ kind: "image", url });
+        } else if (kind === "audio" || kind === "video") {
+          if (mediaUrlRef.current) URL.revokeObjectURL(mediaUrlRef.current);
+          const url = URL.createObjectURL(downloaded.blob);
+          if (cancelled) {
+            URL.revokeObjectURL(url);
+            return;
+          }
+          mediaUrlRef.current = url;
+          setData(kind === "audio" ? { kind: "audio", url } : { kind: "video", url });
         } else {
           setData({ kind: "unsupported" });
         }
@@ -723,6 +847,10 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
       if (imageUrlRef.current) {
         URL.revokeObjectURL(imageUrlRef.current);
         imageUrlRef.current = null;
+      }
+      if (mediaUrlRef.current) {
+        URL.revokeObjectURL(mediaUrlRef.current);
+        mediaUrlRef.current = null;
       }
     };
   }, [documentId, fileName, fileType, request, reloadKey]);
@@ -812,6 +940,8 @@ export default function DocumentPreview({ documentId, fileName, fileType, classN
           <img src={data.url} alt={fileName} className="mx-auto max-w-full rounded-lg" />
         </div>
       )}
+      {data.kind === "audio" && <AudioPane url={data.url} anchor={anchor} />}
+      {data.kind === "video" && <VideoPane url={data.url} anchor={anchor} />}
     </div>
   );
 }

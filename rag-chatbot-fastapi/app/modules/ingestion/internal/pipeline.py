@@ -18,13 +18,14 @@ import asyncio
 import hashlib
 from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass, replace
+from pathlib import PurePosixPath
 
 from app.common.errors import StorageUnavailableError
 from app.common.storage import ObjectStorage, ObjectStorageWriter
 from app.common.storage_keys import (
+    artifact_prefix,
     document_media_key,
     document_media_prefix,
-    ocr_artifact_prefix,
     spreadsheet_table_prefix,
 )
 from app.modules.graph.api import (
@@ -59,12 +60,31 @@ from app.modules.ingestion.internal.chunking import DeterministicChunker, TextCh
 from app.modules.ingestion.internal.entity_extraction import EntityRelationExtractor, graph_units
 from app.modules.ingestion.internal.extraction import DocumentTextExtractor, ParsedDocument
 from app.modules.ingestion.internal.ocr import OcrIngestionService
-from app.modules.ingestion.internal.ocr_artifacts import load_ocr_artifact, save_ocr_artifact
+from app.modules.ingestion.internal.ocr_artifacts import load_parsed_artifact, save_parsed_artifact
+from app.modules.ingestion.internal.transcription import AsrIngestionService
 from app.modules.model.api import (
     ModelRejectedError,
     ModelUnavailableError,
     SparseEmbeddingApi,
     TextEmbeddingApi,
+)
+
+# Extensions handled by the optional ASR stage (audio_parser derivatives);
+# everything OCR handles counts as the text/image document group.
+MEDIA_SUFFIXES = frozenset(
+    {
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".oga",
+        ".ogg",
+        ".opus",
+        ".flac",
+        ".mp4",
+        ".mkv",
+        ".mov",
+        ".webm",
+    }
 )
 
 
@@ -90,6 +110,7 @@ class DocumentIngestionPipeline(IngestionApi):
         graph_extractor: EntityRelationExtractor,
         graph_extraction_enabled: bool = True,
         ocr: OcrIngestionService | None = None,
+        asr: AsrIngestionService | None = None,
     ):
         self._store = store
         self._extractor = extractor
@@ -101,6 +122,7 @@ class DocumentIngestionPipeline(IngestionApi):
         self._graph_extractor = graph_extractor
         self._graph_extraction_enabled = graph_extraction_enabled
         self._ocr = ocr
+        self._asr = asr
 
     async def process(self, command: IngestDocumentCommand) -> IngestionOutcome:
         try:
@@ -139,14 +161,16 @@ class DocumentIngestionPipeline(IngestionApi):
 
     async def prepare(self, event: IngestDocumentCommand) -> PreparedDocument:
         data = await self._store.download(event.storage_key)
-        if self._ocr is None:
-            parsed = self._extractor.parse(
+        artifact_kind = self._artifact_kind(event.file_name)
+        if artifact_kind is None:
+            parsed = await asyncio.to_thread(
+                self._extractor.parse,
                 data,
                 content_type=event.content_type,
                 file_name=event.file_name,
             )
         else:
-            parsed = await self._parse_with_ocr_cache(event, data)
+            parsed = await self._parse_with_artifact_cache(event, data, artifact_kind)
         media_object_keys = {
             asset.name: document_media_key(
                 event.tenant_id,
@@ -172,25 +196,44 @@ class DocumentIngestionPipeline(IngestionApi):
             artifacts=artifacts,
         )
 
-    async def _parse_with_ocr_cache(
-        self, event: IngestDocumentCommand, data: bytes
+    def _artifact_kind(self, file_name: str) -> str | None:
+        """Which derived-parse stage caches this document, if any.
+
+        Audio/video files ride the ASR stage (only when it is wired);
+        everything else stays with the OCR stage. Without either stage the
+        parse runs directly, unchanged from the text-only pipeline.
+        """
+        suffix = PurePosixPath(file_name.lower()).suffix
+        if self._asr is not None and suffix in MEDIA_SUFFIXES:
+            return "asr"
+        if self._ocr is not None and suffix not in MEDIA_SUFFIXES:
+            return "ocr"
+        return None
+
+    async def _parse_with_artifact_cache(
+        self, event: IngestDocumentCommand, data: bytes, artifact_kind: str
     ) -> ParsedDocument:
-        """Cache OCR effort per (raw bytes, OCR settings) fingerprint.
+        """Cache derived-parse effort per (raw bytes, stage settings) fingerprint.
 
         A hit skips recognition entirely on reindex; a miss parses (OCR runs
         through ``asyncio.to_thread`` so the provider subprocess work stays off
         the ingestion event loop) and best-effort caches the outcome when the
-        document actually leaned on OCR.
+        document actually leaned on the derived stage.
         """
-        assert self._ocr is not None
         raw_sha256 = hashlib.sha256(data).hexdigest()
-        fingerprint = self._ocr.fingerprint(raw_sha256)
-        cached = await load_ocr_artifact(
+        if artifact_kind == "asr":
+            assert self._asr is not None
+            fingerprint = self._asr.fingerprint(raw_sha256)
+        else:
+            assert self._ocr is not None
+            fingerprint = self._ocr.fingerprint(raw_sha256)
+        cached = await load_parsed_artifact(
             self._store,
             tenant_id=event.tenant_id,
             knowledge_base_id=event.knowledge_base_id,
             document_id=event.document_id,
             fingerprint=fingerprint,
+            artifact_kind=artifact_kind,
         )
         if cached is not None:
             return cached
@@ -200,7 +243,7 @@ class DocumentIngestionPipeline(IngestionApi):
             content_type=event.content_type,
             file_name=event.file_name,
         )
-        # Citable image assets persist alongside the OCR artifact: upload the
+        # Citable image assets persist alongside the artifact: upload the
         # bytes first (artifact⇒assets invariant), then cache blob-free
         # descriptors so a cache hit compares equal to the original parse.
         media_blobs = {asset.name: asset.blob for asset in parsed.media if asset.blob}
@@ -213,7 +256,7 @@ class DocumentIngestionPipeline(IngestionApi):
                 ),
             )
         if parsed.text_source != "text":
-            await save_ocr_artifact(
+            await save_parsed_artifact(
                 self._store,
                 tenant_id=event.tenant_id,
                 knowledge_base_id=event.knowledge_base_id,
@@ -221,6 +264,7 @@ class DocumentIngestionPipeline(IngestionApi):
                 fingerprint=fingerprint,
                 parsed=parsed,
                 media_blobs=media_blobs,
+                artifact_kind=artifact_kind,
             )
         return parsed
 
@@ -305,7 +349,22 @@ class DocumentIngestionPipeline(IngestionApi):
                 (
                     "OCR artifacts",
                     self._store.delete_prefix(
-                        ocr_artifact_prefix(
+                        artifact_prefix(
+                            "ocr",
+                            event.tenant_id,
+                            event.knowledge_base_id,
+                            event.document_id,
+                        )
+                    ),
+                )
+            )
+        if self._asr is not None:
+            operations.append(
+                (
+                    "ASR artifacts",
+                    self._store.delete_prefix(
+                        artifact_prefix(
+                            "asr",
                             event.tenant_id,
                             event.knowledge_base_id,
                             event.document_id,
@@ -323,11 +382,13 @@ class DocumentIndexLifecycleService(DocumentIndexLifecycleApi):
         graph: GraphProjectionApi,
         artifacts: ObjectStorageWriter,
         ocr: OcrIngestionService | None = None,
+        asr: AsrIngestionService | None = None,
     ) -> None:
         self._index = index
         self._graph = graph
         self._artifacts = artifacts
         self._ocr = ocr
+        self._asr = asr
 
     async def delete_document(
         self, tenant_id: str, knowledge_base_id: str, document_id: str
@@ -351,7 +412,16 @@ class DocumentIndexLifecycleService(DocumentIndexLifecycleApi):
                 (
                     "OCR artifacts",
                     self._artifacts.delete_prefix(
-                        ocr_artifact_prefix(tenant_id, knowledge_base_id, document_id)
+                        artifact_prefix("ocr", tenant_id, knowledge_base_id, document_id)
+                    ),
+                )
+            )
+        if self._asr is not None:
+            operations.append(
+                (
+                    "ASR artifacts",
+                    self._artifacts.delete_prefix(
+                        artifact_prefix("asr", tenant_id, knowledge_base_id, document_id)
                     ),
                 )
             )

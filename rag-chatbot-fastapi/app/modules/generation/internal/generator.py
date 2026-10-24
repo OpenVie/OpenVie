@@ -110,4 +110,5 @@ class GenerationService(GenerationApi):
             answer=message.content,
             citations=tuple(message.citations),
             token_usage=message.token_usage,
+            suggested_questions=tuple(message.suggested_questions),
         )

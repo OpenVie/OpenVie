@@ -252,6 +252,42 @@ Kiểm thử:
 Chi tiết knob và ceiling (DPI, megapixel, timeout, 3 lỗi provider liên tiếp):
 `docs/RETRIEVAL.md` §7.
 
+### ASR và phiên âm video cục bộ (Tùy chọn — dành cho máy mạnh)
+
+Phiên âm ASR tắt mặc định. Trên máy dev có CPU mạnh (4+ cores) hoặc GPU, có thể bật để chạy phiên âm giọng nói và video thật.
+
+Cài đặt `ffmpeg` (bắt buộc đối với video và provider openai-compat; file âm thanh độc lập qua faster-whisper tự giải mã bằng PyAV):
+- macOS: `brew install ffmpeg`
+- Ubuntu/Debian: `apt install ffmpeg`
+- Windows: `winget install -e --id Gyan.FFmpeg`
+
+Cấu hình worker trong `rag-chatbot-fastapi/.env`:
+```ini
+INGESTION_ASR_ENABLED=true
+INGESTION_ASR_PROVIDER=faster-whisper
+INGESTION_ASR_MODEL_ID=small
+INGESTION_ASR_DEVICE=auto
+# Bật hấp thụ video (demux audio + phiên âm):
+INGESTION_VIDEO_ENABLED=true
+# Tùy chọn OCR khung hình video (yêu cầu bật cả INGESTION_OCR_ENABLED=true):
+# INGESTION_VIDEO_KEYFRAME_OCR=true
+```
+
+Cấu hình API trong `api/.env` (Spring):
+```ini
+ASR_UPLOADS_ENABLED=true
+VIDEO_UPLOADS_ENABLED=true
+# Nâng giới hạn kích thước file cho video/audio nếu file > 20 MB (ví dụ 100 MB):
+DOCUMENT_MAX_SIZE_MB=100
+```
+
+Kiểm thử:
+1. Upload file âm thanh (`.mp3`/`.wav`) hoặc video (`.mp4`) trong UI → tài liệu hiển thị badge **ASR**, preview hiển thị trình phát audio/video nguyên bản.
+2. Hỏi chatbot về nội dung nói trong file → trích dẫn trả về `[tên_file:số_phút]` (mỗi page_number tương ứng bucket 60 giây).
+3. Upload lại cùng file → ASR cache bỏ qua phiên âm (fingerprint trùng khớp).
+
+Chi tiết knob và ceiling (bucket seconds, timeout, cache artifact): `docs/RETRIEVAL.md` §8.
+
 ### 5. Kiểm tra và xác minh (Verification)
 
 | Lĩnh vực | Lệnh kiểm tra |
@@ -578,6 +614,42 @@ Verification:
 
 Knob details and ceilings (DPI, megapixels, timeout, 3 consecutive provider
 failures): `docs/RETRIEVAL.md` §7.
+
+## Local ASR and video transcription (Optional — for strong machines)
+
+ASR is off by default. On dev machines with 4+ CPU cores or a dedicated GPU, you can enable speech and video transcription for real media testing.
+
+Install `ffmpeg` (required for video demux and openai-compat normalization; standalone audio files with faster-whisper decode natively through bundled PyAV):
+- macOS: `brew install ffmpeg`
+- Ubuntu/Debian: `apt install ffmpeg`
+- Windows: `winget install -e --id Gyan.FFmpeg`
+
+Worker configuration in `rag-chatbot-fastapi/.env`:
+```ini
+INGESTION_ASR_ENABLED=true
+INGESTION_ASR_PROVIDER=faster-whisper
+INGESTION_ASR_MODEL_ID=small
+INGESTION_ASR_DEVICE=auto
+# Enable video ingestion (audio demux + transcription):
+INGESTION_VIDEO_ENABLED=true
+# Optional video keyframe OCR (requires INGESTION_OCR_ENABLED=true):
+# INGESTION_VIDEO_KEYFRAME_OCR=true
+```
+
+API configuration in `api/.env` (Spring):
+```ini
+ASR_UPLOADS_ENABLED=true
+VIDEO_UPLOADS_ENABLED=true
+# Increase upload limit if testing media > 20 MB (e.g. 100 MB):
+DOCUMENT_MAX_SIZE_MB=100
+```
+
+Verification:
+1. Upload an audio (`.mp3`/`.wav`) or video (`.mp4`) file through the UI → the document shows the **ASR** badge and inline `<audio>`/`<video>` player controls.
+2. Ask about spoken content in the file → citations reference `[filename:minute_bucket]` (each page_number corresponds to a 60-second window).
+3. Re-upload the same file → the ASR cache skips transcription (fingerprint hit).
+
+Knob details and ceilings (bucket seconds, timeout, cache artifact): `docs/RETRIEVAL.md` §8.
 
 ## 5. Verification
 

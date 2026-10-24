@@ -981,6 +981,24 @@ html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-label"]
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-separator"] { background: rgb(16 24 14 / .1); }
 html[data-ov-theme="light"] .ov-workspace-menu [data-slot="dropdown-menu-item"]:focus { background: rgb(200 245 60 / .16); color: #3a6b08; }
 
+/* Follow-up suggestion chips (chat playground): the shared Tailwind hover
+   (hover:bg-muted/60 + hover:border-primary/50) is tuned for dark surfaces —
+   on light, card/muted differ by ~2% alpha and 50% lime on cream washes out,
+   so hovering barely changes the chip. Light gets an explicit hover mirroring
+   the light-mode outline-button language (lime border + ink tint + olive
+   icon); dark mode keeps the token behavior untouched. */
+.ov-light .ov-chat-suggestions button:hover,
+html[data-ov-theme="light"] .ov-chat-suggestions button:hover,
+html[data-theme="light"] .ov-chat-suggestions button:hover {
+  border-color: #c8f53c;
+  background: rgb(16 24 14 / .07);
+}
+.ov-light .ov-chat-suggestions button:hover svg,
+html[data-ov-theme="light"] .ov-chat-suggestions button:hover svg,
+html[data-theme="light"] .ov-chat-suggestions button:hover svg {
+  color: #527400;
+}
+
 /* Custom theme-aware dialog popups */
 [data-slot="dialog-overlay"] {
   background: rgb(0 0 0 / .65) !important;

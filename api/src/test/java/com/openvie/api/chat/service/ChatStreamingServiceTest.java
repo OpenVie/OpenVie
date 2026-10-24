@@ -239,6 +239,6 @@ class ChatStreamingServiceTest {
     private AiInferenceApi.GeneratedAnswer answer(AiInferenceApi.GenerationRequest request,
                                                 String content, List<AiInferenceApi.Citation> citations) {
         return new AiInferenceApi.GeneratedAnswer(request.generationId(), request.authoritativeRevision(),
-                content, citations, 1L, 1L, "none", null, null);
+                content, citations, 1L, 1L, "none", null, null, null);
     }
 }

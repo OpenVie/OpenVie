@@ -33,6 +33,8 @@ describe("resolvePreviewKind", () => {
     expect(resolvePreviewKind("report.xlsx", "XLSX")).toBe("xlsx")
     expect(resolvePreviewKind("report.csv", "CSV")).toBe("csv")
     expect(resolvePreviewKind("scan.jpg", "IMAGE")).toBe("image")
+    expect(resolvePreviewKind("briefing.dontcare", "AUDIO")).toBe("audio")
+    expect(resolvePreviewKind("clip.dontcare", "VIDEO")).toBe("video")
   })
 
   it("falls back to the file extension for approval views without a fileType", () => {
@@ -42,6 +44,9 @@ describe("resolvePreviewKind", () => {
     expect(resolvePreviewKind("data.XLS")).toBe("xlsx")
     expect(resolvePreviewKind("page.htm")).toBe("html")
     expect(resolvePreviewKind("photo.webp")).toBe("image")
+    expect(resolvePreviewKind("briefing.mp3")).toBe("audio")
+    expect(resolvePreviewKind("clip.mp4")).toBe("video")
+    expect(resolvePreviewKind("clip.webm")).toBe("video")
     expect(resolvePreviewKind("raw.log")).toBe("unsupported")
   })
 

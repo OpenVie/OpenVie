@@ -292,7 +292,7 @@ services:
   seaweedfs-s3:
     image: chrislusf/seaweedfs:3.85 # pinned: no floating latest
     restart: unless-stopped
-    command: s3 -filer=seaweedfs-filer:8888
+    command: s3 -filer=seaweedfs-filer:8888 -ip.bind=0.0.0.0
     ports:
       - "${SEAWEEDFS_S3_PORT:-18333}:8333"
     depends_on:
