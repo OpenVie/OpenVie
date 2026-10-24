@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gemini-style composer in the chat playground**: the input textarea auto-grows with typed content (up to ~8 lines) instead of scrolling inside a fixed box, and a corner toggle (maximize/minimize icon) expands it into a large fixed-height writing area with the toolbar pinned underneath — collapsed again after sending; locale labels `composerExpand`/`composerCollapse` added to `en.json`/`vi.json`.
+- **Suggested follow-up questions after every answer (like ChatGPT)**:
+  - **Protobuf contract**: Allocated field `repeated string suggested_questions = 10` on `GenerateAnswerResponse` in `proto/openvie_ai_v1.proto`, regenerated Python pb2/pyi stubs, and updated the frozen-contract tests on both the Java (`ProtobufContractTest`) and Python (`test_proto_contract.py`, `test_contracts.py`) sides.
+  - **AI generation**: New bounded `app/modules/generation/internal/suggestions.py` module proposes at most 3 short self-contained follow-up questions in the answer language after a grounded answer (never on chit-chat or "no information" replies); every failure degrades to an empty list and never breaks the answered turn. Suggestions ride through `AssistantMessage`, `GenerationResult`, the gRPC `completed` event, and the generation-id replay cache.
+  - **Spring control plane**: `AiInferenceApi.GeneratedAnswer` and `ChatDtos.AssistantMessageResponse` gained a `suggested_questions` list that flows from the inference stream into the SSE `complete` payload; replayed idempotent turns omit them.
+  - **Playground UI**: `ChatPlayground.tsx` renders up to 3 clickable suggestion chips under the latest answer and sends the chosen one as the next user message; chips disappear while a response streams. Normalized on the client alongside junk-entry filtering in `chat-api.ts` with locale strings added to `en.json`/`vi.json`.
+  - **Fixed session-history reload wiping the chips**: `ChatPlayground.tsx` refetched `messages` from the DB as soon as `sending` flipped back to false, replacing the live message list — including the fresh suggestion chips — with history rows seconds after the answer completed. The shared history now loads once per session view (deferred while a turn is streaming), so the chips stay visible; unrelated sidebar refreshes are untouched.
+  - **Light-mode chip hover is now legible**: the token-based hover (`hover:bg-muted/60`, `hover:border-primary/50`, lime icon) is tuned for dark surfaces — on light, card/muted differ by ~2% alpha and 50% lime washes out. `globals.css` gives light theme an explicit chip hover mirroring the light outline-button language (lime border `#c8f53c`, soft ink tint, olive icon `#527400`); dark mode keeps the token behavior untouched.
+
 ## [0.3.1] - 2026-10-22
 
 ### Added

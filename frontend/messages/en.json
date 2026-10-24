@@ -254,6 +254,7 @@
     "thinking": "Thinking…",
     "responding": "Writing response",
     "canceled": "Canceled.",
+    "unansweredNotice": "Response interrupted (navigated away or connection lost).",
     "questionPlaceholder": "Ask a question about your indexed sources…",
     "uploadPlaceholder": "Upload and index a source before chatting…",
     "message": "Message",
@@ -261,6 +262,8 @@
     "cancel": "Cancel",
     "cancelResponse": "Cancel response",
     "sendMessage": "Send message",
+    "composerExpand": "Expand input box",
+    "composerCollapse": "Collapse input box",
     "uploadNotice": "Files are uploaded to OpenVie and indexed before answers are generated.",
     "messageCount": "{count, plural, one {# message} other {# messages}}",
     "deleteTitle": "Delete chat?",
@@ -298,11 +301,15 @@
     "scopeClose": "Close",
     "scopeClear": "Clear",
     "scopeApply": "Apply",
-    "scopeSelectedCount": "{count} selected"
+    "scopeSelectedCount": "{count} selected",
+    "suggestedQuestionsLabel": "Suggested next questions"
   },
   "AssistantResponse": {
     "sources": "Sources",
     "citedImages": "Cited images",
+    "citedMedia": "Audio & Video Evidence",
+    "evidenceAtTime": "Evidence at {time}",
+    "seekToEvidence": "Seek to evidence",
     "openCitedSource": "Open cited source",
     "openSourceIn": "Open source in {source}"
   },
@@ -750,6 +757,8 @@
     "saveAs": "Download to view",
     "empty": "The file is empty or has no readable content.",
     "truncated": "File too long — only the first 500 rows are shown.",
+    "evidenceTimestamp": "Evidence at timestamp: {time}",
+    "seekToEvidence": "Seek to evidence",
     "sheetAria": "Choose sheet"
   }
 }

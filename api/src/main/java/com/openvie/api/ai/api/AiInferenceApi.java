@@ -59,7 +59,8 @@ public interface AiInferenceApi {
             Long outputTokens,
             String cacheTier,
             Long avoidedInputTokens,
-            Long avoidedOutputTokens
+            Long avoidedOutputTokens,
+            List<String> suggestedQuestions
     ) {
     }
 

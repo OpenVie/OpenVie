@@ -29,12 +29,17 @@ from typing import Any, Literal, NoReturn
 
 from app.modules.ingestion.api import PermanentIngestionFailure, TransientIngestionFailure
 from app.modules.ingestion.internal.ocr import OcrIngestionService
+from app.modules.ingestion.internal.transcription import AsrIngestionService, TranscriptResult
 
 logger = logging.getLogger(__name__)
 
 BlockType = Literal[
     "heading", "paragraph", "list", "code", "quote", "table", "page", "sheet", "row"
 ]
+
+# Document-wide derived-text provenance. ``asr`` marks transcripts from
+# optional audio/video ingestion; ``ocr`` marks recognized raster content.
+TextSource = Literal["text", "ocr", "mixed", "asr"]
 
 # Embedded-image OCR (best-effort) guards. Disabled by default; see
 # ``INGESTION_OCR_EMBEDDED_IMAGES`` in app/bootstrap/settings.py.
@@ -147,7 +152,7 @@ class ParsedDocument:
     modality: Literal["document", "spreadsheet"]
     blocks: tuple[KnowledgeBlock, ...]
     tables: tuple[NormalizedTable, ...] = ()
-    text_source: Literal["text", "ocr", "mixed"] = "text"
+    text_source: TextSource = "text"
     page_count: int | None = None
     # Raster assets worth persisting as citation images (descriptors carry
     # blobs only on the live parse path; artifact caches drop them).
@@ -729,7 +734,7 @@ def _visible_chars(paragraphs: tuple[str, ...]) -> int:
 
 def _text_source(
     native: dict[int, tuple[str, ...]], ocr_pages: list[int], page_count: int
-) -> Literal["text", "ocr", "mixed"]:
+) -> TextSource:
     if not ocr_pages:
         return "text"
     if len(ocr_pages) == page_count and not any(
@@ -784,6 +789,174 @@ class ImageParser(ParserAdapter):
             page_count=1,
             media=(asset,) if asset is not None else (),
         )
+
+
+def _transcript_blocks(
+    file_name: str,
+    transcript: TranscriptResult,
+    asr: AsrIngestionService,
+    media_kind: str,
+    *,
+    start_ordinal: int = 0,
+) -> list[KnowledgeBlock]:
+    """Turn transcript segments into retrievable blocks with time provenance.
+
+    Each segment keeps its wall-clock window in block metadata while the
+    ``page_number`` anchor maps to the configured timestamp bucket, so the
+    existing citation machinery locates a position inside the media without a
+    full end-to-end schema change.
+    """
+    blocks: list[KnowledgeBlock] = []
+    for segment in transcript.segments:
+        text = segment.text.strip()
+        if not text:
+            continue
+        blocks.append(
+            _block(
+                file_name,
+                start_ordinal + len(blocks),
+                "paragraph",
+                text,
+                page_number=asr.bucket_for_seconds(segment.start_seconds),
+                source_start=max(0, int(round(segment.start_seconds))),
+                source_end=max(0, int(round(segment.end_seconds))),
+                parser_version="asr-v1",
+                metadata={
+                    "media_kind": media_kind,
+                    "start_seconds": segment.start_seconds,
+                    "end_seconds": segment.end_seconds,
+                },
+            )
+        )
+    return blocks
+
+
+class AudioParser(ParserAdapter):
+    """Standalone audio ingestion (.mp3/.wav/.m4a/.ogg/.opus/.flac) through ASR."""
+
+    extensions = (".mp3", ".wav", ".m4a", ".oga", ".ogg", ".opus", ".flac")
+    content_types = (
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/ogg",
+        "audio/vorbis",
+        "audio/opus",
+        "audio/flac",
+        "audio/x-flac",
+    )
+
+    def __init__(self, asr: AsrIngestionService):
+        self._asr = asr
+
+    def parse(
+        self, data: bytes, *, file_name: str, content_type: str = ""
+    ) -> ParsedDocument:
+        del content_type  # the registry already matched the extension
+        transcript = self._asr.transcribe_audio(data, label=file_name, media_kind="audio")
+        blocks = _transcript_blocks(file_name, transcript, self._asr, "audio")
+        if not blocks:
+            raise PermanentIngestionFailure("Audio document produced no speech transcript")
+        return ParsedDocument(
+            "document",
+            tuple(blocks),
+            text_source="asr",
+            page_count=blocks[-1].page_number,
+        )
+
+
+class VideoParser(ParserAdapter):
+    """Video ingestion (mp4/mkv/mov/webm): audio ASR plus optional keyframe OCR.
+
+    The audio track transcribes exactly like an audio document. When the
+    operator turns on keyframe OCR (requires the ingestion OCR stage), sampled
+    frames are recognized as extra paragraph blocks carrying their frame
+    timestamp and the ``video-keyframe`` OCR source; keyframes themselves are
+    not persisted, only their recognized text.
+    """
+
+    extensions = (".mp4", ".mkv", ".mov", ".webm")
+    content_types = ("video/mp4", "video/x-matroska", "video/quicktime", "video/webm")
+
+    def __init__(
+        self,
+        asr: AsrIngestionService,
+        ocr: OcrIngestionService | None,
+        keyframes_ocr: bool,
+    ):
+        self._asr = asr
+        self._ocr = ocr
+        self._keyframes_ocr = keyframes_ocr
+
+    def parse(
+        self, data: bytes, *, file_name: str, content_type: str = ""
+    ) -> ParsedDocument:
+        del content_type  # the registry already matched the extension
+        transcript = self._asr.transcribe_audio(data, label=file_name, media_kind="video")
+        blocks = _transcript_blocks(file_name, transcript, self._asr, "video")
+        if not blocks:
+            raise PermanentIngestionFailure("Video document produced no speech transcript")
+        text_source: TextSource = "asr"
+        keyframe_blocks: list[KnowledgeBlock] = []
+        if self._keyframes_ocr and self._ocr is not None:
+            keyframe_blocks = self._keyframe_ocr_blocks(
+                data, file_name, start_ordinal=len(blocks)
+            )
+            if keyframe_blocks:
+                blocks.extend(keyframe_blocks)
+                text_source = "mixed"
+        return ParsedDocument(
+            "document",
+            tuple(blocks),
+            text_source=text_source,
+            page_count=blocks[-1].page_number,
+        )
+
+    def _keyframe_ocr_blocks(
+        self, data: bytes, file_name: str, *, start_ordinal: int = 0
+    ) -> list[KnowledgeBlock]:
+        """OCR sampled frames best-effort; provider streaks fail the document."""
+        assert self._ocr is not None
+        frames = self._asr.extract_video_keyframes(data, label=file_name)
+        blocks: list[KnowledgeBlock] = []
+        streak = 0
+        for seconds, blob in frames:
+            try:
+                recognition = self._ocr.ocr_embedded_image_best_effort(
+                    blob, content_type="", label=f"{file_name}#frame-{seconds:.1f}s"
+                )
+            except Exception as exc:  # noqa: BLE001 - best-effort with a streak cap
+                streak += 1
+                logger.warning(
+                    "Skipping keyframe at %.1fs in %s: %s", seconds, file_name, exc
+                )
+                if streak >= _EMBEDDED_PROVIDER_ERROR_LIMIT:
+                    _fail_embedded_streak(file_name, streak, exc)
+                continue
+            streak = 0
+            if recognition is None:
+                continue
+            metadata: dict[str, Any] = {
+                "ocr_source": "video-keyframe",
+                "keyframe_seconds": round(seconds, 3),
+            }
+            for paragraph in _ocr_paragraphs(recognition.text, _EMBEDDED_PARAGRAPH_LIMIT):
+                blocks.append(
+                    _block(
+                        file_name,
+                        start_ordinal + len(blocks),
+                        "paragraph",
+                        paragraph,
+                        page_number=self._asr.bucket_for_seconds(seconds),
+                        source_start=max(0, int(round(seconds))),
+                        source_end=max(0, int(round(seconds))),
+                        parser_version="ocr-v1",
+                        metadata=metadata,
+                    )
+                )
+        return blocks
 
 
 class DocxParser(ParserAdapter):
@@ -871,7 +1044,7 @@ class DocxParser(ParserAdapter):
         blocks = _interleave_media_blocks(blocks, anchors, media_plan)
         if not blocks:
             raise PermanentIngestionFailure("Document contains no extractable text")
-        text_source: Literal["text", "ocr", "mixed"] = "text"
+        text_source: TextSource = "text"
         if len(blocks) > native_count:
             text_source = "mixed" if native_count else "ocr"
         return ParsedDocument(
@@ -1235,7 +1408,7 @@ def _spreadsheet_document(
     else:
         table_block_count = len(blocks)
         media_assets = ()
-    text_source: Literal["text", "ocr", "mixed"] = "text"
+    text_source: TextSource = "text"
     if len(blocks) > table_block_count:
         text_source = "mixed" if table_block_count else "ocr"
     if not blocks:
@@ -1330,27 +1503,45 @@ class XlsxParser(ParserAdapter):
 
 
 class DocumentTextExtractor:
-    """Parser registry/factory facade for all supported digital formats."""
+    """Parser registry/factory facade for all supported digital formats.
+
+    Media parsing is optional: ``AudioParser``/``VideoParser`` join the
+    registry only when an ASR service is wired (and by default the video
+    parser stays out entirely), mirroring how the image parser rides the
+    optional OCR service.
+    """
 
     def __init__(
         self,
         parsers: tuple[ParserAdapter, ...] | None = None,
         *,
         ocr: OcrIngestionService | None = None,
+        asr: AsrIngestionService | None = None,
+        video_enabled: bool = False,
+        video_keyframe_ocr: bool = False,
     ):
         if parsers is not None:
             self._parsers = parsers
-        elif ocr is not None:
-            self._parsers = (
-                ImageParser(ocr),
-                PdfParser(ocr),
-                DocxParser(ocr),
-                MarkdownParser(),
-                HtmlDocumentParser(),
-                TextParser(),
-                XlsxParser(ocr),
-                CsvParser(),
+        elif ocr is not None or asr is not None:
+            selected: list[ParserAdapter] = []
+            if asr is not None:
+                selected.append(AudioParser(asr))
+                if video_enabled:
+                    selected.append(VideoParser(asr, ocr, video_keyframe_ocr))
+            if ocr is not None:
+                selected.append(ImageParser(ocr))
+            selected.extend(
+                (
+                    PdfParser(ocr),
+                    DocxParser(ocr),
+                    MarkdownParser(),
+                    HtmlDocumentParser(),
+                    TextParser(),
+                    XlsxParser(ocr),
+                    CsvParser(),
+                )
             )
+            self._parsers = tuple(selected)
         else:
             self._parsers = (
                 PdfParser(),

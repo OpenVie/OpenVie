@@ -93,6 +93,8 @@ class GenerationResult:
     citations: tuple[Citation, ...] = ()
     token_usage: TokenUsage = TokenUsage()
     cache_tier: GenerationCacheTier = GenerationCacheTier.NONE
+    # Short follow-up questions the user can send next (may be empty).
+    suggested_questions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

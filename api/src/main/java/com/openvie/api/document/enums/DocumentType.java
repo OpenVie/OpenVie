@@ -22,5 +22,7 @@ public enum DocumentType {
     HTML,
     XLSX,
     CSV,
-    IMAGE
+    IMAGE,
+    AUDIO,
+    VIDEO
 }

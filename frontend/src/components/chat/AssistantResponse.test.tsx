@@ -174,4 +174,17 @@ describe("AssistantResponse cited sources", () => {
     })
     expect(screen.getByRole("button")).toBeDefined()
   })
+
+  it("renders a cited media card with a seek button when an answer has audio/video citations", async () => {
+    const mediaCitation: ChatCitation = {
+      ...citation,
+      source_name: "briefing.mp4",
+      page_number: 2,
+      snippet: "Transcript snippet at minute 1",
+    };
+    render(<AssistantResponse content="Nội dung [S1]." citations={[mediaCitation]} />);
+
+    expect(screen.getByText("citedMedia")).toBeDefined();
+    expect(screen.getByText("01:00")).toBeDefined();
+  });
 })

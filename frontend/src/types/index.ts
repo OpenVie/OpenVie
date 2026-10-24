@@ -338,6 +338,8 @@ export interface AssistantMessageResponse {
   role: "assistant";
   content: string;
   citations: ChatCitation[];
+  /** Short follow-up questions (at most a few) the user can send next; absent when none were made. */
+  suggested_questions?: string[];
 }
 
 export interface ChatHistoryMessageResponse {

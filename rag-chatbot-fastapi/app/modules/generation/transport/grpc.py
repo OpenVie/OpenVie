@@ -140,6 +140,7 @@ def _response(result: GenerationResult) -> pb.GenerateAnswerResponse:
         answer=result.answer,
         citations=[_citation(item) for item in result.citations],
         cache_tier=result.cache_tier,
+        suggested_questions=list(result.suggested_questions),
     )
     usage = result.token_usage
     for field in (

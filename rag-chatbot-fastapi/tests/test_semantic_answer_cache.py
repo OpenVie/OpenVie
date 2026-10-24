@@ -746,7 +746,8 @@ async def test_shadow_never_serves_and_compares_then_writes_fresh_answer() -> No
     assert result.content == "Returns are accepted for 7 days [S1]."
     assert embedder.calls[0] == "Return policy?"
     assert retriever.calls == 1
-    assert model.calls == 1
+    # One call produces the answer; the second only proposes follow-up suggestions.
+    assert model.calls == 2
     assert stub.semantic_calls == 1
     assert stub.comparisons == 1
     assert stub.writes == 1

@@ -32,11 +32,16 @@ import {
   FileStack,
   FileText,
   Loader2,
+  MessageSquarePlus,
   Paperclip,
   Upload,
   Square,
   AlertCircle,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { AppShell } from "@/components/app/AppShell"
 import { AssistantResponse } from "@/components/chat/AssistantResponse"
 import { DocumentScopeDialog, MAX_SCOPE_DOCUMENTS } from "@/components/chat/DocumentScopeDialog"
@@ -83,6 +88,8 @@ type ChatMessage = {
   role: "user" | "assistant"
   content: string
   citations?: ChatCitation[]
+  /** Suggested follow-up questions returned with this answer (rendered for the latest turn). */
+  suggestions?: string[]
   loading?: boolean
   error?: boolean
 }
@@ -157,10 +164,18 @@ function Playground() {
   const canPersistStateRef = useRef(false)
   const activeChatAbortRef = useRef<AbortController | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const composerTextareaRef = useRef<HTMLTextAreaElement>(null)
   const followLatestRef = useRef(true)
   const [workspace, setWorkspace] = useState<TenantWorkspace | null>(null)
   const [message, setMessage] = useState("")
+  // Gemini-style composer heights: normal mode auto-grows with the typed
+  // content (capped), while the expand toggle switches to a fixed large box.
+  const [composerExpanded, setComposerExpanded] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  // The session whose shared history has already been loaded into `messages`;
+  // loading it more than once would wipe live-only suggestion chips the moment
+  // a turn completes and `sending` flips back to false.
+  const historyLoadedForRef = useRef<string | null>(null)
   const [sources, setSources] = useState<SourceDocument[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -320,7 +335,14 @@ function Playground() {
   }, [pendingScopeIds, request, workspace])
 
   useEffect(() => {
-    if (!workspace || !sessionId || sending) return
+    if (!workspace || !sessionId) return
+    // Load the shared history once per session view. The old `sending` guard
+    // re-ran this effect after every completed turn, which replaced the live
+    // messages (including suggestion chips) with DB history seconds later.
+    // An in-flight turn owns `messages`, so its history load stays deferred.
+    if (activeChatAbortRef.current) return
+    if (historyLoadedForRef.current === sessionId) return
+    historyLoadedForRef.current = sessionId
 
     let cancelled = false
     getChatMessagesApi(request, sessionId)
@@ -349,7 +371,7 @@ function Playground() {
     return () => {
       cancelled = true
     }
-  }, [request, sending, sessionId, t, workspace])
+  }, [request, sessionId, t, workspace])
 
   useEffect(() => {
     return () => {
@@ -495,6 +517,10 @@ function Playground() {
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault()
     const content = message.trim()
+    await sendUserMessage(content, false)
+  }
+
+  async function sendUserMessage(content: string, isRetry: boolean = false) {
     if (!content || sending || activeChatAbortRef.current) return
     if (!hasCompletedSource) {
       toast.error(
@@ -507,12 +533,21 @@ function Playground() {
 
     const assistantId = makeId()
     followLatestRef.current = true
-    setMessages((current) => [
-      ...current,
-      { id: makeId(), role: "user", content },
-      { id: assistantId, role: "assistant", content: "", loading: true },
-    ])
-    setMessage("")
+    if (isRetry) {
+      setMessages((current) => [
+        ...current.slice(0, -1),
+        { id: makeId(), role: "user", content },
+        { id: assistantId, role: "assistant", content: "", loading: true },
+      ])
+    } else {
+      setMessages((current) => [
+        ...current,
+        { id: makeId(), role: "user", content },
+        { id: assistantId, role: "assistant", content: "", loading: true },
+      ])
+      setMessage("")
+    }
+    setComposerExpanded(false)
     setSending(true)
 
     const abortController = new AbortController()
@@ -567,7 +602,13 @@ function Playground() {
       if (!isActive()) return
       setMessages((current) => current.map((item): ChatMessage =>
         item.id === assistantId
-          ? { id: assistantId, role: "assistant", content: response.content, citations: response.citations }
+          ? {
+              id: assistantId,
+              role: "assistant",
+              content: response.content,
+              citations: response.citations,
+              suggestions: response.suggested_questions,
+            }
           : item,
       ))
       notifyChatHistoryChanged()
@@ -590,6 +631,21 @@ function Playground() {
       }
     }
   }
+
+  // Auto-grow the composer with its content (Gemini-style). The textarea
+  // never scrolls on its own in normal mode until the ~8-line cap; expanded
+  // mode hands sizing to flex so the toolbar stays pinned below a large
+  // scrollable writing area.
+  useEffect(() => {
+    const element = composerTextareaRef.current
+    if (!element) return
+    if (composerExpanded) {
+      element.style.height = ""
+      return
+    }
+    element.style.height = "auto"
+    element.style.height = `${Math.min(element.scrollHeight, 256)}px`
+  }, [message, composerExpanded, sending])
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -711,7 +767,7 @@ function Playground() {
             </div>
           ) : (
             <div className="flex flex-1 flex-col justify-end gap-5 py-4">
-              {messages.map((item) => (
+              {messages.map((item, index) => (
                 <div
                   key={item.id}
                   className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}
@@ -744,10 +800,47 @@ function Playground() {
                         citations={item.citations}
                         error={item.error}
                       />
+                      {index === messages.length - 1 && !sending && !item.error &&
+                        item.suggestions && item.suggestions.length > 0 && (
+                        <div
+                          className="ov-chat-suggestions mt-3 flex flex-wrap gap-2"
+                          aria-label={t("suggestedQuestionsLabel")}
+                        >
+                          {item.suggestions.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              disabled={sending}
+                              onClick={() => void sendUserMessage(suggestion)}
+                              className="group flex items-start gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-foreground shadow-xs transition-colors hover:border-primary/50 hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60 sm:text-[13px]"
+                            >
+                              <MessageSquarePlus className="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                              <span>{suggestion}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
+              {messages.length > 0 && messages[messages.length - 1]?.role === "user" && !sending && (
+                <div className="flex justify-start">
+                  <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-muted/60 px-3.5 py-2 text-xs text-muted-foreground shadow-xs">
+                    <AlertCircle className="size-4 text-amber-500 shrink-0" />
+                    <span>{t("unansweredNotice")}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void sendUserMessage(messages[messages.length - 1]!.content, true)}
+                      className="h-6 gap-1 px-2 text-xs font-semibold text-primary hover:text-primary"
+                    >
+                      <RotateCcw className="size-3" />
+                      <span>{t("retry")}</span>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -757,8 +850,13 @@ function Playground() {
         <form onSubmit={submitMessage} className="mx-auto w-full max-w-[720px]">
           {messages.length > 0 && sourceProcessList}
 
-          <div className={cn("ov-chat-composer relative rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:p-2", messages.length === 0 && "ov-chat-composer-empty ov-up")} style={messages.length === 0 ? { animationDelay: ".55s" } : undefined}>
+          <div className={cn(
+            "ov-chat-composer relative rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:p-2",
+            composerExpanded && "flex h-[min(65dvh,34rem)] flex-col",
+            messages.length === 0 && !composerExpanded && "ov-chat-composer-empty ov-up",
+          )} style={messages.length === 0 && !composerExpanded ? { animationDelay: ".55s" } : undefined}>
             <textarea
+              ref={composerTextareaRef}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={handleComposerKeyDown}
@@ -768,9 +866,28 @@ function Playground() {
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
-              className="block max-h-36 min-h-16 w-full resize-none bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:min-h-14 sm:px-2 sm:py-1.5 sm:text-sm"
+              className={cn(
+                "ov-chat-composer-scroll block w-full resize-none bg-transparent px-2 py-2 pr-11 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:py-1.5 sm:text-sm",
+                composerExpanded
+                  ? "min-h-0 flex-1 overflow-y-auto"
+                  : "max-h-64 min-h-16 overflow-y-auto sm:min-h-14",
+              )}
               aria-label={t("message")}
             />
+            <button
+              type="button"
+              onClick={() => {
+                setComposerExpanded((current) => !current)
+                composerTextareaRef.current?.focus()
+              }}
+              className="absolute right-1.5 top-1.5 z-10 grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:right-2 sm:top-2"
+              aria-label={composerExpanded ? t("composerCollapse") : t("composerExpand")}
+              aria-pressed={composerExpanded}
+            >
+              {composerExpanded
+                ? <Minimize2 className="size-3.5 sm:size-4" />
+                : <Maximize2 className="size-3.5 sm:size-4" />}
+            </button>
             <div className="flex h-9 items-center justify-between gap-2">
               <div className="relative flex items-center gap-0.5">
                 <button
@@ -819,16 +936,20 @@ function Playground() {
                 disabled={!sending && sendDisabled}
                 onClick={sending ? cancelMessage : undefined}
                 className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-lg text-white transition-colors",
-                  sending
-                    ? "bg-foreground text-background hover:bg-foreground/80"
-                    : "bg-primary text-primary-foreground hover:bg-primary/80",
-                  !sending && sendDisabled &&
-                    "cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted",
+                  "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
+                  !sending && sendDisabled
+                    ? "cursor-not-allowed bg-muted text-muted-foreground hover:bg-muted"
+                    : "bg-primary text-primary-foreground hover:bg-primary/85",
                 )}
                 aria-label={sending ? t("cancelResponse") : t("sendMessage")}
               >
-                {sending ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" />}
+                {sending ? (
+                  <span className="grid place-items-center" aria-hidden="true">
+                    <Square className="size-3.5 fill-current" strokeWidth={2.5} />
+                  </span>
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
               </button>
             </div>
           </div>

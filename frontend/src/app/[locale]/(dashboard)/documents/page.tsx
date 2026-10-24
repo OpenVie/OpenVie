@@ -568,6 +568,11 @@ export default function DocumentsPage() {
                         OCR
                       </Badge>
                     )}
+                    {doc.textSource === "asr" && (
+                      <Badge variant="outline" className="text-xs uppercase" title="ASR">
+                        ASR
+                      </Badge>
+                    )}
                     {approvalControl(doc)}
                     {canDeleteDoc(doc) && (
                       <Button
@@ -590,7 +595,7 @@ export default function DocumentsPage() {
                 <div className="mt-1.5 flex items-center gap-2">
                   <StatusBadge status={doc.status} uploadState={doc.uploadState} />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 truncate text-xs text-muted-foreground" title={documentDetailText(doc)}>
                   {formatBytes(doc.fileSizeBytes)} · {formatDate(doc.uploadedAt)} · {documentDetailText(doc)}
                 </p>
               </div>
@@ -599,13 +604,13 @@ export default function DocumentsPage() {
           <div className="hidden sm:block"><Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("table.fileName")}</TableHead>
-                <TableHead>{t("table.type")}</TableHead>
-                <TableHead>{t("table.status")}</TableHead>
-                <TableHead>{t("table.size")}</TableHead>
-                <TableHead>{t("table.uploaded")}</TableHead>
-                <TableHead>{t("table.details")}</TableHead>
-                <TableHead className="w-16">{t("table.actions")}</TableHead>
+                <TableHead className="min-w-[180px]">{t("table.fileName")}</TableHead>
+                <TableHead className="w-24">{t("table.type")}</TableHead>
+                <TableHead className="w-32">{t("table.status")}</TableHead>
+                <TableHead className="w-24">{t("table.size")}</TableHead>
+                <TableHead className="w-32">{t("table.uploaded")}</TableHead>
+                <TableHead className="max-w-[260px]">{t("table.details")}</TableHead>
+                <TableHead className="w-16 text-right">{t("table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -625,7 +630,9 @@ export default function DocumentsPage() {
                     }
                   }}
                 >
-                  <TableCell className="font-medium"><span className="block max-w-44 truncate sm:max-w-none">{doc.fileName}</span></TableCell>
+                  <TableCell className="max-w-[220px] font-medium">
+                    <span className="block truncate" title={doc.fileName}>{doc.fileName}</span>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs uppercase">
                       {doc.fileType}
@@ -633,6 +640,11 @@ export default function DocumentsPage() {
                     {(doc.textSource === "ocr" || doc.textSource === "mixed") && (
                       <Badge variant="outline" className="ml-1 text-xs uppercase" title={doc.textSource === "ocr" ? "OCR" : "OCR + text"}>
                         OCR
+                      </Badge>
+                    )}
+                    {doc.textSource === "asr" && (
+                      <Badge variant="outline" className="ml-1 text-xs uppercase" title="ASR">
+                        ASR
                       </Badge>
                     )}
                   </TableCell>
@@ -645,10 +657,12 @@ export default function DocumentsPage() {
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(doc.uploadedAt)}
                   </TableCell>
-                  <TableCell className="max-w-xs text-sm text-muted-foreground">
-                    {documentDetailText(doc)}
+                  <TableCell className="max-w-[260px] text-sm text-muted-foreground">
+                    <span className="block truncate" title={documentDetailText(doc)}>
+                      {documentDetailText(doc)}
+                    </span>
                   </TableCell>
-                  <TableCell className="space-x-1">
+                  <TableCell className="space-x-1 text-right">
                     {approvalControl(doc)}
                     {canDeleteDoc(doc) && (
                       <Button

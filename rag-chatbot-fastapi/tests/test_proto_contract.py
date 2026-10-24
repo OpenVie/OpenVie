@@ -56,4 +56,5 @@ def test_generate_answer_descriptor_field_numbers() -> None:
         "cache_tier",
         "avoided_input_tokens",
         "avoided_output_tokens",
+        "suggested_questions",
     }

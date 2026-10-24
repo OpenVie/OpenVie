@@ -59,7 +59,7 @@ class ChatControllerTest extends BaseController {
         UUID sessionId = UUID.randomUUID();
         when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
                 any(), any(), eq("key"), eq("request"), any()))
-                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null));
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null, null));
 
         when(request.getHeader("Accept")).thenReturn(MediaType.APPLICATION_JSON_VALUE);
         var body = new ChatDtos.SubmitMessageRequest("Question", Map.of(), null);
@@ -79,7 +79,7 @@ class ChatControllerTest extends BaseController {
         UUID sessionId = UUID.randomUUID();
         when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
                 any(), any(), isNull(), isNull(), any()))
-                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null));
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null, null));
 
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
         try {
@@ -119,7 +119,8 @@ class ChatControllerTest extends BaseController {
             listener.onContent("Initial draft");
             listener.onReset();
             listener.onContent("Revised draft");
-            return new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null);
+            return new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null,
+                    List.of("Who approves a return request?", "How long does the refund take?"));
         });
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
         try {
@@ -147,6 +148,8 @@ class ChatControllerTest extends BaseController {
             assertTrue(body.indexOf("Revised draft") > body.indexOf("event:reset"));
             assertTrue(body.indexOf("event:complete") > body.indexOf("Revised draft"));
             assertTrue(body.contains("\"content\":\"Committed answer\""));
+            assertTrue(body.contains("\"suggested_questions\":[\"Who approves a return request?\","
+                    + "\"How long does the refund take?\"]"));
             assertFalse(body.contains("event:error"));
         } finally {
             controller.closeStreams();

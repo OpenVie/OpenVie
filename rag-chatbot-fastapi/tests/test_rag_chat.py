@@ -546,7 +546,9 @@ async def test_first_question_is_not_rewritten() -> None:
     )
 
     assert retriever.calls[0]["query_text"] == "Chinh sach doi tra?"
-    assert len(model.calls) == 1
+    # One call answers the question; the second generates follow-up suggestions.
+    assert len(model.calls) == 2
+    assert "follow-up questions" in str(model.calls[1][0]["content"])
 
 
 @pytest.mark.asyncio
@@ -1250,3 +1252,90 @@ async def test_stream_answer_empty_after_polishing_is_not_a_successful_completio
         )
     assert previews == []
     assert model.closed
+
+
+class SuggestionChatModel(FakeChatModel):
+    """Answers normally and echoes a question triplet on the suggestion call."""
+
+    async def complete(self, messages: Sequence[dict[str, object]]) -> str:
+        self.calls.append(messages)
+        if "follow-up questions" in str(messages[0]["content"]):
+            return (
+                "1. Chính sách đổi trả hàng có áp dụng cho sản phẩm khuyến mãi không?\n"
+                "- mất bao lâu?\n"
+                "Thủ tục hoàn tiền sau khi đổi trả diễn ra thế nào?\n"
+                "4. Đây là câu hỏi thứ tư bị bỏ vì vượt giới hạn ba gợi ý."
+            )
+        return "Sản phẩm được đổi trong 7 ngày [S1]."
+
+
+class SuggestionTimeoutChatModel(FakeChatModel):
+    """Times out only on the suggestion call; the answer itself succeeds."""
+
+    async def complete(self, messages: Sequence[dict[str, object]]) -> str:
+        self.calls.append(messages)
+        if "follow-up questions" in str(messages[0]["content"]):
+            raise ChatModelTimeoutError("Model generation timed out")
+        return "Sản phẩm được đổi trong 7 ngày [S1]."
+
+
+@pytest.mark.asyncio
+async def test_grounded_answer_carries_up_to_three_follow_up_suggestions() -> None:
+    service, _, _, model = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Sản phẩm được đổi trong 7 ngày.",
+                score=0.9,
+            )
+        ],
+        model=SuggestionChatModel(),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+
+    answer = await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Chinh sach doi tra?",
+    )
+
+    assert answer.content == "Sản phẩm được đổi trong 7 ngày [S1]."
+    assert answer.suggested_questions == [
+        "Chính sách đổi trả hàng có áp dụng cho sản phẩm khuyến mãi không?",
+        "mất bao lâu?",
+        "Thủ tục hoàn tiền sau khi đổi trả diễn ra thế nào?",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_suggestion_failure_never_breaks_the_answered_turn() -> None:
+    service, _, _, _ = make_service(
+        chunks=[
+            RetrievedChunk(
+                document_id="doc-1",
+                source_name="policy.txt",
+                page_number=1,
+                chunk_index=0,
+                text="Sản phẩm được đổi trong 7 ngày.",
+                score=0.9,
+            )
+        ],
+        model=SuggestionTimeoutChatModel(),
+    )
+    session = service.create_session(
+        tenant_id="tenant-1", user_id="user-1", chatbot_id="bot-1",
+        knowledge_base_id="kb-1", locale="vi-VN", channel="EMPLOYEE_PLAYGROUND",
+    )
+
+    answer = await service.submit_message(
+        tenant_id="tenant-1", session_id=session.id, user_id="user-1",
+        content="Chinh sach doi tra?",
+    )
+
+    assert answer.content == "Sản phẩm được đổi trong 7 ngày [S1]."
+    assert answer.suggested_questions == []

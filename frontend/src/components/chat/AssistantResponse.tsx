@@ -14,12 +14,13 @@
 
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { ExternalLink, FileText, Maximize2 } from "lucide-react";
+import { Clock, ExternalLink, FileText, Loader2, Maximize2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -29,8 +30,14 @@ import {
 } from "@/components/ui/dialog";
 import { useApiClient } from "@/hooks/useApiClient";
 import { documentViewerHref } from "@/lib/document-links";
-import { loadCitationImageApi } from "@/lib/documents-api";
-import type { ChatCitation, ChatCitationImage } from "@/types";
+import { downloadDocumentApi, getDocumentUnitsApi, loadCitationImageApi } from "@/lib/documents-api";
+import {
+  citationSeekSeconds,
+  formatTimestamp,
+  isMediaSource,
+  isVideoSource,
+} from "@/lib/preview-renderers";
+import type { ChatCitation, ChatCitationImage, DocumentUnit } from "@/types";
 
 function CitationImagePreview({
   documentId,
@@ -143,6 +150,163 @@ function CitationImageCard({
         <span className="shrink-0 font-semibold text-primary">[{citation.id}]</span>
         <span className="truncate text-muted-foreground">{citation.source_name}</span>
       </div>
+    </div>
+  );
+}
+
+function CitationMediaCard({
+  citations,
+}: {
+  citations: ChatCitation[];
+}) {
+  const t = useTranslations("AssistantResponse");
+  const { request } = useApiClient();
+  const [src, setSrc] = useState<string | null>(null);
+  const [loadedDocId, setLoadedDocId] = useState<string | null>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [units, setUnits] = useState<DocumentUnit[]>([]);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+
+  const activeCitation = citations[activeIdx] ?? citations[0];
+  const isVideo = isVideoSource(activeCitation.source_name);
+  const loading = loadedDocId !== activeCitation.document_id;
+
+  useEffect(() => {
+    let active = true;
+    getDocumentUnitsApi(request, activeCitation.document_id)
+      .then((loadedUnits) => {
+        if (active) setUnits(loadedUnits);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [request, activeCitation.document_id]);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let active = true;
+
+    downloadDocumentApi(request, activeCitation.document_id)
+      .then(({ blob }) => {
+        if (!active || !blob.size) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+        setLoadedDocId(activeCitation.document_id);
+      })
+      .catch(() => {
+        if (active) setLoadedDocId(activeCitation.document_id);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [request, activeCitation.document_id]);
+
+  const getSeconds = (c: ChatCitation): number => {
+    const matched = units.find(
+      (u) =>
+        (c.unit_id && u.unit_id === c.unit_id) ||
+        u.chunk_index === c.chunk_index ||
+        (c.snippet && u.text.includes(c.snippet.slice(0, 30))),
+    );
+    if (matched?.source_start != null) {
+      return matched.source_start;
+    }
+    return citationSeekSeconds(c.page_number);
+  };
+
+  const activeSeconds = getSeconds(activeCitation);
+
+  const handleLoadedMetadata = () => {
+    if (mediaRef.current && activeSeconds > 0) {
+      mediaRef.current.currentTime = activeSeconds;
+    }
+  };
+
+  const handleSelectCitation = (index: number) => {
+    setActiveIdx(index);
+    const target = citations[index];
+    if (!target) return;
+    const targetSeconds = getSeconds(target);
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = targetSeconds;
+      mediaRef.current.play().catch(() => {});
+    }
+  };
+
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card p-3.5 text-left shadow-xs transition-all hover:border-primary/40">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="truncate text-xs font-semibold text-foreground" title={activeCitation.source_name}>
+            {activeCitation.source_name}
+          </span>
+          <Badge variant="outline" className="text-[10px] uppercase shrink-0">
+            {isVideo ? "Video" : "Audio"}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {citations.map((c, index) => {
+            const isSelected = index === activeIdx;
+            const sec = getSeconds(c);
+            return (
+              <Button
+                key={c.id}
+                variant={isSelected ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleSelectCitation(index)}
+                className="h-7 gap-1 px-2.5 text-xs font-medium shrink-0"
+                title={t("seekToEvidence")}
+              >
+                <span className="font-semibold">[{c.id}]</span>
+                <Clock className="size-3" />
+                <span>{formatTimestamp(sec)}</span>
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="relative flex w-full items-center justify-center overflow-hidden rounded-lg bg-black/90">
+        {loading && (
+          <div className="flex h-44 w-full items-center justify-center text-muted-foreground">
+            <Loader2 className="size-6 animate-spin text-primary" />
+          </div>
+        )}
+        {!loading && src && isVideo && (
+          <video
+            ref={mediaRef as React.RefObject<HTMLVideoElement>}
+            controls
+            src={src}
+            onLoadedMetadata={handleLoadedMetadata}
+            className="max-h-80 w-full rounded object-contain"
+          >
+            Your browser does not support the video element.
+          </video>
+        )}
+        {!loading && src && !isVideo && (
+          <div className="flex h-24 w-full items-center justify-center bg-card/90 p-3">
+            <audio
+              ref={mediaRef as React.RefObject<HTMLAudioElement>}
+              controls
+              src={src}
+              onLoadedMetadata={handleLoadedMetadata}
+              className="w-full"
+            >
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        )}
+      </div>
+
+      {activeCitation.snippet && (
+        <div className="mt-2.5 rounded-lg bg-muted/40 p-2 text-xs text-muted-foreground">
+          <span className="font-semibold text-primary mr-1">[{activeCitation.id}]</span>
+          <span className="italic">&ldquo;{activeCitation.snippet}&rdquo;</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -347,6 +511,7 @@ export function AssistantResponse({
   } | null>(null);
   const citationsById = new Map(citations.map((citation) => [citation.id, citation]));
   const imageCitations = citations.filter((c) => Boolean(c.image));
+  const mediaCitations = citations.filter((c) => isMediaSource(c.source_name));
   const grouped = Array.from(
     citations.reduce((documents, citation) => {
       const existing = documents.get(citation.document_id) ?? [];
@@ -388,6 +553,15 @@ export function AssistantResponse({
                         OCR
                       </Badge>
                     )}
+                    {documentCitations.some((citation) => citation.parser_version === "asr-v1") && (
+                      <Badge
+                        variant="outline"
+                        className="mt-0.5 text-[10px] uppercase"
+                        title="ASR"
+                      >
+                        ASR
+                      </Badge>
+                    )}
                     <span className="block text-xs text-muted-foreground">{t("openCitedSource")}</span>
                   </span>
                   <ExternalLink className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
@@ -409,6 +583,14 @@ export function AssistantResponse({
                 onSelect={(payload) => setSelectedImage(payload)}
               />
             ))}
+          </div>
+        </div>
+      )}
+      {mediaCitations.length > 0 && (
+        <div className="chat-media-enter mt-6 border-t border-border pt-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("citedMedia")}</p>
+          <div className="max-w-2xl">
+            <CitationMediaCard citations={mediaCitations} />
           </div>
         </div>
       )}
