@@ -37,7 +37,7 @@ import java.util.UUID;
  */
 @Tag(name = "Lakehouse Analytics", description = "DuckDB-powered Lakehouse OLAP queries and aggregate analytics")
 @RestController
-@RequestMapping({"/api/v1/analytics/lakehouse", "/api/analytics/lakehouse"})
+@RequestMapping("/api/v1/analytics/lakehouse")
 @Slf4j(topic = "LAKEHOUSE-CONTROLLER")
 public class LakehouseAnalyticsController extends BaseController {
 
