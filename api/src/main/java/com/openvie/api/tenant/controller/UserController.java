@@ -59,7 +59,7 @@ import java.util.UUID;
  */
 @Tag(name = "Workspace members", description = "Member directory, invitations, and role management inside the caller's active workspace")
 @RestController
-@RequestMapping({"/api/v1/users", "/api/users"})
+@RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
 public class UserController extends BaseController {
