@@ -146,4 +146,34 @@ public class LakehouseAnalyticsController extends BaseController {
                 .body(String.class);
         return ResponseEntity.ok(response);
     }
+
+    @Operation(summary = "Get automated data quality score and assertion results across Lakehouse Parquet datasets")
+    @GetMapping(value = "/quality", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> getDataQuality(HttpServletRequest request) {
+        UUID tenantId = getTenantId(request);
+        String response = restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/lakehouse/analytics/quality")
+                        .queryParam("tenant_id", tenantId)
+                        .build())
+                .retrieve()
+                .body(String.class);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Get end-to-end data lineage DAG for a specific document across the Lakehouse ecosystem")
+    @GetMapping(value = "/lineage/documents/{documentId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> getDocumentLineage(
+            HttpServletRequest request,
+            @PathVariable UUID documentId) {
+        UUID tenantId = getTenantId(request);
+        String response = restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/lakehouse/analytics/lineage/documents/" + documentId)
+                        .queryParam("tenant_id", tenantId)
+                        .build())
+                .retrieve()
+                .body(String.class);
+        return ResponseEntity.ok(response);
+    }
 }

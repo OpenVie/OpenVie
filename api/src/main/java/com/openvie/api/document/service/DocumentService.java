@@ -44,6 +44,9 @@ import org.springframework.security.access.AccessDeniedException;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.InternalServerErrorException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.common.exception.custom.MalwareDetectedException;
+import com.openvie.api.common.event.AuditLogEvent;
+import com.openvie.api.common.enums.LogAction;
 import com.openvie.api.common.cache.BusinessCache;
 import com.openvie.api.common.cache.BusinessCacheInvalidationPublisher;
 import com.openvie.api.common.cache.DocumentListGenerationStore;
@@ -105,6 +108,8 @@ public class DocumentService {
     private BusinessCacheInvalidationPublisher businessInvalidationPublisher;
     @Autowired(required = false)
     private DurableEventPublisher durableEventPublisher;
+    @Autowired(required = false)
+    private AntivirusScanner antivirusScanner;
 
     @Autowired
     public DocumentService(
@@ -143,6 +148,21 @@ public class DocumentService {
         String safeFileName = safeFileName(file.getOriginalFilename());
         DocumentType documentType = documentTypeFor(safeFileName);
         String contentHash = computeSha256(fileBytes);
+
+        if (antivirusScanner != null) {
+            try {
+                antivirusScanner.scan(fileBytes, safeFileName);
+            } catch (MalwareDetectedException e) {
+                eventPublisher.publishEvent(AuditLogEvent.builder(this)
+                        .tenantId(tenantId)
+                        .userId(userId)
+                        .action(LogAction.MALWARE_QUARANTINED)
+                        .resourceType("document")
+                        .metadata(Map.of("fileName", safeFileName, "threat", e.getThreatName()))
+                        .build());
+                throw e;
+            }
+        }
 
         Optional<Document> existingOpt = documentRepository
                 .findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(

@@ -24,7 +24,9 @@ from app.modules.lakehouse.api import (
     AuditAnalyticsSummary,
     ChatAnalyticsSummary,
     DocumentAnalyticsSummary,
+    DocumentLineageGraph,
     LakehouseBatchIngestRequest,
+    LakehouseDataQualitySummary,
     LakehouseDataset,
     LakehouseQueryRequest,
     LakehouseQueryResult,
@@ -166,3 +168,20 @@ async def get_workflow_analytics(
 ) -> WorkflowAnalyticsSummary:
     """Returns document approval workflow and SLA metrics."""
     return await get_engine().get_workflow_summary(str(tenant_id))
+
+
+@router.get("/analytics/quality", response_model=LakehouseDataQualitySummary)
+async def get_data_quality_analytics(
+    tenant_id: UUID,
+) -> LakehouseDataQualitySummary:
+    """Returns automated data quality verification and scoring across Lakehouse datasets."""
+    return await get_engine().evaluate_data_quality(str(tenant_id))
+
+
+@router.get("/analytics/lineage/documents/{document_id}", response_model=DocumentLineageGraph)
+async def get_document_lineage_graph(
+    document_id: UUID,
+    tenant_id: UUID,
+) -> DocumentLineageGraph:
+    """Returns end-to-end data lineage DAG for a specific document."""
+    return await get_engine().get_document_lineage(str(tenant_id), str(document_id))

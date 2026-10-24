@@ -59,9 +59,7 @@ class LakehouseCdcWorker:
         if self._running:
             return
         self._running = True
-        self._task = asyncio.create_task(
-            self._consume_loop(), name="lakehouse-cdc-consumer"
-        )
+        self._task = asyncio.create_task(self._consume_loop(), name="lakehouse-cdc-consumer")
         self._flush_task = asyncio.create_task(
             self._flush_timer_loop(), name="lakehouse-cdc-flusher"
         )
