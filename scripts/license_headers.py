@@ -86,7 +86,7 @@ def _source_files() -> list[Path]:
         for candidate in sorted(ROOT.glob(pattern)):
             if not candidate.is_file():
                 continue
-            rel = str(candidate.relative_to(ROOT))
+            rel = candidate.relative_to(ROOT).as_posix()
             if rel in _EXCLUDED_PATHS:
                 continue
             if any(piece in rel + "/" for piece in _EXCLUDED_PIECES):

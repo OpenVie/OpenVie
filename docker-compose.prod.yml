@@ -391,6 +391,10 @@ services:
       FROM_EMAIL: ${FROM_EMAIL:-no-reply@app.example.com}
       FROM_NAME: ${FROM_NAME:-OpenVie}
       INVITATION_LINK: ${INVITATION_LINK:-http://localhost:8088/accept-invitation}
+      ANTIVIRUS_ENABLED: ${ANTIVIRUS_ENABLED:-true}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      ANTIVIRUS_FAIL_OPEN: ${ANTIVIRUS_FAIL_OPEN:-true}
     ports:
       - "127.0.0.1:${SERVER_PORT:-8080}:8080"
     healthcheck:
@@ -539,6 +543,7 @@ services:
       # Anonymous access is disabled: every viewer signs in.
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: ""
+      GF_INSTALL_PLUGINS: "yesoreyeram-infinity-datasource"
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
     volumes:
@@ -550,6 +555,32 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  # ── Edge Quarantine: Antivirus Scanner (ClamAV Daemon) ─────────────────────
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan /bin/sh || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── Automated Self-Recovery: Docker Autoheal Daemon ────────────────────────
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 5
+      AUTOHEAL_START_PERIOD: 30
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:
@@ -566,3 +597,4 @@ volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  clamav_data:

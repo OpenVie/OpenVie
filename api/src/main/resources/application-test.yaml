@@ -23,6 +23,12 @@ app:
     invitation-link: http://localhost:3000/accept-invitation
   lakehouse:
     url: ${LAKEHOUSE_URL:http://localhost:18000}
+  antivirus:
+    enabled: false
+    host: localhost
+    port: 3310
+    timeout-ms: 1000
+    fail-open: true
 
 spring:
   config:

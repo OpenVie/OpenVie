@@ -83,9 +83,7 @@ async def test_sink_writes_valid_snappy_parquet_partition() -> None:
         timestamp=datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC),
     )
 
-    expected = (
-        f"lakehouse/tenants/{TENANT_A}/chat_analytics/year=2026/month=10/batch-001.parquet"
-    )
+    expected = f"lakehouse/tenants/{TENANT_A}/chat_analytics/year=2026/month=10/batch-001.parquet"
     assert key == expected
     assert key in store.objects
 
@@ -359,3 +357,21 @@ def test_lakehouse_fastapi_endpoints() -> None:
         assert a_data["total_turns"] == 1
         assert a_data["completed_turns"] == 1
         assert a_data["total_tokens"] == 160
+
+        quality_resp = client.get(f"/api/v1/lakehouse/analytics/quality?tenant_id={TENANT_A}")
+        assert quality_resp.status_code == 200
+        q_summary = quality_resp.json()
+        assert q_summary["tenant_id"] == TENANT_A
+        assert q_summary["status"] in ("PASSED", "WARNING")
+        assert q_summary["overall_score"] >= 90.0
+        assert len(q_summary["checks"]) >= 5
+
+        doc_id = str(uuid4())
+        lineage_resp = client.get(
+            f"/api/v1/lakehouse/analytics/lineage/documents/{doc_id}?tenant_id={TENANT_A}"
+        )
+        assert lineage_resp.status_code == 200
+        l_graph = lineage_resp.json()
+        assert l_graph["document_id"] == doc_id
+        assert len(l_graph["nodes"]) >= 5
+        assert len(l_graph["edges"]) >= 5

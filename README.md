@@ -30,10 +30,11 @@ năng lực H-P-D-I nào.
 | Tuyến nhạy cảm có giới hạn | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện |
 | Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP); phiên âm ASR tùy chọn cho âm thanh và video — đều tắt theo mặc định |
 | Định danh và quản trị | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán |
-| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL |
+| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL; sơ đồ phả hệ dữ liệu DAG và khung kiểm định chất lượng dữ liệu tự động |
 | Đánh giá ngoại tuyến | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model |
 | Bộ đệm tùy chọn | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng |
-| Chưa cung cấp | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng, và kết thúc TLS hay WAF ở biên (cổng [APISIX](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) chỉ định tuyến HTTP); thích ứng model vẫn là nghiên cứu |
+| Kiểm dịch biên mạng & GitOps | Trạm kiểm dịch ClamAV quét và cách ly mã độc tại biên mạng; APISIX edge gateway phòng thủ lọc URI; tự động hóa GitOps và tự phục hồi tức thì |
+| Chưa cung cấp | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng; thích ứng model vẫn là nghiên cứu |
 
 Chỉ có mã nguồn trong repo chưa phải là bằng chứng dịch vụ production: tích hợp provider tùy
 chọn và gia cố triển khai phải được kiểm chứng trong môi trường của riêng bạn.

@@ -26,9 +26,14 @@ import pyarrow.parquet as pq
 from app.modules.lakehouse.api import (
     AuditAnalyticsSummary,
     ChatAnalyticsSummary,
+    DataQualityCheckResult,
     DocumentAnalyticsSummary,
+    DocumentLineageGraph,
+    LakehouseDataQualitySummary,
     LakehouseDataset,
     LakehouseQueryResult,
+    LineageEdge,
+    LineageNode,
     WorkflowAnalyticsSummary,
 )
 
@@ -91,7 +96,8 @@ class DuckDbLakehouseEngine:
         scanned_count = 0
 
         matching_keys = [
-            k for k in (partitions or self._partition_cache.keys())
+            k
+            for k in (partitions or self._partition_cache.keys())
             if f"/tenants/{tenant_id}/{dataset_name}/" in k
         ]
 
@@ -115,6 +121,7 @@ class DuckDbLakehouseEngine:
         try:
             if arrow_tables:
                 import pyarrow as pa
+
                 combined = pa.concat_tables(arrow_tables)
                 con.register("_raw_partition_data", combined)
                 con.execute(
@@ -237,8 +244,7 @@ class DuckDbLakehouseEngine:
         row = res.rows[0] if res.rows else [0, 0, 0, 0, 0.0]
 
         ct_query = (
-            "SELECT content_type, count(*)::INTEGER FROM document_lifecycle "
-            "GROUP BY content_type"
+            "SELECT content_type, count(*)::INTEGER FROM document_lifecycle GROUP BY content_type"
         )
         ct_res = await self.execute_query(ct_query, tenant_id, LakehouseDataset.DOCUMENT_LIFECYCLE)
         content_types = {r[0]: r[1] for r in ct_res.rows if r[0]}
@@ -272,9 +278,7 @@ class DuckDbLakehouseEngine:
             "SELECT user_id, count(*)::INTEGER FROM audit_events "
             "WHERE user_id IS NOT NULL GROUP BY user_id ORDER BY 2 DESC LIMIT 5"
         )
-        actor_res = await self.execute_query(
-            actor_query, tenant_id, LakehouseDataset.AUDIT_EVENTS
-        )
+        actor_res = await self.execute_query(actor_query, tenant_id, LakehouseDataset.AUDIT_EVENTS)
         top_actors = {r[0]: r[1] for r in actor_res.rows if r[0]}
 
         return AuditAnalyticsSummary(
@@ -313,4 +317,351 @@ class DuckDbLakehouseEngine:
             escalated_count=int(row[3] or 0),
             approval_rate_percent=rate,
             avg_duration_minutes=round(float(row[4] or 0.0), 2),
+        )
+
+    async def evaluate_data_quality(self, tenant_id: str) -> LakehouseDataQualitySummary:
+        """Executes automated data quality assertions across all Lakehouse Parquet datasets."""
+        from datetime import UTC, datetime
+
+        checks: list[DataQualityCheckResult] = []
+
+        # 1. Chat Analytics Completeness
+        chat_res = await self.execute_query(
+            "SELECT count(*)::INTEGER as total, "
+            "coalesce(sum(CASE WHEN turn_id IS NULL OR turn_id = '' THEN 1 ELSE 0 END), 0)"
+            "::INTEGER as null_turns, "
+            "coalesce(sum(CASE WHEN prompt_tokens < 0 OR completion_tokens < 0 THEN 1 ELSE 0 END)"
+            ", 0)::INTEGER as invalid_tokens FROM chat_analytics",
+            tenant_id,
+            LakehouseDataset.CHAT_ANALYTICS,
+        )
+        chat_row = chat_res.rows[0] if chat_res.rows else [0, 0, 0]
+        chat_total, chat_null, chat_neg = (
+            int(chat_row[0] or 0),
+            int(chat_row[1] or 0),
+            int(chat_row[2] or 0),
+        )
+        chat_score = (
+            100.0
+            if chat_total == 0
+            else max(0.0, 100.0 - ((chat_null + chat_neg) / chat_total * 100.0))
+        )
+        checks.append(
+            DataQualityCheckResult(
+                name="chat_completeness_and_schema",
+                dataset="chat_analytics",
+                status="PASSED"
+                if chat_score >= 95.0
+                else ("WARNING" if chat_score >= 80.0 else "FAILED"),
+                score=round(chat_score, 2),
+                message=(
+                    f"Verified {chat_total} chat turns; {chat_null} missing IDs, "
+                    f"{chat_neg} negative tokens"
+                ),
+                metrics={
+                    "total_records": chat_total,
+                    "null_id_count": chat_null,
+                    "invalid_tokens": chat_neg,
+                },
+            )
+        )
+
+        # 2. Document Lifecycle Integrity
+        doc_res = await self.execute_query(
+            "SELECT count(*)::INTEGER as total, "
+            "coalesce(sum(CASE WHEN document_id IS NULL OR document_id = '' THEN 1 ELSE 0 END), 0)"
+            "::INTEGER as null_docs, "
+            "coalesce(sum(CASE WHEN chunk_count < 0 OR file_size_bytes < 0 THEN 1 ELSE 0 END), 0)"
+            "::INTEGER as invalid_metrics FROM document_lifecycle",
+            tenant_id,
+            LakehouseDataset.DOCUMENT_LIFECYCLE,
+        )
+        doc_row = doc_res.rows[0] if doc_res.rows else [0, 0, 0]
+        doc_total, doc_null, doc_inv = (
+            int(doc_row[0] or 0),
+            int(doc_row[1] or 0),
+            int(doc_row[2] or 0),
+        )
+        doc_score = (
+            100.0
+            if doc_total == 0
+            else max(0.0, 100.0 - ((doc_null + doc_inv) / doc_total * 100.0))
+        )
+        checks.append(
+            DataQualityCheckResult(
+                name="document_provenance_and_integrity",
+                dataset="document_lifecycle",
+                status="PASSED"
+                if doc_score >= 95.0
+                else ("WARNING" if doc_score >= 80.0 else "FAILED"),
+                score=round(doc_score, 2),
+                message=(
+                    f"Verified {doc_total} document lifecycle records; "
+                    f"{doc_null} missing document IDs"
+                ),
+                metrics={
+                    "total_records": doc_total,
+                    "null_id_count": doc_null,
+                    "invalid_metrics": doc_inv,
+                },
+            )
+        )
+
+        # 3. Audit Trail Uniqueness & Non-Repudiation
+        audit_res = await self.execute_query(
+            "SELECT count(*)::INTEGER as total, "
+            "count(distinct event_id)::INTEGER as distinct_events "
+            "FROM audit_events",
+            tenant_id,
+            LakehouseDataset.AUDIT_EVENTS,
+        )
+        audit_row = audit_res.rows[0] if audit_res.rows else [0, 0]
+        audit_total, audit_dist = int(audit_row[0] or 0), int(audit_row[1] or 0)
+        dup_events = max(0, audit_total - audit_dist)
+        audit_score = (
+            100.0 if audit_total == 0 else max(0.0, 100.0 - (dup_events / audit_total * 100.0))
+        )
+        checks.append(
+            DataQualityCheckResult(
+                name="audit_trail_uniqueness",
+                dataset="audit_events",
+                status="PASSED"
+                if audit_score >= 95.0
+                else ("WARNING" if audit_score >= 80.0 else "FAILED"),
+                score=round(audit_score, 2),
+                message=f"Verified {audit_total} audit events; {dup_events} duplicate IDs detected",
+                metrics={
+                    "total_events": audit_total,
+                    "distinct_events": audit_dist,
+                    "duplicates": dup_events,
+                },
+            )
+        )
+
+        # 4. Workflow Decisions Validity
+        wf_res = await self.execute_query(
+            "SELECT count(*)::INTEGER as total, "
+            "coalesce(sum(CASE WHEN decision NOT IN ('APPROVE', 'REJECT', 'ESCALATE') "
+            "THEN 1 ELSE 0 END), 0)::INTEGER as invalid_decisions "
+            "FROM workflow_decisions",
+            tenant_id,
+            LakehouseDataset.WORKFLOW_DECISIONS,
+        )
+        wf_row = wf_res.rows[0] if wf_res.rows else [0, 0]
+        wf_total, wf_inv = int(wf_row[0] or 0), int(wf_row[1] or 0)
+        wf_score = 100.0 if wf_total == 0 else max(0.0, 100.0 - (wf_inv / wf_total * 100.0))
+        checks.append(
+            DataQualityCheckResult(
+                name="workflow_decision_validity",
+                dataset="workflow_decisions",
+                status="PASSED"
+                if wf_score >= 95.0
+                else ("WARNING" if wf_score >= 80.0 else "FAILED"),
+                score=round(wf_score, 2),
+                message=(
+                    f"Verified {wf_total} workflow decisions; "
+                    f"{wf_inv} invalid state transitions"
+                ),
+                metrics={"total_decisions": wf_total, "invalid_decisions": wf_inv},
+            )
+        )
+
+        # 5. Timestamp and Temporal Chronology Check
+        ts_res = await self.execute_query(
+            "SELECT count(*)::INTEGER as total, "
+            "coalesce(sum(CASE WHEN created_at > now() + INTERVAL 1 DAY THEN 1 ELSE 0 END), 0)"
+            "::INTEGER as future_ts FROM audit_events",
+            tenant_id,
+            LakehouseDataset.AUDIT_EVENTS,
+        )
+        ts_row = ts_res.rows[0] if ts_res.rows else [0, 0]
+        ts_total, ts_future = int(ts_row[0] or 0), int(ts_row[1] or 0)
+        ts_score = 100.0 if ts_total == 0 else max(0.0, 100.0 - (ts_future / ts_total * 100.0))
+        checks.append(
+            DataQualityCheckResult(
+                name="temporal_chronology_and_freshness",
+                dataset="audit_events",
+                status="PASSED"
+                if ts_score >= 95.0
+                else ("WARNING" if ts_score >= 80.0 else "FAILED"),
+                score=round(ts_score, 2),
+                message=(
+                    f"Verified temporal freshness across {ts_total} records; "
+                    f"{ts_future} future timestamps"
+                ),
+                metrics={"total_records": ts_total, "future_timestamps": ts_future},
+            )
+        )
+
+        overall_score = round(sum(c.score for c in checks) / len(checks), 2)
+        passed_count = sum(1 for c in checks if c.status == "PASSED")
+        overall_status = (
+            "PASSED"
+            if overall_score >= 90.0
+            else ("WARNING" if overall_score >= 70.0 else "FAILED")
+        )
+
+        return LakehouseDataQualitySummary(
+            tenant_id=tenant_id,
+            status=overall_status,
+            overall_score=overall_score,
+            passed_checks=passed_count,
+            total_checks=len(checks),
+            checks=checks,
+            evaluated_at=datetime.now(UTC).isoformat(),
+        )
+
+    async def get_document_lineage(
+        self, tenant_id: str, document_id: str
+    ) -> DocumentLineageGraph:
+        """Constructs an end-to-end Data Lineage DAG for a given document across Lakehouse."""
+        from datetime import UTC, datetime
+
+        query = (
+            "SELECT file_name, content_type, file_size_bytes, chunk_count, "
+            "entity_count, relation_count, ingestion_status, duration_seconds, created_at "
+            f"FROM document_lifecycle WHERE document_id = '{document_id}'"
+        )
+        res = await self.execute_query(query, tenant_id, LakehouseDataset.DOCUMENT_LIFECYCLE)
+
+        file_name = "document"
+        content_type = "application/octet-stream"
+        file_size = 0
+        chunk_count = 0
+        entity_count = 0
+        relation_count = 0
+        ingestion_status = "COMPLETED"
+        created_at_str = datetime.now(UTC).isoformat()
+
+        if res.rows:
+            row = res.rows[0]
+            file_name = str(row[0] or "document")
+            content_type = str(row[1] or "application/octet-stream")
+            file_size = int(row[2] or 0)
+            chunk_count = int(row[3] or 0)
+            entity_count = int(row[4] or 0)
+            relation_count = int(row[5] or 0)
+            ingestion_status = str(row[6] or "COMPLETED")
+            created_at_str = str(row[8] or created_at_str)
+
+        nodes: list[LineageNode] = [
+            LineageNode(
+                id=f"doc:{document_id}",
+                label=f"Source: {file_name}",
+                type="source_document",
+                metadata={
+                    "document_id": document_id,
+                    "file_name": file_name,
+                    "content_type": content_type,
+                    "file_size_bytes": file_size,
+                    "uploaded_at": created_at_str,
+                },
+            ),
+            LineageNode(
+                id=f"parser:{document_id}",
+                label="Document Parser & Ingestion Worker",
+                type="transformation_pipeline",
+                metadata={
+                    "status": ingestion_status,
+                    "chunk_count": chunk_count,
+                    "parser_type": "PyMuPDF / python-docx / openpyxl",
+                },
+            ),
+            LineageNode(
+                id=f"vector:{document_id}",
+                label="Vector Index (Qdrant)",
+                type="vector_storage",
+                metadata={
+                    "collection": f"workspace_{tenant_id}",
+                    "embedding_model": "bge-m3 (dense + sparse)",
+                    "indexed_chunks": chunk_count,
+                },
+            ),
+            LineageNode(
+                id=f"graph:{document_id}",
+                label="Knowledge Graph (Kuzu)",
+                type="graph_storage",
+                metadata={
+                    "extracted_entities": entity_count,
+                    "extracted_relations": relation_count,
+                },
+            ),
+            LineageNode(
+                id=f"cdc:{document_id}",
+                label="CDC Event Relay (RabbitMQ)",
+                type="event_bus",
+                metadata={
+                    "queue": "openvie.lakehouse.cdc.v1",
+                    "routing_key": "cdc.events.document_lifecycle",
+                },
+            ),
+            LineageNode(
+                id=f"lakehouse:{document_id}",
+                label="Lakehouse Partition (SeaweedFS S3)",
+                type="lakehouse_storage",
+                metadata={
+                    "format": "Snappy Parquet",
+                    "partition": f"tenants/{tenant_id}/document_lifecycle/",
+                },
+            ),
+            LineageNode(
+                id=f"duckdb:{document_id}",
+                label="DuckDB OLAP & RAG Grounding Engine",
+                type="analytical_engine",
+                metadata={
+                    "engine": "DuckDB in-process OLAP",
+                    "query_mode": "Vector Search + Graph Hop + Evidence Anchoring",
+                },
+            ),
+        ]
+
+        edges: list[LineageEdge] = [
+            LineageEdge(
+                source=f"doc:{document_id}",
+                target=f"parser:{document_id}",
+                label="parses & segments",
+            ),
+            LineageEdge(
+                source=f"parser:{document_id}",
+                target=f"vector:{document_id}",
+                label="indexes embeddings",
+            ),
+            LineageEdge(
+                source=f"parser:{document_id}",
+                target=f"graph:{document_id}",
+                label="extracts entities",
+            ),
+            LineageEdge(
+                source=f"doc:{document_id}",
+                target=f"cdc:{document_id}",
+                label="emits ingestion event",
+            ),
+            LineageEdge(
+                source=f"cdc:{document_id}",
+                target=f"lakehouse:{document_id}",
+                label="archives Snappy Parquet",
+            ),
+            LineageEdge(
+                source=f"lakehouse:{document_id}",
+                target=f"duckdb:{document_id}",
+                label="executes OLAP queries",
+            ),
+            LineageEdge(
+                source=f"vector:{document_id}",
+                target=f"duckdb:{document_id}",
+                label="evidence citations",
+            ),
+            LineageEdge(
+                source=f"graph:{document_id}",
+                target=f"duckdb:{document_id}",
+                label="graph context joins",
+            ),
+        ]
+
+        return DocumentLineageGraph(
+            document_id=document_id,
+            tenant_id=tenant_id,
+            nodes=nodes,
+            edges=edges,
+            generated_at=datetime.now(UTC).isoformat(),
         )

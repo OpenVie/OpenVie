@@ -27,6 +27,12 @@ app:
       deletion-deadline-seconds: ${AI_DELETION_DEADLINE_SECONDS:15}
     lakehouse:
       url: ${LAKEHOUSE_URL:http://localhost:18000}
+  antivirus:
+    enabled: ${ANTIVIRUS_ENABLED:false}
+    host: ${CLAMAV_HOST:localhost}
+    port: ${CLAMAV_PORT:3310}
+    timeout-ms: ${ANTIVIRUS_TIMEOUT_MS:5000}
+    fail-open: ${ANTIVIRUS_FAIL_OPEN:true}
 
 spring:
   config:

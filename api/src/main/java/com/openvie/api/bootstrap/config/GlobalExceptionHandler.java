@@ -20,6 +20,7 @@ import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.InternalServerErrorException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.common.exception.custom.UnauthorizedException;
+import com.openvie.api.common.exception.custom.MalwareDetectedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -87,6 +88,23 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST.value())
                 .path(safePath(request))
                 .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .message(e.getMessage())
+                .build();
+    }
+
+    // 422 - Malware Quarantined
+    @ExceptionHandler(MalwareDetectedException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handleMalwareDetectedException(
+            MalwareDetectedException e, WebRequest request
+    ) {
+        log.warn("Malware quarantine triggered: threat={}, path={}",
+                e.getThreatName(), safePath(request));
+        return ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.UNPROCESSABLE_ENTITY.value())
+                .path(safePath(request))
+                .error("MALWARE_DETECTED")
                 .message(e.getMessage())
                 .build();
     }
