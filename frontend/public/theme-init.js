@@ -1,8 +1,9 @@
 (function () {
   try {
+    var root = document.documentElement;
+    root.dataset.ovPalette = "cmc";
     var theme = localStorage.getItem("openvie.theme");
     if (theme !== "light" && theme !== "dark") return;
-    var root = document.documentElement;
     root.dataset.ovTheme = theme;
     root.dataset.theme = theme;
     var shell = document.querySelector(".ov-shell");

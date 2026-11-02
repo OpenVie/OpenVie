@@ -233,7 +233,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="mx-auto grid max-w-[1500px] grid-cols-1 lg:grid-cols-[250px_minmax(0,760px)] lg:gap-10 lg:px-6 xl:grid-cols-[250px_minmax(0,760px)_220px]">
-        <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] overflow-y-auto border-r border-[var(--ov-docs-border)] py-8 pr-6 lg:block"><DocsNavigation pages={pages} pathname={pathname} /></aside>
+        <aside className="ov-docs-sidebar sticky top-16 hidden h-[calc(100dvh-4rem)] overflow-y-auto border-r border-[var(--ov-docs-border)] py-8 pr-6 lg:block"><DocsNavigation pages={pages} pathname={pathname} /></aside>
         <main className="min-w-0 px-5 py-10 sm:px-8 lg:px-0 lg:py-12">
           {children}
           <nav className="mt-12 grid gap-3 border-t border-[var(--ov-docs-border)] pt-8 sm:grid-cols-2" aria-label={t("previousNextNavigation")}>
@@ -241,7 +241,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
             {next && <Link href={next.href} className="ov-docs-action rounded-lg border border-[var(--ov-docs-border)] p-4 text-right hover:border-primary/30"><span className="flex items-center justify-end gap-2 text-xs text-[var(--ov-docs-muted)]">{t("next")}<ArrowRight className="size-3.5" /></span><span className="mt-1 block font-semibold text-[var(--ov-docs-text)]">{next.title}</span></Link>}
           </nav>
         </main>
-        <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] py-12 xl:block">
+        <aside className="ov-docs-toc sticky top-16 hidden h-[calc(100dvh-4rem)] py-12 xl:block">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--ov-docs-muted)]">{t("onThisPage")}</p>
           <nav className="border-l border-[var(--ov-docs-border)]" aria-label={t("onThisPage")}>
             {current.sections.map((section) => <Link key={section.id} href={`#${section.id}`} className="block border-l border-transparent px-4 py-1.5 text-sm leading-5 text-[var(--ov-docs-muted)] hover:border-primary hover:text-primary">{section.title}</Link>)}
