@@ -368,7 +368,7 @@ export function ResultsSummary({ total, refreshing }: { total: number; refreshin
   return (
     <p className="ov-results" aria-live="polite">
       {t("results", { count: total, formattedCount: format.number(total) })}
-      {refreshing ? <span style={{ marginLeft: 8, color: "#c8f53c" }}>{t("refreshing")}</span> : null}
+      {refreshing ? <span className="ml-2 text-primary">{t("refreshing")}</span> : null}
     </p>
   );
 }

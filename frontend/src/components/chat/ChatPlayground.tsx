@@ -754,7 +754,7 @@ function Playground() {
                   className="ov-chat-dropzone flex w-full items-center justify-center gap-4 text-left"
                 >
                   <svg className="ov-upload-border" aria-hidden="true"><rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="23" /></svg>
-                  <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#c8f53c] text-[#07090c]">
+                  <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground">
                     <Upload className="size-6" strokeWidth={2.4} />
                   </span>
                   <span>
@@ -847,7 +847,7 @@ function Playground() {
       </div>
 
       <div className="ov-chat-composer-area shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-5">
-        <form onSubmit={submitMessage} className="mx-auto w-full max-w-[720px]">
+        <form onSubmit={submitMessage} className="mx-auto w-full max-w-[840px]">
           {messages.length > 0 && sourceProcessList}
 
           <div className={cn(
@@ -861,33 +861,20 @@ function Playground() {
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               rows={messages.length === 0 ? 1 : 2}
+              wrap={messages.length === 0 ? "off" : "soft"}
               placeholder={
                 hasCompletedSource
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
               className={cn(
-                "ov-chat-composer-scroll block w-full resize-none bg-transparent px-2 py-2 pr-11 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:py-1.5 sm:text-sm",
+                "ov-chat-composer-scroll block w-full resize-none bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:py-1.5 sm:text-sm",
                 composerExpanded
                   ? "min-h-0 flex-1 overflow-y-auto"
                   : "max-h-64 min-h-16 overflow-y-auto sm:min-h-14",
               )}
               aria-label={t("message")}
             />
-            <button
-              type="button"
-              onClick={() => {
-                setComposerExpanded((current) => !current)
-                composerTextareaRef.current?.focus()
-              }}
-              className="absolute right-1.5 top-1.5 z-10 grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:right-2 sm:top-2"
-              aria-label={composerExpanded ? t("composerCollapse") : t("composerExpand")}
-              aria-pressed={composerExpanded}
-            >
-              {composerExpanded
-                ? <Minimize2 className="size-3.5 sm:size-4" />
-                : <Maximize2 className="size-3.5 sm:size-4" />}
-            </button>
             <div className="flex h-9 items-center justify-between gap-2">
               <div className="relative flex items-center gap-0.5">
                 <button
@@ -900,7 +887,7 @@ function Playground() {
                   )}
                 >
                   <Paperclip className="size-4" />
-                  <span>{t("addSource")}</span>
+                  <span className="ov-composer-action-label">{t("addSource")}</span>
                 </button>
                 <button
                   type="button"
@@ -916,11 +903,25 @@ function Playground() {
                   )}
                 >
                   <FileStack className="size-4" />
-                  <span>
+                  <span className="ov-composer-action-label">
                     {scope.length > 0
                       ? t("scopeTriggerCount", { count: scope.length })
                       : t("scopeTriggerAll")}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposerExpanded((current) => !current)
+                    composerTextareaRef.current?.focus()
+                  }}
+                  className="ov-composer-expand grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label={composerExpanded ? t("composerCollapse") : t("composerExpand")}
+                  aria-pressed={composerExpanded}
+                >
+                  {composerExpanded
+                    ? <Minimize2 className="size-3.5" />
+                    : <Maximize2 className="size-3.5" />}
                 </button>
                 <input
                   ref={fileInputRef}

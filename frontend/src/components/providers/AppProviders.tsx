@@ -36,6 +36,7 @@ function ThemeToaster() {
     return () => window.removeEventListener("openvie:themechange", syncTheme);
   }, []);
 
+
   const dark = theme === "dark";
   return (
     <Toaster
@@ -48,7 +49,7 @@ function ThemeToaster() {
           borderRadius: "14px",
           boxShadow: dark ? "0 18px 42px -16px rgb(0 0 0 / 0.7)" : "0 18px 42px -16px rgb(16 24 14 / 0.28)",
         },
-        success: { iconTheme: { primary: "#c8f53c", secondary: "#07090c" } },
+        success: { iconTheme: { primary: "#1fb6ff", secondary: "#001b29" } },
         error: { iconTheme: { primary: "#ff4d55", secondary: dark ? "#12161a" : "#ffffff" } },
       }}
     />

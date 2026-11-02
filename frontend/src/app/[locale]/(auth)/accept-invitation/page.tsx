@@ -72,7 +72,7 @@ function AcceptInvitationContent() {
   return <>
     <div className="ov-auth-card" style={{ maxWidth: 440 }}>
       <div className="flex flex-col items-center mb-4">
-        <div className="mb-3 flex size-12 items-center justify-center rounded-full" style={{ background: accepted ? 'rgba(200,245,60,.15)' : 'rgba(200,245,60,.15)' }}>{accepted ? <CheckCircle2 className="size-6 text-[#c8f53c]" /> : <Users className="size-6 text-[#c8f53c]" />}</div>
+        <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-primary/15">{accepted ? <CheckCircle2 className="size-6 text-primary" /> : <Users className="size-6 text-primary" />}</div>
         <h1>{accepted ? t("invitation.accepted") : t("invitation.joinTeam")}</h1>
       </div>
 
