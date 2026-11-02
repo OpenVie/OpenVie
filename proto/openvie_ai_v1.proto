@@ -24,6 +24,7 @@ service InferenceService {
   rpc GenerateAnswer(GenerateAnswerRequest) returns (stream GenerateAnswerEvent);
   rpc ListDocumentUnits(ListDocumentUnitsRequest) returns (ListDocumentUnitsResponse);
   rpc DeleteDocumentIndex(DeleteDocumentIndexRequest) returns (DeleteDocumentIndexResponse);
+  rpc CompleteJson(CompleteJsonRequest) returns (CompleteJsonResponse);
 }
 
 message PriorMessage {
@@ -148,4 +149,20 @@ message DeleteDocumentIndexRequest {
 
 message DeleteDocumentIndexResponse {
   bool deleted = 1;
+}
+
+message CompleteJsonRequest {
+  string prompt = 1;
+  string system_prompt = 2;
+  string json_schema = 3;
+  string model_id = 4;
+  float temperature = 5;
+  int32 max_tokens = 6;
+}
+
+message CompleteJsonResponse {
+  string json_output = 1;
+  string model_id = 2;
+  int32 prompt_tokens = 3;
+  int32 completion_tokens = 4;
 }

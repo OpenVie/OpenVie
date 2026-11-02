@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/assistant.schema.json",
+  "title": "Assistant Block",
+  "type": "object",
+  "required": [],
+  "properties": {
+    "knowledgeBaseBlock": { "type": "string" },
+    "instructions": { "type": "string", "maxLength": 2000 }
+  }
+}

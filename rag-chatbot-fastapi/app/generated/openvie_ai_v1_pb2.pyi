@@ -211,3 +211,31 @@ class DeleteDocumentIndexResponse(_message.Message):
     DELETED_FIELD_NUMBER: _ClassVar[int]
     deleted: bool
     def __init__(self, deleted: bool = ...) -> None: ...
+
+class CompleteJsonRequest(_message.Message):
+    __slots__ = ("prompt", "system_prompt", "json_schema", "model_id", "temperature", "max_tokens")
+    PROMPT_FIELD_NUMBER: _ClassVar[int]
+    SYSTEM_PROMPT_FIELD_NUMBER: _ClassVar[int]
+    JSON_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    TEMPERATURE_FIELD_NUMBER: _ClassVar[int]
+    MAX_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    prompt: str
+    system_prompt: str
+    json_schema: str
+    model_id: str
+    temperature: float
+    max_tokens: int
+    def __init__(self, prompt: _Optional[str] = ..., system_prompt: _Optional[str] = ..., json_schema: _Optional[str] = ..., model_id: _Optional[str] = ..., temperature: _Optional[float] = ..., max_tokens: _Optional[int] = ...) -> None: ...
+
+class CompleteJsonResponse(_message.Message):
+    __slots__ = ("json_output", "model_id", "prompt_tokens", "completion_tokens")
+    JSON_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    PROMPT_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    COMPLETION_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    json_output: str
+    model_id: str
+    prompt_tokens: int
+    completion_tokens: int
+    def __init__(self, json_output: _Optional[str] = ..., model_id: _Optional[str] = ..., prompt_tokens: _Optional[int] = ..., completion_tokens: _Optional[int] = ...) -> None: ...

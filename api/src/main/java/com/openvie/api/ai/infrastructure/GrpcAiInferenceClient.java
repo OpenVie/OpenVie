@@ -275,6 +275,27 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 unit.hasSourceEnd() ? unit.getSourceEnd() : null);
     }
 
+    @Override
+    public StructuredJsonResponse completeJson(StructuredJsonRequest request) {
+        return unavailableRetry(answerDeadlineSeconds, s -> {
+            var req = com.openvie.ai.v1.CompleteJsonRequest.newBuilder()
+                    .setPrompt(request.prompt() != null ? request.prompt() : "")
+                    .setSystemPrompt(request.systemPrompt() != null ? request.systemPrompt() : "")
+                    .setJsonSchema(request.jsonSchema() != null ? request.jsonSchema() : "")
+                    .setModelId(request.modelId() != null ? request.modelId() : "")
+                    .setTemperature(request.temperature() != null ? request.temperature() : 0.2f)
+                    .setMaxTokens(request.maxTokens() != null ? request.maxTokens() : 2048)
+                    .build();
+            var resp = s.completeJson(req);
+            return new StructuredJsonResponse(
+                    resp.getJsonOutput(),
+                    resp.getModelId(),
+                    resp.getPromptTokens(),
+                    resp.getCompletionTokens()
+            );
+        }, "completeJson");
+    }
+
     @PreDestroy
     void close() throws InterruptedException {
         channel.shutdown();

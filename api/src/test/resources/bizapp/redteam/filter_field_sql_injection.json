@@ -1,0 +1,34 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-sql-injection",
+  "name": { "vi": "SQL Injection", "en": "SQL Injection" },
+  "version": 1,
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "injectReport",
+      "type": "report",
+      "params": {
+        "views": [
+          {
+            "name": "injected",
+            "entity": "items",
+            "filters": [
+              {
+                "field": "title'); DROP TABLE bizapp_records; --",
+                "op": "eq",
+                "value": "owned"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -34,7 +34,8 @@ class ProtobufContractTest {
         assertEquals(List.of(
                 "GenerateAnswer",
                 "ListDocumentUnits",
-                "DeleteDocumentIndex"),
+                "DeleteDocumentIndex",
+                "CompleteJson"),
                 service.getMethods().stream().map(Descriptors.MethodDescriptor::getName).toList());
         var generate = service.findMethodByName("GenerateAnswer");
         assertFalse(generate.isClientStreaming());

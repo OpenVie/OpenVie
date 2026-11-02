@@ -203,12 +203,13 @@ export async function deleteBizAppTemplateApi(
 
 export async function installBizAppApi(
   request: ApiRequest,
-  templateRef: string,
+  target: string | { templateRef?: string; manifest?: BizAppManifest; draftId?: string },
 ): Promise<BizAppInstallResult> {
+  const body = typeof target === "string" ? { templateRef: target } : target;
   return readJsonOrThrow<BizAppInstallResult>(
     await request(`${getApiBase()}/apps/install`, {
       method: "POST",
-      body: JSON.stringify({ templateRef }),
+      body: JSON.stringify(body),
     }),
   );
 }

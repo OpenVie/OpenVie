@@ -83,4 +83,14 @@ public class DocumentApiImpl implements DocumentApi {
     public void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy) {
         documentService.recordApprovalDecision(tenantId, documentId, decision, decidedBy);
     }
+
+    @Override
+    public UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent) {
+        return documentService.ingestText(tenantId, actorId, knowledgeBaseId, fileName, markdownContent);
+    }
+
+    @Override
+    public void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName) {
+        documentService.deleteByFileName(tenantId, knowledgeBaseId, fileName);
+    }
 }

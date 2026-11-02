@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/notify.schema.json",
+  "title": "Notify Block",
+  "type": "object",
+  "required": ["to", "title"],
+  "properties": {
+    "to": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "title": { "type": "string", "maxLength": 200 },
+    "subject": { "type": "string", "maxLength": 200 }
+  }
+}

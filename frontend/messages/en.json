@@ -59,7 +59,34 @@
     "entitiesSuffix": "entities",
     "viewsNav": "App views",
     "nav": {
-      "report": "Report: {view}"
+      "report": "Report: {view}",
+      "assistant": "Assistant"
+    },
+    "assistant": {
+      "welcome": "Ask questions about records and processes in this app.",
+      "evidenceHint": "Answers cite verified documents from this application's knowledge base.",
+      "placeholder": "Ask a question…"
+    },
+    "composer": {
+      "title": "App Composer",
+      "canvasTab": "Visual Canvas",
+      "listTab": "List View",
+      "jsonTab": "JSON Editor",
+      "autoLayout": "Auto Layout",
+      "saveDraft": "Save Draft",
+      "saveTemplate": "Save as Template",
+      "install": "Install App",
+      "paletteTitle": "Add Components",
+      "addEntity": "Add Entity",
+      "addBlock": "Add Block",
+      "inspectorTitle": "Properties",
+      "noSelection": "Select an entity or block to configure properties.",
+      "validationTitle": "Validation",
+      "valid": "Manifest is valid",
+      "invalid": "Manifest has errors",
+      "saving": "Saving…",
+      "saved": "Draft saved successfully.",
+      "installed": "App installed successfully."
     },
     "unknownEntity": "Unknown entity “{entity}”.",
     "noViews": "This app declares no runtime views.",

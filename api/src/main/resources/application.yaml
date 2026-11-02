@@ -64,6 +64,13 @@ app:
   bizapps:
     enabled: ${BIZAPPS_ENABLED:true}
     encryption-key: ${BIZAPP_ENC_KEY:}
+    outbound:
+      allow-http: ${BIZAPPS_OUTBOUND_ALLOW_HTTP:false}
+    ai-drafting:
+      enabled: ${BIZAPPS_AI_DRAFTING_ENABLED:false}
+    remote-catalog:
+      enabled: ${BIZAPPS_REMOTE_CATALOG_ENABLED:false}
+      hosts: ${BIZAPPS_REMOTE_CATALOG_HOSTS:}
   security:
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:127.0.0.1/32,::1/128}
   # Optional caches; all default to off so a fresh install has no unverified

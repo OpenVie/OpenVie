@@ -369,11 +369,13 @@ export interface BizAppLocalized {
 
 export interface BizAppField {
   name: string;
-  type: "string" | "number" | "boolean" | "enum" | "date";
+  type: "string" | "number" | "boolean" | "enum" | "date" | "ref";
+  entity?: string;
   required?: boolean;
   maxLen?: number;
   format?: string;
   options?: string[];
+  pii?: boolean;
   label?: BizAppLocalized;
 }
 
@@ -381,6 +383,11 @@ export interface BizAppEntity {
   name: string;
   label?: BizAppLocalized;
   fields: BizAppField[];
+  knowledge?: {
+    project?: boolean;
+    titleField?: string;
+    fields?: string[];
+  };
   hooks?: Record<string, string[]>;
 }
 
@@ -396,12 +403,15 @@ export interface BizAppManifest {
   name: BizAppLocalized;
   version?: number;
   icon?: string;
+  storage?: "jsonb" | "typed";
   rbac?: Record<string, string[]>;
   entities: BizAppEntity[];
   blocks?: BizAppBlock[];
-  ui?: { views: string[] };
+  ui?: {
+    views: string[];
+    layout?: Record<string, { x: number; y: number }>;
+  };
 }
-
 export interface BizAppInstalledAppView {
   kind: string;
   version: number;

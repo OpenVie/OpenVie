@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/knowledge_base.schema.json",
+  "title": "Knowledge Base Block",
+  "type": "object",
+  "required": [],
+  "properties": {
+    "graphExtraction": { "type": "boolean", "default": false },
+    "ocrEnabled": { "type": "boolean", "default": false }
+  }
+}

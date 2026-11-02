@@ -1,0 +1,16 @@
+{
+  "request": {
+    "prompt": "Create an invoice management app with invoice number, amount, customer name, and payment status.",
+    "systemPrompt": "You are OpenVie's BizApp Manifest generator.",
+    "jsonSchema": "bizapp.v1.schema.json",
+    "modelId": "vylinh",
+    "temperature": 0.2,
+    "maxTokens": 2048
+  },
+  "response": {
+    "jsonOutput": "{\"schema\":\"bizapp.v1\",\"kind\":\"invoices\",\"name\":{\"en\":\"Invoices\",\"vi\":\"Hoa don\"},\"version\":1,\"entities\":[{\"name\":\"invoices\",\"label\":{\"en\":\"Invoices\",\"vi\":\"Hoa don\"},\"fields\":[{\"name\":\"invoiceNumber\",\"type\":\"string\",\"required\":true},{\"name\":\"amount\",\"type\":\"number\",\"required\":true},{\"name\":\"customerName\",\"type\":\"string\",\"required\":true},{\"name\":\"paymentStatus\",\"type\":\"enum\",\"options\":[\"PENDING\",\"PAID\",\"CANCELLED\"]}]}]}",
+    "modelId": "vylinh",
+    "promptTokens": 120,
+    "completionTokens": 180
+  }
+}

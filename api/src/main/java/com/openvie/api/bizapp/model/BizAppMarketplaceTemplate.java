@@ -60,6 +60,13 @@ public class BizAppMarketplaceTemplate extends BaseEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> manifest;
 
+    @Column(name = "meta", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> meta;
+
+    @Column(name = "source", length = 32)
+    private String source;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/report.schema.json",
+  "title": "Report Block",
+  "type": "object",
+  "required": ["views"],
+  "properties": {
+    "views": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "entity"],
+        "properties": {
+          "name": { "type": "string" },
+          "entity": { "type": "string" },
+          "groupBy": { "type": "array", "items": { "type": "string" } },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["fn", "as"],
+              "properties": {
+                "fn": { "type": "string", "enum": ["count", "sum", "avg", "min", "max"] },
+                "field": { "type": "string" },
+                "as": { "type": "string" }
+              }
+            }
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["field", "op"],
+              "properties": {
+                "field": { "type": "string" },
+                "op": { "type": "string", "enum": ["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains", "isNull"] },
+                "value": {},
+                "values": { "type": "array" },
+                "param": { "type": "string" }
+              }
+            }
+          },
+          "orderBy": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["by"],
+              "properties": {
+                "by": { "type": "string" },
+                "dir": { "type": "string", "enum": ["asc", "desc"] }
+              }
+            }
+          },
+          "limit": { "type": "integer", "maximum": 500, "default": 100 },
+          "engine": { "type": "string", "enum": ["postgres", "lakehouse"], "default": "postgres" }
+        }
+      }
+    }
+  }
+}

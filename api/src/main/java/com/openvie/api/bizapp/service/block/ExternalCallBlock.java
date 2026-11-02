@@ -14,32 +14,35 @@
 
 package com.openvie.api.bizapp.service.block;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.bizapp.model.BizAppCredential;
 import com.openvie.api.bizapp.repository.BizAppCredentialRepository;
 import com.openvie.api.bizapp.service.BizAppCredentialCipher;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.InternalServerErrorException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.common.net.SafeOutboundHttp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Outbound HTTP block. Secrets resolve by {@code credentialRef} out of the
- * organization's vault — decrypted just-in-time, attached as a header, and
- * never logged. Transport errors degrade to a warning-and-failed result: the
- * record write never depends on the remote system.
+ * Hardened outbound HTTP block with SSRF defense (via {@link SafeOutboundHttp}),
+ * credential vault resolution by id or name, body templating, idempotency headers,
+ * and response extraction.
  */
 @Component
 @RequiredArgsConstructor
@@ -47,9 +50,12 @@ import java.util.UUID;
 public class ExternalCallBlock implements BizAppBlockExecutor {
 
     public static final String TYPE = "external_call";
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
 
     private final BizAppCredentialRepository credentialRepository;
     private final BizAppCredentialCipher cipher;
+    private final SafeOutboundHttp outboundHttp;
+    private final ObjectMapper objectMapper;
 
     @Override
     public String supports() {
@@ -62,66 +68,106 @@ public class ExternalCallBlock implements BizAppBlockExecutor {
         if (url == null) {
             throw new BadRequestException("external_call block " + spec.blockId() + " has no url");
         }
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(10));
-        factory.setReadTimeout(Duration.ofSeconds(15));
-        RestClient client = RestClient.builder().baseUrl(url).requestFactory(factory).build();
-        HttpMethod method = "GET".equalsIgnoreCase(string(spec.params(), "method"))
-                ? HttpMethod.GET : HttpMethod.POST;
+
         try {
-            RestClient.RequestBodySpec request = client.method(method).uri(URI.create(url));
-            applyCredential(request, spec, context);
-            RestClient.ResponseSpec response = method == HttpMethod.POST
-                    ? request.body(body(spec, context)).retrieve()
-                    : request.retrieve();
-            int status = response.toBodilessEntity().getStatusCode().value();
-            return new BlockResult("external_call " + spec.blockId() + " -> HTTP " + status);
-        } catch (BadRequestException | ResourceNotFoundException | InternalServerErrorException exception) {
-            throw exception;
+            // 1. Resolve credentials
+            Map<String, String> headers = new HashMap<>();
+            applyCredential(headers, spec, context);
+
+            // 2. Set Idempotency-Key
+            String idempotencyKey = (context.recordId() != null ? context.recordId() : UUID.randomUUID())
+                    + ":" + spec.blockId() + ":" + (context.version() != null ? context.version() : 1);
+            headers.put("X-Idempotency-Key", idempotencyKey);
+            headers.put("Content-Type", "application/json");
+
+            // 3. Render body
+            String requestBody = renderBody(spec, context);
+
+            // 4. Extract allowedHosts from installation config
+            List<String> allowedHosts = extractAllowedHosts(context.config());
+
+            String method = string(spec.params(), "method");
+            if (method == null || method.isBlank()) {
+                method = "POST";
+            }
+
+            var request = new SafeOutboundHttp.Request(
+                    url,
+                    method,
+                    headers,
+                    requestBody,
+                    allowedHosts
+            );
+
+            // 5. Execute safe outbound call
+            SafeOutboundHttp.Response response = outboundHttp.execute(request);
+            int status = response.statusCode();
+
+            // 6. Response mapping
+            Map<String, Object> runtimeUpdates = new LinkedHashMap<>();
+            Map<String, Object> extractedMap = extractResponse(spec, response.body());
+            if (!extractedMap.isEmpty()) {
+                Map<String, Object> existingExternal = new LinkedHashMap<>();
+                runtimeUpdates.put("external", Map.of(spec.blockId(), extractedMap));
+            }
+
+            return new BlockResult("external_call " + spec.blockId() + " -> HTTP " + status, runtimeUpdates);
+
+        } catch (ResourceNotFoundException exception) {
+            log.warn("external_call {} failed: credential unavailable: {}", spec.blockId(), exception.getMessage());
+            return new BlockResult("external_call " + spec.blockId() + " failed: credential unavailable: " + exception.getMessage());
+        } catch (BadRequestException exception) {
+            log.warn("external_call {} rejected: {}", spec.blockId(), exception.getMessage());
+            return new BlockResult("external_call " + spec.blockId() + " failed: " + exception.getMessage());
         } catch (Exception exception) {
             log.warn("external_call {} failed: {}", spec.blockId(), exception.getMessage());
             return new BlockResult("external_call " + spec.blockId() + " failed: " + exception.getMessage());
         }
     }
 
-    private void applyCredential(RestClient.RequestBodySpec request, BlockSpec spec, BlockContext context) {
+    private void applyCredential(Map<String, String> headers, BlockSpec spec, BlockContext context) {
         String credentialRef = string(spec.params(), "credentialRef");
         if (credentialRef == null || credentialRef.isBlank()) {
             return;
         }
         if (!cipher.available()) {
             throw new InternalServerErrorException(
-                    "Stored BizApp credentials require BIZAPP_ENC_KEY (32 random bytes, base64)."
-                    + " Generate one with: openssl rand -base64 32");
+                    "Stored BizApp credentials require BIZAPP_ENC_KEY (32 random bytes, base64).");
         }
-        UUID credentialId = parseRef(credentialRef);
-        BizAppCredential credential = credentialRepository.findById(credentialId)
-                .filter(row -> row.getOrgId().equals(context.orgId()))
-                .orElseThrow(() -> new ResourceNotFoundException("Credential " + credentialRef + " not found"));
+        BizAppCredential credential = resolveCredential(context.orgId(), credentialRef);
         String plaintext = cipher.decrypt(credential.getEncryptedData());
+
         switch (credential.getFormat()) {
-            case "api_key" -> request.header("X-API-Key", plaintext);
-            case "bearer" -> request.header("Authorization", "Bearer " + plaintext);
-            case "basic" -> request.header("Authorization", "Basic "
+            case "api_key" -> headers.put("X-API-Key", plaintext);
+            case "bearer" -> headers.put("Authorization", "Bearer " + plaintext);
+            case "basic" -> headers.put("Authorization", "Basic "
                     + Base64.getEncoder().encodeToString(plaintext.getBytes(StandardCharsets.UTF_8)));
             default -> throw new BadRequestException("Unsupported credential format " + credential.getFormat());
         }
     }
 
-    /** {@code credentialRef} may be a vault row id or its `name`; both resolve org-scoped. */
-    private UUID parseRef(String credentialRef) {
+    private BizAppCredential resolveCredential(UUID orgId, String credentialRef) {
+        BizAppCredential credential = null;
         try {
-            return UUID.fromString(credentialRef);
-        } catch (IllegalArgumentException notAnId) {
-            throw new BadRequestException("credentialRef must be a credential id from the org vault");
+            UUID id = UUID.fromString(credentialRef.trim());
+            credential = credentialRepository.findByIdAndOrgId(id, orgId).orElse(null);
+        } catch (IllegalArgumentException ignored) {
+            // try by name
         }
+        if (credential == null) {
+            credential = credentialRepository.findByOrgIdAndName(orgId, credentialRef.trim())
+                    .orElseThrow(() -> new ResourceNotFoundException("Credential " + credentialRef + " not found in org vault"));
+        }
+        return credential;
     }
 
-    private Object body(BlockSpec spec, BlockContext context) {
-        Object template = spec.params() == null ? null : spec.params().get("body");
-        if (template instanceof Map<?, ?> map) {
-            return new LinkedHashMap<>(map);
+    private String renderBody(BlockSpec spec, BlockContext context) {
+        String bodyTemplate = string(spec.params(), "bodyTemplate");
+        if (bodyTemplate != null && !bodyTemplate.isBlank()) {
+            return substitutePlaceholders(bodyTemplate, context);
         }
+
+        // Fallback standard JSON body
         Map<String, Object> fallback = new LinkedHashMap<>();
         fallback.put("app", context.appKind());
         fallback.put("entity", context.entity());
@@ -131,7 +177,95 @@ public class ExternalCallBlock implements BizAppBlockExecutor {
         if (context.payload() != null) {
             fallback.put("record", context.payload());
         }
-        return fallback;
+        try {
+            return objectMapper.writeValueAsString(fallback);
+        } catch (Exception ex) {
+            throw new BadRequestException("Failed to serialize request body: " + ex.getMessage());
+        }
+    }
+
+    private String substitutePlaceholders(String template, BlockContext context) {
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
+        StringBuilder sb = new StringBuilder();
+        while (matcher.find()) {
+            String token = matcher.group(1).trim();
+            String value;
+            if ("record.id".equals(token)) {
+                value = context.recordId() != null ? context.recordId().toString() : "";
+            } else if ("app.kind".equals(token)) {
+                value = context.appKind() != null ? context.appKind() : "";
+            } else if (token.startsWith("record.")) {
+                String field = token.substring("record.".length());
+                Object val = context.payload() != null ? context.payload().get(field) : null;
+                value = val != null ? String.valueOf(val) : "";
+            } else {
+                throw new BadRequestException("Unsupported placeholder in bodyTemplate: " + token);
+            }
+            // Escape for JSON string inclusion
+            String escaped = escapeJson(value);
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(escaped));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\b", "\\b")
+                .replace("\f", "\\f")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private Map<String, Object> extractResponse(BlockSpec spec, String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return Map.of();
+        }
+        Object responseMapObj = spec.params() != null ? spec.params().get("responseMap") : null;
+        if (!(responseMapObj instanceof Map<?, ?> responseMap)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            int count = 0;
+            for (Map.Entry<?, ?> entry : responseMap.entrySet()) {
+                if (count >= 8) break; // cap at 8 keys
+                String targetKey = String.valueOf(entry.getKey());
+                String pointer = String.valueOf(entry.getValue());
+                JsonNode targetNode = root.at(pointer);
+                if (!targetNode.isMissingNode()) {
+                    String textVal = targetNode.asText();
+                    if (textVal.length() > 200) {
+                        textVal = textVal.substring(0, 200); // cap at 200 chars
+                    }
+                    result.put(targetKey, textVal);
+                    count++;
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to parse response for responseMap extraction: {}", ex.getMessage());
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> extractAllowedHosts(Map<String, Object> config) {
+        if (config == null) {
+            return List.of();
+        }
+        Object hosts = config.get("allowedHosts");
+        if (hosts instanceof List<?> list) {
+            List<String> result = new ArrayList<>();
+            for (Object h : list) {
+                if (h != null) result.add(String.valueOf(h));
+            }
+            return result;
+        }
+        return List.of();
     }
 
     private String string(Map<String, Object> params, String key) {

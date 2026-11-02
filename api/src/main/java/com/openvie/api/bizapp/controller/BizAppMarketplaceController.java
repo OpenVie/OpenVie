@@ -15,6 +15,7 @@
 package com.openvie.api.bizapp.controller;
 
 import com.openvie.api.bizapp.dto.BizAppDtos;
+import com.openvie.api.bizapp.service.BizAppDraftService;
 import com.openvie.api.bizapp.service.BizAppInstallService;
 import com.openvie.api.bizapp.service.BizAppMarketplaceService;
 import com.openvie.api.common.controller.BaseController;
@@ -54,7 +55,7 @@ public class BizAppMarketplaceController extends BaseController {
 
     private final BizAppMarketplaceService marketplaceService;
     private final BizAppInstallService installService;
-
+    private final BizAppDraftService draftService;
     @Operation(summary = "Browse the marketplace",
             description = "Platform-bundled templates plus organization custom templates.")
     @GetMapping("/marketplace/bizapps")
@@ -102,9 +103,15 @@ public class BizAppMarketplaceController extends BaseController {
             @RequestBody BizAppDtos.InstallRequest body,
             HttpServletRequest request) {
         requireOrgOwner(request);
-        Map<String, Object> manifest = body.manifest() != null && !body.manifest().isEmpty()
-                ? body.manifest()
-                : marketplaceService.templateManifest(getOrgId(request), body.templateRef());
+        Map<String, Object> manifest;
+        if (body.draftId() != null) {
+            var draft = draftService.getDraft(getOrgId(request), body.draftId());
+            manifest = draft.manifest();
+        } else if (body.manifest() != null && !body.manifest().isEmpty()) {
+            manifest = body.manifest();
+        } else {
+            manifest = marketplaceService.templateManifest(getOrgId(request), body.templateRef());
+        }
         BizAppDtos.InstallResult result = installService.install(
                 getTenantId(request), getOrgId(request), getUserId(request), manifest);
         return ResponseEntity.status(201).body(result);
@@ -117,6 +124,40 @@ public class BizAppMarketplaceController extends BaseController {
         requireOrgOwner(request);
         installService.uninstall(getTenantId(request), getUserId(request), kind);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Export template envelope JSON")
+    @GetMapping("/marketplace/bizapps/{templateRef}/export")
+    public ResponseEntity<Map<String, Object>> exportTemplate(
+            @PathVariable String templateRef, HttpServletRequest request) {
+        return ResponseEntity.ok(marketplaceService.exportEnvelope(
+                getOrgId(request), getTenantId(request), getUserId(request), templateRef));
+    }
+
+    @Operation(summary = "Import template envelope JSON as draft (owner)")
+    @PostMapping("/marketplace/bizapps/import")
+    public ResponseEntity<BizAppDtos.DraftView> importTemplate(
+            @Valid @RequestBody BizAppDtos.ImportTemplateRequest body, HttpServletRequest request) {
+        requireOrgOwner(request);
+        return ResponseEntity.status(201).body(marketplaceService.importTemplate(
+                getOrgId(request), getTenantId(request), getUserId(request), body));
+    }
+
+    @Operation(summary = "Remix an existing template into a new draft (owner)")
+    @PostMapping("/marketplace/bizapps/{templateRef}/remix")
+    public ResponseEntity<BizAppDtos.DraftView> remixTemplate(
+            @PathVariable String templateRef,
+            @RequestBody(required = false) BizAppDtos.RemixRequest body,
+            HttpServletRequest request) {
+        requireOrgOwner(request);
+        return ResponseEntity.status(201).body(marketplaceService.remixTemplate(
+                getOrgId(request), getTenantId(request), getUserId(request), templateRef, body));
+    }
+
+    @Operation(summary = "Get entries from configured remote catalog")
+    @GetMapping("/marketplace/catalog")
+    public ResponseEntity<List<BizAppDtos.CatalogEntryView>> remoteCatalog() {
+        return ResponseEntity.ok(marketplaceService.remoteCatalog());
     }
 
     private void requireOrgOwner(HttpServletRequest request) {

@@ -21,6 +21,7 @@ import type { BizAppInstalledAppView } from "@/types";
 import { BizAppRegistryView } from "@/components/bizapp/BizAppRegistryView";
 import { BizAppReportView } from "@/components/bizapp/BizAppReportView";
 import { BizAppTimelineView } from "@/components/bizapp/BizAppTimelineView";
+import { BizAppAssistantView } from "@/components/bizapp/BizAppAssistantView";
 
 type UiView = { prefix: string; target: string; raw: string };
 /**
@@ -48,6 +49,9 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
   const label = (view: UiView): string => {
     if (view.prefix === "report") {
       return t("nav.report", { view: view.target });
+    }
+    if (view.prefix === "assistant") {
+      return t("nav.assistant", { fallback: "Trợ lý AI" });
     }
     const entity = app.manifest.entities.find((candidate) => candidate.name === view.target);
     return entity?.label
@@ -85,6 +89,9 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
       {current && current.prefix === "form" && <BizAppRegistryView app={app} entityName={current.target} openCreate />}
       {current && current.prefix === "report" && (
         <BizAppReportView app={app} viewName={current.target} admin={admin} />
+      )}
+      {current && current.prefix === "assistant" && (
+        <BizAppAssistantView app={app} blockId={current.target} />
       )}
     </div>
   );

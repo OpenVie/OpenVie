@@ -33,6 +33,7 @@ def test_grpc_descriptor_is_wire_compatible() -> None:
         "GenerateAnswer",
         "ListDocumentUnits",
         "DeleteDocumentIndex",
+        "CompleteJson",
     ]
     expected = {
         "GenerateAnswerRequest": {

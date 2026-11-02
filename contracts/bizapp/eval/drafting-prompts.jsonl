@@ -1,0 +1,20 @@
+{"id": "eval-01", "lang": "en", "prompt": "Create an asset tracking app to manage IT equipment with serial number, model, purchase date, assigned employee, and status."}
+{"id": "eval-02", "lang": "vi", "prompt": "Xây dựng ứng dụng quản lý tài sản công ty gồm mã thiết bị, tên máy, ngày mua, người sử dụng và tình trạng."}
+{"id": "eval-03", "lang": "en", "prompt": "Create a recruitment applicant tracking app with candidate name, email, phone, applied position, interview date, and hiring stage."}
+{"id": "eval-04", "lang": "vi", "prompt": "Ứng dụng tuyển dụng ứng viên gồm họ tên, email, vị trí ứng tuyển, điểm phỏng vấn và trạng thái trúng tuyển."}
+{"id": "eval-05", "lang": "en", "prompt": "Create an expense reimbursement app with expense title, category, amount, currency, receipt notes, and approval flow."}
+{"id": "eval-06", "lang": "vi", "prompt": "Ứng dụng thanh toán công tác phí gồm lý do chi, số tiền, loại tiền, hóa đơn chứng từ và quy trình phê duyệt."}
+{"id": "eval-07", "lang": "en", "prompt": "Create a vendor management system to track supplier name, tax code, contract value, contact person, and rating."}
+{"id": "eval-08", "lang": "vi", "prompt": "Ứng dụng quản lý nhà cung cấp gồm tên đơn vị, mã số thuế, đại diện liên hệ, giá trị hợp đồng và xếp hạng."}
+{"id": "eval-09", "lang": "en", "prompt": "Create a customer feedback tracking app with customer name, feedback type, rating score, feedback content, and resolution status."}
+{"id": "eval-10", "lang": "vi", "prompt": "Ứng dụng ghi nhận phản hồi khách hàng gồm tên khách, phân loại phản ánh, điểm đánh giá, nội dung và trạng thái xử lý."}
+{"id": "eval-11", "lang": "en", "prompt": "Create a room reservation app with room name, capacity, booked date, start time, end time, and meeting host."}
+{"id": "eval-12", "lang": "vi", "prompt": "Ứng dụng đặt phòng họp nội bộ gồm tên phòng, sức chứa, ngày đặt, thời gian bắt đầu, kết thúc và người chủ trì."}
+{"id": "eval-13", "lang": "en", "prompt": "Create a software license manager with software name, vendor, license key, expiration date, seats count, and assigned department."}
+{"id": "eval-14", "lang": "vi", "prompt": "Ứng dụng quản trị bản quyền phần mềm gồm tên phần mềm, hãng sản xuất, ngày hết hạn, số lượng bản quyền và phòng ban."}
+{"id": "eval-15", "lang": "en", "prompt": "Create a facility maintenance request app with location, issue description, priority level, reported date, and repair status."}
+{"id": "eval-16", "lang": "vi", "prompt": "Ứng dụng yêu cầu sửa chữa cơ sở vật chất gồm khu vực, mô tả sự cố, mức độ ưu tiên, ngày báo và tiến độ xử lý."}
+{"id": "eval-17", "lang": "en", "prompt": "Create an employee onboarding checklist app with employee name, department, start date, mentor, and task progress."}
+{"id": "eval-18", "lang": "vi", "prompt": "Ứng dụng tiếp nhận nhân sự mới gồm họ tên, phòng ban, ngày gia nhập, người hướng dẫn và các bước hoàn thành."}
+{"id": "eval-19", "lang": "en", "prompt": "Create an event registration app with attendee name, email, ticket type, registration date, and payment status."}
+{"id": "eval-20", "lang": "vi", "prompt": "Ứng dụng đăng ký tham dự hội thảo gồm tên người tham dự, email, loại vé, ngày đăng ký và trạng thái thanh toán."}

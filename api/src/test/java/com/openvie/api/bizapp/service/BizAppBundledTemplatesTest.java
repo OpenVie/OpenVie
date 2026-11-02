@@ -46,8 +46,11 @@ class BizAppBundledTemplatesTest {
         for (Resource resource : resources) {
             String json = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             Map<String, Object> raw = mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            if ("openvie.template.v1".equals(raw.get("envelope")) && raw.get("manifest") instanceof Map<?, ?> m) {
+                raw = (Map<String, Object>) m;
+            }
             validator.validate(mapper.convertValue(raw,
-                    com.openvie.api.bizapp.dto.BizAppManifest.Manifest.class));
+                    com.openvie.api.bizapp.dto.BizAppManifest.Manifest.class), true);
         }
     }
 }

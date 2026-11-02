@@ -24,10 +24,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class LakehouseDataset(StrEnum):
     AUDIT_EVENTS = "audit_events"
+    BIZAPP_RECORDS = "bizapp_records"
     CHAT_ANALYTICS = "chat_analytics"
     DOCUMENT_LIFECYCLE = "document_lifecycle"
     WORKFLOW_DECISIONS = "workflow_decisions"
-
 
 class CdcOperation(StrEnum):
     INSERT = "INSERT"

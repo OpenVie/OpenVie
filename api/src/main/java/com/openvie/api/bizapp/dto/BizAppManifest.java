@@ -43,23 +43,45 @@ public final class BizAppManifest {
     public record Field(
             String name,
             String type,
+            String entity,
             Boolean required,
             Integer maxLen,
             String format,
-            List<String> options) {}
+            List<String> options,
+            Boolean pii,
+            Localized label) {
+        public Field(String name, String type, Boolean required, Integer maxLen, String format, List<String> options) {
+            this(name, type, null, required, maxLen, format, options, null, null);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record KnowledgeConfig(
+            Boolean project,
+            String titleField,
+            List<String> fields) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Entity(
             String name,
             Localized label,
             List<Field> fields,
-            Map<String, List<String>> hooks) {}
+            KnowledgeConfig knowledge,
+            Map<String, List<String>> hooks) {
+        public Entity(String name, Localized label, List<Field> fields, Map<String, List<String>> hooks) {
+            this(name, label, fields, null, hooks);
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Block(String id, String type, Map<String, Object> params) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Ui(List<String> views) {}
+    public record Ui(List<String> views, Map<String, Object> layout) {
+        public Ui(List<String> views) {
+            this(views, null);
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Manifest(
@@ -68,11 +90,15 @@ public final class BizAppManifest {
             Localized name,
             Integer version,
             String icon,
+            String storage,
             Map<String, List<String>> rbac,
             List<Entity> entities,
             List<Block> blocks,
             Ui ui) {
-
+        public Manifest(String schema, String kind, Localized name, Integer version, String icon,
+                Map<String, List<String>> rbac, List<Entity> entities, List<Block> blocks, Ui ui) {
+            this(schema, kind, name, version, icon, null, rbac, entities, blocks, ui);
+        }
         public String entityField(String entityName, String fieldName) {
             if (entities == null) {
                 return null;

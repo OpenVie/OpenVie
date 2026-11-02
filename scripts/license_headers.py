@@ -26,8 +26,9 @@ excluded on purpose: they are outputs, not authored source.
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
+import re
+import sys
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +61,16 @@ _TARGET_GLOBS: tuple[str, ...] = (
     "frontend/scripts/**/*.ts",
     "proto/*.proto",
     "scripts/**/*.sh",
+    "scripts/**/*.py",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    "docker-compose*.yml",
+    "docker-compose*.yaml",
+    "Dockerfile*",
+    "*/Dockerfile*",
+    "frontend/**/*.mjs",
+    "api/src/main/resources/processes/*.bpmn20.xml",
+    "api/src/main/resources/db/migration/*.sql",
 )
 
 # Substrings that skip a matched path: generated artifacts and scratch output.
@@ -91,6 +102,11 @@ def _source_files() -> list[Path]:
                 continue
             if any(piece in rel + "/" for piece in _EXCLUDED_PIECES):
                 continue
+            if candidate.name.endswith(".sql"):
+                # Only check migrations V14 and later (do not touch V1-V13: Flyway checksums)
+                m = re.match(r"^V(\d+)__.*\.sql$", candidate.name)
+                if not m or int(m.group(1)) < 14:
+                    continue
             collected.add(candidate)
     return sorted(collected)
 
@@ -108,17 +124,33 @@ def _has_header(text: str, prefix: str) -> bool:
 
 
 def _header_prefix(path: Path) -> str:
+    name = path.name
     rel = str(path.relative_to(ROOT))
-    if rel.endswith((".java", ".ts", ".tsx", ".proto")):
+    if rel.endswith((".java", ".ts", ".tsx", ".proto", ".mjs")):
         return "//"
-    if rel.endswith((".py", ".sh")):
+    if rel.endswith((".py", ".sh", ".yml", ".yaml")) or name.startswith("Dockerfile") or "Dockerfile" in name:
         return "#"
+    if rel.endswith(".sql"):
+        return "--"
+    if rel.endswith((".bpmn20.xml", ".xml")):
+        return "xml"
     raise AssertionError(f"no header comment syntax for {rel}")
 
 
 def _with_header(path: Path, text: str) -> str:
     prefix = _header_prefix(path)
     eol = _eol_of(text)
+    if prefix == "xml":
+        header = f"<!--{eol}" + f"{eol}".join(_BODY) + f"{eol}-->"
+        if text.startswith("<?xml"):
+            idx = text.find("?>")
+            if idx != -1:
+                line_end = text.find("\n", idx)
+                if line_end != -1:
+                    pre = text[: line_end + 1]
+                    post = text[line_end + 1 :]
+                    return pre + header + eol + post.lstrip("\r\n")
+        return header + eol + text
     header = eol.join(header_lines(prefix))
     body = text
     if body.startswith("#!"):  # keep the shebang as the very first line

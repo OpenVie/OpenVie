@@ -1,0 +1,14 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-typed-storage",
+  "name": { "vi": "Storage Typed", "en": "Storage Typed" },
+  "version": 1,
+  "storage": "typed",
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ]
+}

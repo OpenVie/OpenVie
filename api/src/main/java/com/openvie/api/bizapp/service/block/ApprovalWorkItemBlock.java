@@ -54,6 +54,11 @@ public class ApprovalWorkItemBlock implements BizAppBlockExecutor {
         variables.put("entity", context.entity());
         variables.put("appKind", context.appKind());
         variables.put("candidateRole", string(spec.params(), "candidateRole", "WORKSPACE_ADMIN"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sla = spec.params() != null && spec.params().get("sla") instanceof Map<?, ?> map
+                ? (Map<String, Object>) map : Map.of();
+        variables.put("reminderDuration", string(sla, "reminder", "PT24H"));
+        variables.put("escalationDuration", string(sla, "escalation", "PT48H"));
         WorkflowRuntimeApi.StartedProcess started = workflowRuntimeApi.start(
                 context.tenantId(), context.actorId(), context.processKey(),
                 context.recordId() == null ? null : context.recordId().toString(), variables);

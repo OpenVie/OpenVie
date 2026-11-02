@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/approval_workitem.schema.json",
+  "title": "Approval Workitem Block",
+  "type": "object",
+  "required": ["bpmnTemplate", "candidateRole"],
+  "properties": {
+    "bpmnTemplate": { "type": "string", "pattern": "^processes/[a-z0-9-]+\\.bpmn20\\.xml$" },
+    "candidateRole": { "type": "string", "enum": ["ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"] },
+    "sla": {
+      "type": "object",
+      "properties": {
+        "reminder": { "type": "string", "default": "PT24H" },
+        "escalation": { "type": "string", "default": "PT48H" }
+      }
+    }
+  }
+}

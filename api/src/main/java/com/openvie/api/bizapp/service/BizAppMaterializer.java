@@ -27,11 +27,14 @@ import org.springframework.stereotype.Component;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+
 /**
  * Unified template resolution for install + catalog + remix:
- * {@code platform:<kind>}` loads a bundled JSON; a bare UUID loads the org's
- * own template row. The resolver owns all Jackson/IO failure translation.
+ * {@code platform:<kind>} loads a bundled JSON; a bare UUID loads the org's
+ * own template row. The resolver unwraps the {@code openvie.template.v1} envelope
+ * when present and owns all Jackson/IO failure translation.
  */
 @Component
 @RequiredArgsConstructor
@@ -42,7 +45,19 @@ public class BizAppMaterializer {
     private final ObjectMapper objectMapper;
     private final BizAppMarketplaceTemplateRepository templateRepository;
 
+    @SuppressWarnings("unchecked")
     public Map<String, Object> loadRaw(UUID orgId, String templateRef) {
+        Map<String, Object> raw = loadRawEnvelope(orgId, templateRef);
+        if (raw.containsKey("envelope") && "openvie.template.v1".equals(raw.get("envelope"))) {
+            Object manifestObj = raw.get("manifest");
+            if (manifestObj instanceof Map<?, ?> manifestMap) {
+                return (Map<String, Object>) manifestMap;
+            }
+        }
+        return raw;
+    }
+
+    public Map<String, Object> loadRawEnvelope(UUID orgId, String templateRef) {
         if (templateRef == null || templateRef.isBlank()) {
             throw new BadRequestException("templateRef is required");
         }
@@ -87,11 +102,19 @@ public class BizAppMaterializer {
     }
 
     /** Catalog path: unreadable bundled templates are skipped, not fatal. */
-    java.util.Optional<Map<String, Object>> readOptional(org.springframework.core.io.Resource resource) {
+    @SuppressWarnings("unchecked")
+    Optional<Map<String, Object>> readOptional(org.springframework.core.io.Resource resource) {
         try (InputStream stream = resource.getInputStream()) {
-            return java.util.Optional.of(parse(new String(stream.readAllBytes(), StandardCharsets.UTF_8)));
+            Map<String, Object> parsed = parse(new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+            if (parsed.containsKey("envelope") && "openvie.template.v1".equals(parsed.get("envelope"))) {
+                Object manifestObj = parsed.get("manifest");
+                if (manifestObj instanceof Map<?, ?> manifestMap) {
+                    return Optional.of((Map<String, Object>) manifestMap);
+                }
+            }
+            return Optional.of(parsed);
         } catch (Exception exception) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
     }
 }

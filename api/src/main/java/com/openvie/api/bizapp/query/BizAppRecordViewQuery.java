@@ -17,19 +17,14 @@ package com.openvie.api.bizapp.query;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
- * Executes a manifest report view (already SELECT-validated by
- * {@code BizAppManifestValidator}) against the core database with only two
- * bind parameters allowed — {@code :tenant} and {@code :app} — and a hard
- * row cap. JDBC lives in this query package only, per the module
- * architecture rules.
+ * Executes a compiled report query against the core database in a read-only
+ * transaction with a hard row limit.
  */
 @Component
 @RequiredArgsConstructor
@@ -39,16 +34,9 @@ public class BizAppRecordViewQuery {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public List<Map<String, Object>> run(UUID tenantId, String appKind, String sql, Map<String, Object> params) {
-        Map<String, Object> binds = new HashMap<>();
-        // Bind the UUID object so PostgreSQL compares `uuid = uuid` (a string
-        // would fail with `operator does not exist: uuid = character varying`).
-        binds.put("tenant", tenantId);
-        binds.put("app", appKind);
-        if (params != null) {
-            binds.putAll(params);
-        }
-        return jdbcTemplate.queryForList(sql, binds).stream()
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> run(String sql, Map<String, Object> params) {
+        return jdbcTemplate.queryForList(sql, params == null ? Map.of() : params).stream()
                 .limit(MAX_ROWS)
                 .collect(java.util.stream.Collectors.toList());
     }

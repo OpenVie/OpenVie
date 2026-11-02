@@ -17,12 +17,13 @@ from __future__ import annotations
 from app.generated import openvie_ai_v1_pb2 as pb
 
 
-def test_inference_service_exposes_only_the_three_rag_methods() -> None:
+def test_inference_service_exposes_the_proto_methods() -> None:
     methods = [method.name for method in pb.DESCRIPTOR.services_by_name["InferenceService"].methods]
     assert methods == [
         "GenerateAnswer",
         "ListDocumentUnits",
         "DeleteDocumentIndex",
+        "CompleteJson",
     ]
 
 

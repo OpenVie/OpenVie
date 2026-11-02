@@ -1,57 +1,171 @@
 {
-  "schema": "bizapp.v1",
-  "kind": "crm",
-  "name": {
-    "vi": "CRM-lite",
-    "en": "CRM Lite"
+  "envelope": "openvie.template.v1",
+  "meta": {
+    "author": "LinkedNodeDigital",
+    "license": "Apache-2.0",
+    "source": "bundled",
+    "sha256": "e37e138658835b710de51eed56e029039c24dcd1ad1f1ee52bf99d88d1545e05",
+    "generator": "human",
+    "model": null,
+    "changes": []
   },
-  "version": 1,
-  "icon": "briefcase",
-  "rbac": {
-    "read": ["WORKSPACE_ADMIN", "MEMBER"],
-    "write": ["WORKSPACE_ADMIN", "MEMBER"]
-  },
-  "entities": [
-    {
-      "name": "leads",
-      "label": { "vi": "Khách hàng tiềm năng", "en": "Leads" },
-      "fields": [
-        { "name": "name", "type": "string", "required": true, "maxLen": 200, "label": { "vi": "Tên khách hàng", "en": "Customer name" } },
-        { "name": "email", "type": "string", "format": "email", "maxLen": 200 },
-        { "name": "phone", "type": "string", "maxLen": 40 },
-        { "name": "stage", "type": "enum", "required": true, "options": ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST"] },
-        { "name": "dealValue", "type": "number", "required": false },
-        { "name": "notes", "type": "string", "maxLen": 500 }
-      ],
-      "hooks": {
-        "onCreate": ["notifyOwner"]
-      }
-    }
-  ],
-  "blocks": [
-    {
-      "id": "notifyOwner",
-      "type": "notify",
-      "params": {
-        "to": ["creator"],
-        "title": "Lead mới đã được ghi nhận",
-        "subject": "OpenVie CRM — lead mới"
-      }
+  "manifest": {
+    "schema": "bizapp.v1",
+    "kind": "crm",
+    "name": {
+      "vi": "CRM-lite",
+      "en": "CRM Lite"
     },
-    {
-      "id": "leadPipeline",
-      "type": "report",
-      "params": {
-        "views": [
+    "version": 1,
+    "icon": "briefcase",
+    "storage": "typed",
+    "rbac": {
+      "read": [
+        "ORG_OWNER",
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ],
+      "write": [
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ]
+    },
+    "entities": [
+      {
+        "name": "leads",
+        "label": {
+          "vi": "Kh\u00e1ch h\u00e0ng ti\u1ec1m n\u0103ng",
+          "en": "Leads"
+        },
+        "fields": [
           {
-            "name": "pipeline",
-            "sql": "SELECT payload ->> 'name' AS name, payload ->> 'stage' AS stage, payload ->> 'dealValue' AS deal_value, created_at FROM bizapp_records WHERE tenant_id = :tenant AND app_kind = :app AND entity = 'leads' AND status = 'ACTIVE' ORDER BY updated_at DESC"
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "maxLen": 200,
+            "label": {
+              "vi": "T\u00ean kh\u00e1ch h\u00e0ng",
+              "en": "Customer name"
+            }
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "format": "email",
+            "maxLen": 200
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "maxLen": 40
+          },
+          {
+            "name": "stage",
+            "type": "enum",
+            "required": true,
+            "options": [
+              "NEW",
+              "CONTACTED",
+              "QUALIFIED",
+              "WON",
+              "LOST"
+            ]
+          },
+          {
+            "name": "dealValue",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "maxLen": 500
           }
-        ]
+        ],
+        "knowledge": {
+          "project": true,
+          "titleField": "name",
+          "fields": [
+            "name",
+            "email",
+            "phone",
+            "stage",
+            "dealValue",
+            "notes"
+          ]
+        },
+        "hooks": {
+          "onCreate": [
+            "notifyOwner"
+          ]
+        }
       }
+    ],
+    "blocks": [
+      {
+        "id": "notifyOwner",
+        "type": "notify",
+        "params": {
+          "to": [
+            "creator"
+          ],
+          "title": "Lead m\u1edbi \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn",
+          "subject": "OpenVie CRM \u2014 lead m\u1edbi"
+        }
+      },
+      {
+        "id": "leadPipeline",
+        "type": "report",
+        "params": {
+          "views": [
+            {
+              "name": "pipeline",
+              "entity": "leads",
+              "orderBy": [
+                {
+                  "by": "name",
+                  "dir": "asc"
+                }
+              ],
+              "limit": 100,
+              "engine": "postgres"
+            },
+            {
+              "name": "pipeline_by_stage",
+              "entity": "leads",
+              "groupBy": [
+                "stage"
+              ],
+              "metrics": [
+                {
+                  "fn": "count",
+                  "as": "leads"
+                },
+                {
+                  "fn": "sum",
+                  "field": "dealValue",
+                  "as": "value"
+                }
+              ],
+              "orderBy": [
+                {
+                  "by": "leads",
+                  "dir": "desc"
+                }
+              ],
+              "limit": 100,
+              "engine": "postgres"
+            }
+          ]
+        }
+      }
+    ],
+    "ui": {
+      "views": [
+        "registry:leads",
+        "form:leads",
+        "report:pipeline"
+      ]
     }
-  ],
-  "ui": {
-    "views": ["registry:leads", "form:leads", "report:pipeline"]
   }
 }
