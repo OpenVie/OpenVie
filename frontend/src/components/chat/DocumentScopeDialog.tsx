@@ -215,8 +215,8 @@ function ScopeSelection({
                     "grid size-5 shrink-0 place-items-center rounded-md border transition-colors",
                     checked
                       ? light
-                        ? "border-transparent bg-[#1f7a4d] text-white"
-                        : "border-transparent bg-[#c8f53c] text-[#07090c]"
+                        ? "border-transparent bg-[#149fe3] text-white"
+                        : "border-transparent bg-[#1fb6ff] text-[#07090c]"
                       : light
                         ? "border-[rgb(16_24_14_/_0.25)]"
                         : "border-white/25",
@@ -258,7 +258,7 @@ function ScopeSelection({
             onClick={() => onApply([...draft])}
             className={cn(
               "rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors",
-              light ? "bg-[#1f7a4d] hover:bg-[#186a42]" : "bg-[#c8f53c] text-[#07090c] hover:bg-[#b7e133]",
+              light ? "bg-[#149fe3] hover:bg-[#0785c5]" : "bg-[#1fb6ff] text-[#07090c] hover:bg-[#149fe3]",
             )}
           >
             {t("scopeApply")}

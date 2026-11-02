@@ -101,7 +101,7 @@ export default function RegisterPage() {
   if (enabled === null) {
     return (
       <div className="grid min-h-dvh place-items-center">
-        <Loader2 className="size-8 animate-spin text-[#c8f53c]" />
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
