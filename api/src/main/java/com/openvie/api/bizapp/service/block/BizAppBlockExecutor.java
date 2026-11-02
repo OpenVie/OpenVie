@@ -46,7 +46,25 @@ public interface BizAppBlockExecutor {
             String entity,
             UUID recordId,
             Map<String, Object> payload,
-            String processKey) {}
+            String processKey,
+            Map<String, Object> config,
+            Integer version) {
+        public BlockContext(
+                UUID orgId,
+                UUID tenantId,
+                UUID actorId,
+                String appKind,
+                String entity,
+                UUID recordId,
+                Map<String, Object> payload,
+                String processKey) {
+            this(orgId, tenantId, actorId, appKind, entity, recordId, payload, processKey, Map.of(), 1);
+        }
+    }
 
-    record BlockResult(String summary) {}
+    record BlockResult(String summary, Map<String, Object> runtimeUpdates) {
+        public BlockResult(String summary) {
+            this(summary, Map.of());
+        }
+    }
 }

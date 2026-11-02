@@ -1,6 +1,6 @@
-# BizApps — nền tảng ứng dụng kinh doanh cài được (Tier 3)
+# BizApps — nền tảng ứng dụng kinh doanh cài được (Tier 3 / v1.0.0 GA)
 
-[Danh mục tài liệu](README.md) · [Kiến trúc](ARCHITECTURE.md) · [Tích hợp](INTEGRATION.md) · [Workflow](WORKFLOW.md) · [DX-OS](DX_OS.md)
+[Danh mục tài liệu](README.md) · [Kiến trúc](ARCHITECTURE.md) · [Tích hợp](INTEGRATION.md) · [Workflow](WORKFLOW.md) · [DX-OS](DX_OS.md) · [Nguồn mở & Cấp phép](OPEN_SOURCE.md)
 
 > **Ngôn ngữ / Language:** [Tiếng Việt](#bizapps--nền-tảng-ứng-dụng-kinh-doanh--tiếng-việt) · [English](#bizapps--the-installable-business-app-platform)
 
@@ -8,236 +8,241 @@
 
 ## BizApps — nền tảng ứng dụng kinh doanh — tiếng Việt
 
-BizApp là **ứng dụng kinh doanh khai báo** ("template") cài được vào một workspace,
-chạy trên dịch vụ nền tảng hiện hữu thay vì backend riêng: kho bản ghi JSONB
-theo workspace, phê duyệt qua engine Flowable, email qua kênh SMTP của tổ chức,
-webhook HMAC có chữ ký, và HTTP outbound với vault thông tin xác thực riêng. Mẫu đóng gói sẵn:
-**CRM Lite** (quản lý khách hàng tiềm năng) và **Booking** (đặt lịch hẹn, có vòng
-duyệt xác nhận). Thiết kế bám mô hình Flowise: schema + validator chặn trước,
-marketplace hai tầng (platform + do tổ chức tự tạo), node = block gắn dịch vụ.
+BizApp là **ứng dụng kinh doanh khai báo** cài được vào một workspace thuộc DX-OS Tầng 3,
+chạy trực tiếp trên các headless service sẵn có của nền tảng mà không cần backend riêng:
+kho bản ghi hybrid (lưu trữ typed table cho các app platform và JSONB cho app tự tạo),
+phê duyệt quy trình qua Flowable engine có SLA timers, gửi thông báo email, webhook sự kiện
+HMAC-SHA256, HTTP outbound được bảo vệ chống SSRF, và kho thông tin xác thực mã hóa AES-256-GCM.
+Mẫu đóng gói sẵn bao gồm:
+1. **CRM Lite** (quản lý khách hàng tiềm năng, lưu trữ typed table `bizapp_crm_leads`),
+2. **Booking** (đặt lịch hẹn có xác nhận phê duyệt, lưu trữ typed table `bizapp_booking_appointments`),
+3. **Signature Request** (công thức yêu cầu ký số ủy quyền qua nhà cung cấp bên ngoài).
 
-### 1. Manifest `bizapp.v1`
+### 1. Hợp đồng Manifest `bizapp.v1` đóng băng (Frozen Contract)
 
-Mọi BizApp định nghĩa bằng một JSON (`schema: "bizapp.v1"`):
+Mọi BizApp được định nghĩa bởi một tài liệu JSON chuẩn `bizapp.v1` (schema tại `contracts/bizapp/bizapp.v1.schema.json`):
 
-| Mục | Ý nghĩa |
+| Trường | Ý nghĩa |
 | --- | --- |
-| `kind` | key ổn định của app (`crm`, `booking`), dùng mọi nơi từ URL tới webhook |
-| `entities` | kho dữ liệu khai báo: `fields[]` (`string/number/boolean/enum/date`, `required`, `maxLen`, `format: email`), `hooks` |
-| `blocks` | khối tác nghiệp: `approval_workitem`, `notify`, `webhook_out`, `external_call`, `report`, `registry`, `form`, `timeline` |
-| `rbac` | `read/write/delete/approve` → vai trò được phép (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`); thiếu `write` = chỉ admin |
-| `ui` | thứ tự view tại runtime: `registry:<entity>`, `form:<entity>`, `timeline:<entity>`, `report:<view>`, `assistant:<block>` |
+| `schema` | Luôn là `"bizapp.v1"` |
+| `kind` | Mã định danh duy nhất của app (`[a-z][a-z0-9-]{1,31}`) |
+| `name` | Đối tượng bản địa hóa: `{"vi": "...", "en": "..."}` |
+| `version` | Số nguyên phiên bản (>= 1) |
+| `storage` | `"jsonb"` (mặc định) hoặc `"typed"` (chỉ dành riêng cho platform-bundled templates) |
+| `entities` | Khai báo các thực thể dữ liệu (tối đa 20 thực thể, 40 trường/thực thể): `fields[]` (`string`, `number`, `boolean`, `enum`, `date`, `ref`), `knowledge` projection, và `hooks` |
+| `blocks` | Khối thực thi (tối đa 40 khối): `approval_workitem`, `assistant`, `knowledge_base`, `report`, `notify`, `webhook_out`, `external_call` |
+| `rbac` | Quyền hạn `read/write/delete/approve` gắn với các vai trò (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`) |
+| `ui` | Thứ tự các view runtime (`registry:<entity>`, `form:<entity>`, `timeline:<entity>`, `report:<view>`, `assistant:<block>`) cùng tọa độ bố cục `layout` của visual composer |
 
-**Validator** (`BizAppManifestValidator`) là cổng bảo mật duy nhất, chạy chặt ở
-*install*, *save template* và *upgrade*:
+**Báo cáo khai báo (Declarative Reports — Thay thế hoàn toàn raw SQL):**
+Báo cáo không chứa chuỗi SQL tự do; thay vào đó định nghĩa dưới dạng view khai báo an toàn:
+```json
+{
+  "name": "pipeline_by_stage",
+  "entity": "leads",
+  "groupBy": ["stage"],
+  "metrics": [
+    { "fn": "count", "as": "leads" },
+    { "fn": "sum", "field": "dealValue", "as": "value" }
+  ],
+  "filters": [
+    { "field": "stage", "op": "in", "values": ["NEW", "CONTACTED"] }
+  ],
+  "orderBy": [
+    { "by": "leads", "dir": "desc" }
+  ],
+  "limit": 100,
+  "engine": "postgres"
+}
+```
+Trình biên dịch `BizAppReportCompiler` phân tích view spec thành câu lệnh tham số hóa có ràng buộc tenant/org/app nghiêm ngặt, hỗ trợ cả hai dialect `postgres` và `duckdb` (Lakehouse).
 
-- SQL report phải là **đúng một câu SELECT**, cấm `UNION`/`INSERT`/`UPDATE`/`DROP`…,
-  cấm `${…}` nội suy, chỉ cho phép named bind `:tenant`/`:app`;
-- key trông giống secret (`password`, `secret`, `token`, `apiKey`…) bị từ chối — chỉ cho phép
-  `credentialRef` trỏ vào vault của tổ chức;
-- `external_call` bắt buộc `credentialRef`, không được nội suy secret;
-- `bpmnTemplate` gắt trong `processes/<name>.bpmn20.xml` (cấm traversal `../`);
-- hook chỉ trỏ tới block id hoặc `webhook_out:<event>`; mọi tham chiếu `ui` phải
-  giải được (entity/report view/block).
+### 2. Chiếu tri thức (Knowledge Projection: Bản ghi → Trợ lý AI)
 
-### 2. Vòng đời: cài → dùng → gỡ
+Nhằm cho phép trợ lý ảo trả lời câu hỏi về dữ liệu kinh doanh **kèm trích dẫn chính xác nguồn dữ liệu** mà không can thiệp vào tầng truy hồi (retrieval) và không dùng Text-to-SQL:
+- Thực thể bật chiếu qua `knowledge: { "project": true, "titleField": "name", "fields": ["name", "stage"] }`.
+- Mỗi bản ghi được chiếu thành một tài liệu Markdown tổng hợp (`bizapp_<kind>_<entity>_<recordId>.md`) đưa vào pipeline hấp thụ tự động của Qdrant và đồ thị tri thức Kuzu.
+- **Quy tắc fail-closed:** Chiếu tri thức chỉ được phép kích hoạt khi `rbac.read` bao gồm đầy đủ mọi vai trò trong workspace (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`). Trường đánh dấu `pii: true` không bao giờ bị chiếu.
+- **Tài liệu tổng hợp (Digest Document):** `bizapp_<kind>__digest.md` tự động kết xuất từ các report view đã khai báo để trả lời câu hỏi tổng hợp mang tính định lượng chính xác.
 
-| Việc | Route (chỉ `ORG_OWNER`) |
-| --- | --- |
-| Xem marketplace (platform + của tổ chức) | `GET /api/v1/marketplace/bizapps` |
-| Cài 1 app (`{"templateRef":"platform:crm"}`) | `POST /api/v1/apps/install` |
-| Gỡ (soft: giữ nguyên records) | `DELETE /api/v1/apps/{kind}` |
-| Xem cấu hình app + manifest đóng băng | `GET /api/v1/bizapps` · `GET /api/v1/bizapps/{kind}` |
-| Đổi config org-level của app | `PATCH /api/v1/bizapps/{kind}/config` |
-| Lưu app đang chạy thành template của tổ chức | `POST /api/v1/marketplace/bizapps` |
-| Xoá template của tổ chức | `DELETE /api/v1/marketplace/bizapps/{id}` |
+### 3. Trình thiết kế trực quan (Visual Composer)
 
-Cài đặt: validator chặn trước → **manifest được "đóng băng"** vào bảng
-`bizapp_installations` (sửa template sau không ảnh hưởng app đang chạy; nâng cấp =
-cài lại) → nếu app có block `approval_workitem`, BPMN
-`processes/bizapp-single-approval.bpmn20.xml` được **deploy qua
-`WorkflowRuntimeApi`** với tên `bizapp-<kind>` → ghi audit `BIZAPP_APP_INSTALLED`.
-Gỡ là soft-delete (`status=DISABLED`): records + audit còn nguyên.
+- Giao diện kéo thả tại `(admin)/admin/apps/compose`:
+  - **Canvas trực quan:** Sử dụng `@xyflow/react` kết hợp thuật toán sắp xếp tự động `@dagrejs/dagre`, hiển thị thực thể (`NodeEntity`) và khối (`NodeBlock`).
+  - **Dạng danh sách (List View):** Cung cấp giao diện tương tác toàn diện bằng bàn phím và trợ năng (accessibility scan đạt chuẩn axe).
+  - **Trình sửa JSON (Json Tab):** Cho phép xem và chỉnh sửa trực tiếp mã JSON canonical `bizapp.v1`.
+  - **Kiểm tra tự động (Validation Panel):** Kiểm tra hợp lệ debounced qua `POST /api/v1/bizapps/validate`.
 
-### 3. Kho bản ghi (record store)
+### 4. Soạn thảo Manifest bằng AI (AI Manifest Drafting)
 
-Một bảng chung `bizapp_records` (JSONB `payload` + `runtime`) phục vụ mọi app,
-phân trang theo workspace + app + entity:
+- Endpoint `POST /api/v1/bizapps/drafts/generate` (chỉ `ORG_OWNER`, có rate-limiting và kill-switch `app.bizapps.ai-drafting.enabled`).
+- Không bao giờ tự động cài đặt: kết quả sinh ra chỉ lưu vào bảng `bizapp_drafts` (Flyway V14) dưới dạng bản nháp để người dùng xem lại. Khi nhấn cài đặt, hệ thống sẽ thẩm định lại từ đầu.
+- Bộ prompt hệ thống độc lập kèm bộ kiểm thử chất lượng 20 kịch bản tại `contracts/bizapp/eval/drafting-prompts.jsonl`.
 
-| Việc | Route |
-| --- | --- |
-| Danh sách records | `GET /api/v1/bizapp-data/{kind}/{entity}?includeArchived=&page=&size=` |
-| Tạo / xem / sửa 1 record | `POST` / `GET` / `PATCH /api/v1/bizapp-data/{kind}/{entity}[/{recordId}]` |
-| Lưu trữ 1 record | `DELETE /api/v1/bizapp-data/{kind}/{entity}/{recordId}` |
-| Chạy view report | `POST /api/v1/bizapps/{kind}/reports/{viewName}` (chỉ admin) |
-| Nộp record vào vòng duyệt | `POST /api/v1/bizapp-data/{kind}/{entity}/{recordId}/submit` |
+### 5. Trao đổi Template (Export / Import / Remix)
 
-- **Payload được validate chặt**: field nằm ngoài manifest bị từ chối → 400; thiếu field
-  bắt buộc → 400; `email`, `date`, `enum` kiểm tra kiểu.
-- **`runtime`** (không phải dữ liệu user) chứa `processId`, `approvalStatus`
-  (`PENDING/RUNNING → APPROVED | REJECTED`), quyết định gần nhất.
-- **RBAC**: mọi bước ghi đều chạy qua lược đồ của manifest + vai trò
-  workspace giải lại mỗi request (không tin client).
+Mọi template đóng gói và trao đổi đều sử dụng phong bì tiêu chuẩn `openvie.template.v1` (`contracts/bizapp/openvie.template.v1.schema.json`):
+```json
+{
+  "envelope": "openvie.template.v1",
+  "meta": {
+    "author": "LinkedNodeDigital",
+    "license": "Apache-2.0",
+    "source": "bundled",
+    "sha256": "...",
+    "generator": "human",
+    "changes": []
+  },
+  "manifest": { ... }
+}
+```
+- Endpoint:
+  - `GET /api/v1/marketplace/bizapps/{id}/export`: Tải file phong bì JSON.
+  - `POST /api/v1/marketplace/bizapps/import`: Nhập template từ file hoặc URL catalog, kiểm tra mã băm SHA-256 và danh sách giấy phép SPDX cho phép; chỉ đưa vào danh sách bản nháp.
+  - `POST /api/v1/marketplace/bizapps/{id}/remix`: Sao chép sang bản nháp, giữ nguyên tác giả/giấy phép gốc và bổ sung mục lịch sử sửa đổi `changes[]`.
+  - `GET /api/v1/marketplace/catalog`: Lấy chỉ mục catalog từ các host được cấu hình trong `app.bizapps.remote-catalog.hosts`.
 
-### 4. Phê duyệt qua engine Flowable
+### 6. Khối gọi ngoài an toàn & Công thức Ký số (e-Signature Recipe)
 
-App có block `approval_workitem` tức có nút "Nộp duyệt": `submit` khởi động process
-đã deploy (candidate group lấy từ `candidateRole`). Được duyệt/từ chối bằng
-**inbox tác vụ tổng quát** `/api/v1/workflow/engine/tasks` (`decision =
-APPROVE|REJECT`, `decidedBy`). Cuối process, delegate
-`bizAppRecordDecisionDelegate` ghi kết quả về `runtime` trong cùng transaction
-và sự kiện `bizapp.<kind>.record.decided` đi vào webhook outbox sau commit
-(hoàn toàn tách khỏi luồng tài liệu — task BizApp không thuộc miền phê duyệt
-tài liệu nên vẫn hoàn tất được trên inbox tổng quát).
+Khối `external_call` được tăng cường bảo vệ an ninh mạng:
+- Chỉ cho phép giao thức HTTPS (trừ khi bật dev profile `app.bizapps.outbound.allow-http`).
+- Bắt buộc host phải nằm trong danh sách cho phép `allowedHosts` do ORG_OWNER cấu hình.
+- Phân giải DNS và kiểm tra SSRF: chặn toàn bộ loopback, IP riêng RFC 1918, link-local, dải IP metadata đám mây (`169.254.169.254`).
+- Tắt cơ chế tự động chuyển hướng (no redirects); giới hạn kích thước phản hồi tối đa 256 KiB; không lưu log query string hoặc giá trị header nhạy cảm.
+- Tiêu đề chống gửi trùng lặp: `X-Idempotency-Key: <recordId>:<blockId>:<version>`.
+- Trích xuất phản hồi `responseMap` qua JSON-pointer vào `runtime.external.<blockId>`.
 
-### 5. Vault thông tin xác thực (credential vault)
+### 7. Ranh giới pháp lý (Legal Boundaries)
 
-HTTP outbound cần secret: tổ chức tạo entry qua
-`POST /api/v1/bizapp-credentials` (`format = api_key | bearer | basic`), nền tảng
-mã hoá **AES-256-GCM** qua `BIZAPP_ENC_KEY` (sinh bằng `openssl rand -base64 32`,
-bắt buộc khi dùng; bật/tắt bằng `BIZAPPS_ENABLED`), chỉ hiện metadata khi đọc, và
-`external_call` giải mã just-in-time để gắn header. Không bao giờ log secret.
-Kill-switch `BIZAPPS_ENABLED=false` biến toàn bộ bề mặt `/api/v1/bizapp*` thành 404.
+> **Tuyên bố ranh giới pháp lý:**
+> OpenVie là nền tảng phần mềm mã nguồn mở. OpenVie **không** tạo, không nắm giữ khóa ký riêng tư (private key), và không thực hiện quy trình ký số hay kiểm tra tính hợp lệ pháp lý của chứng thư điện tử. Mọi tác vụ ký số được thực hiện bằng cách ủy quyền thông qua khối `external_call` tới nhà cung cấp dịch vụ ký số bên ngoài do tổ chức tự hợp đồng và cấu hình.
+> Giá trị pháp lý của văn bản ký kết phụ thuộc hoàn toàn vào dịch vụ của nhà cung cấp đó và các quy định pháp luật hiện hành tại quốc gia sở tại. Người vận hành hệ thống có trách nhiệm tự tham vấn ý kiến pháp lý chuyên môn cho các hoạt động ký kết điện tử của mình.
 
-### 6. Webhook và audit
+### 8. Các mục tiêu cố ý nằm ngoài phạm vi (Non-Goals)
 
-Mọi lifecycle đi qua Spring event `BizAppLifecycleEvent` → bridge
-`BizAppWebhookBridge` (AFTER_COMMIT) → outbox chung như webhook của workflow:
-envelope HMAC-SHA256, retry có backoff, lọc theo `acceptsEventListener`. Kiểu sự
-kiện: `bizapp.<kind>.record.created|updated|archived|submitted|decided`.
-Audit: `BIZAPP_APP_INSTALLED/UNINSTALLED`, `BIZAPP_TEMPLATE_SAVED/DELETED`,
-`BIZAPP_RECORD_CREATED/UPDATED/ARCHIVED/SUBMITTED/DECIDED`,
-`BIZAPP_CREDENTIAL_CREATED/DELETED`.
-
-### 7. Kiến trúc module
-
-Module `bizapp` là business module ArchUnit: chỉ giao tiếp với
-`workflow`/`notification`/`tenant` qua `*Api` published boundary
-(`WorkflowRuntimeApi`, `NotificationRuntimeApi`, `TenantIdentityApi`), chung
-`common/` cho event; JDBC chỉ nằm trong `bizapp/query`. Template platform
-(tải tĩnh từ classpath) được guard kép: test Java
-`BizAppBundledTemplatesTest` + CI job `marketplace-validate`
-(`scripts/marketplace_validate.py`).
+- Không tích hợp thư viện ký số nhúng hay giữ private key trong quy trình.
+- Không tạo endpoint webhook riêng biệt cho từng nhà cung cấp ký số (cập nhật trạng thái được thực hiện qua `PATCH /api/v1/bizapp-data/{kind}/{entity}/{id}` bằng API key máy `ovk_...`).
+- Không tạo bảng cơ sở dữ liệu động từ manifest của người dùng (chỉ các template platform cốt lõi mới có bảng typed table).
+- Không sử dụng Text-to-SQL hay truy vấn do LLM tự sinh.
+- Không xác thực chữ ký mật mã detached cho remote template (v1.0.0 neo kiểm tra bằng mã băm SHA-256 từ catalog index).
 
 ---
 
 ## BizApps — the installable business app platform
 
-A BizApp is a **declarative, installable business application** bound to a
-workspace, running on the existing platform services instead of a separate
-backend: a workspace-scoped JSONB record store, approvals through the embedded
-Flowable engine, transactional email over the org's SMTP channel, HMAC-signed
-webhooks, and outbound HTTP with an org-scoped secret vault. Bundled templates
-ship: **CRM Lite** (lead pipeline) and **Booking** (appointment scheduling with
-a confirmation approval hop). The design follows Flowise's patterns: validated
-schema gate first, a two-layer marketplace (platform + org-crafted), and
-"node" made concrete as executable blocks.
+A BizApp is a **declarative, installable business application** operating on DX-OS Tier 3,
+running directly on the platform's headless services without requiring a dedicated backend:
+a hybrid record store (typed SQL tables for platform flagship templates and JSONB store for custom apps),
+business approval workflows via the embedded Flowable engine with SLA boundary timers, transactional email,
+HMAC-SHA256 signed webhooks, SSRF-protected outbound HTTP, and an AES-256-GCM credential vault.
+Bundled flagship templates include:
+1. **CRM Lite** (lead pipeline management, backed by typed table `bizapp_crm_leads`),
+2. **Booking** (appointment scheduling with confirmation approval, backed by typed table `bizapp_booking_appointments`),
+3. **Signature Request** (e-signature delegation recipe template calling external providers).
 
-### 1. The `bizapp.v1` manifest
+### 1. Frozen `bizapp.v1` Manifest Contract
 
-Every BizApp is one JSON document (`schema: "bizapp.v1"`):
+Every BizApp is defined by a canonical JSON document (`schema: "bizapp.v1"`, specification at `contracts/bizapp/bizapp.v1.schema.json`):
 
 | Section | Meaning |
 | --- | --- |
-| `kind` | stable app key (`crm`, `booking`) used in URLs and webhook types |
-| `entities` | declarative record types: `fields[]` (`string/number/boolean/enum/date`, `required`, `maxLen`, `format: email`), `hooks` |
-| `blocks` | executable blocks: `approval_workitem`, `notify`, `webhook_out`, `external_call`, `report`, `registry`, `form`, `timeline` |
-| `rbac` | `read/write/delete/approve` → allowed roles (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`); missing `write` = admins only |
-| `ui` | runtime view order: `registry:<entity>`, `form:<entity>`, `timeline:<entity>`, `report:<view>`, `assistant:<block>` |
+| `schema` | Must be `"bizapp.v1"` |
+| `kind` | Stable unique app key (`[a-z][a-z0-9-]{1,31}`) |
+| `name` | Localized label object: `{"vi": "...", "en": "..."}` |
+| `version` | Manifest schema revision integer (>= 1) |
+| `storage` | `"jsonb"` (default) or `"typed"` (reserved for platform-bundled templates) |
+| `entities` | Data models (up to 20 entities, 40 fields/entity): `fields[]` (`string`, `number`, `boolean`, `enum`, `date`, `ref`), `knowledge` projection, and `hooks` |
+| `blocks` | Executable blocks (up to 40 blocks): `approval_workitem`, `assistant`, `knowledge_base`, `report`, `notify`, `webhook_out`, `external_call` |
+| `rbac` | Role permissions (`read/write/delete/approve`) mapped to workspace roles (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`) |
+| `ui` | Runtime views order (`registry:<entity>`, `form:<entity>`, `timeline:<entity>`, `report:<view>`, `assistant:<block>`) and visual composer `layout` coordinates |
 
-**The validator** (`BizAppManifestValidator`) is the single security gate,
-enforced on *install*, *template save*, and *upgrade*:
+**Declarative Report Views (Replaces Free-Form SQL):**
+Report blocks no longer contain raw SQL strings; they are structured declarative views:
+```json
+{
+  "name": "pipeline_by_stage",
+  "entity": "leads",
+  "groupBy": ["stage"],
+  "metrics": [
+    { "fn": "count", "as": "leads" },
+    { "fn": "sum", "field": "dealValue", "as": "value" }
+  ],
+  "filters": [
+    { "field": "stage", "op": "in", "values": ["NEW", "CONTACTED"] }
+  ],
+  "orderBy": [
+    { "by": "leads", "dir": "desc" }
+  ],
+  "limit": 100,
+  "engine": "postgres"
+}
+```
+The parameterized `BizAppReportCompiler` compiles view specifications with strict tenant, organization, and entity bounds, supporting both `postgres` and `duckdb` (Lakehouse) dialects.
 
-- report SQL must be **exactly one SELECT statement** — no `UNION`,
-  `INSERT`/`UPDATE`/`DROP`…, no `${…}` interpolation, and the only allowed
-  named binds are `:tenant` / `:app`;
-- secret-looking keys (`password`, `secret`, `token`, `apiKey`…) are rejected —
-  the only allowed form is a `credentialRef` into the org vault;
-- `external_call` requires `credentialRef`, inline secrets never pass;
-- `bpmnTemplate` is locked to `processes/<name>.bpmn20.xml` (no `..` traversal);
-- hooks may only target a block id or `webhook_out:<event>`; every `ui`
-  reference must resolve (entity/report view/block).
+### 2. Knowledge Projection (Records → AI Assistant)
 
-### 2. Lifecycle: install → use → uninstall
+Allows the AI assistant to answer questions about business records **with verified citations** without modifying retrieval internals or using Text-to-SQL:
+- Opted-in entities declare `knowledge: { "project": true, "titleField": "name", "fields": ["name", "stage"] }`.
+- Each record is projected into a synthetic Markdown document (`bizapp_<kind>_<entity>_<recordId>.md`) indexed through Qdrant vector search and Kuzu knowledge graphs.
+- **Fail-closed rule:** Projection is rejected unless `rbac.read` includes all workspace roles (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`). Fields marked `pii: true` are never projected.
+- **Digest Document:** `bizapp_<kind>__digest.md` automatically compiles declared report views into aggregated Markdown tables for cited quantitative queries.
 
-| Action | Route (`ORG_OWNER` only) |
-| --- | --- |
-| Browse (platform + org templates) | `GET /api/v1/marketplace/bizapps` |
-| Install (`{"templateRef":"platform:crm"}`) | `POST /api/v1/apps/install` |
-| Uninstall (soft; records kept) | `DELETE /api/v1/apps/{kind}` |
-| Inspect app + frozen manifest | `GET /api/v1/bizapps` · `GET /api/v1/bizapps/{kind}` |
-| Replace org-level app config | `PATCH /api/v1/bizapps/{kind}/config` |
-| Save a running app as an org template | `POST /api/v1/marketplace/bizapps` |
-| Delete an org template | `DELETE /api/v1/marketplace/bizapps/{id}` |
+### 3. Visual Composer
 
-Installation: the validator gates first → the manifest is **frozen** onto
-`bizapp_installations` (later template edits never mutate a running app;
-upgrades are explicit re-installs) → when the app declares an
-`approval_workitem` block, `processes/bizapp-single-approval.bpmn20.xml` is
-**deployed through `WorkflowRuntimeApi`** as `bizapp-<kind>` → audit
-`BIZAPP_APP_INSTALLED`. Uninstall flips `status=DISABLED`: records and audit
-history survive.
+- Low-code editor available at `(admin)/admin/apps/compose`:
+  - **Visual Canvas:** Built with `@xyflow/react` and automated `@dagrejs/dagre` graph layouts, rendering `NodeEntity` and `NodeBlock`.
+  - **List View:** Full keyboard navigation and accessibility-first representation (verified by `@axe-core/playwright`).
+  - **JSON Tab:** Direct inspection and editing of canonical `bizapp.v1` JSON.
+  - **Validation Panel:** Debounced real-time validation via `POST /api/v1/bizapps/validate`.
 
-### 3. The record store
+### 4. AI Manifest Drafting
 
-One shared table, `bizapp_records` (JSONB `payload` + `runtime`), serves every
-app, paged per workspace + app + entity:
+- Endpoint: `POST /api/v1/bizapps/drafts/generate` (`ORG_OWNER` only, rate-limited, kill-switch `app.bizapps.ai-drafting.enabled`).
+- Stored as untrusted drafts in `bizapp_drafts` (Flyway V14); installation re-validates the manifest from scratch.
+- Governed by prompt isolation rules and evaluated against 20 benchmark prompts in `contracts/bizapp/eval/drafting-prompts.jsonl`.
 
-| Action | Route |
-| --- | --- |
-| List records | `GET /api/v1/bizapp-data/{kind}/{entity}?includeArchived=&page=&size=` |
-| Create / read / patch a record | `POST` / `GET` / `PATCH /api/v1/bizapp-data/{kind}/{entity}[/{recordId}]` |
-| Archive a record | `DELETE /api/v1/bizapp-data/{kind}/{entity}/{recordId}` |
-| Run a report view | `POST /api/v1/bizapps/{kind}/reports/{viewName}` (admins) |
-| Submit a record for approval | `POST /api/v1/bizapp-data/{kind}/{entity}/{recordId}/submit` |
+### 5. Template Exchange (Export / Import / Remix)
 
-- **Payloads are strictly validated**: unknown fields, missing required fields,
-  or malformed `email`/`date`/`enum` values return 400.
-- **`runtime`** (never user data) holds `processId`, `approvalStatus`
-  (`PENDING → APPROVED | REJECTED`) and the latest decision.
-- **RBAC**: every write re-checks the manifest schema plus the workspace role,
-  re-resolved per request — the client is never trusted.
+Templates travel inside the standard `openvie.template.v1` envelope (`contracts/bizapp/openvie.template.v1.schema.json`):
+```json
+{
+  "envelope": "openvie.template.v1",
+  "meta": {
+    "author": "LinkedNodeDigital",
+    "license": "Apache-2.0",
+    "source": "bundled",
+    "sha256": "...",
+    "generator": "human",
+    "changes": []
+  },
+  "manifest": { ... }
+}
+```
+- `GET /api/v1/marketplace/bizapps/{id}/export`: Download envelope JSON.
+- `POST /api/v1/marketplace/bizapps/import`: Import via file or remote catalog URL, validating SHA-256 and SPDX license allow-lists (draft-only, never auto-installs).
+- `POST /api/v1/marketplace/bizapps/{id}/remix`: Fork into a new draft, retaining upstream attribution and appending a change entry to `changes[]`.
+- `GET /api/v1/marketplace/catalog`: Fetch catalog index entries from allow-listed hosts.
 
-### 4. Approvals through the Flowable engine
+### 6. SSRF-Safe Outbound HTTP & e-Signature Recipe
 
-An app with an `approval_workitem` block gains a "Submit for approval" action:
-`submit` starts the deployed process (candidate group from `candidateRole`).
-Reviewers claim/complete through the **generic engine inbox**
-`/api/v1/workflow/engine/tasks` (`decision = APPROVE|REJECT`, `decidedBy`). At
-the process end the `bizAppRecordDecisionDelegate` writes the decision into
-`runtime` in the same transaction and raises `bizapp.<kind>.record.decided`
-into the webhook outbox after commit (fully separate from the document flow —
-BizApp tasks are explicitly *not* flagged as the document approval domain, so
-they stay completable on the generic surface).
+The `external_call` block features strict SSRF defense:
+- HTTPS only (unless development override `app.bizapps.outbound.allow-http=true` is set).
+- Host must exist in installation `allowedHosts` config.
+- DNS resolution checks reject loopback, RFC 1918 private IPs, link-local, and cloud metadata addresses (`169.254.169.254`).
+- Redirects disabled; response body capped at 256 KiB; URLs sanitized in logs.
+- Idempotency header: `X-Idempotency-Key: <recordId>:<blockId>:<version>`.
+- Parameter extraction via `responseMap` stored in `runtime.external.<blockId>`.
 
-### 5. The credential vault
+### 7. Legal Boundaries
 
-Outbound HTTP needing secrets: the organization creates entries via
-`POST /api/v1/bizapp-credentials` (`format = api_key | bearer | basic`), stored
-**AES-256-GCM**-encrypted under `BIZAPP_ENC_KEY` (generate with
-`openssl rand -base64 32`; required when stored secrets are used; feature
-kill-switch `BIZAPPS_ENABLED`), listings show metadata only, and
-`external_call` decrypts just-in-time to attach a header. Secrets are never
-logged. `BIZAPPS_ENABLED=false` turns the whole `/api/v1/bizapp*` surface 404.
+> **Legal Disclaimer:**
+> OpenVie is an open-source software platform. OpenVie does **not** create, hold private signing keys for, or verify digital signatures; it delegates outbound requests through `external_call` to an external signing service contracted and configured by the operator.
+> The legal validity and enforceability of signatures depend entirely on that external provider and applicable electronic transaction laws in the relevant jurisdiction. Operators must obtain their own legal advice.
 
-### 6. Webhooks and audit
+### 8. Explicit Non-Goals
 
-Every lifecycle step goes through the Spring event `BizAppLifecycleEvent` →
-`BizAppWebhookBridge` (AFTER_COMMIT) → the same durable outbox as workflow
-webhooks: HMAC-SHA256 envelope, retry with backoff, per-endpoint event
-filtering (`acceptsEventType`). Event kinds:
-`bizapp.<kind>.record.created|updated|archived|submitted|decided`.
-Audit actions: `BIZAPP_APP_INSTALLED/UNINSTALLED`,
-`BIZAPP_TEMPLATE_SAVED/DELETED`,
-`BIZAPP_RECORD_CREATED/UPDATED/ARCHIVED/SUBMITTED/DECIDED`,
-`BIZAPP_CREDENTIAL_CREATED/DELETED`.
-
-### 7. Module architecture
-
-`bizapp` is an ArchUnit business module: it talks to
-`workflow`/`notification`/`tenant` only through published `*Api` boundaries
-(`WorkflowRuntimeApi`, `NotificationRuntimeApi`, `TenantIdentityApi`), shares
-`common/` for events, and keeps JDBC inside the `bizapp/query` package.
-Bundled platform templates (loaded from the classpath) are double-gated: the
-Java test `BizAppBundledTemplatesTest` plus the CI `marketplace-validate` job
-(`scripts/marketplace_validate.py`).
+- No in-process digital signature creation or key custody.
+- No vendor-specific inbound callback endpoints (status write-back occurs via standard `PATCH /api/v1/bizapp-data/{kind}/{entity}/{id}` using `ovk_...` API keys).
+- No dynamic DDL execution generated from user manifests (typed storage is platform-bundled only).
+- No Text-to-SQL or LLM-generated database queries.
+- No detached cryptographic signature verification for remote templates (pinned via SHA-256 hashes in v1.0.0).

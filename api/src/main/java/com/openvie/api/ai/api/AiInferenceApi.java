@@ -114,4 +114,22 @@ public interface AiInferenceApi {
             @JsonProperty("source_end") Integer sourceEnd
     ) {
     }
+
+    record StructuredJsonRequest(
+            String prompt,
+            String systemPrompt,
+            String jsonSchema,
+            String modelId,
+            Float temperature,
+            Integer maxTokens
+    ) {}
+
+    record StructuredJsonResponse(
+            String jsonOutput,
+            String modelId,
+            int promptTokens,
+            int completionTokens
+    ) {}
+
+    StructuredJsonResponse completeJson(StructuredJsonRequest request);
 }

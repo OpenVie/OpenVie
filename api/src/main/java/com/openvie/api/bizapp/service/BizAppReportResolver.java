@@ -14,6 +14,8 @@
 
 package com.openvie.api.bizapp.service;
 
+import com.openvie.api.bizapp.dto.BizAppManifest.Entity;
+import com.openvie.api.bizapp.query.BizAppReportCompiler;
 import com.openvie.api.bizapp.query.BizAppRecordViewQuery;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
@@ -26,9 +28,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Runs one declared manifest report view. SQL is SELECT-only by validator
- * contract; binds are limited to {@code :tenant}, {@code :app}, and any named
- * params the view declared in its manifest.
+ * Resolves and executes a declared manifest report view via BizAppReportCompiler.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,13 +36,16 @@ public class BizAppReportResolver {
 
     private final BizAppInstallService installService;
     private final BizAppManifestParser parser;
+    private final BizAppReportCompiler compiler;
     private final BizAppRecordViewQuery query;
+    private final com.openvie.api.document.api.AnalyticsRuntimeApi analyticsRuntimeApi;
+    private final com.openvie.api.bizapp.service.storage.BizAppStorageRouter storageRouter;
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> run(UUID tenantId, String appKind, String viewName,
             Map<String, Object> params) {
-        var installation = installService.getInstalled(tenantId, appKind);
-        var manifest = parser.parse(installation.manifest());
+        var installation = installService.getInstallationEntity(tenantId, appKind);
+        var manifest = parser.parse(installation.getManifest());
         var block = manifest.blocks() == null ? null : manifest.blocks().stream()
                 .filter(candidate -> "report".equals(candidate.type()))
                 .filter(candidate -> candidate.params() != null
@@ -51,9 +54,37 @@ public class BizAppReportResolver {
                                 && viewName.equals(row.get("name"))))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("View " + viewName + " not found"));
-        for (Object view : (List<?>) block.params().get("views")) {
-            if (view instanceof Map<?, ?> row && viewName.equals(row.get("name"))) {
-                return query.run(tenantId, appKind, String.valueOf(row.get("sql")), safeParams(params));
+
+        for (Object viewObj : (List<?>) block.params().get("views")) {
+            if (viewObj instanceof Map<?, ?> row && viewName.equals(row.get("name"))) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> viewSpec = (Map<String, Object>) row;
+                String entityName = String.valueOf(viewSpec.get("entity"));
+                Entity entityDef = manifest.entities() == null ? null : manifest.entities().stream()
+                        .filter(e -> entityName.equals(e.name()))
+                        .findFirst()
+                        .orElseThrow(() -> new BadRequestException("Entity " + entityName + " not found"));
+
+                boolean isTyped = storageRouter.isTyped(appKind, entityName);
+                String typedTableName = storageRouter.getTableName(appKind, entityName);
+
+                boolean isLakehouse = "lakehouse".equalsIgnoreCase(String.valueOf(viewSpec.get("engine")));
+                var compiled = compiler.compile(
+                        isLakehouse ? BizAppReportCompiler.Dialect.DUCKDB : BizAppReportCompiler.Dialect.POSTGRES,
+                        installation.getOrgId(),
+                        tenantId,
+                        appKind,
+                        entityDef,
+                        viewSpec,
+                        safeParams(params),
+                        isTyped,
+                        typedTableName
+                );
+
+                if (isLakehouse) {
+                    return analyticsRuntimeApi.queryLakehouse(tenantId, "bizapp_records", compiled.sql(), compiled.params());
+                }
+                return query.run(compiled.sql(), compiled.params());
             }
         }
         throw new BadRequestException("View " + viewName + " not found");
@@ -64,7 +95,7 @@ public class BizAppReportResolver {
             return Map.of();
         }
         params.forEach((key, value) -> {
-            if (key != null && (key.equals("tenant") || key.equals("app"))) {
+            if (key != null && (key.equals("orgId") || key.equals("tenantId") || key.equals("appKind") || key.equals("entityName"))) {
                 throw new BadRequestException("Bind param " + key + " is system-reserved");
             }
         });

@@ -66,6 +66,9 @@ public class BizAppCredentialService {
         String plaintext = "basic".equals(format)
                 ? request.user() + ":" + request.secret()
                 : request.secret();
+        if (plaintext != null && plaintext.contains("-----BEGIN") && plaintext.contains("PRIVATE KEY-----")) {
+            throw new BadRequestException("Private keys (PEM blocks) cannot be stored in vault; signing keys are never custodied");
+        }
         credential.setEncryptedData(cipher.encrypt(plaintext));
         credential.setCreatedBy(actorId);
         BizAppCredential saved = repository.save(credential);

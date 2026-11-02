@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-02
+
+### Added
+- **Full DX-OS 3-Tier Completion & BizApp Platform GA (Tier 3)**:
+  - **Frozen `bizapp.v1` Canonical Schema**: Replaced unreleased draft report SQL with declarative, parameter-bound report views (`groupBy`, `metrics`, `filters`, `orderBy`, `limit`, `engine`). Eliminated raw SQL injection and cross-tenant leakage vectors.
+  - **Hybrid Storage Architecture (Workstream T)**: Implemented `BizAppStorageRouter` providing clean storage routing between dedicated typed tables (`bizapp_crm_leads`, `bizapp_booking_appointments` via Flyway V16/V17) for platform flagship templates and the generic JSONB store (`bizapp_records`) for org-custom applications.
+  - **Knowledge Projection (Workstream D)**: Projected business records and aggregate data digest documents (`bizapp/<kind>/_digest.md`) into the workspace knowledge base, allowing the AI assistant to answer CRM and booking questions with verified source citations. Enforced fail-closed access control requiring `rbac.read` to cover all workspace roles, with strict exclusion of PII and credentials.
+  - **Low-Code Visual Composer (Workstream B)**: Built an intuitive visual authoring canvas at `/admin/apps/compose` using `@xyflow/react` and `@dagrejs/dagre` automated graph layout, featuring custom entity and block nodes, component palette, property inspector with vault integration, and an accessible keyboard-first list view.
+  - **AI Manifest Drafting (Workstream A)**: Introduced `POST /api/v1/bizapps/drafts/generate` powered by a dedicated `CompleteJson` gRPC RPC in `proto/openvie_ai_v1.proto`, prompt isolation, and automated self-repair loop. Drafts are safely persisted in `bizapp_drafts` (Flyway V14) without auto-installation.
+  - **Template Exchange & Provenance (Workstream F)**: Standardized on the `openvie.template.v1` envelope for bundled, custom, and imported templates. Supports envelope export, safe import, remixing with retained upstream attribution, and remote catalog index discovery.
+  - **SSRF-Hardened Outbound HTTP (Workstream S)**: Built `SafeOutboundHttp` enforcing HTTPS, installation `allowedHosts` allow-listing, pre-connection DNS SSRF checks rejecting loopback, private RFC 1918, link-local, and cloud metadata addresses (169.254.169.254), disabled redirects, and 256 KiB response caps.
+  - **e-Signature Delegation Recipe (Workstream E)**: Added bundled `signature-request.json` recipe template utilizing `external_call` with idempotency headers (`X-Idempotency-Key`) and response mapping (`responseMap`) without key custody or legal liability.
+  - **BPMN Approval SLA Timers (Workstream K)**: Extended `bizapp-single-approval.bpmn20.xml` with reminder (PT24H) and escalation (PT48H) boundary timer events.
+  - **Lakehouse CDC for BizApp Records (Workstream K)**: Integrated `bizapp_records` into Lakehouse CDC streaming via RabbitMQ and DuckDB OLAP aggregate analytics.
+  - **Apache-2.0 & Supply-Chain Compliance (Workstream L)**: Extended license header coverage across all migrations, BPMN XML, workflows, Dockerfiles, and scripts; added automated dependency license check scripts and CI gates (`dependency-licenses`, `artifact-license`); verified `NOTICE` accuracy and packaged `LICENSE` and `NOTICE` inside all distributable artifacts.
+  - **Unified 1.0.0 Versioning**: Aligned API, frontend, and Python microservices to `1.0.0`.
 ## [0.3.2] - 2026-10-24
 
 ### Added

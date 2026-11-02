@@ -21,6 +21,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -55,9 +56,70 @@ public final class BizAppDtos {
     @Schema(description = "Install a BizApp from a template id or an inline manifest.")
     public record InstallRequest(
             @Schema(description = "Template to install; `platform:<kind>` or an organization template UUID.") String templateRef,
-            Map<String, Object> manifest
+            Map<String, Object> manifest,
+            UUID draftId
     ) {
     }
+
+    public record GenerateDraftRequest(
+            @NotBlank String prompt,
+            String locale,
+            String baseTemplateRef
+    ) {}
+
+    public record ValidationResult(
+            boolean ok,
+            List<String> errors
+    ) {}
+
+    public record GenerateDraftResponse(
+            UUID draftId,
+            Map<String, Object> manifest,
+            ValidationResult validation,
+            Map<String, Object> meta
+    ) {}
+
+    public record ValidateManifestRequest(
+            @NotNull Map<String, Object> manifest
+    ) {}
+
+    public record SaveDraftRequest(
+            UUID id,
+            String title,
+            String source,
+            @NotNull Map<String, Object> manifest,
+            Map<String, Object> meta
+    ) {}
+
+    public record DraftView(
+            UUID id,
+            String title,
+            String source,
+            Map<String, Object> manifest,
+            Map<String, Object> validation,
+            Map<String, Object> meta,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {}
+
+    public record ImportTemplateRequest(
+            String content,
+            String url,
+            String sha256
+    ) {}
+
+    public record RemixRequest(
+            String summary
+    ) {}
+
+    public record CatalogEntryView(
+            String id,
+            String name,
+            int version,
+            String license,
+            String url,
+            String sha256
+    ) {}
 
     @Schema(description = "One installed app as the mobile/web runtime sees it.")
     public record InstalledAppView(

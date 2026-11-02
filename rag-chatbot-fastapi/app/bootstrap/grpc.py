@@ -69,6 +69,11 @@ class InferenceGrpcService(pb_grpc.InferenceServiceServicer):
     ) -> pb.DeleteDocumentIndexResponse:
         return await self._ingestion.delete_document_index(request, context)
 
+    async def CompleteJson(
+        self, request: pb.CompleteJsonRequest, context: grpc.aio.ServicerContext
+    ) -> pb.CompleteJsonResponse:
+        return await self._generation.complete_json(request, context)
+
 
 def create_grpc_service(
     settings: Settings, runtime: RagRuntime, redis_client: Redis

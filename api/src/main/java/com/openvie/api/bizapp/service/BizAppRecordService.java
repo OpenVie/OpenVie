@@ -64,7 +64,7 @@ public class BizAppRecordService {
     private final BizAppBlockRegistry blockRegistry;
     private final BizAppRuntime runtime;
     private final WebhookOutBlock webhookOutBlock;
-
+    private final com.openvie.api.bizapp.service.storage.BizAppStorageRouter storageRouter;
     // ------------------------------------------------------------------ read
 
     @Transactional(readOnly = true)
@@ -80,11 +80,8 @@ public class BizAppRecordService {
         installationOf(tenantId, appKind);
         ensureEntity(installationOf(tenantId, appKind), appKind, entity);
         int safeSize = Math.min(Math.max(size, 1), 100);
-        Page<BizAppRecord> rows = includeArchived
-                ? recordRepository.findByTenantIdAndAppKindAndEntityOrderByUpdatedAtDesc(
-                        tenantId, appKind, entity, PageRequest.of(Math.max(page, 0), safeSize))
-                : recordRepository.findByTenantIdAndAppKindAndEntityAndStatusOrderByUpdatedAtDesc(
-                        tenantId, appKind, entity, "ACTIVE", PageRequest.of(Math.max(page, 0), safeSize));
+        Page<BizAppRecord> rows = storageRouter.route(appKind, entity)
+                .list(tenantId, appKind, entity, includeArchived, PageRequest.of(Math.max(page, 0), safeSize));
         Manifest manifest = manifestParser.parse(installationOf(tenantId, appKind).getManifest());
         return rows.map(row -> toView(row, manifest));
     }
@@ -107,7 +104,7 @@ public class BizAppRecordService {
         record.setStatus("ACTIVE");
         record.setCreatedBy(userId);
         record.setRuntime(Map.of());
-        BizAppRecord saved = recordRepository.save(record);
+        BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
 
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_CREATED, "bizapp_record", saved.getId(),
                 Map.of("app", appKind, "entity", entity));
@@ -135,7 +132,7 @@ public class BizAppRecordService {
         record.setPayload(merged);
         record.setRuntime(withDecisionReset(record));
         record.setUpdatedBy(userId);
-        BizAppRecord saved = recordRepository.save(record);
+        BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
 
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_UPDATED, "bizapp_record", saved.getId(),
                 Map.of("app", appKind, "entity", entity, "fields", clean.keySet()));
@@ -152,7 +149,7 @@ public class BizAppRecordService {
         BizAppRecord record = resolveForWrite(tenantId, appKind, entity, recordId);
         record.setStatus("ARCHIVED");
         record.setUpdatedBy(userId);
-        BizAppRecord saved = recordRepository.save(record);
+        BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_ARCHIVED, "bizapp_record", recordId,
                 Map.of("app", appKind, "entity", entity));
         return toView(saved, manifestParser.parse(installation.getManifest()));
@@ -194,7 +191,7 @@ public class BizAppRecordService {
             record.setRuntime(runtimeState);
         });
         record.setUpdatedBy(userId);
-        BizAppRecord saved = recordRepository.save(record);
+        BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_SUBMITTED, "bizapp_record", recordId,
                 Map.of("app", appKind, "entity", entity, "process", installation.getProcessKey()));
         lifecycleWebhook(tenantId, installation, manifest, saved, "record.submitted",
@@ -211,9 +208,7 @@ public class BizAppRecordService {
     @Transactional
     public void applyEngineDecision(UUID recordId, String appKind,
             Map<String, Object> decisionState, Map<String, Object> eventData) {
-        BizAppRecord record = recordRepository.findById(recordId)
-                .filter(row -> appKind.equals(row.getAppKind()) && "ACTIVE".equals(row.getStatus()))
-                .orElse(null);
+        BizAppRecord record = findAny(recordId, appKind);
         if (record == null) {
             log.warn("Engine decision for missing/foreign record {} (app {})", recordId, appKind);
             return;
@@ -223,7 +218,7 @@ public class BizAppRecordService {
         runtimeState.put("approvalStatus", "APPROVE".equals(decisionState.get("decision")) ? "APPROVED" : "REJECTED");
         runtimeState.put("decision", decisionState);
         record.setRuntime(runtimeState);
-        recordRepository.save(record);
+        storageRouter.route(record.getAppKind(), record.getEntity()).save(record);
 
         runtime.audit(record.getTenantId(), record.getCreatedBy(), LogAction.BIZAPP_RECORD_DECIDED,
                 "bizapp_record", recordId, Map.of("app", appKind, "decision", decisionState.get("decision")));
@@ -269,9 +264,16 @@ public class BizAppRecordService {
                         if ("approval_workitem".equals(block.type())) {
                             return;
                         }
-                        blockRegistry.executor(block.type()).ifPresent(executor ->
-                                executor.execute(new BlockSpec(block.id(), block.params()),
-                                        contextFor(installation, manifest, record, actorId)));
+                        blockRegistry.executor(block.type()).ifPresent(executor -> {
+                            var result = executor.execute(new BlockSpec(block.id(), block.params()),
+                                    contextFor(installation, manifest, record, actorId));
+                            if (result != null && result.runtimeUpdates() != null && !result.runtimeUpdates().isEmpty()) {
+                                Map<String, Object> r = new LinkedHashMap<>(record.getRuntime() == null ? Map.of() : record.getRuntime());
+                                r.putAll(result.runtimeUpdates());
+                                record.setRuntime(r);
+                                storageRouter.route(record.getAppKind(), record.getEntity()).save(record);
+                            }
+                        });
                     });
                 }
             } catch (Exception exception) {
@@ -302,21 +304,46 @@ public class BizAppRecordService {
                 record.getEntity(),
                 record.getId(),
                 record.getPayload(),
-                installation.getProcessKey());
+                installation.getProcessKey(),
+                installation.getConfig() != null ? installation.getConfig() : Map.of(),
+                installation.getVersion());
     }
 
     private BizAppRecord resolve(UUID tenantId, String appKind, UUID recordId) {
-        return recordRepository.findById(recordId)
-                .filter(row -> row.getTenantId().equals(tenantId) && row.getAppKind().equals(appKind))
+        var installation = installationOf(tenantId, appKind);
+        Manifest manifest = manifestParser.parse(installation.getManifest());
+        if (manifest.entities() != null) {
+            for (var e : manifest.entities()) {
+                if (storageRouter.isTyped(appKind, e.name())) {
+                    var found = storageRouter.route(appKind, e.name()).findById(tenantId, appKind, recordId);
+                    if (found.isPresent()) {
+                        return found.get();
+                    }
+                }
+            }
+        }
+        return storageRouter.route(appKind, "").findById(tenantId, appKind, recordId)
                 .orElseThrow(() -> new ResourceNotFoundException("Record not found in this app"));
     }
 
     private BizAppRecord resolveForWrite(UUID tenantId, String appKind, String entity, UUID recordId) {
-        BizAppRecord record = resolve(tenantId, appKind, recordId);
-        if (!entity.equals(record.getEntity())) {
-            throw new ResourceNotFoundException("Record does not belong to this entity");
+        return storageRouter.route(appKind, entity).findById(tenantId, appKind, recordId)
+                .filter(record -> entity.equals(record.getEntity()))
+                .orElseThrow(() -> new ResourceNotFoundException("Record not found in this app"));
+    }
+
+    private BizAppRecord findAny(UUID recordId, String appKind) {
+        if ("crm".equalsIgnoreCase(appKind)) {
+            var crmLead = storageRouter.route("crm", "leads").findById(null, "crm", recordId);
+            if (crmLead.isPresent()) return crmLead.get();
         }
-        return record;
+        if ("booking".equalsIgnoreCase(appKind)) {
+            var bAppt = storageRouter.route("booking", "bookings").findById(null, "booking", recordId);
+            if (bAppt.isPresent()) return bAppt.get();
+        }
+        return recordRepository.findById(recordId)
+                .filter(row -> appKind.equals(row.getAppKind()) && "ACTIVE".equals(row.getStatus()))
+                .orElse(null);
     }
 
     private BizAppInstallation installationOf(UUID tenantId, String appKind) {

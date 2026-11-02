@@ -73,4 +73,8 @@ public interface DocumentApi {
      *             when the document does not exist in the workspace
      */
     void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy);
+
+    UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent);
+
+    void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName);
 }

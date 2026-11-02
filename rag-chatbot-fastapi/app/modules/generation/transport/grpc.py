@@ -111,6 +111,44 @@ class GenerationGrpcHandler:
             with suppress(asyncio.CancelledError):
                 await producer
 
+    async def complete_json(
+        self, request: pb.CompleteJsonRequest, context: grpc.aio.ServicerContext
+    ) -> pb.CompleteJsonResponse:
+        messages = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.append({"role": "user", "content": request.prompt})
+
+        max_tokens = request.max_tokens if request.max_tokens > 0 else 2048
+        temperature = request.temperature if request.temperature > 0 else 0.2
+
+        output = "{}"
+        gen = self._generation
+        model = getattr(gen, "model", None) or getattr(gen, "_model", None)
+        if model and hasattr(model, "complete_text"):
+            try:
+                output = await model.complete_text(
+                    messages, max_output_tokens=max_tokens, temperature=temperature
+                )
+            except Exception as exc:
+                logger.warning("CompleteJson model invocation failed: %s", exc)
+                output = "{}"
+
+        cleaned = output.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[len("```json"):].strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:].strip()
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+
+        return pb.CompleteJsonResponse(
+            json_output=cleaned,
+            model_id=request.model_id or "default",
+            prompt_tokens=len(request.prompt) // 4,
+            completion_tokens=len(cleaned) // 4,
+        )
+
 
 def _context(request: pb.GenerateAnswerRequest) -> GenerationContext:
     return GenerationContext(

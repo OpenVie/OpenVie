@@ -26,7 +26,7 @@
     "settings": "Cài đặt",
     "organization": "Tổ chức",
     "apps": "Ứng dụng",
-    "marketplace": "Thị trường",
+    "marketplace": "Kho ứng dụng",
     "changePassword": "Đổi mật khẩu",
     "adminOnly": "Chỉ chủ sở hữu tổ chức mới mở được khu vực này."
   },
@@ -43,23 +43,50 @@
     "workspaces": "Không gian làm việc",
     "settings": "Cài đặt",
     "apps": "Ứng dụng",
-    "marketplace": "Thị trường ứng dụng",
+    "marketplace": "Kho ứng dụng",
     "changePassword": "Đổi mật khẩu",
     "register": "Tạo tài khoản"
   },
     "BizApps": {
     "title": "Ứng dụng",
-    "subtitle": "Các ứng dụng kinh doanh cài từ thị trường, chạy ngay trên nền tảng.",
+    "subtitle": "Các ứng dụng kinh doanh cài từ kho ứng dụng, chạy ngay trên nền tảng.",
     "refresh": "Làm mới",
     "retry": "Thử lại",
     "loading": "Đang tải…",
-    "empty": "Chưa cài ứng dụng nào. Hãy nhờ chủ tổ chức cài từ thị trường.",
+    "empty": "Chưa cài ứng dụng nào. Hãy nhờ chủ tổ chức cài từ kho ứng dụng.",
     "cancel": "Hủy",
     "appCard": "{kind} · phiên bản {version}",
     "entitiesSuffix": "thực thể",
     "viewsNav": "Các khung xem của ứng dụng",
     "nav": {
-      "report": "Báo cáo: {view}"
+      "report": "Báo cáo: {view}",
+      "assistant": "Trợ lý AI"
+    },
+    "assistant": {
+      "welcome": "Đặt câu hỏi về bản ghi và quy trình trong ứng dụng này.",
+      "evidenceHint": "Câu trả lời trích dẫn tài liệu xác thực từ cơ sở tri thức của ứng dụng.",
+      "placeholder": "Hỏi câu hỏi…"
+    },
+    "composer": {
+      "title": "Trình thiết kế ứng dụng",
+      "canvasTab": "Canvas trực quan",
+      "listTab": "Dạng danh sách",
+      "jsonTab": "Trình sửa JSON",
+      "autoLayout": "Tự động sắp xếp",
+      "saveDraft": "Lưu bản nháp",
+      "saveTemplate": "Lưu làm template",
+      "install": "Cài đặt ứng dụng",
+      "paletteTitle": "Thêm thành phần",
+      "addEntity": "Thêm thực thể",
+      "addBlock": "Thêm khối",
+      "inspectorTitle": "Thuộc tính",
+      "noSelection": "Chọn một thực thể hoặc khối để cấu hình thuộc tính.",
+      "validationTitle": "Kiểm tra hợp lệ",
+      "valid": "Manifest hợp lệ",
+      "invalid": "Manifest có lỗi",
+      "saving": "Đang lưu…",
+      "saved": "Đã lưu bản nháp thành công.",
+      "installed": "Đã cài đặt ứng dụng thành công."
     },
     "unknownEntity": "Không tìm thấy thực thể “{entity}”.",
     "noViews": "Ứng dụng này không khai báo khung xem nào.",
@@ -104,9 +131,9 @@
       "empty": "Không có bản ghi nào gần đây."
     },
     "admin": {
-      "title": "Thị trường BizApp",
+      "title": "Kho ứng dụng BizApp",
       "subtitle": "Cài ứng dụng vào workspace này và quản lý template của tổ chức cùng kho thông tin xác thực.",
-      "templates": "Template trên thị trường",
+      "templates": "Template trên kho ứng dụng",
       "installed": "Ứng dụng đã cài",
       "credentials": "Kho thông tin xác thực",
       "emptyTemplates": "Chưa có template nào.",

@@ -49,6 +49,11 @@ class InferenceServiceStub(object):
                 request_serializer=openvie__ai__v1__pb2.DeleteDocumentIndexRequest.SerializeToString,
                 response_deserializer=openvie__ai__v1__pb2.DeleteDocumentIndexResponse.FromString,
                 _registered_method=True)
+        self.CompleteJson = channel.unary_unary(
+                '/openvie.ai.v1.InferenceService/CompleteJson',
+                request_serializer=openvie__ai__v1__pb2.CompleteJsonRequest.SerializeToString,
+                response_deserializer=openvie__ai__v1__pb2.CompleteJsonResponse.FromString,
+                _registered_method=True)
 
 
 class InferenceServiceServicer(object):
@@ -72,6 +77,12 @@ class InferenceServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CompleteJson(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InferenceServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +100,11 @@ def add_InferenceServiceServicer_to_server(servicer, server):
                     servicer.DeleteDocumentIndex,
                     request_deserializer=openvie__ai__v1__pb2.DeleteDocumentIndexRequest.FromString,
                     response_serializer=openvie__ai__v1__pb2.DeleteDocumentIndexResponse.SerializeToString,
+            ),
+            'CompleteJson': grpc.unary_unary_rpc_method_handler(
+                    servicer.CompleteJson,
+                    request_deserializer=openvie__ai__v1__pb2.CompleteJsonRequest.FromString,
+                    response_serializer=openvie__ai__v1__pb2.CompleteJsonResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +188,33 @@ class InferenceService(object):
             '/openvie.ai.v1.InferenceService/DeleteDocumentIndex',
             openvie__ai__v1__pb2.DeleteDocumentIndexRequest.SerializeToString,
             openvie__ai__v1__pb2.DeleteDocumentIndexResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CompleteJson(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/openvie.ai.v1.InferenceService/CompleteJson',
+            openvie__ai__v1__pb2.CompleteJsonRequest.SerializeToString,
+            openvie__ai__v1__pb2.CompleteJsonResponse.FromString,
             options,
             channel_credentials,
             insecure,

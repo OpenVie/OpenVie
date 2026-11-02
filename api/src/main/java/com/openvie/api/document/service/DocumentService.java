@@ -69,11 +69,14 @@ import com.openvie.api.document.model.Document;
 import com.openvie.api.document.repository.DocumentRepository;
 import com.openvie.api.common.storage.DocumentStorage;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
-
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
+import java.nio.charset.StandardCharsets;
+
 @Service
+@Slf4j(topic = "DOCUMENT")
 public class DocumentService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -954,5 +957,27 @@ public class DocumentService {
         } catch (NoSuchAlgorithmException e) {
             throw new InternalServerErrorException("SHA-256 algorithm not available", e);
         }
+    }
+
+    @Transactional
+    public UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String textContent) {
+        tenantWorkspaceApi.requireActiveKnowledgeBase(tenantId, knowledgeBaseId);
+        byte[] bytes = textContent.getBytes(StandardCharsets.UTF_8);
+        MultipartFile multipartFile = new ByteArrayMultipartFile(fileName, "text/markdown", bytes);
+        DocumentUploadResponse response = upload(tenantId, actorId, knowledgeBaseId, multipartFile);
+        return response.id();
+    }
+
+    @Transactional
+    public void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName) {
+        String safe = safeFileName(fileName);
+        documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(tenantId, knowledgeBaseId, safe)
+                .ifPresent(doc -> {
+                    try {
+                        delete(tenantId, doc.getUploadedBy(), true, doc.getId());
+                    } catch (Exception ex) {
+                        log.warn("Failed to delete projected document {}: {}", safe, ex.getMessage());
+                    }
+                });
     }
 }

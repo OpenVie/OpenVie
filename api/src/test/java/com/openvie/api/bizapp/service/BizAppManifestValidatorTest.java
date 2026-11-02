@@ -14,6 +14,7 @@
 
 package com.openvie.api.bizapp.service;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -60,8 +61,9 @@ class BizAppManifestValidatorTest {
     private static Block reportBlock() {
         Map<String, Object> view = new HashMap<>();
         view.put("name", "pipeline");
-        view.put("sql", "SELECT payload ->> 'name' AS name FROM bizapp_records "
-                + "WHERE tenant_id = :tenant AND app_kind = :app AND status = 'ACTIVE'");
+        view.put("entity", "leads");
+        view.put("groupBy", List.of("stage"));
+        view.put("metrics", List.of(Map.of("fn", "count", "as", "leads_count")));
         Map<String, Object> params = new HashMap<>();
         params.put("views", List.of(view));
         return new Block("leadPipeline", "report", params);
@@ -116,30 +118,34 @@ class BizAppManifestValidatorTest {
     }
 
     @Test
-    void reportSqlMustBeSelectOnly() {
-        for (String badSql : List.of(
-                "UPDATE bizapp_records SET payload = 'x';",
-                "SELECT 1; DROP TABLE bizapp_records",
-                "SELECT * FROM bizapp_records WHERE tenant_id = :tenant AND app_kind = :app "
-                        + "UNION SELECT 1",
-                "TRUNCATE bizapp_records")) {
-            assertFalse(validator.isSelectOnly(badSql), badSql);
-        }
-        assertTrue(validator.isSelectOnly(
-                "SELECT count(*) AS n FROM bizapp_records WHERE tenant_id = :tenant"));
+    void rawSqlInReportViewMustBeRejected() {
+        Map<String, Object> view = new HashMap<>();
+        view.put("name", "legacy_view");
+        view.put("sql", "SELECT * FROM bizapp_records WHERE tenant_id = :tenant");
+        Map<String, Object> params = new HashMap<>();
+        params.put("views", List.of(view));
+        Block report = new Block("legacyReport", "report", params);
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(report), null)));
+        assertTrue(exception.getMessage().contains("free-form sql"), exception.getMessage());
     }
 
     @Test
-    void reportViewsCannotBindUnknownNamedParams() {
-        Map<String, Object> view = new HashMap<>();
-        view.put("name", "leak");
-        view.put("sql", "SELECT payload FROM bizapp_records WHERE org_id = :workspaceId");
-        Map<String, Object> params = new HashMap<>();
-        params.put("views", List.of(view));
-        Block report = new Block("leaky", "report", params);
-        BadRequestException exception = assertThrows(BadRequestException.class,
-                () -> validator.validate(crm(leads(), List.of(report), null)));
-        assertTrue(exception.getMessage().contains("read-only"));
+    void reportViewRequiresDeclaredEntityAndValidMetrics() {
+        Map<String, Object> badEntityView = new HashMap<>();
+        badEntityView.put("name", "bad_view");
+        badEntityView.put("entity", "nonexistent_entity");
+        Block report1 = new Block("badReport", "report", Map.of("views", List.of(badEntityView)));
+        assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(report1), null)));
+
+        Map<String, Object> validView = new HashMap<>();
+        validView.put("name", "pipeline_report");
+        validView.put("entity", "leads");
+        validView.put("groupBy", List.of("stage"));
+        validView.put("metrics", List.of(Map.of("fn", "count", "as", "leads_count")));
+        Block validReport = new Block("validReport", "report", Map.of("views", List.of(validView)));
+        assertDoesNotThrow(() -> validator.validate(crm(leads(), List.of(validReport), null)));
     }
 
     @Test

@@ -15,6 +15,7 @@
 package com.openvie.api.tenant.service.implement;
 
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import com.openvie.api.tenant.api.TenantKnowledgeApi;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
 import com.openvie.api.tenant.enums.ChatbotStatus;
 import com.openvie.api.tenant.enums.KnowledgeBaseStatus;
@@ -30,7 +31,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class TenantWorkspaceApiImpl implements TenantWorkspaceApi {
+public class TenantWorkspaceApiImpl implements TenantWorkspaceApi, TenantKnowledgeApi {
     private final TenantRepository tenantRepository;
     private final ChatbotRepository chatbotRepository;
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -65,6 +66,25 @@ public class TenantWorkspaceApiImpl implements TenantWorkspaceApi {
     @Override
     public void incrementSearchRevision(UUID tenantId, UUID knowledgeBaseId) {
         revisionService.increment(tenantId, knowledgeBaseId);
+    }
+
+    @Override
+    @Transactional
+    public UUID getOrCreateAppKnowledgeBase(UUID tenantId, String appKind, boolean graphExtraction) {
+        var tenant = activeTenant(tenantId);
+        String slug = "bizapp-" + appKind.toLowerCase(java.util.Locale.ROOT);
+        return knowledgeBaseRepository.findByTenantIdAndSlug(tenantId, slug)
+                .map(com.openvie.api.tenant.model.KnowledgeBase::getId)
+                .orElseGet(() -> {
+                    var kb = new com.openvie.api.tenant.model.KnowledgeBase();
+                    kb.setTenant(tenant);
+                    kb.setName("BizApp " + appKind);
+                    kb.setSlug(slug);
+                    kb.setDescription("Dedicated workspace knowledge base for BizApp " + appKind);
+                    kb.setDefaultLocale("vi-VN");
+                    kb.setStatus(KnowledgeBaseStatus.ACTIVE);
+                    return knowledgeBaseRepository.save(kb).getId();
+                });
     }
 
     private com.openvie.api.tenant.model.Tenant activeTenant(UUID tenantId) {

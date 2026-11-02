@@ -1,0 +1,42 @@
+OpenVie
+Copyright 2026 LinkedNodeDigital
+
+The OpenVie application source in this repository is licensed under the
+Apache License, Version 2.0 (see LICENSE), unless a file states otherwise.
+The Apache license does not grant rights to use the OpenVie name or logo
+as a trademark, except as needed to describe the origin of the software.
+
+## Third-party components
+
+Third-party packages, model weights, datasets, container images, and services
+are not relicensed by this notice. Preserve their original notices and check
+their terms before redistributing them. Components with noteworthy conditions:
+
+- pypdfium2 (Apache-2.0 OR BSD-3-Clause) bundles Google PDFium.
+- The optional document OCR path invokes Tesseract OCR with vie/eng
+  traineddata (Apache-2.0); it is disabled by default.
+- fastembed (Apache-2.0) embeds ONNX Runtime (MIT) and is used with the
+  MIT-licensed bge-m3 embedding weights.
+- Qdrant (Apache-2.0) serves dense, sparse (bm25), and hybrid retrieval.
+- Kuzu (MIT) stores the knowledge graph.
+- Redis is pinned to 7.2.x (BSD-3-Clause) on purpose: Redis 7.4+ is
+  RSALv2/SSPL, which is not an OSI-approved license.
+- Infrastructure services: PostgreSQL (PostgreSQL License), RabbitMQ
+  (MPL-2.0), SeaweedFS (Apache-2.0), Keycloak and APISIX (Apache-2.0).
+- The optional observability profile runs Grafana (AGPL-3.0) as an unmodified
+  standalone service accessed over the network; no Grafana code is linked
+  into OpenVie.
+- pdf.worker.min.mjs (frontend/public/pdf.worker.min.mjs) is vendored from
+  Mozilla PDF.js and distributed under the Apache License, Version 2.0.
+- sharp (frontend runtime dependency, Apache-2.0) bundles prebuilt libvips
+  binaries licensed under LGPL-3.0-or-later; Next.js image optimization utilizes
+  it dynamically.
+- H2 Database (com.h2database:h2, MPL-2.0 / EPL-1.0) is present only in test
+  scope for in-memory integration testing and is never packaged into production JARs.
+- AI model weights referenced in configuration (such as vylinh, bge-m3, or
+  models configured for AI manifest drafting) are third-party models with their
+  own upstream licenses and are not relicensed by OpenVie.
+- Remaining Python, Java, and frontend dependencies are permissive
+  (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, or CDDL-1.1/MPL-2.0
+  where unmodified) and listed in `rag-chatbot-fastapi/pyproject.toml`,
+  `api/pom.xml`, and `frontend/package.json`.

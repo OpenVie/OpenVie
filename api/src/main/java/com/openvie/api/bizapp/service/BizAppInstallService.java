@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -65,7 +66,8 @@ public class BizAppInstallService {
     public InstallResult install(UUID tenantId, UUID orgId, UUID actorId, Map<String, Object> rawManifest) {
         requireEnabled();
         Manifest parsed = parser.parse(rawManifest);
-        validator.validate(parsed);
+        boolean isPlatform = Set.of("crm", "booking", "signature-request").contains(parsed.kind());
+        validator.validate(parsed, isPlatform);
         if (installationRepository.existsByTenantIdAndKindAndStatus(tenantId, parsed.kind(), "ACTIVE")) {
             throw new ConflictException("App " + parsed.kind() + " is already installed");
         }
@@ -125,6 +127,14 @@ public class BizAppInstallService {
                 .findByTenantIdAndKindAndStatus(tenantId, kind, "ACTIVE")
                 .orElseThrow(() -> new ResourceNotFoundException("App " + kind + " is not installed"));
         return toView(installation, parser.parse(installation.getManifest()));
+    }
+
+    @Transactional(readOnly = true)
+    public BizAppInstallation getInstallationEntity(UUID tenantId, String kind) {
+        requireEnabled();
+        return installationRepository
+                .findByTenantIdAndKindAndStatus(tenantId, kind, "ACTIVE")
+                .orElseThrow(() -> new ResourceNotFoundException("App " + kind + " is not installed"));
     }
 
     private String deployApprovalDefinition(Manifest manifest, UUID tenantId, UUID actorId) {
