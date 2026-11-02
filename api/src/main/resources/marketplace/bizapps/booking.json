@@ -1,0 +1,72 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "booking",
+  "name": {
+    "vi": "Đặt lịch hẹn",
+    "en": "Booking"
+  },
+  "version": 1,
+  "icon": "calendar",
+  "rbac": {
+    "read": ["WORKSPACE_ADMIN", "MEMBER"],
+    "write": ["WORKSPACE_ADMIN", "MEMBER"]
+  },
+  "entities": [
+    {
+      "name": "bookings",
+      "label": { "vi": "Lịch hẹn", "en": "Bookings" },
+      "fields": [
+        { "name": "customerName", "type": "string", "required": true, "maxLen": 200, "label": { "vi": "Tên khách", "en": "Customer name" } },
+        { "name": "customerEmail", "type": "string", "format": "email", "required": true, "maxLen": 200 },
+        { "name": "service", "type": "enum", "required": true, "options": ["consultation", "tour", "meeting-room"] },
+        { "name": "bookingDate", "type": "date", "required": true },
+        { "name": "guests", "type": "number", "required": false },
+        { "name": "notes", "type": "string", "maxLen": 500 }
+      ],
+      "hooks": {
+        "onCreate": ["notifyCustomer"]
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "confirmBooking",
+      "type": "approval_workitem",
+      "params": {
+        "bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml",
+        "candidateRole": "WORKSPACE_ADMIN"
+      }
+    },
+    {
+      "id": "notifyCustomer",
+      "type": "notify",
+      "params": {
+        "to": ["creator"],
+        "title": "Đặt lịch hẹn đã được ghi nhận",
+        "subject": "OpenVie Booking — xác nhận đặt lịch"
+      }
+    },
+    {
+      "id": "pushBookingEvents",
+      "type": "webhook_out",
+      "params": {
+        "events": ["record.created", "record.submitted", "record.decided"]
+      }
+    },
+    {
+      "id": "bookingOverview",
+      "type": "report",
+      "params": {
+        "views": [
+          {
+            "name": "upcoming",
+            "sql": "SELECT payload ->> 'customerName' AS customer, payload ->> 'service' AS service, payload ->> 'bookingDate' AS booking_date, payload ->> 'guests' AS guests, created_at FROM bizapp_records WHERE tenant_id = :tenant AND app_kind = :app AND entity = 'bookings' AND status = 'ACTIVE' ORDER BY updated_at DESC"
+          }
+        ]
+      }
+    }
+  ],
+  "ui": {
+    "views": ["registry:bookings", "form:bookings", "report:upcoming"]
+  }
+}

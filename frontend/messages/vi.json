@@ -25,6 +25,8 @@
     "workspaces": "Không gian làm việc",
     "settings": "Cài đặt",
     "organization": "Tổ chức",
+    "apps": "Ứng dụng",
+    "marketplace": "Thị trường",
     "changePassword": "Đổi mật khẩu",
     "adminOnly": "Chỉ chủ sở hữu tổ chức mới mở được khu vực này."
   },
@@ -40,10 +42,107 @@
     "organization": "Tổ chức",
     "workspaces": "Không gian làm việc",
     "settings": "Cài đặt",
+    "apps": "Ứng dụng",
+    "marketplace": "Thị trường ứng dụng",
     "changePassword": "Đổi mật khẩu",
     "register": "Tạo tài khoản"
   },
-  "DocumentationShell": {
+    "BizApps": {
+    "title": "Ứng dụng",
+    "subtitle": "Các ứng dụng kinh doanh cài từ thị trường, chạy ngay trên nền tảng.",
+    "refresh": "Làm mới",
+    "retry": "Thử lại",
+    "loading": "Đang tải…",
+    "empty": "Chưa cài ứng dụng nào. Hãy nhờ chủ tổ chức cài từ thị trường.",
+    "cancel": "Hủy",
+    "appCard": "{kind} · phiên bản {version}",
+    "entitiesSuffix": "thực thể",
+    "viewsNav": "Các khung xem của ứng dụng",
+    "nav": {
+      "report": "Báo cáo: {view}"
+    },
+    "unknownEntity": "Không tìm thấy thực thể “{entity}”.",
+    "noViews": "Ứng dụng này không khai báo khung xem nào.",
+    "record": {
+      "create": "Thêm {entity}",
+      "createTitle": "Tạo bản ghi",
+      "editTitle": "Sửa bản ghi",
+      "empty": "Chưa có bản ghi {entity} nào.",
+      "updatedAt": "Cập nhật",
+      "actions": "Thao tác",
+      "edit": "Sửa",
+      "archive": "Lưu trỹ",
+      "submit": "Nộp duyệt",
+      "pick": "Chọn {field}",
+      "save": "Lưu",
+      "saved": "Đã lưu bản ghi.",
+      "archived": "Đã lưu trỹ bản ghi.",
+      "submitted": "Đã nộp bản ghi để phê duyệt."
+    },
+    "approval": {
+      "approved": "Đã duyệt",
+      "rejected": "Từ chối",
+      "pending": "Chờ duyệt"
+    },
+    "boolean": {
+      "true": "Có",
+      "false": "Không"
+    },
+    "fallback": {
+      "load": "Không tải được dự liệu. Vui lòng thử lại.",
+      "save": "Không lưu được bản ghi.",
+      "archive": "Không lưu trỹ được bản ghi.",
+      "submit": "Không nộp được bản ghi."
+    },
+    "report": {
+      "title": "Báo cáo: {view}",
+      "adminOnly": "Báo cáo chỉ hiển thị cho quản trị workspace.",
+      "empty": "Báo cáo không có dòng nào."
+    },
+    "timeline": {
+      "title": "Bản ghi gần đây",
+      "empty": "Không có bản ghi nào gần đây."
+    },
+    "admin": {
+      "title": "Thị trường BizApp",
+      "subtitle": "Cài ứng dụng vào workspace này và quản lý template của tổ chức cùng kho thông tin xác thực.",
+      "templates": "Template trên thị trường",
+      "installed": "Ứng dụng đã cài",
+      "credentials": "Kho thông tin xác thực",
+      "emptyTemplates": "Chưa có template nào.",
+      "emptyInstalled": "Chưa cài ứng dụng nào.",
+      "emptyCredentials": "Kho xác thực đang trống.",
+      "sourcePlatform": "Hệ thống",
+      "sourceOrg": "Tổ chức",
+      "install": "Cài đặt",
+      "installedBadge": "Đã cài",
+      "uninstall": "Gỡ cài",
+      "deleteTemplate": "Xóa template",
+      "open": "Mở",
+      "installSuccess": "Đã cài “{kind}”.",
+      "uninstallSuccess": "Đã gỡ “{kind}”. Bản ghi được giự lại.",
+      "templateDeleted": "Đã xóa template.",
+      "credentialCreated": "Đã lưu thông tin xác thực.",
+      "credentialDeleted": "Đã xóa thông tin xác thực.",
+      "addCredential": "Thêm xác thực",
+      "saveCredential": "Lưu thông tin xác thực",
+      "credentialName": "Tên",
+      "credentialFormat": "Định dạng",
+      "formatApiKey": "Khóa API",
+      "formatBearer": "Bearer token",
+      "formatBasic": "Basic (tên đăng nhập + bí mật)",
+      "credentialSecret": "Bí mật",
+      "credentialUser": "Tên đăng nhập",
+      "credentialHint": "Bí mật được mã hóa AES-256-GCM bằng khóa của nền tảng và không bao giờ hiển thị lại sau khi lưu.",
+      "confirmTitle": "Bạn chắc chắn chứ?",
+      "confirmDescription": "Thao tác này sẽ gỡ “{name}”. Bản ghi đã lưu trong workspace vẫn được giự.",
+      "confirmAction": "Gỡ bỏ",
+      "fallbackInstall": "Không cài được ứng dụng. Vui lòng thử lại.",
+      "fallbackDelete": "Không thực hiện được thao tác.",
+      "fallbackCredential": "Không lưu được thông tin xác thực."
+    }
+  },
+"DocumentationShell": {
     "docs": "Tài liệu",
     "documentation": "Tài liệu hướng dẫn",
     "navigation": "Điều hướng tài liệu",

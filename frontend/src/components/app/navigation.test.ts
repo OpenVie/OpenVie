@@ -38,9 +38,11 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/approvals",
+      "/apps",
       "/users",
       "/admin/organization",
       "/admin/workspaces",
+      "/admin/apps",
       "/admin/settings",
       "/documentation",
     ]);
@@ -51,6 +53,7 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/approvals",
+      "/apps",
       "/users",
       "/documentation",
     ]);
@@ -70,6 +73,7 @@ describe("application navigation", () => {
     expect(adminNavigation.map((item) => item.href).sort()).toEqual([...ADMIN_PATHS].sort());
     expect(isAdminPath("/admin/organization")).toBe(true);
     expect(isAdminPath("/admin/workspaces")).toBe(true);
+    expect(isAdminPath("/admin/apps")).toBe(true);
     expect(isAdminPath("/admin/settings")).toBe(true);
     expect(isAdminPath("/vi/admin/settings")).toBe(true);
     expect(isAdminPath("/organization")).toBe(false);

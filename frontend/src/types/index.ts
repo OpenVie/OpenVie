@@ -357,3 +357,106 @@ export interface PlaygroundSession {
   created_at: string;
   last_activity_at: string;
 }
+
+// ─── BizApps (Tier 3) ────────────────────────────────────────────────────────
+// Mirror of the wire records in com.openvie.api.bizapp.dto.BizAppDtos and the
+// bizapp.v1 manifest shape the backend validator enforces.
+
+export interface BizAppLocalized {
+  vi?: string | null;
+  en?: string | null;
+}
+
+export interface BizAppField {
+  name: string;
+  type: "string" | "number" | "boolean" | "enum" | "date";
+  required?: boolean;
+  maxLen?: number;
+  format?: string;
+  options?: string[];
+  label?: BizAppLocalized;
+}
+
+export interface BizAppEntity {
+  name: string;
+  label?: BizAppLocalized;
+  fields: BizAppField[];
+  hooks?: Record<string, string[]>;
+}
+
+export interface BizAppBlock {
+  id: string;
+  type: string;
+  params?: Record<string, unknown>;
+}
+
+export interface BizAppManifest {
+  schema: "bizapp.v1";
+  kind: string;
+  name: BizAppLocalized;
+  version?: number;
+  icon?: string;
+  rbac?: Record<string, string[]>;
+  entities: BizAppEntity[];
+  blocks?: BizAppBlock[];
+  ui?: { views: string[] };
+}
+
+export interface BizAppInstalledAppView {
+  kind: string;
+  version: number;
+  nameEn: string;
+  nameVi: string;
+  icon?: string | null;
+  status: "ACTIVE" | "DISABLED";
+  manifest: BizAppManifest;
+  config?: Record<string, unknown> | null;
+  processKey?: string | null;
+  installedAt: string;
+}
+
+export interface BizAppTemplateView {
+  /** Only for org (`source === "org"`) templates; platform entries are null. */
+  id?: string | null;
+  source: "platform" | "org";
+  kind: string;
+  name: string;
+  nameVi?: string | null;
+  summary?: string | null;
+  version: number;
+}
+
+export interface BizAppRecordView {
+  id: string;
+  appKind: string;
+  entity: string;
+  payload: Record<string, unknown>;
+  runtime?: Record<string, unknown> | null;
+  status: "ACTIVE" | "ARCHIVED";
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Spring Data page body as serialized by the API. */
+export interface BizAppRecordPage {
+  content: BizAppRecordView[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface BizAppCredentialView {
+  id: string;
+  name: string;
+  format: "api_key" | "bearer" | "basic";
+  createdAt: string;
+}
+
+export interface BizAppInstallResult {
+  installationId: string;
+  kind: string;
+  version: number;
+  processKey?: string | null;
+}

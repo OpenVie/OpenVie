@@ -20,6 +20,19 @@ jobs:
           python-version: "3.11"
       - run: python3 scripts/license_headers.py --check
 
+  marketplace-validate:
+    # Tier-3 guard: bundled marketplace manifests stay schema-valid bizapp.v1
+    # (independent of the authoritative Java BizAppManifestValidator, which the
+    # java job also enforces via BizAppBundledTemplatesTest).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python3 scripts/marketplace_validate.py
+
   java:
     runs-on: ubuntu-latest
     timeout-minutes: 30
