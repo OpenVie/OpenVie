@@ -58,6 +58,12 @@ app:
   webhooks:
     enabled: ${WEBHOOKS_ENABLED:true}
     dispatch-interval-ms: ${WEBHOOKS_DISPATCH_INTERVAL_MS:5000}
+  # Tier 3 BizApps: installable business apps (registry, marketplace, approval
+  # binding). The kill-switch turns every /api/v1/bizapp* route into 404
+  # without failing any domain transaction, removing the UI surface with it.
+  bizapps:
+    enabled: ${BIZAPPS_ENABLED:true}
+    encryption-key: ${BIZAPP_ENC_KEY:}
   security:
     trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:127.0.0.1/32,::1/128}
   # Optional caches; all default to off so a fresh install has no unverified

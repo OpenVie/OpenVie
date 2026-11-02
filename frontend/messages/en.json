@@ -25,6 +25,8 @@
     "workspaces": "Workspaces",
     "settings": "Settings",
     "organization": "Organization",
+    "apps": "Apps",
+    "marketplace": "Marketplace",
     "changePassword": "Change password",
     "adminOnly": "Only the organization owner can open this area."
   },
@@ -40,10 +42,107 @@
     "organization": "Organization",
     "workspaces": "Workspaces",
     "settings": "Settings",
+    "apps": "Apps",
+    "marketplace": "App Marketplace",
     "changePassword": "Change Password",
     "register": "Create Account"
   },
-  "DocumentationShell": {
+    "BizApps": {
+    "title": "Apps",
+    "subtitle": "Business apps installed from the marketplace, running on the platform.",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "loading": "Loading…",
+    "empty": "No apps installed yet. Ask the organization owner to install one from the marketplace.",
+    "cancel": "Cancel",
+    "appCard": "{kind} · version {version}",
+    "entitiesSuffix": "entities",
+    "viewsNav": "App views",
+    "nav": {
+      "report": "Report: {view}"
+    },
+    "unknownEntity": "Unknown entity “{entity}”.",
+    "noViews": "This app declares no runtime views.",
+    "record": {
+      "create": "New {entity}",
+      "createTitle": "Create record",
+      "editTitle": "Edit record",
+      "empty": "No {entity} records yet.",
+      "updatedAt": "Updated",
+      "actions": "Actions",
+      "edit": "Edit",
+      "archive": "Archive",
+      "submit": "Submit for approval",
+      "pick": "Select {field}",
+      "save": "Save",
+      "saved": "Record saved.",
+      "archived": "Record archived.",
+      "submitted": "Record submitted for approval."
+    },
+    "approval": {
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    },
+    "boolean": {
+      "true": "Yes",
+      "false": "No"
+    },
+    "fallback": {
+      "load": "Could not load data. Please try again.",
+      "save": "Could not save the record.",
+      "archive": "Could not archive the record.",
+      "submit": "Could not submit the record."
+    },
+    "report": {
+      "title": "Report: {view}",
+      "adminOnly": "Reports are visible to workspace admins only.",
+      "empty": "The report returned no rows."
+    },
+    "timeline": {
+      "title": "Recent records",
+      "empty": "No recent records."
+    },
+    "admin": {
+      "title": "BizApp marketplace",
+      "subtitle": "Install apps into this workspace and manage the organization's templates and the credential vault.",
+      "templates": "Marketplace templates",
+      "installed": "Installed apps",
+      "credentials": "Credential vault",
+      "emptyTemplates": "No templates available.",
+      "emptyInstalled": "No apps installed yet.",
+      "emptyCredentials": "The vault is empty.",
+      "sourcePlatform": "Platform",
+      "sourceOrg": "Organization",
+      "install": "Install",
+      "installedBadge": "Installed",
+      "uninstall": "Uninstall",
+      "deleteTemplate": "Delete template",
+      "open": "Open",
+      "installSuccess": "Installed “{kind}”.",
+      "uninstallSuccess": "Uninstalled “{kind}”. Records are kept.",
+      "templateDeleted": "Template deleted.",
+      "credentialCreated": "Credential stored.",
+      "credentialDeleted": "Credential deleted.",
+      "addCredential": "Add credential",
+      "saveCredential": "Store credential",
+      "credentialName": "Name",
+      "credentialFormat": "Format",
+      "formatApiKey": "API key",
+      "formatBearer": "Bearer token",
+      "formatBasic": "Basic (username + secret)",
+      "credentialSecret": "Secret",
+      "credentialUser": "Username",
+      "credentialHint": "Secrets are AES-256-GCM encrypted at rest with the platform key and are never shown again after saving.",
+      "confirmTitle": "Are you sure?",
+      "confirmDescription": "This will remove “{name}”. Records already stored in the workspace are kept.",
+      "confirmAction": "Remove",
+      "fallbackInstall": "Could not install the app. Please try again.",
+      "fallbackDelete": "Could not complete the action.",
+      "fallbackCredential": "Could not store the credential."
+    }
+  },
+"DocumentationShell": {
     "docs": "Docs",
     "documentation": "Documentation",
     "navigation": "Documentation navigation",

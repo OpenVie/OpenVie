@@ -70,7 +70,9 @@ curl -X POST "$BASE/api/v1/admin/webhook-endpoints" \
 ```
 
 - Sự kiện hiện có: `document.status.changed` (tiến độ hấp thụ), `workflow.started`,
-  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, và `webhook.test`.
+  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, `webhook.test`,
+  và họ `bizapp.<kind>.record.created|updated|archived|submitted|decided` từ nền tảng
+  BizApp (Tier 3 — xem [BIZAPPS.md](BIZAPPS.md)).
 - Body là envelope JSON: `{ "id", "type", "occurred_at", "workspace_id", "data" }`.
   `id` (`X-OpenVie-Event-Id`) ổn định cho một sự kiện → dùng làm khóa chống trùng phía nhận.
 - Chữ ký: header `X-OpenVie-Signature: t=<unix>,v1=<hex>` với
@@ -214,7 +216,9 @@ curl -X POST "$BASE/api/v1/admin/webhook-endpoints" \
 ```
 
 - Known events: `document.status.changed` (ingestion progress), `workflow.started`,
-  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, and `webhook.test`.
+  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, `webhook.test`,
+  and the `bizapp.<kind>.record.created|updated|archived|submitted|decided` family
+  from the BizApp platform (Tier 3 — see [BIZAPPS.md](BIZAPPS.md)).
 - The body is a JSON envelope: `{ "id", "type", "occurred_at", "workspace_id", "data" }`.
   `id` (`X-OpenVie-Event-Id`) is stable per event → use it as the receiver-side dedupe key.
 - Signature: header `X-OpenVie-Signature: t=<unix>,v1=<hex>` where

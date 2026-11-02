@@ -1,0 +1,57 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "crm",
+  "name": {
+    "vi": "CRM-lite",
+    "en": "CRM Lite"
+  },
+  "version": 1,
+  "icon": "briefcase",
+  "rbac": {
+    "read": ["WORKSPACE_ADMIN", "MEMBER"],
+    "write": ["WORKSPACE_ADMIN", "MEMBER"]
+  },
+  "entities": [
+    {
+      "name": "leads",
+      "label": { "vi": "Khách hàng tiềm năng", "en": "Leads" },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "maxLen": 200, "label": { "vi": "Tên khách hàng", "en": "Customer name" } },
+        { "name": "email", "type": "string", "format": "email", "maxLen": 200 },
+        { "name": "phone", "type": "string", "maxLen": 40 },
+        { "name": "stage", "type": "enum", "required": true, "options": ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST"] },
+        { "name": "dealValue", "type": "number", "required": false },
+        { "name": "notes", "type": "string", "maxLen": 500 }
+      ],
+      "hooks": {
+        "onCreate": ["notifyOwner"]
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": "notifyOwner",
+      "type": "notify",
+      "params": {
+        "to": ["creator"],
+        "title": "Lead mới đã được ghi nhận",
+        "subject": "OpenVie CRM — lead mới"
+      }
+    },
+    {
+      "id": "leadPipeline",
+      "type": "report",
+      "params": {
+        "views": [
+          {
+            "name": "pipeline",
+            "sql": "SELECT payload ->> 'name' AS name, payload ->> 'stage' AS stage, payload ->> 'dealValue' AS deal_value, created_at FROM bizapp_records WHERE tenant_id = :tenant AND app_kind = :app AND entity = 'leads' AND status = 'ACTIVE' ORDER BY updated_at DESC"
+          }
+        ]
+      }
+    }
+  ],
+  "ui": {
+    "views": ["registry:leads", "form:leads", "report:pipeline"]
+  }
+}

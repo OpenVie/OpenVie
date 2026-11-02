@@ -16,7 +16,7 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | --- | --- | --- |
 | **Tầng 1 – Nền tảng Dịch vụ Lõi số** (PaaS, headless) | `api/` (Spring Boot trên Java 21), `rag-chatbot-fastapi/` (AI HTTP + gRPC + worker + DuckDB Lakehouse), `apisix/` (cổng API), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Đạt** — đủ các dịch vụ lõi bắt buộc kèm hồ dữ liệu phân tích Lakehouse (Parquet/DuckDB); các thành phần biên nâng cao (WAF/Vault) thuộc tùy chọn hạ tầng |
 | **Tầng 2 – Không gian Năng lực số** (H-P-D-I, có giao diện) | `frontend/` (Next.js) | **Đạt** (có ứng dụng minh họa giao diện) |
-| **Tầng 3 – Nền tảng Kinh doanh số** (OMS/WMS/POS/LMS/CRM…) | Không có | Ngoài phạm vi |
+| **Tầng 3 – Nền tảng Kinh doanh số** (OMS/WMS/POS/LMS/CRM…) | Nền tảng BizApp: marketplace chấp nhận template cài được (`resources/marketplace/bizapps/` + template tự tạo theo tổ chức), kho bản ghi JSONB (`bizapp_records`), khối tác nghiệp gắn dịch vụ hiện hữu (approve/email/webhook/HTTP), vault khóa `BIZAPP_ENC_KEY` — kèm hai mẫu đóng gói sẵn CRM-lite + Booking | **Đạt** (mẫu công khai CRM-lite + Booking; xem [BIZAPPS.md](BIZAPPS.md)) |
 
 ### 2. Nguyên tắc lõi chạy ngầm (Headless)
 
@@ -32,9 +32,10 @@ Tài liệu này đối chiếu mã nguồn OpenVie với khung kiến trúc **H
 | --- | --- | --- | --- |
 | **Định danh, SSO** | Keycloak OIDC IdP (Authorization Code + PKCE S256), Spring Boot SSO exchange (`/api/v1/auth/sso/exchange`), mật khẩu + JWT, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), xoay vòng token, API key machine-to-machine (`/api/v1/admin/api-keys`, `ovk_…` xác thực như service member theo membership sống) | **Đạt** | Xem [KEYCLOAK.md](KEYCLOAK.md) và [DEVELOPMENT §5](DEVELOPMENT.md#hướng-dẫn-chạy-và-kiểm-tra-đăng-nhập-sso-cục-bộ-local-sso-run--first-run-checks) |
 | **Cổng API (API Gateway)** | Apache APISIX standalone (`:8088`), định tuyến và giới hạn tần suất biên (`limit-req`) | **Đạt** | Xem [DEPLOYMENT §10](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
-| **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (23 bảng nghiệp vụ, ràng buộc tenant_id) | **Đạt** | — |
+| **Quản trị dữ liệu cấu trúc** | PostgreSQL 16 + Flyway (27 bảng nghiệp vụ, ràng buộc tenant_id; Tầng 3 thêm 4 bảng BizApp) | **Đạt** | — |
 | **Quản trị dữ liệu phi cấu trúc & Hồ dữ liệu (Lakehouse)** | SeaweedFS (S3), Qdrant (vector), Kuzu (đồ thị tri thức), phân vùng Parquet Lakehouse nén Snappy (chat, audit, document, workflow) kèm cỗ máy truy vấn OLAP nhúng DuckDB (`/api/v1/analytics/lakehouse/**`), hấp thụ đa định dạng (PDF, DOCX, XLSX, CSV, âm thanh, video qua ASR faster-whisper), OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định) | **Đạt** | — |
 | **Động cơ luồng công việc (Workflow)** | Engine Flowable nhúng trong API runtime chính: nộp → duyệt/từ chối/leo thang hai cấp, chính sách độ nhạy dùng chung, SLA theo tổ chức, audit log đầy đủ; API engine tổng quát `/api/v1/workflow/engine` (triển khai BPMN bất kỳ, khởi động process + biến, inbox tác vụ, lịch sử); write-back kết quả duyệt vào bảng `documents` (Flyway V8, `approval_status`), thông báo SMTP (`WORKFLOW_DECIDED`), và đẩy webhook có chữ ký HMAC-SHA256 | **Đạt** | Xem [WORKFLOW.md](WORKFLOW.md), [INTEGRATION.md](INTEGRATION.md) |
+| **Thương mại số (Tier 3 – BizApp)** | Marketplace template cài được (gồm CRM-lite và Booking đóng gói sẵn), schema `bizapp.v1` được validator chặn bảo mật phía server (SQL chỉ đọc SELECT, cấm secret nội tuyến), kho bản ghi JSONB theo workspace (`bizapp_records`), khối tác nghiệp gắn dịch vụ sống: phê duyệt qua engine Flowable, email qua NotificationRuntimeApi, webhook HMAC qua bridge AFTER_COMMIT, HTTP outbound với vault khóa AES-256-GCM (`BIZAPP_ENC_KEY`); API đầy đủ `/api/v1/marketplace/bizapps`, `/api/v1/bizapps`, `/api/v1/bizapp-data`, `/api/v1/bizapp-credentials` | **Đạt** | Xem [BIZAPPS.md](BIZAPPS.md) |
 
 **Bề mặt tích hợp cho bên thứ ba** (chi tiết ở [INTEGRATION.md](INTEGRATION.md)): API key machine-to-machine
 (`ovk_…`, xác thực như service member qua membership sống), webhook sự kiện có chữ ký HMAC-SHA256
@@ -45,7 +46,7 @@ BPMN tổng quát — mỗi thứ đều có kill-switch cấu hình (`app.webho
 
 - **[I] Trí tuệ số:** Trợ lý ảo RAG vận hành trên kho tri thức nội bộ (`/`, `/documents/[id]`) — **Đạt** (ứng dụng minh họa chính).
 - **[H] Con người số:** Kho tài liệu, bách khoa hướng dẫn, quản trị thành viên/workspace (`/documents`, `/documentation`, `/users`, `/workspaces`) — **Đạt**.
-- **[P] Quy trình số:** Phê duyệt tài liệu hai cấp chạy trong runtime chính: nộp → duyệt/từ chối/leo thang, chính sách độ nhạy dùng chung, SLA nhắc nhở/leo thang, audit log; ghi nhận trạng thái phê duyệt trực tiếp vào tài liệu (`approval_status`), thông báo email qua kênh SMTP và đẩy webhook sự kiện cho bên thứ ba — **Đạt**.
+- **[P] Quy trình số:** Phê duyệt tài liệu hai cấp chạy trong runtime chính: nộp → duyệt/từ chối/leo thang, chính sách độ nhạy dùng chung, SLA nhắc nhở/leo thang, audit log; ghi nhận trạng thái phê duyệt trực tiếp vào tài liệu (`approval_status`), thông báo email qua kênh SMTP và đẩy webhook sự kiện cho bên thứ ba; nền tảng BizApp khái quát hoá thành template cài được theo tổ chức (form/registry/timeline/report + phê duyệt/email/webhook/HTTP) — **Đạt**.
 - **[D] Dữ liệu số:** Nguồn gốc tài liệu, nhật ký kiểm toán, số liệu Prometheus + Alertmanager kèm 2 dashboard Grafana chuyên biệt (tổng quan nền tảng và AI/hấp thụ dữ liệu), công cụ sao lưu và phục hồi cơ sở dữ liệu/lưu trữ đối tượng (`scripts/ops/`) — **Đạt (MVP)**.
 
 ### 5. Bốn nguyên lý thiết kế
@@ -79,7 +80,7 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | --- | --- | --- |
 | **Tier 1 – Digital Core Platform** (Headless PaaS) | `api/` (Spring Boot on Java 21), `rag-chatbot-fastapi/` (AI inference, gRPC, worker, DuckDB Lakehouse), `apisix/` (gateway), `docker-compose.yml` (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu) | **Achieved** — all mandatory core services delivered alongside Lakehouse analytical data store (Parquet/DuckDB); perimeter edge hardening (WAF/Vault) remains an infrastructure operator option |
 | **Tier 2 – Digital Capability Space** (H-P-D-I with UI) | `frontend/` (Next.js) | **Achieved** (UI demo application) |
-| **Tier 3 – Digital Business Platform** (OMS, WMS, POS, LMS...) | None | Out of scope |
+| **Tier 3 – Digital Business Platform** (OMS, WMS, POS, LMS...) | The BizApp platform: a marketplace of installable templates (`resources/marketplace/bizapps/` plus org-crafted copies), a generic JSONB record store (`bizapp_records`), block executors bound to existing services (approval/email/webhook/HTTP), and an AES-256-GCM credential vault (`BIZAPP_ENC_KEY`) | **Achieved** (shipped CRM-lite + Booking templates; see [BIZAPPS.md](BIZAPPS.md)) |
 
 ### 2. Headless Core Principle
 
@@ -95,9 +96,10 @@ This document evaluates OpenVie against the **Digital Transformation Operating S
 | --- | --- | --- | --- |
 | **Identity & SSO** | Keycloak OIDC IdP (Authorization Code flow + PKCE S256), Spring Boot SSO token exchange (`/api/v1/auth/sso/exchange`), password + JWT, 3-role RBAC (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), token rotation, machine-to-machine API keys (`/api/v1/admin/api-keys`, `ovk_…` authenticating as a service member through live membership) | **Achieved** | See [KEYCLOAK.md](KEYCLOAK.md) and [DEVELOPMENT §5](DEVELOPMENT.md#local-sso-run--first-run-verification-guide) |
 | **API Gateway** | Apache APISIX standalone (`:8088`), route proxying, and edge rate-limiting (`limit-req`) | **Achieved** | See [DEPLOYMENT §10](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
-| **Structured Data** | PostgreSQL 16 + Flyway (23 business tables with tenant scoping) | **Achieved** | — |
+| **Structured Data** | PostgreSQL 16 + Flyway (27 business tables with tenant scoping; Tier 3 adds 4 BizApp tables) | **Achieved** | — |
 | **Unstructured & Lakehouse Data** | SeaweedFS (S3), Qdrant (vectors), Kuzu (knowledge graph), partitioned Snappy Parquet Lakehouse (chat, audit, document, workflow) with embedded DuckDB OLAP engine (`/api/v1/analytics/lakehouse/**`), asynchronous multi-format ingestion (PDF, DOCX, XLSX, CSV, audio and video via faster-whisper ASR), optional OCR for scanned PDFs/images (off by default) | **Achieved** | — |
 | **Workflow Engine** | Flowable embedded in the main API runtime: two-level submit → approve/reject/escalate, shared sensitivity policy, per-organization SLA, full audit trail; generic engine API `/api/v1/workflow/engine` (deploy any BPMN definition, start processes with variables, generic task inbox, history); decision write-back directly onto the `documents` row (Flyway V8, `approval_status`), transactional SMTP notification (`WORKFLOW_DECIDED`), and signed HMAC-SHA256 webhook dispatch | **Achieved** | See [WORKFLOW.md](WORKFLOW.md), [INTEGRATION.md](INTEGRATION.md) |
+| **Digital Business Platform (Tier 3 — BizApps)** | Installable template marketplace (bundled **CRM Lite** and **Booking**), server-enforced bizapp.v1 schema (SELECT-only SQL, no inline secrets), workspace-scoped JSONB record store (`bizapp_records`), block executors bound to live services: approvals through the Flowable engine, email via NotificationRuntimeApi, HMAC-signed webhooks via the AFTER_COMMIT bridge, outbound HTTP with the AES-256-GCM credential vault (`BIZAPP_ENC_KEY`); full API surface `/api/v1/marketplace/bizapps`, `/api/v1/bizapps`, `/api/v1/bizapp-data`, `/api/v1/bizapp-credentials` | **Achieved** | See [BIZAPPS.md](BIZAPPS.md) |
 
 **Third-party integration surface** (details in [INTEGRATION.md](INTEGRATION.md)): machine-to-machine API keys
 (`ovk_…` authenticating as a service member through live membership), HMAC-SHA256-signed event webhooks
@@ -108,7 +110,7 @@ generic BPMN engine API — each with a configuration kill-switch (`app.webhooks
 
 - **[I] Digital Intelligence:** Document-grounded RAG assistant (`/`, `/documents/[id]`) — **Achieved** (primary demo).
 - **[H] Digital Human:** Document vault, documentation wiki, workspace/member management (`/documents`, `/documentation`, `/users`, `/workspaces`) — **Achieved**.
-- **[P] Digital Process:** Two-level document approval in the main runtime: submit → approve/reject/escalate, shared sensitivity policy, SLA reminders/escalation, audit logging; authoritative approval state written directly onto document records (`approval_status`), automated SMTP notification dispatch, and signed webhook event publication — **Achieved**.
+- **[P] Digital Process:** Two-level document approval in the main runtime: submit → approve/reject/escalate, shared sensitivity policy, SLA reminders/escalation, audit logging; authoritative approval state written directly onto document records (`approval_status`), automated SMTP notification dispatch, and signed webhook event publication; the BizApp platform generalizes this into installable per-organization templates (form/registry/timeline/report plus approval/email/webhook/HTTP blocks) — **Achieved**.
 - **[D] Digital Data:** Source provenance, audit logs, Prometheus + Alertmanager metrics with 2 provisioned Grafana dashboards (platform overview and AI/ingestion), verifiable backup/restore tooling (`scripts/ops/`) — **Achieved (MVP)**.
 
 ### 5. Four Design Principles

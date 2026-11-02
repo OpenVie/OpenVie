@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="https://openvie.dev/bpmn/bizapp">
+  <process id="bizappSingleApproval" name="BizApp single-level record approval" isExecutable="true">
+    <documentation>Tier-3 template deployed once per installed BizApp (definition name
+      bizapp-&lt;kind&gt;). The submitter's record id travels as recordId; the
+      candidateRole manifest parameter scopes the reviewer pool. Claim and
+      complete run through the generic engine inbox
+      (/api/v1/workflow/engine/tasks/**) with variables decision (APPROVE |
+      REJECT) and decidedBy; the terminal delegate writes the decision into
+      bizapp_records.runtime and raises the record.decided webhook. This
+      definition is deliberately outside the e-Office approval domain, so its
+      tasks stay claimable on the generic surface.</documentation>
+
+    <startEvent id="start" name="Record submitted" />
+    <sequenceFlow id="f_start_review" sourceRef="start" targetRef="reviewRecord" />
+
+    <userTask id="reviewRecord" name="Review submitted record"
+      flowable:candidateGroups="${candidateRole}" />
+    <sequenceFlow id="f_review_decide" sourceRef="reviewRecord" targetRef="recordDecision" />
+
+    <serviceTask id="recordDecision" name="Write decision back to the record"
+      flowable:delegateExpression="${bizAppRecordDecisionDelegate}" />
+    <sequenceFlow id="f_decide_end" sourceRef="recordDecision" targetRef="end" />
+
+    <endEvent id="end" name="Decision recorded" />
+  </process>
+</definitions>

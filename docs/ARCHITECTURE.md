@@ -98,6 +98,12 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 7. Trạng thái chạy nằm trong bảng engine `ACT_*` của PostgreSQL nên API khởi động lại (deploy/crash) vẫn tái hiện quy trình và nhiệm vụ đang chờ mà không cần trình phát lại.
 8. Ghi nhận trạng thái chính thức: Khi quy trình kết thúc (duyệt hoặc từ chối), `DocumentApi.recordApprovalDecision` ghi trực tiếp `approval_status` và người duyệt vào bảng `documents`, đồng thời phát sự kiện `WorkflowDecisionEvent` gửi email thông báo kết quả phê duyệt cho người nộp qua kênh SMTP (`WORKFLOW_DECIDED`).
 
+#### D. BizApp runtime (Tier 3 — ứng dụng cài được)
+1. `ORG_OWNER` cài template từ marketplace (`platform:crm` hoặc bản copy của tổ chức): validator chặn manifest trước → đóng băng manifest vào `bizapp_installations` → deploy BPMN `bizapp-<kind>` qua engine khi app khai báo block phê duyệt.
+2. Người dùng thao tác trên khung xem form/registry/timeline/report sinh từ manifest; mọi bản ghi nằm trong bảng JSONB chung `bizapp_records`, validate chặt theo schema và RBAC giải lại mỗi request (không tin client).
+3. Nộp duyệt khởi động process Flowable, hoàn tất qua inbox tác vụ tổng quát; delegate cuối ghi quyết định vào `runtime` và phát webhook `bizapp.<kind>.record.decided` sau commit.
+4. HTTP outbound lấy secret từ vault mã hóa AES-256-GCM (`BIZAPP_ENC_KEY`); mọi bước đều ghi audit và đi outbox webhook ký HMAC. Chi tiết: [BIZAPPS.md](BIZAPPS.md).
+
 ### 5. Bảo mật và phân lập
 
 - **Phân quyền 3 vai trò:** `ORG_OWNER` (quản trị toàn tổ chức, tạo workspace), `WORKSPACE_ADMIN` (quản lý thành viên và tài liệu trong workspace), `MEMBER` (chat, tải/xóa tài liệu của chính mình).
@@ -166,6 +172,12 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 6. SLA timers are per-organization configurable (`workflow_sla_configs`, defaults `openvie.workflow.*` = PT24H reminder / PT48H escalation): the reminder never interrupts the task, escalation interrupts it and moves an overdue level 1 task to the owner queue, both audited (`overdue`, not a manual decision).
 7. Runtime state lives in the engine's `ACT_*` tables, so an API restart (deploy or crash) rediscovers the running process and pending task without replay; workflows are claimed and completed by live membership, so a foreign-workspace task or process is answered with an explicit 403.
 8. Authoritative decision write-back: upon terminal settlement (approved or rejected), `DocumentApi.recordApprovalDecision` commits `approval_status`, timestamp, and the deciding user directly onto the `documents` record, invalidating document caches and publishing `WorkflowDecisionEvent` for transactional submitter email notification (`WORKFLOW_DECIDED`).
+
+#### D. BizApp runtime (Tier 3 — installable apps)
+1. An `ORG_OWNER` installs a marketplace template (`platform:crm` or an org-crafted copy): the manifest validator gates first, the manifest freezes onto `bizapp_installations`, and the engine deploys the `bizapp-<kind>` BPMN when the app declares an approval block.
+2. Users work through manifest-generated form/registry/timeline/report views; every record lands in the shared JSONB table `bizapp_records`, strictly validated against the schema with workspace RBAC re-resolved per request — the client is never trusted.
+3. Submitting for approval starts a Flowable process completed through the generic engine inbox; the terminal delegate writes the decision into `runtime` and raises the `bizapp.<kind>.record.decided` webhook after commit.
+4. Outbound HTTP pulls secrets from the AES-256-GCM credential vault (`BIZAPP_ENC_KEY`); every step is audited and pushed through the HMAC-signed webhook outbox. Details: [BIZAPPS.md](BIZAPPS.md).
 
 ## 5. Security and isolation
 

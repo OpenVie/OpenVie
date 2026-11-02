@@ -196,6 +196,21 @@ public class EmailService {
     }
 
     /**
+     * Runtime-API path for other modules (BizApp notification blocks): sends a
+     * caller-rendered HTML message through the org's configured channel without
+     * touching user lifecycle templates. Best-effort like the other paths.
+     */
+    public boolean sendRawEmail(UUID orgId, String toEmail, String subject, String htmlBody) {
+        String body = renderShell(isBlank(htmlBody) ? "" : htmlBody);
+        EmailMessage message = new EmailMessage(toEmail, toEmail, subject, body);
+        return trySend(orgId, message, "bizapp notice");
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /**
      * Shared dark-brand shell: page background, card, logo, type colors and
      * button mirror the app's dark theme tokens (#07090c background, #c8f53c
      * primary with #07090c text on it).
