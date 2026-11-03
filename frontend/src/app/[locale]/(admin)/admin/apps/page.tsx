@@ -17,10 +17,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
-import { AlertCircle, EyeOff, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Download,
+  EyeOff,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import type {
   BizAppCredentialView,
+  BizAppDraftView,
   BizAppInstalledAppView,
   BizAppTemplateView,
 } from "@/types";
@@ -28,14 +39,21 @@ import { useApiClient } from "@/hooks/useApiClient";
 import {
   createBizAppCredentialApi,
   deleteBizAppCredentialApi,
+  deleteBizAppDraftApi,
   deleteBizAppTemplateApi,
+  exportBizAppTemplateApi,
+  generateBizAppDraftApi,
+  importBizAppTemplateApi,
   installBizAppApi,
   listBizAppCredentialsApi,
-  listBizAppTemplatesApi,
+  listBizAppDraftsApi,
   listInstalledBizAppsApi,
+  listBizAppTemplatesApi,
+  remixBizAppTemplateApi,
   uninstallBizAppApi,
 } from "@/lib/bizapp-api";
 import { useRouter } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,13 +69,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 type CredentialFormat = "api_key" | "bearer" | "basic";
 
 type ConfirmTarget =
   | { action: "uninstall"; kind: string }
   | { action: "template"; templateId: string; name: string }
+  | { action: "draft"; draftId: string; name: string }
   | { action: "credential"; credentialId: string; name: string };
+
+/** Remix dialog target: the template being copied into a new draft. */
+type RemixTarget = {
+  templateRef: string;
+  name: string;
+};
 
 /**
  * Owner marketplace console: browse the two-layer catalog (platform-bundled
@@ -73,12 +99,30 @@ export default function AdminAppsPage() {
 
   const [templates, setTemplates] = useState<BizAppTemplateView[]>([]);
   const [installed, setInstalled] = useState<BizAppInstalledAppView[]>([]);
+  const [drafts, setDrafts] = useState<BizAppDraftView[]>([]);
   const [credentials, setCredentials] = useState<BizAppCredentialView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showCredentialForm, setShowCredentialForm] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+
+  // Composer entry points: AI drafting + template import land as drafts only
+  // (install stays an explicit owner action), mirroring the backend contract.
+  const [showAiDialog, setShowAiDialog] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiSubmitting, setAiSubmitting] = useState(false);
+
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importMode, setImportMode] = useState<"json" | "url">("json");
+  const [importContent, setImportContent] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [importSha256, setImportSha256] = useState("");
+  const [importSubmitting, setImportSubmitting] = useState(false);
+
+  const [remixTarget, setRemixTarget] = useState<RemixTarget | null>(null);
+  const [remixSummary, setRemixSummary] = useState("");
+  const [remixSubmitting, setRemixSubmitting] = useState(false);
 
   // Credential dialog: plain controlled inputs keep the "user" field optional
   // (the API uses it only for the `basic` format).
@@ -95,12 +139,26 @@ export default function AdminAppsPage() {
     setCredentialUser("");
   };
 
+  const resetImportForm = () => {
+    setImportMode("json");
+    setImportContent("");
+    setImportUrl("");
+    setImportSha256("");
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setTemplates(await listBizAppTemplatesApi(request));
       setInstalled(await listInstalledBizAppsApi(request));
+      try {
+        setDrafts(await listBizAppDraftsApi(request));
+      } catch {
+        // Drafts are `ORG_OWNER`-scoped like the vault; the marketplace above
+        // must still render if the surface is unavailable.
+        setDrafts([]);
+      }
       try {
         setCredentials(await listBizAppCredentialsApi(request));
       } catch {
@@ -128,6 +186,65 @@ export default function AdminAppsPage() {
   const templateName = (template: BizAppTemplateView): string =>
     template.nameVi || template.name;
 
+  /** Display title for a draft row: explicit title, else the manifest name. */
+  const draftTitle = (draft: BizAppDraftView): string => {
+    if (draft.title?.trim()) return draft.title.trim();
+    const name = draft.manifest?.name;
+    if (name && typeof name === "object") {
+      const localized = name as Record<string, string | undefined>;
+      return localized.en || localized.vi || draft.id;
+    }
+    return draft.id;
+  };
+
+  /** A draft installs only when its stored validation passed. */
+  const draftValid = (draft: BizAppDraftView): boolean =>
+    (draft.validation as { ok?: boolean } | null)?.ok === true;
+
+  const draftSourceLabel = (source: string): string => {
+    switch (source) {
+      case "ai": return t("admin.draftSourceAi");
+      case "canvas": return t("admin.draftSourceCanvas");
+      case "import": return t("admin.draftSourceImport");
+      case "remix": return t("admin.draftSourceRemix");
+      default: return source;
+    }
+  };
+
+  const onInstallDraft = async (draft: BizAppDraftView) => {
+    if (!draftValid(draft)) return;
+    setBusy(`installDraft:${draft.id}`);
+    try {
+      const result = await installBizAppApi(request, { draftId: draft.id });
+      toast.success(t("admin.installSuccess", { kind: result.kind }));
+      await load();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("admin.fallbackInstall"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Exports the template envelope JSON as a client-side download. */
+  const onExportTemplate = async (template: BizAppTemplateView) => {
+    const ref = templateRef(template);
+    setBusy(`export:${ref}`);
+    try {
+      const envelope = await exportBizAppTemplateApi(request, ref);
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `openvie-template-${template.kind}.json`;
+      anchor.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("admin.fallbackExport"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onInstall = async (template: BizAppTemplateView) => {
     setBusy(`install:${templateRef(template)}`);
     try {
@@ -145,6 +262,7 @@ export default function AdminAppsPage() {
     switch (target.action) {
       case "uninstall": return target.kind;
       case "template": return target.name;
+      case "draft": return target.name;
       case "credential": return target.name;
     }
   };
@@ -161,6 +279,9 @@ export default function AdminAppsPage() {
       } else if (target.action === "template") {
         await deleteBizAppTemplateApi(request, target.templateId);
         toast.success(t("admin.templateDeleted"));
+      } else if (target.action === "draft") {
+        await deleteBizAppDraftApi(request, target.draftId);
+        toast.success(t("admin.draftDeleted"));
       } else {
         await deleteBizAppCredentialApi(request, target.credentialId);
         toast.success(t("admin.credentialDeleted"));
@@ -203,16 +324,93 @@ export default function AdminAppsPage() {
     }
   };
 
+  // -- AI draft generation (draft only, review before install) -----------------------------------
+
+  const canSubmitImport = importMode === "json"
+    ? (() => {
+        if (!importContent.trim()) return false;
+        try {
+          JSON.parse(importContent);
+          return true;
+        } catch {
+          return false;
+        }
+      })()
+    : Boolean(importUrl.trim());
+
+  const onGenerateDraft = async () => {
+    if (!aiPrompt.trim() || aiSubmitting) return;
+    setAiSubmitting(true);
+    try {
+      const result = await generateBizAppDraftApi(request, { prompt: aiPrompt.trim() });
+      toast.success(t("admin.aiGenerated"));
+      setAiSubmitting(false);
+      setShowAiDialog(false);
+      setAiPrompt("");
+      router.push(`/admin/apps/compose/${result.draftId}`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("admin.fallbackAi"));
+      setAiSubmitting(false);
+    }
+  };
+
+  const onImportTemplate = async () => {
+    if (!canSubmitImport || importSubmitting) return;
+    setImportSubmitting(true);
+    try {
+      const body = importMode === "json"
+        ? { content: importContent }
+        : { url: importUrl.trim(), sha256: importSha256.trim() || undefined };
+      const draft = await importBizAppTemplateApi(request, body);
+      toast.success(t("admin.importSuccess"));
+      setImportSubmitting(false);
+      setShowImportDialog(false);
+      resetImportForm();
+      router.push(`/admin/apps/compose/${draft.id}`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("admin.fallbackImport"));
+      setImportSubmitting(false);
+    }
+  };
+
+  const onRemixTemplate = async () => {
+    if (!remixTarget || remixSubmitting) return;
+    const target = remixTarget;
+    setRemixSubmitting(true);
+    try {
+      const draft = await remixBizAppTemplateApi(request, target.templateRef, remixSummary.trim() || undefined);
+      toast.success(t("admin.remixSuccess", { name: target.name }));
+      setRemixSubmitting(false);
+      setRemixTarget(null);
+      setRemixSummary("");
+      router.push(`/admin/apps/compose/${draft.id}`);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("admin.fallbackRemix"));
+      setRemixSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1">
           <h2 className="text-xl font-semibold text-foreground">{t("admin.title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("admin.subtitle")}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void load()}>
-          <RefreshCw className="mr-1 size-4" />{t("refresh")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap lg:shrink-0">
+          <Button size="sm" variant="outline" onClick={() => setShowAiDialog(true)}>
+            <Sparkles className="mr-1 size-4" />{t("admin.newAiDraft")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowImportDialog(true)}>
+            <Upload className="mr-1 size-4" />{t("admin.importTemplate")}
+          </Button>
+          <Button size="sm" onClick={() => router.push("/admin/apps/compose")}>
+            <Plus className="mr-1 size-4" />{t("admin.newInCanvas")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn("mr-1 size-4", loading && "animate-spin")} />{t("refresh")}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -266,6 +464,21 @@ export default function AdminAppsPage() {
                             {t("admin.install")}
                           </Button>
                         )}
+                        <Button
+                          size="sm" variant="outline"
+                          disabled={Boolean(busy)}
+                          onClick={() => { setRemixSummary(""); setRemixTarget({ templateRef: templateRef(template), name: templateName(template) }); }}
+                        >
+                          {t("admin.remix")}
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost" className="size-8"
+                          aria-label={t("admin.export")}
+                          disabled={busy === `export:${templateRef(template)}` || Boolean(busy)}
+                          onClick={() => void onExportTemplate(template)}
+                        >
+                          {busy === `export:${templateRef(template)}` ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                        </Button>
                         {template.source === "org" && template.id && (
                           <Button
                             size="icon" variant="ghost" className="size-8 text-destructive"
@@ -311,6 +524,67 @@ export default function AdminAppsPage() {
                         >
                           <EyeOff className="mr-1 size-3.5" />
                           {t("admin.uninstall")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Drafts: AI/canvas/import/remix — never executable until installed */}
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-medium">{t("admin.drafts")}</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{t("admin.draftHint")}</p>
+                </div>
+              </div>
+              {drafts.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{t("admin.emptyDrafts")}</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {drafts.map((draft) => (
+                    <div key={draft.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium">{draftTitle(draft)}</p>
+                          <Badge variant="outline">{draftSourceLabel(draft.source)}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t("admin.draftUpdated", { time: format.dateTime(new Date(draft.updatedAt), { dateStyle: "medium" }) })}
+                        </p>
+                        {!draftValid(draft) && (
+                          <p className="mt-1 text-xs text-muted-foreground">{t("admin.draftNotValid")}</p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          size="sm" variant="outline"
+                          disabled={Boolean(busy)}
+                          onClick={() => router.push(`/admin/apps/compose/${draft.id}`)}
+                        >
+                          {t("admin.draftEdit")}
+                        </Button>
+                        {draftValid(draft) && (
+                          <Button
+                            size="sm"
+                            disabled={busy === `installDraft:${draft.id}` || Boolean(busy)}
+                            onClick={() => void onInstallDraft(draft)}
+                          >
+                            {busy === `installDraft:${draft.id}` && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+                            {t("admin.install")}
+                          </Button>
+                        )}
+                        <Button
+                          size="icon" variant="ghost" className="size-8 text-destructive"
+                          aria-label={t("admin.deleteDraft")}
+                          disabled={Boolean(busy)}
+                          onClick={() => setConfirmTarget({ action: "draft", draftId: draft.id, name: draftTitle(draft) })}
+                        >
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </div>
@@ -437,6 +711,136 @@ export default function AdminAppsPage() {
               {t("admin.confirmAction")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI draft dialog: draft only — never installs automatically */}
+      <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.aiTitle")}</DialogTitle>
+            <DialogDescription>{t("admin.aiDescription")}</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onGenerateDraft(); }}>
+            <div className="space-y-1.5">
+              <Label htmlFor="bizappAiPrompt">{t("admin.aiPrompt")}</Label>
+              <Textarea
+                id="bizappAiPrompt"
+                value={aiPrompt}
+                maxLength={2000}
+                className="min-h-28"
+                onChange={(event) => setAiPrompt(event.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={aiSubmitting} onClick={() => setShowAiDialog(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" disabled={aiSubmitting || !aiPrompt.trim()}>
+                {aiSubmitting && <Loader2 className="mr-1 size-4 animate-spin" />}
+                {t("admin.aiGenerate")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Template import dialog: envelope JSON or a catalog URL + expected hash */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.importTitle")}</DialogTitle>
+            <DialogDescription>{t("admin.importDescription")}</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onImportTemplate(); }}>
+            <div className="space-y-1.5">
+              <Label htmlFor="bizappImportMode">{t("admin.importMode")}</Label>
+              <Select value={importMode} onValueChange={(value) => setImportMode(value as "json" | "url")}>
+                <SelectTrigger id="bizappImportMode">
+                  <SelectValue>{importMode === "json" ? t("admin.importModeJson") : t("admin.importModeUrl")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="json">{t("admin.importModeJson")}</SelectItem>
+                  <SelectItem value="url">{t("admin.importModeUrl")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {importMode === "json" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="bizappImportJson">{t("admin.importJson")}</Label>
+                <Textarea
+                  id="bizappImportJson"
+                  value={importContent}
+                  className="min-h-32 font-mono text-xs"
+                  spellCheck={false}
+                  onChange={(event) => setImportContent(event.target.value)}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="bizappImportUrl">{t("admin.importUrl")}</Label>
+                  <Input
+                    id="bizappImportUrl"
+                    type="url"
+                    value={importUrl}
+                    onChange={(event) => setImportUrl(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="bizappImportSha">{t("admin.importSha")}</Label>
+                  <Input
+                    id="bizappImportSha"
+                    value={importSha256}
+                    placeholder="SHA-256"
+                    onChange={(event) => setImportSha256(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("admin.importHint")}</p>
+                </div>
+              </>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={importSubmitting} onClick={() => setShowImportDialog(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" disabled={importSubmitting || !canSubmitImport}>
+                {importSubmitting && <Loader2 className="mr-1 size-4 animate-spin" />}
+                {t("admin.importSubmit")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remix dialog: copy to draft, keep upstream attribution, append the change */}
+      <Dialog open={remixTarget !== null} onOpenChange={(open) => { if (!open && !remixSubmitting) setRemixTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("admin.remixTitle")}</DialogTitle>
+            <DialogDescription>
+              {remixTarget && t("admin.remixDescription", { name: remixTarget.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void onRemixTemplate(); }}>
+            <div className="space-y-1.5">
+              <Label htmlFor="bizappRemixSummary">{t("admin.remixSummary")}</Label>
+              <Input
+                id="bizappRemixSummary"
+                value={remixSummary}
+                maxLength={200}
+                onChange={(event) => setRemixSummary(event.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={remixSubmitting} onClick={() => setRemixTarget(null)}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" disabled={remixSubmitting}>
+                {remixSubmitting && <Loader2 className="mr-1 size-4 animate-spin" />}
+                {t("admin.remixSubmit")}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -30,18 +30,29 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import {
+  ArrowLeft,
   Code,
   LayoutTemplate,
   List as ListIcon,
+  Loader2,
+  Moon,
   Play,
   Save,
   Share2,
+  Sun,
   Workflow,
 } from "lucide-react";
 
 import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
+import { validateBizAppManifestApi } from "@/lib/bizapp-api";
+import { useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/hooks/useApiClient";
+import { useTheme, type Theme } from "@/hooks/useTheme";
+import { transitionTheme } from "@/lib/theme-transition";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { NodeEntity } from "./NodeEntity";
 import { NodeBlock } from "./NodeBlock";
 import { Palette } from "./Palette";
@@ -63,6 +74,7 @@ interface ComposerCanvasProps {
   onSaveDraft?: (manifest: BizAppManifest) => Promise<void>;
   onSaveTemplate?: (manifest: BizAppManifest) => Promise<void>;
   onInstall?: (manifest: BizAppManifest) => Promise<void>;
+  onBack?: () => void;
 }
 
 export function ComposerCanvas({
@@ -70,10 +82,25 @@ export function ComposerCanvas({
   onSaveDraft,
   onSaveTemplate,
   onInstall,
+  onBack,
 }: ComposerCanvasProps) {
   const t = useTranslations("BizApps.composer");
+  const router = useRouter();
   const { request } = useApiClient();
+  const { theme, setTheme } = useTheme();
+  const languageMenuStyle = useMemo(() => liquidGlassMenuStyle(theme), [theme]);
 
+  const changeTheme = (nextTheme: Theme) => {
+    transitionTheme(() => setTheme(nextTheme));
+  };
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.push("/admin/apps");
+    }
+  };
   const [activeTab, setActiveTab] = useState<"canvas" | "list" | "json">("canvas");
   const [manifest, setManifest] = useState<BizAppManifest>(initialManifest);
 
@@ -107,24 +134,14 @@ export function ComposerCanvas({
     const timer = setTimeout(async () => {
       setIsValidating(true);
       try {
-        const res = await request("/bizapps/validate", {
-          method: "POST",
-          body: JSON.stringify({ manifest }),
-        });
+        const data = await validateBizAppManifestApi(request, manifest);
         if (!active) return;
-        if (res.ok) {
-          const data = await res.json();
-          setIsValid(Boolean(data.ok));
-          setValidationErrors(Array.isArray(data.errors) ? data.errors : []);
-        } else {
-          setIsValid(false);
-          const err = await res.json().catch(() => ({}));
-          setValidationErrors([err.message || "Validation failed"]);
-        }
-      } catch {
+        setIsValid(Boolean(data.ok));
+        setValidationErrors(Array.isArray(data.errors) ? data.errors : []);
+      } catch (err) {
         if (!active) return;
         setIsValid(false);
-        setValidationErrors(["Validation network error"]);
+        setValidationErrors([err instanceof Error ? err.message : "Validation failed"]);
       } finally {
         if (active) setIsValidating(false);
       }
@@ -267,58 +284,81 @@ export function ComposerCanvas({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] border rounded-xl overflow-hidden bg-background">
+    <div className="flex flex-col h-screen h-dvh w-full overflow-hidden bg-background">
       {/* Top Header / Toolbar */}
-      <header className="flex items-center justify-between px-4 py-2.5 border-b bg-card gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <Workflow className="h-5 w-5 text-primary" />
-          <h1 className="text-sm font-semibold truncate max-w-xs">
-            {manifest.name?.en || manifest.kind || t("title")}
-          </h1>
-          <span className="text-[11px] font-mono px-2 py-0.5 bg-muted rounded text-muted-foreground">
-            {manifest.kind} · v{manifest.version || 1}
-          </span>
+      <header className="flex items-center justify-between px-3 sm:px-4 py-2 border-b bg-card gap-2 sm:gap-4 shrink-0 h-14">
+        {/* Left: Back button + Manifest Title */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            className="h-8 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0"
+            title={t("back")}
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden sm:inline">{t("back")}</span>
+          </Button>
+
+          <div className="h-4 w-px bg-border shrink-0" aria-hidden="true" />
+
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 bg-primary/10 rounded text-primary shrink-0">
+              <Workflow className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold truncate leading-tight">
+                {manifest.name?.vi || manifest.name?.en || manifest.kind || t("title")}
+              </h1>
+              <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
+                {manifest.schema} · {manifest.kind} · v{manifest.version || 1}
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/40">
+        {/* Center: View Switcher Tabs */}
+        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/40 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab("canvas")}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "canvas" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
+            )}
           >
-            <Workflow className="h-3.5 w-3.5" />
-            <span>{t("canvasTab")}</span>
+            <Workflow className="size-3.5" />
+            <span className="hidden sm:inline">{t("canvasTab")}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("list")}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "list" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
+            )}
           >
-            <ListIcon className="h-3.5 w-3.5" />
-            <span>{t("listTab")}</span>
+            <ListIcon className="size-3.5" />
+            <span className="hidden sm:inline">{t("listTab")}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("json")}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "json" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
+            )}
           >
-            <Code className="h-3.5 w-3.5" />
-            <span>{t("jsonTab")}</span>
+            <Code className="size-3.5" />
+            <span className="hidden sm:inline">{t("jsonTab")}</span>
           </button>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+        {/* Right: Actions + Theme Toggle + Language Switcher */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {activeTab === "canvas" && (
-            <Button variant="outline" size="sm" onClick={handleAutoLayout} className="h-8 text-xs gap-1.5">
-              <LayoutTemplate className="h-3.5 w-3.5" />
+            <Button variant="outline" size="sm" onClick={handleAutoLayout} className="h-8 text-xs gap-1.5 px-2.5 hidden md:inline-flex">
+              <LayoutTemplate className="size-3.5" />
               <span>{t("autoLayout")}</span>
             </Button>
           )}
@@ -336,10 +376,10 @@ export function ComposerCanvas({
                 }
               }}
               disabled={isSaving}
-              className="h-8 text-xs gap-1.5"
+              className="h-8 text-xs gap-1.5 px-2.5"
             >
-              <Save className="h-3.5 w-3.5" />
-              <span>{t("saveDraft")}</span>
+              {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              <span className="hidden sm:inline">{t("saveDraft")}</span>
             </Button>
           )}
 
@@ -348,9 +388,9 @@ export function ComposerCanvas({
               variant="outline"
               size="sm"
               onClick={() => onSaveTemplate(manifest)}
-              className="h-8 text-xs gap-1.5"
+              className="h-8 text-xs gap-1.5 px-2.5 hidden sm:inline-flex"
             >
-              <Share2 className="h-3.5 w-3.5" />
+              <Share2 className="size-3.5" />
               <span>{t("saveTemplate")}</span>
             </Button>
           )}
@@ -360,12 +400,33 @@ export function ComposerCanvas({
               size="sm"
               onClick={() => onInstall(manifest)}
               disabled={!isValid}
-              className="h-8 text-xs gap-1.5 font-semibold"
+              className="h-8 text-xs gap-1.5 font-semibold px-2.5"
             >
-              <Play className="h-3.5 w-3.5" />
+              <Play className="size-3.5" />
               <span>{t("install")}</span>
             </Button>
           )}
+
+          <div className="h-4 w-px bg-border mx-1 shrink-0" aria-hidden="true" />
+
+          {/* Theme Toggle */}
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
+            aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
+          </button>
+
+          {/* Language Switcher */}
+          <LanguageSwitcher
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            menuClassName="ov-language-menu"
+            menuStyle={languageMenuStyle}
+            variant={theme === "light" ? "light" : "dark"}
+          />
         </div>
       </header>
 
@@ -383,6 +444,7 @@ export function ComposerCanvas({
                 onEdgesChange={onEdgesChange}
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
+                colorMode={theme}
                 fitView
               >
                 <Background />

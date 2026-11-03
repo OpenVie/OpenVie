@@ -31,6 +31,7 @@ import {
   setWorkspaceVisibilityApi,
 } from "@/lib/workspace-api";
 import type { WorkspaceView, WorkspaceVisibility } from "@/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -161,10 +162,13 @@ export default function WorkspacesPage() {
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
   return <div className="space-y-6">
-    <div className="flex items-center justify-between gap-4">
-      <div><h2 className="text-xl font-semibold text-foreground">{t("title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("description")}</p></div>
-      <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => void load()}><RefreshCw className="mr-1 size-4" />{t("refresh")}</Button>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <h2 className="text-xl font-semibold text-foreground">{t("title")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={cn("mr-1 size-4", loading && "animate-spin")} />{t("refresh")}</Button>
         <Button size="sm" onClick={() => { setShowCreate(true); reset(); setNewVisibility("PUBLIC"); }} className="gap-1.5"><Plus className="size-4" />{t("create")}</Button>
       </div>
     </div>

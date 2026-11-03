@@ -18,18 +18,64 @@ import {
   archiveBizAppRecordApi,
   bizAppLabel,
   createBizAppRecordApi,
+  deleteBizAppDraftApi,
+  exportBizAppTemplateApi,
+  generateBizAppDraftApi,
+  importBizAppTemplateApi,
   installBizAppApi,
+  listBizAppDraftsApi,
   listBizAppTemplatesApi,
+  remixBizAppTemplateApi,
   runBizAppReportApi,
+  saveBizAppDraftApi,
   submitBizAppRecordApi,
   uninstallBizAppApi,
+  validateBizAppManifestApi,
 } from "@/lib/bizapp-api";
+
+const draft = {
+  id: "d1",
+  title: "Leads",
+  source: "canvas",
+  manifest: { schema: "bizapp.v1", kind: "leads" },
+  validation: { ok: true, errors: [] },
+  meta: { generator: "human" },
+  createdAt: "2026-01-01T00:00:00",
+  updatedAt: "2026-01-01T00:00:01",
+};
 
 const seen: Array<{ url: string; init?: RequestInit }> = [];
 const request = vi.fn(async (input: string, init?: RequestInit) => {
   seen.push({ url: input, init });
   const path = input;
   if (init?.method === "DELETE") return new Response(null, { status: 204 });
+  if (path.endsWith("/bizapps/drafts/generate")) {
+    return Response.json(
+      { draftId: "d1", manifest: {}, validation: { ok: true, errors: [] }, meta: { generator: "ai" } },
+      { status: 201 },
+    );
+  }
+  if (path.endsWith("/bizapps/drafts/new")) {
+    return Response.json(draft, { status: 200 });
+  }
+  if (path.endsWith("/bizapps/drafts")) {
+    return Response.json([draft], { status: 200 });
+  }
+  if (path.endsWith("/bizapps/validate")) {
+    return Response.json({ ok: true, errors: [] }, { status: 200 });
+  }
+  if (path.endsWith("/marketplace/bizapps/import")) {
+    return Response.json(draft, { status: 201 });
+  }
+  if (path.endsWith("/remix")) {
+    return Response.json(draft, { status: 201 });
+  }
+  if (path.endsWith("/export")) {
+    return Response.json(
+      { envelope: "openvie.template.v1", meta: { license: "Apache-2.0" }, manifest: { kind: "crm" } },
+      { status: 200 },
+    );
+  }
   if (path.endsWith("/marketplace/bizapps")) {
     return Response.json(
       [{ id: null, source: "platform", kind: "crm", name: "CRM Lite", nameVi: "CRM-lite", version: 1 }],
@@ -113,6 +159,64 @@ describe("bizapp api client", () => {
     await uninstallBizAppApi(request, "crm");
     expect(seen[1].init?.method).toBe("DELETE");
     expect(seen[1].url).toContain("/apps/crm");
+  });
+
+  it("lists, saves and deletes drafts through the drafts routes", async () => {
+    const drafts = await listBizAppDraftsApi(request);
+    expect(drafts[0]).toMatchObject({ id: "d1", source: "canvas" });
+    expect(seen[0].url).toContain("/bizapps/drafts");
+
+    const saved = await saveBizAppDraftApi(request, "new", {
+      title: "Leads",
+      source: "canvas",
+      manifest: {
+        schema: "bizapp.v1",
+        kind: "leads",
+        name: { en: "Leads", vi: "Khách hàng" },
+        version: 1,
+        entities: [],
+      },
+    });
+    expect(seen[1].url).toContain("/bizapps/drafts/new");
+    expect(seen[1].init?.method).toBe("PUT");
+    expect(saved.id).toBe("d1");
+
+    await deleteBizAppDraftApi(request, "d1");
+    expect(seen[2].init?.method).toBe("DELETE");
+    expect(seen[2].url).toContain("/bizapps/drafts/d1");
+  });
+
+  it("generates an AI draft and never installs it", async () => {
+    const result = await generateBizAppDraftApi(request, { prompt: "inventory app" });
+    expect(seen[0].url).toContain("/bizapps/drafts/generate");
+    expect(JSON.parse(seen[0].init?.body as string)).toEqual({ prompt: "inventory app" });
+    expect(result.draftId).toBe("d1");
+  });
+
+  it("exports, imports and remixes template envelopes", async () => {
+    const envelope = await exportBizAppTemplateApi(request, "platform:crm");
+    expect(envelope).toMatchObject({ envelope: "openvie.template.v1" });
+
+    const imported = await importBizAppTemplateApi(request, { content: "{}" });
+    expect(seen[1].url).toContain("/marketplace/bizapps/import");
+    expect(imported.id).toBe("d1");
+
+    const remixed = await remixBizAppTemplateApi(request, "platform:crm", "add notes field");
+    expect(seen[2].url).toContain("/marketplace/bizapps/platform%3Acrm/remix");
+    expect(JSON.parse(seen[2].init?.body as string)).toEqual({ summary: "add notes field" });
+    expect(remixed.id).toBe("d1");
+  });
+
+  it("validates manifests through validateBizAppManifestApi", async () => {
+    const result = await validateBizAppManifestApi(request, {
+      schema: "bizapp.v1",
+      kind: "test",
+      name: { en: "Test", vi: "Thu nghiem" },
+      entities: [],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(seen[seen.length - 1].url).toContain("/bizapps/validate");
   });
 
   it("resolves localized labels with the active locale", () => {

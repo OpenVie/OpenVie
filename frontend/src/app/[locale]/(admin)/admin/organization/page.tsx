@@ -180,23 +180,25 @@ export default function OrganizationPage() {
   };
 
   return <div className="space-y-6">
-    <div className="flex items-center justify-between gap-4">
-      <div>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
         <h2 className="text-xl font-semibold text-foreground">{t("tabs.organization")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t("organizationDescription")}</p>
       </div>
-      <Button
-        size="sm"
-        onClick={() => {
-          setShowCreateUser(true);
-          createUserForm.reset();
-          setShowCreatedPassword(false);
-        }}
-        className="gap-1.5"
-      >
-        <Plus className="size-4" />
-        {t("createUser")}
-      </Button>
+      <div className="shrink-0">
+        <Button
+          size="sm"
+          onClick={() => {
+            setShowCreateUser(true);
+            createUserForm.reset();
+            setShowCreatedPassword(false);
+          }}
+          className="gap-1.5"
+        >
+          <Plus className="size-4" />
+          {t("createUser")}
+        </Button>
+      </div>
     </div>
 
     {orgError && (

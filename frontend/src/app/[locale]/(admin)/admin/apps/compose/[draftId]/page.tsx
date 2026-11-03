@@ -15,13 +15,19 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useRouter } from "@/i18n/navigation";
+import { useTranslations } from "next-intl";
 import toast from "react-hot-toast";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import type { BizAppManifest } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
+import { Button } from "@/components/ui/button";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
-import { installBizAppApi } from "@/lib/bizapp-api";
+import {
+  getBizAppDraftApi,
+  installBizAppApi,
+  saveBizAppDraftApi,
+} from "@/lib/bizapp-api";
 
 export default function ComposeDraftPage({
   params,
@@ -29,6 +35,7 @@ export default function ComposeDraftPage({
   params: Promise<{ draftId: string }>;
 }) {
   const { draftId } = use(params);
+  const t = useTranslations("BizApps");
   const router = useRouter();
   const { request } = useApiClient();
 
@@ -40,17 +47,18 @@ export default function ComposeDraftPage({
     let active = true;
     const fetchDraft = async () => {
       try {
-        const res = await request(`/bizapps/drafts/${draftId}`);
+        const draft = await getBizAppDraftApi(request, draftId);
         if (!active) return;
-        if (res.ok) {
-          const data = await res.json();
-          setManifest(data.manifest);
+        if (draft.manifest) {
+          setManifest(draft.manifest as unknown as BizAppManifest);
         } else {
-          setError("Failed to load draft");
+          setManifest(null);
+          setError(t("composer.draftNotFound"));
         }
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Error loading draft");
+        setManifest(null);
+        setError(err instanceof Error ? err.message : t("composer.loadFailed"));
       } finally {
         if (active) setLoading(false);
       }
@@ -59,42 +67,35 @@ export default function ComposeDraftPage({
     return () => {
       active = false;
     };
-  }, [draftId, request]);
+  }, [draftId, request, t]);
 
   const handleSaveDraft = async (updated: BizAppManifest) => {
     try {
-      const res = await request(`/bizapps/drafts/${draftId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          id: draftId,
-          title: updated.name?.en || updated.kind,
-          source: "canvas",
-          manifest: updated,
-        }),
+      await saveBizAppDraftApi(request, draftId, {
+        id: draftId,
+        title: updated.name?.en || updated.kind,
+        source: "canvas",
+        manifest: updated,
       });
-      if (res.ok) {
-        toast.success("Draft saved successfully.");
-      } else {
-        toast.error("Failed to save draft.");
-      }
+      toast.success(t("composer.saved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error saving draft");
+      toast.error(err instanceof Error ? err.message : t("composer.saveFailed"));
     }
   };
 
   const handleInstall = async (updated: BizAppManifest) => {
     try {
       await installBizAppApi(request, { draftId });
-      toast.success("App installed successfully from draft.");
+      toast.success(t("composer.installed"));
       router.push(`/apps/${updated.kind}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error installing app");
+      toast.error(err instanceof Error ? err.message : t("composer.installFailed"));
     }
   };
 
   if (loading) {
     return (
-      <div className="h-[60vh] flex items-center justify-center">
+      <div className="h-screen w-screen flex items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
@@ -102,20 +103,23 @@ export default function ComposeDraftPage({
 
   if (error || !manifest) {
     return (
-      <div className="p-8 text-center text-destructive">
-        <p>{error || "Draft not found"}</p>
+      <div className="h-screen w-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-background">
+        <p className="text-destructive font-medium">{error || t("composer.draftNotFound")}</p>
+        <Button variant="outline" size="sm" onClick={() => router.push("/admin/apps")}>
+          <ArrowLeft className="mr-1.5 size-4" />
+          {t("composer.back")}
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <ComposerCanvas
-        initialManifest={manifest}
-        draftId={draftId}
-        onSaveDraft={handleSaveDraft}
-        onInstall={handleInstall}
-      />
-    </div>
+    <ComposerCanvas
+      initialManifest={manifest}
+      draftId={draftId}
+      onSaveDraft={handleSaveDraft}
+      onInstall={handleInstall}
+      onBack={() => router.push("/admin/apps")}
+    />
   );
 }

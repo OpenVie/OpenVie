@@ -44,7 +44,7 @@ export function ValidationPanel({ isValid, errors, isValidating }: ValidationPan
           )}
           <span className="font-medium">
             {isValidating
-              ? "Validating manifest..."
+              ? t("validating")
               : isValid
               ? t("valid")
               : `${t("invalid")} (${errors.length})`}
