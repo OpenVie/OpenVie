@@ -16,19 +16,43 @@
 
 import { useState, useRef, useEffect, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowUp, Bot, Loader2, Sparkles, User } from "lucide-react";
+import toast from "react-hot-toast";
+import {
+  ArrowUp,
+  Bot,
+  FileText,
+  Loader2,
+  Sparkles,
+  User,
+} from "lucide-react";
 
-import type { BizAppInstalledAppView } from "@/types";
+import type {
+  BizAppEntity,
+  BizAppInstalledAppView,
+  BizAppRecordView,
+} from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { AssistantResponse } from "@/components/chat/AssistantResponse";
 import { createChatSessionApi, submitChatMessageApi } from "@/lib/chat-api";
+import { BizAppEntityFormDialog } from "@/components/bizapp/BizAppEntityFormDialog";
+import {
+  type BizAppActionSuggestion,
+  extractActionSuggestion,
+} from "./action-suggestion";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  action?: BizAppActionSuggestion | null;
 }
 
 export function BizAppAssistantView({
@@ -48,11 +72,20 @@ export function BizAppAssistantView({
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Human-in-the-Loop Action Dialog State
+  const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
+  const [activeActionEntity, setActiveActionEntity] = useState<BizAppEntity | null>(null);
+  const [activeActionRecord, setActiveActionRecord] = useState<BizAppRecordView | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const block = app.manifest.blocks?.find((b) => b.id === blockId);
-  const instructions = typeof block?.params?.instructions === "string" ? block.params.instructions : null;
-  const kbId = typeof app.config?.knowledgeBaseId === "string" ? (app.config.knowledgeBaseId as string) : undefined;
+  const instructions =
+    typeof block?.params?.instructions === "string" ? block.params.instructions : null;
+  const kbId =
+    typeof app.config?.knowledgeBaseId === "string"
+      ? (app.config.knowledgeBaseId as string)
+      : undefined;
 
   const initiatedRef = useRef(false);
   useEffect(() => {
@@ -95,24 +128,28 @@ export function BizAppAssistantView({
     setStreamingContent("");
 
     try {
-      const resp = await submitChatMessageApi(
-        request,
-        sessionId,
-        query,
-        {
-          onContent: (chunk: string) => {
-            setStreamingContent((prev) => (prev ?? "") + chunk);
-          },
-          onReset: () => {
-            setStreamingContent("");
-          },
-        }
-      );
+      const resp = await submitChatMessageApi(request, sessionId, query, {
+        onContent: (chunk: string) => {
+          setStreamingContent((prev) => (prev ?? "") + chunk);
+        },
+        onReset: () => {
+          setStreamingContent("");
+        },
+      });
+
+      // Detect Human-in-the-Loop actionable suggestion
+      let actionSuggestion: BizAppActionSuggestion | null = null;
+      if (resp.action && typeof resp.action === "object" && "type" in resp.action) {
+        actionSuggestion = resp.action as unknown as BizAppActionSuggestion;
+      } else {
+        actionSuggestion = extractActionSuggestion(query, app);
+      }
 
       const assistantMsg: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: resp.content || streamingContent || "",
+        action: actionSuggestion,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setStreamingContent(null);
@@ -122,6 +159,41 @@ export function BizAppAssistantView({
       setIsSending(false);
       setStreamingContent(null);
     }
+  };
+
+  const handleTriggerAction = (action: BizAppActionSuggestion) => {
+    const targetEntity = (app.manifest.entities || []).find((e) => e.name === action.entityName);
+    if (!targetEntity) {
+      toast.error(`Entity ${action.entityName} not found`);
+      return;
+    }
+
+    const draftRecord: BizAppRecordView = {
+      id: "",
+      appKind: app.kind,
+      entity: action.entityName,
+      payload: action.payload || {},
+      runtime: {},
+      status: "ACTIVE",
+      createdBy: "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setActiveActionEntity(targetEntity);
+    setActiveActionRecord(draftRecord);
+    setIsActionDialogOpen(true);
+  };
+
+  const handleActionSaved = () => {
+    setIsActionDialogOpen(false);
+    toast.success(t("action.recordCreated", { fallback: "Đã tạo bản ghi thành công!" }));
+    const confirmMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: `✓ ${t("action.recordCreated", { fallback: "Đã tạo bản ghi thành công." })}`,
+    };
+    setMessages((prev) => [...prev, confirmMsg]);
   };
 
   return (
@@ -146,10 +218,14 @@ export function BizAppAssistantView({
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted-foreground">
               <Sparkles className="h-10 w-10 text-muted-foreground/50 mb-3" />
               <p className="text-sm font-medium">
-                {t("assistant.welcome", { fallback: "Ask questions about records and processes in this app." })}
+                {t("assistant.welcome", {
+                  fallback: "Ask questions about records and processes in this app.",
+                })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {t("assistant.evidenceHint", { fallback: "Answers cite verified documents from this application's knowledge base." })}
+                {t("assistant.evidenceHint", {
+                  fallback: "Answers cite verified documents from this application's knowledge base.",
+                })}
               </p>
             </div>
           )}
@@ -165,14 +241,52 @@ export function BizAppAssistantView({
                 </div>
               )}
               <div
-                className={`rounded-xl px-4 py-2.5 text-sm max-w-[80%] ${
+                className={`rounded-xl px-4 py-2.5 text-sm max-w-[85%] ${
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-foreground"
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <AssistantResponse content={msg.content} />
+                  <>
+                    <AssistantResponse content={msg.content} />
+                    {/* Human-in-the-Loop Action Suggestion Card */}
+                    {msg.action && (
+                      <div className="mt-3 p-3 rounded-lg border border-primary/20 bg-card text-card-foreground shadow-xs space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                          <span className="font-semibold text-xs text-foreground">
+                            {msg.action.label}
+                          </span>
+                        </div>
+                        {msg.action.payload && Object.keys(msg.action.payload).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {Object.entries(msg.action.payload).map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="text-[11px] bg-muted/80 border px-1.5 py-0.5 rounded font-mono text-muted-foreground"
+                              >
+                                <span className="font-medium text-foreground">{k}:</span> {String(v)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="pt-1.5 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleTriggerAction(msg.action!)}
+                            className="h-7 text-xs gap-1.5 font-medium"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>
+                              {t("action.reviewAndConfirm", { fallback: "Xem lại & Xác nhận" })}
+                            </span>
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 )}
@@ -190,7 +304,7 @@ export function BizAppAssistantView({
               <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
                 <Bot className="h-4 w-4" />
               </div>
-              <div className="rounded-xl px-4 py-2.5 text-sm max-w-[80%] bg-muted text-foreground">
+              <div className="rounded-xl px-4 py-2.5 text-sm max-w-[85%] bg-muted text-foreground">
                 <AssistantResponse content={streamingContent} />
                 <span className="inline-block animate-pulse">▍</span>
               </div>
@@ -220,6 +334,18 @@ export function BizAppAssistantView({
           </Button>
         </form>
       </CardContent>
+
+      {/* Human-in-the-Loop Action Confirmation Dialog */}
+      {activeActionEntity && (
+        <BizAppEntityFormDialog
+          app={app}
+          entity={activeActionEntity}
+          record={activeActionRecord}
+          open={isActionDialogOpen}
+          onClose={() => setIsActionDialogOpen(false)}
+          onSaved={handleActionSaved}
+        />
+      )}
     </Card>
   );
 }

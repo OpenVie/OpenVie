@@ -14,7 +14,7 @@
 
 import type { AppLocale } from "@/i18n/routing"
 
-export type DocumentationGroupId = "start" | "product"
+export type DocumentationGroupId = "start" | "product" | "bizapps"
 
 export type DocumentationSection = {
   id: string
@@ -40,13 +40,16 @@ const structure = [
   { href: "/documentation/getting-started", group: "start", sections: ["upload", "index", "test", "next-step"] },
   { href: "/documentation/documents", group: "product", sections: ["supported-files", "indexing", "viewer-citations", "manage"] },
   { href: "/documentation/playground", group: "product", sections: ["ask", "sources", "history", "manage"] },
+  { href: "/documentation/workflow", group: "product", sections: ["approval-levels", "task-inbox", "sla-timers", "role-permissions"] },
+  { href: "/documentation/bizapps", group: "bizapps", sections: ["overview", "marketplace-install", "runtime-views", "credential-vault"] },
+  { href: "/documentation/composer", group: "bizapps", sections: ["canvas-editing", "blocks-entities", "ai-drafting", "template-exchange"] },
 ] as const
 
-export const documentationGroupOrder: DocumentationGroupId[] = ["start", "product"]
+export const documentationGroupOrder: DocumentationGroupId[] = ["start", "product", "bizapps"]
 
 const groupTitles: Record<AppLocale, Record<DocumentationGroupId, string>> = {
-  en: { start: "Start here", product: "Product guides" },
-  vi: { start: "Bắt đầu", product: "Hướng dẫn sản phẩm" },
+  en: { start: "Start here", product: "Knowledge & Approvals", bizapps: "BizApp Platform" },
+  vi: { start: "Bắt đầu", product: "Tri thức & Phê duyệt", bizapps: "Nền tảng BizApp" },
 }
 
 const content: Record<AppLocale, Record<string, LocalizedPage>> = {
@@ -77,9 +80,42 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
       title: "Chat playground",
       description: "Ask employee questions, inspect sources, and manage chat history.",
       keywords: ["chat", "history", "sources", "citations"],
-      sections: { ask: { title: "Ask questions" }, sources: { title: "Review sources and citations" }, history: { title: "Search chat history" }, manage: { title: "Manage chats" } },
+        sections: { ask: { title: "Ask questions" }, sources: { title: "Review sources and citations" }, history: { title: "Search chat history" }, manage: { title: "Manage chats" } },
+      },
+      "/documentation/workflow": {
+        title: "Workflow & approvals",
+        description: "Two-level document review, task inbox handling, and SLA timer escalations.",
+        keywords: ["workflow", "approval", "flowable", "bpmn", "sla", "tasks"],
+        sections: {
+          "approval-levels": { title: "1. Two-level review process" },
+          "task-inbox": { title: "2. Claiming & completing tasks" },
+          "sla-timers": { title: "3. SLA reminder & escalation timers" },
+          "role-permissions": { title: "4. Role permissions by level" },
+        },
+      },
+      "/documentation/bizapps": {
+        title: "BizApps platform",
+        description: "Installable applications, runtime records, timelines, and the credential vault.",
+        keywords: ["bizapps", "crm", "booking", "signature", "vault", "marketplace"],
+        sections: {
+          overview: { title: "1. What is a BizApp?" },
+          "marketplace-install": { title: "2. Installing from the marketplace" },
+          "runtime-views": { title: "3. Interacting with runtime views" },
+          "credential-vault": { title: "4. AES-256-GCM credential vault" },
+        },
+      },
+      "/documentation/composer": {
+        title: "Visual composer & AI drafting",
+        description: "Build apps on the visual canvas, draft with AI prompts, and exchange templates.",
+        keywords: ["composer", "canvas", "react flow", "ai drafting", "manifest", "templates"],
+        sections: {
+          "canvas-editing": { title: "1. Visual canvas & layout" },
+          "blocks-entities": { title: "2. Configuring entities & blocks" },
+          "ai-drafting": { title: "3. Drafting apps with AI" },
+          "template-exchange": { title: "4. Export, import & remix templates" },
+        },
+      },
     },
-  },
   vi: {
     "/documentation": {
       title: "Tổng quan tài liệu",
@@ -107,9 +143,42 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
       title: "Bảng trò chuyện",
       description: "Đặt câu hỏi cho nhân viên, xem nguồn và quản lý lịch sử hội thoại.",
       keywords: ["trò chuyện", "lịch sử", "nguồn", "trích dẫn"],
-      sections: { ask: { title: "Đặt câu hỏi" }, sources: { title: "Xem nguồn và trích dẫn" }, history: { title: "Tìm lịch sử hội thoại" }, manage: { title: "Quản lý cuộc trò chuyện" } },
+        sections: { ask: { title: "Đặt câu hỏi" }, sources: { title: "Xem nguồn và trích dẫn" }, history: { title: "Tìm lịch sử hội thoại" }, manage: { title: "Quản lý cuộc trò chuyện" } },
+      },
+      "/documentation/workflow": {
+        title: "Quy trình phê duyệt",
+        description: "Luồng phê duyệt tài liệu hai cấp, hộp thư công việc và bộ đếm thời gian SLA.",
+        keywords: ["quy trinh", "phe duyet", "flowable", "bpmn", "sla", "tac vu"],
+        sections: {
+          "approval-levels": { title: "1. Luồng phê duyệt hai cấp" },
+          "task-inbox": { title: "2. Tiếp nhận & xử lý tác vụ" },
+          "sla-timers": { title: "3. Bộ đếm SLA nhắc nhở & leo thang" },
+          "role-permissions": { title: "4. Phân định quyền theo vai trò" },
+        },
+      },
+      "/documentation/bizapps": {
+        title: "Nền tảng BizApp",
+        description: "Kho ứng dụng kinh doanh cài đặt sẵn, bản ghi tác nghiệp và kho bảo mật thông tin xác thực.",
+        keywords: ["bizapps", "crm", "booking", "ky so", "vault", "kho ung dung"],
+        sections: {
+          overview: { title: "1. BizApp là gì?" },
+          "marketplace-install": { title: "2. Duyệt & cài đặt từ kho ứng dụng" },
+          "runtime-views": { title: "3. Khung xem tác vụ & bản ghi" },
+          "credential-vault": { title: "4. Kho mật khẩu xác thực AES-256-GCM" },
+        },
+      },
+      "/documentation/composer": {
+        title: "Trình thiết kế trực quan & Soạn thảo AI",
+        description: "Thiết kế ứng dụng trên canvas kéo thả, sinh manifest bằng prompt AI và trao đổi template.",
+        keywords: ["composer", "canvas", "react flow", "ai drafting", "manifest", "mau ung dung"],
+        sections: {
+          "canvas-editing": { title: "1. Thao tác trên canvas & tự động sắp xếp" },
+          "blocks-entities": { title: "2. Cấu hình thực thể & khối nghiệp vụ" },
+          "ai-drafting": { title: "3. Soạn thảo tự động bằng AI" },
+          "template-exchange": { title: "4. Xuất, nhập & remix template" },
+        },
+      },
     },
-  },
 }
 
 export function getDocumentationGroups(locale: AppLocale) {

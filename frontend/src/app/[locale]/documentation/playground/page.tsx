@@ -37,9 +37,11 @@ export default async function PlaygroundDocumentationPage({ params }: PageProps)
     <DocSection id="ask" title={sections.ask}>
       <p>{t.rich("askBody", { code: (chunks) => <code>{chunks}</code> })}</p>
       <Callout type="tip">{t("askTip")}</Callout>
+      <Callout type="note" title={t("suggestionsTitle")}>{t("suggestionsText")}</Callout>
     </DocSection>
     <DocSection id="sources" title={sections.sources}>
       <p>{t("sourcesBody")}</p>
+      <Callout type="tip" title={t("multimodalCitationsTitle")}>{t("multimodalCitationsText")}</Callout>
       <Callout type="note">{t("sourcesNote")}</Callout>
     </DocSection>
     <DocSection id="history" title={sections.history}>
