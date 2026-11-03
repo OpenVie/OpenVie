@@ -31,6 +31,7 @@ const PAGE_TITLE_KEYS = {
   "/apps": "apps",
   "/users": "users",
   "/admin/organization": "organization",
+  "/admin/organization/api-keys": "apiKeys",
   "/admin/workspaces": "workspaces",
   "/admin/apps": "marketplace",
   "/admin/settings": "settings",

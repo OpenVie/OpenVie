@@ -17,6 +17,7 @@ import {
   Building2,
   ClipboardCheck,
   FileText,
+  KeyRound,
   LayoutGrid,
   MessageSquare,
   Settings,
@@ -28,7 +29,7 @@ import {
 
 export type AppNavigationItem = {
   href: string
-  labelKey: "chat" | "documents" | "approvals" | "apps" | "documentation" | "users" | "organization" | "workspaces" | "marketplace" | "settings"
+  labelKey: "chat" | "documents" | "approvals" | "apps" | "documentation" | "users" | "organization" | "apiKeys" | "workspaces" | "marketplace" | "settings"
   icon: LucideIcon
   placement?: "main" | "footer"
   /** When set, the item only shows for callers holding an org-level role. */
@@ -42,6 +43,7 @@ export const appNavigation: AppNavigationItem[] = [
   { href: "/apps", labelKey: "apps", icon: LayoutGrid },
   { href: "/users", labelKey: "users", icon: Users },
   { href: "/admin/organization", labelKey: "organization", icon: ShieldCheck, ownerOnly: true },
+  { href: "/admin/organization/api-keys", labelKey: "apiKeys", icon: KeyRound, ownerOnly: true },
   { href: "/admin/workspaces", labelKey: "workspaces", icon: Building2, ownerOnly: true },
   { href: "/admin/apps", labelKey: "marketplace", icon: Store, ownerOnly: true },
   { href: "/admin/settings", labelKey: "settings", icon: Settings, ownerOnly: true },
@@ -59,7 +61,7 @@ export function visibleNavigation(orgRole: string | undefined): AppNavigationIte
 // everything else stays on the main app (`:3000`, `openvie-frontend`).
 // The gateway routes `/admin/*` to the admin deployment and
 // `/api/v1/admin/*` to Spring, which still enforces `ORG_OWNER` per request.
-export const ADMIN_PATHS = ["/admin/organization", "/admin/workspaces", "/admin/apps", "/admin/settings"] as const
+export const ADMIN_PATHS = ["/admin/organization", "/admin/organization/api-keys", "/admin/workspaces", "/admin/apps", "/admin/settings"] as const
 
 export type AdminPath = (typeof ADMIN_PATHS)[number]
 
