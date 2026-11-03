@@ -95,6 +95,17 @@ public class BizAppDraftController extends BaseController {
         return ResponseEntity.ok(draftService.saveDraft(getOrgId(httpReq), getTenantId(httpReq), getUserId(httpReq), reqWithId));
     }
 
+    @Operation(summary = "Save a brand-new draft (first save from the composer canvas)",
+            description = "The body carries no id; the service creates the draft and returns it with its new id.")
+    @PutMapping("/drafts/new")
+    public ResponseEntity<DraftView> createDraft(
+            @Valid @RequestBody SaveDraftRequest request,
+            HttpServletRequest httpReq) {
+        requireOrgOwner(httpReq);
+        return ResponseEntity.ok(draftService.saveDraft(
+                getOrgId(httpReq), getTenantId(httpReq), getUserId(httpReq), request));
+    }
+
     @Operation(summary = "Delete a draft")
     @DeleteMapping("/drafts/{id}")
     public ResponseEntity<Void> deleteDraft(@PathVariable UUID id, HttpServletRequest httpReq) {

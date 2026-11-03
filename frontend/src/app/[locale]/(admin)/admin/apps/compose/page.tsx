@@ -14,12 +14,16 @@
 
 "use client";
 
-import { useRouter } from "@/i18n/navigation";
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import toast from "react-hot-toast";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import type { BizAppManifest } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
+import { getApiBase } from "@/lib/auth-api";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
-import { installBizAppApi } from "@/lib/bizapp-api";
+import { installBizAppApi, saveBizAppDraftApi } from "@/lib/bizapp-api";
 
 const DEFAULT_MANIFEST: BizAppManifest = {
   schema: "bizapp.v1",
@@ -49,46 +53,83 @@ const DEFAULT_MANIFEST: BizAppManifest = {
 };
 
 export default function ComposeNewPage() {
+  const t = useTranslations("BizApps");
   const router = useRouter();
   const { request } = useApiClient();
 
-  const handleSaveDraft = async (manifest: BizAppManifest) => {
-    try {
-      const res = await request("/bizapps/drafts/new", {
-        method: "PUT",
-        body: JSON.stringify({
-          title: manifest.name?.en || manifest.kind,
-          source: "canvas",
-          manifest,
-        }),
-      });
-      if (res.ok) {
-        toast.success("Draft saved successfully.");
-      } else {
-        toast.error("Failed to save draft.");
+  const [manifest, setManifest] = useState<BizAppManifest | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      // "New from template": admins land here with ?template=<ref> to start
+      // the canvas from a platform or organization template's manifest.
+      const ref = new URLSearchParams(window.location.search).get("template");
+      if (!ref) {
+        setManifest(DEFAULT_MANIFEST);
+        return;
       }
+      try {
+        const res = await request(
+          `${getApiBase()}/marketplace/bizapps/${encodeURIComponent(ref)}`,
+        );
+        if (!active) return;
+        if (res.ok) {
+          setManifest((await res.json()) as BizAppManifest);
+        } else {
+          toast.error(t("composer.templateNotFound"));
+          setManifest(DEFAULT_MANIFEST);
+        }
+      } catch (err) {
+        if (!active) return;
+        toast.error(err instanceof Error ? err.message : t("composer.templateNotFound"));
+        setManifest(DEFAULT_MANIFEST);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [request, t]);
+
+  const handleSaveDraft = async (updated: BizAppManifest) => {
+    try {
+      const draft = await saveBizAppDraftApi(request, "new", {
+        title: updated.name?.en || updated.kind,
+        source: "canvas",
+        manifest: updated,
+      });
+      toast.success(t("composer.saved"));
+      router.replace(`/admin/apps/compose/${draft.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error saving draft");
+      toast.error(err instanceof Error ? err.message : t("composer.saveFailed"));
     }
   };
 
-  const handleInstall = async (manifest: BizAppManifest) => {
+  const handleInstall = async (updated: BizAppManifest) => {
     try {
-      await installBizAppApi(request, { manifest });
-      toast.success("App installed successfully.");
-      router.push(`/apps/${manifest.kind}`);
+      await installBizAppApi(request, { manifest: updated });
+      toast.success(t("composer.installed"));
+      router.push(`/apps/${updated.kind}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error installing app");
+      toast.error(err instanceof Error ? err.message : t("composer.installFailed"));
     }
   };
+
+  if (!manifest) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 space-y-4">
-      <ComposerCanvas
-        initialManifest={DEFAULT_MANIFEST}
-        onSaveDraft={handleSaveDraft}
-        onInstall={handleInstall}
-      />
-    </div>
+    <ComposerCanvas
+      initialManifest={manifest}
+      onSaveDraft={handleSaveDraft}
+      onInstall={handleInstall}
+      onBack={() => router.push("/admin/apps")}
+    />
   );
 }

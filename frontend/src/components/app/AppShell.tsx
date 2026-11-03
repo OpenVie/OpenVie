@@ -392,3 +392,66 @@ export function ProtectedAdminShell({ children }: { children: ReactNode }) {
 
   return <AppShell>{children}</AppShell>
 }
+
+/**
+ * Composer boundary: full-screen layout for the visual BizApp composer canvas.
+ * Same auth and `ORG_OWNER` requirement, but takes 100% of the screen with no sidebar.
+ */
+export function ProtectedComposerShell({ children }: { children: ReactNode }) {
+  const common = useTranslations("Common")
+  const navigation = useTranslations("Navigation")
+  const router = useRouter()
+  const status = useTokenRehydration()
+  const user = useAuthStore((state) => state.user)
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+
+  useEffect(() => {
+    function syncTheme() {
+      const stored = window.localStorage.getItem("openvie.theme")
+      if (stored === "dark" || stored === "light") {
+        setTheme(stored)
+      }
+    }
+    syncTheme()
+    window.addEventListener("openvie:themechange", syncTheme)
+    window.addEventListener("storage", syncTheme)
+    return () => {
+      window.removeEventListener("openvie:themechange", syncTheme)
+      window.removeEventListener("storage", syncTheme)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      router.replace(withNext("/login", destination))
+    }
+  }, [router, status])
+
+  if (status === "rehydrating") {
+    return <AppLoadingScreen label={common("loading")} />
+  }
+
+  if (status === "unauthenticated") {
+    return null
+  }
+
+  if (user?.orgRole !== "ORG_OWNER") {
+    return (
+      <div className={cn("ov-shell flex min-h-dvh h-dvh w-screen items-center justify-center p-6 bg-background text-foreground", theme === "light" && "ov-light")}>
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive max-w-md text-center"
+        >
+          {navigation("adminOnly")}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn("ov-shell min-h-dvh h-screen h-dvh w-screen overflow-hidden bg-background text-foreground", theme === "light" && "ov-light")}>
+      {children}
+    </div>
+  )
+}

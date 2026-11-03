@@ -17,12 +17,12 @@
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { BarChart3, Bot, History, List, PlusCircle } from "lucide-react";
 import type { BizAppInstalledAppView } from "@/types";
 import { BizAppRegistryView } from "@/components/bizapp/BizAppRegistryView";
 import { BizAppReportView } from "@/components/bizapp/BizAppReportView";
 import { BizAppTimelineView } from "@/components/bizapp/BizAppTimelineView";
 import { BizAppAssistantView } from "@/components/bizapp/BizAppAssistantView";
-
 type UiView = { prefix: string; target: string; raw: string };
 /**
  * Manifest-driven runtime surface of one installed app: walks `ui.views` and
@@ -53,10 +53,30 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
     if (view.prefix === "assistant") {
       return t("nav.assistant", { fallback: "Trợ lý AI" });
     }
+
     const entity = app.manifest.entities.find((candidate) => candidate.name === view.target);
-    return entity?.label
-      ? entityLabel(entity, locale) ?? view.target
-      : view.target;
+    const eLabel = (locale === "vi" ? entity?.label?.vi : entity?.label?.en) || view.target;
+
+    const prefixLabel =
+      view.prefix === "registry"
+        ? t("nav.registry")
+        : view.prefix === "form"
+        ? t("nav.form")
+        : view.prefix === "timeline"
+        ? t("nav.timeline")
+        : view.prefix;
+
+    const sameEntityViews = views.filter((v) => v.target === view.target);
+    const hasMultipleEntities = (app.manifest.entities?.length ?? 0) > 1;
+
+    if (sameEntityViews.length > 1) {
+      if (hasMultipleEntities) {
+        return `${eLabel} · ${prefixLabel}`;
+      }
+      return prefixLabel;
+    }
+
+    return eLabel;
   };
 
   if (views.length === 0) {
@@ -73,13 +93,14 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
             aria-selected={current?.raw === view.raw}
             onClick={() => setActive(view.raw)}
             className={
-              "rounded-full border px-4 py-1.5 text-sm transition-colors " +
+              "flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors " +
               (current?.raw === view.raw
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-background hover:bg-muted")
+                ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground")
             }
           >
-            {label(view)}
+            {viewIcon(view.prefix)}
+            <span>{label(view)}</span>
           </button>
         ))}
       </div>
@@ -97,6 +118,20 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
   );
 }
 
-function entityLabel(entity: { label?: { vi?: string | null; en?: string | null } | null }, locale: string): string | null {
-  return (locale === "vi" ? entity.label?.vi : entity.label?.en) || null;
+
+function viewIcon(prefix: string) {
+  switch (prefix) {
+    case "registry":
+      return <List className="size-3.5 shrink-0" />;
+    case "form":
+      return <PlusCircle className="size-3.5 shrink-0" />;
+    case "timeline":
+      return <History className="size-3.5 shrink-0" />;
+    case "report":
+      return <BarChart3 className="size-3.5 shrink-0" />;
+    case "assistant":
+      return <Bot className="size-3.5 shrink-0" />;
+    default:
+      return null;
+  }
 }

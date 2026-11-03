@@ -22,12 +22,15 @@ import { readJsonOrThrow } from "@/lib/api-error";
 import type {
   BizAppBlock,
   BizAppCredentialView,
+  BizAppDraftView,
+  BizAppGenerateDraftResult,
   BizAppInstallResult,
   BizAppInstalledAppView,
   BizAppManifest,
   BizAppRecordPage,
   BizAppRecordView,
   BizAppTemplateView,
+  BizAppValidationResult,
 } from "@/types";
 
 // ─── Runtime (installed apps + record store) ────────────────────────────────
@@ -210,6 +213,121 @@ export async function installBizAppApi(
     await request(`${getApiBase()}/apps/install`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  );
+}
+
+// ─── Drafts (AI drafting + composer, owner) ─────────────────────────────────
+
+export async function listBizAppDraftsApi(
+  request: ApiRequest,
+): Promise<BizAppDraftView[]> {
+  return readJsonOrThrow<BizAppDraftView[]>(
+    await request(`${getApiBase()}/bizapps/drafts`),
+  );
+}
+
+export async function getBizAppDraftApi(
+  request: ApiRequest,
+  draftId: string,
+): Promise<BizAppDraftView> {
+  return readJsonOrThrow<BizAppDraftView>(
+    await request(`${getApiBase()}/bizapps/drafts/${encodeURIComponent(draftId)}`),
+  );
+}
+
+/**
+ * Saves a draft; `"new"` as the id creates one (backend `PUT /drafts/new`).
+ * The returned view carries the stored manifest and a fresh validation.
+ */
+export async function saveBizAppDraftApi(
+  request: ApiRequest,
+  draftId: string,
+  body: { id?: string; title?: string; source?: string; manifest: BizAppManifest; meta?: Record<string, unknown> },
+): Promise<BizAppDraftView> {
+  return readJsonOrThrow<BizAppDraftView>(
+    await request(`${getApiBase()}/bizapps/drafts/${encodeURIComponent(draftId)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function deleteBizAppDraftApi(
+  request: ApiRequest,
+  draftId: string,
+): Promise<void> {
+  await request(`${getApiBase()}/bizapps/drafts/${encodeURIComponent(draftId)}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Drafts a manifest from a natural-language prompt. The result is a draft
+ * only — it never installs until the owner reviews and installs it.
+ */
+export async function generateBizAppDraftApi(
+  request: ApiRequest,
+  body: { prompt: string; locale?: string; baseTemplateRef?: string },
+): Promise<BizAppGenerateDraftResult> {
+  return readJsonOrThrow<BizAppGenerateDraftResult>(
+    await request(`${getApiBase()}/bizapps/drafts/generate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/**
+ * Validates a manifest against the bizapp.v1 schema rules without saving.
+ */
+export async function validateBizAppManifestApi(
+  request: ApiRequest,
+  manifest: BizAppManifest,
+): Promise<BizAppValidationResult> {
+  return readJsonOrThrow<BizAppValidationResult>(
+    await request(`${getApiBase()}/bizapps/validate`, {
+      method: "POST",
+      body: JSON.stringify({ manifest }),
+    }),
+  );
+}
+
+// ─── Template exchange (export / import / remix, owner) ─────────────────────
+
+/** Downloads the `openvie.template.v1` envelope (manifest + provenance meta). */
+export async function exportBizAppTemplateApi(
+  request: ApiRequest,
+  templateRef: string,
+): Promise<Record<string, unknown>> {
+  return readJsonOrThrow<Record<string, unknown>>(
+    await request(`${getApiBase()}/marketplace/bizapps/${encodeURIComponent(templateRef)}/export`),
+  );
+}
+
+/** Imports an envelope (pasted JSON or URL + SHA-256) as a draft. */
+export async function importBizAppTemplateApi(
+  request: ApiRequest,
+  body: { content?: string; url?: string; sha256?: string },
+): Promise<BizAppDraftView> {
+  return readJsonOrThrow<BizAppDraftView>(
+    await request(`${getApiBase()}/marketplace/bizapps/import`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/** Remixes a template: copy to draft, retain upstream attribution, append a change entry. */
+export async function remixBizAppTemplateApi(
+  request: ApiRequest,
+  templateRef: string,
+  summary?: string,
+): Promise<BizAppDraftView> {
+  return readJsonOrThrow<BizAppDraftView>(
+    await request(`${getApiBase()}/marketplace/bizapps/${encodeURIComponent(templateRef)}/remix`, {
+      method: "POST",
+      body: JSON.stringify(summary ? { summary } : {}),
     }),
   );
 }

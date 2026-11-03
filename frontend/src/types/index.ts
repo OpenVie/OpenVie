@@ -470,3 +470,30 @@ export interface BizAppInstallResult {
   version: number;
   processKey?: string | null;
 }
+
+/** Stateless manifest validation result (`POST /bizapps/validate`). */
+export interface BizAppValidationResult {
+  ok: boolean;
+  errors: string[];
+}
+
+/** One draft entry — AI-generated, canvas-edited, imported or remixed. */
+export interface BizAppDraftView {
+  id: string;
+  source: "ai" | "canvas" | "import" | "remix";
+  title: string | null;
+  manifest: Record<string, unknown> | null;
+  /** `{ ok, errors[] }` as stored by the backend, when validation ran. */
+  validation: Record<string, unknown> | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Response of `POST /bizapps/drafts/generate` (draft only, never installs). */
+export interface BizAppGenerateDraftResult {
+  draftId: string;
+  manifest: Record<string, unknown> | null;
+  validation: BizAppValidationResult | null;
+  meta: Record<string, unknown> | null;
+}

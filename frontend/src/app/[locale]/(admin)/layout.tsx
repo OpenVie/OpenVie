@@ -12,12 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ProtectedAdminShell } from "@/components/app/AppShell"
+"use client";
+
+import { usePathname } from "@/i18n/navigation";
+import { ProtectedAdminShell, ProtectedComposerShell } from "@/components/app/AppShell";
 
 /**
  * Admin surface layout: every page under `/admin/*` requires `ORG_OWNER`.
  * Served by the `frontend-admin` deployment (OIDC client `openvie-admin`).
+ * The visual composer routes (`/admin/apps/compose*`) take full screen without the sidebar.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return <ProtectedAdminShell>{children}</ProtectedAdminShell>
+  const pathname = usePathname();
+  const isComposer = pathname?.startsWith("/admin/apps/compose");
+
+  if (isComposer) {
+    return <ProtectedComposerShell>{children}</ProtectedComposerShell>;
+  }
+
+  return <ProtectedAdminShell>{children}</ProtectedAdminShell>;
 }
