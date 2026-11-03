@@ -200,6 +200,31 @@ export interface OrganizationMember {
   currentUser: boolean;
 }
 
+/** Machine API key as reported by `/admin/api-keys` (secrets are write-only). */
+export interface ApiKeyView {
+  id: string;
+  workspaceId: string;
+  serviceUserId: string;
+  name: string;
+  /** `ovk_` + first secret characters, identification only. */
+  keyPrefix: string;
+  role: WorkspaceRole;
+  status: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdBy: string;
+  /** True when the key can no longer authenticate (revoked or expired). */
+  expired: boolean;
+}
+
+/** Creation response: `key` is the secret shown exactly once — store it now. */
+export interface CreatedApiKey {
+  id: string;
+  key: string;
+  keyView: ApiKeyView;
+}
+
 export interface InvitationValidation {
   email: string;
   organizationName: string;

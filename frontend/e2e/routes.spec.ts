@@ -74,6 +74,7 @@ test("retained routes resolve for both locales", async ({ page }) => {
     "/change-password",
     "/sso/callback",
     "/admin/workspaces",
+    "/admin/organization/api-keys",
     "/admin/settings",
     "/admin/organization",
     "/documentation",

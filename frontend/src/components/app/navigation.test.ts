@@ -41,6 +41,7 @@ describe("application navigation", () => {
       "/apps",
       "/users",
       "/admin/organization",
+      "/admin/organization/api-keys",
       "/admin/workspaces",
       "/admin/apps",
       "/admin/settings",
@@ -72,6 +73,7 @@ describe("application navigation", () => {
   it("keeps the admin boundary in sync with owner-only destinations", () => {
     expect(adminNavigation.map((item) => item.href).sort()).toEqual([...ADMIN_PATHS].sort());
     expect(isAdminPath("/admin/organization")).toBe(true);
+    expect(isAdminPath("/admin/organization/api-keys")).toBe(true);
     expect(isAdminPath("/admin/workspaces")).toBe(true);
     expect(isAdminPath("/admin/apps")).toBe(true);
     expect(isAdminPath("/admin/settings")).toBe(true);
