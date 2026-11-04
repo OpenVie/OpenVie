@@ -46,7 +46,7 @@
     <rect width="205" height="128" rx="14" fill="url(#af-card)" stroke="#1fb6ff" stroke-opacity="0.5" stroke-width="1.5"/>
     <rect x="85" y="14" width="36" height="36" rx="9" fill="#1fb6ff" fill-opacity="0.15" stroke="#1fb6ff" stroke-opacity="0.5" stroke-width="1"/>
     <!-- Shield / Admin Icon -->
-    <path d="M96 23 l7 3 v6 c0 5 -3.5 8 -7 10 c-3.5 -2 -7 -5 -7 -10 v-6 z" fill="none" stroke="#1fb6ff" stroke-width="1.8"/>
+    <path d="M103 23 l7 3 v6 c0 5 -3.5 8 -7 10 c-3.5 -2 -7 -5 -7 -10 v-6 z" fill="none" stroke="#1fb6ff" stroke-width="1.8"/>
     <text x="102" y="74" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#f2f5f0">Level 1: Admin</text>
     <text x="102" y="94" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" fill="#1fb6ff">Workspace Admin</text>
     <text x="102" y="112" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" font-weight="400" fill="#94a3b8">Approve · Reject · Escalate</text>

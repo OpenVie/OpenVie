@@ -53,12 +53,12 @@ flowchart TB
 
 ### 2. Mô hình 4 mặt phẳng (Four-Plane Boundary)
 
-| Mặt phẳng | Hiện trạng đã có | Chưa cung cấp |
-|---|---|---|
-| **Điều khiển (Control)** | Spring Boot quản lý tổ chức, workspace, tài khoản, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), kênh thông báo, phiên chat và lưu trữ PostgreSQL. | Dịch vụ điều phối chuyển đổi checkpoint model động. |
-| **Dữ liệu bất đồng bộ** | RabbitMQ điều phối hàng đợi, worker xử lý đa luồng, SeaweedFS lưu trữ file gốc, Qdrant lưu vector, Kuzu lưu đồ thị. OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định). | Âm thanh, video tổng quát. |
+| Mặt phẳng                | Hiện trạng đã có                                                                                                                                                                | Chưa cung cấp                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Điều khiển (Control)** | Spring Boot quản lý tổ chức, workspace, tài khoản, phân quyền 3 cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), kênh thông báo, phiên chat và lưu trữ PostgreSQL.               | Dịch vụ điều phối chuyển đổi checkpoint model động.                                                                |
+| **Dữ liệu bất đồng bộ**  | RabbitMQ điều phối hàng đợi, worker xử lý đa luồng, SeaweedFS lưu trữ file gốc, Qdrant lưu vector, Kuzu lưu đồ thị. OCR tùy chọn cho PDF scan/ảnh (tắt theo mặc định).          | Âm thanh, video tổng quát.                                                                                         |
 | **Suy luận (Inference)** | FastAPI xử lý gRPC server-streaming cho câu trả lời, bộ lọc chào hỏi/nhiễu bảo thủ, RAG ngữ cảnh theo tenant, router từ khóa nhạy cảm, LLM sinh câu trả lời có trích dẫn nguồn. | Mô hình Verifier đã huấn luyện, ngữ liệu pháp luật Việt Nam độc lập, tự động failover giữa các nhà cung cấp cloud. |
-| **Đánh giá ngoại tuyến** | Công cụ chạy lại trace JSONL đo đạc nhãn nhạy cảm, độ chuẩn xác của trích dẫn mà không cần gọi API model. | Pipeline huấn luyện SFT/DPO/QLoRA, bộ benchmark tự động công bố. |
+| **Đánh giá ngoại tuyến** | Công cụ chạy lại trace JSONL đo đạc nhãn nhạy cảm, độ chuẩn xác của trích dẫn mà không cần gọi API model.                                                                       | Pipeline huấn luyện SFT/DPO/QLoRA, bộ benchmark tự động công bố.                                                   |
 
 ### 3. Phân định trách nhiệm dữ liệu
 
@@ -71,6 +71,7 @@ flowchart TB
 ### 4. Chuỗi tương tác chính
 
 #### A. Xử lý yêu cầu trò chuyện (Chat Sequence)
+
 1. Client gửi câu hỏi kèm JWT tới Spring Boot qua Gateway APISIX.
 2. Spring xác thực quyền workspace, kiểm tra khóa idempotency, lưu trạng thái `PENDING`.
 3. Spring gọi gRPC server-streaming `GenerateAnswer` sang Python FastAPI kèm ngữ cảnh và lịch sử gần nhất.
@@ -82,6 +83,7 @@ flowchart TB
 POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác thực JWT, trả `text/event-stream` với `content`, `reset`, `complete`, `error`. Header `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no` tránh gom luồng qua proxy/nén. Giao diện có trạng thái đang viết, dấu chấm và con trỏ nhẹ; tắt animation khi người dùng chọn reduced motion.
 
 #### B. Hấp thụ tài liệu (Ingestion Sequence)
+
 1. Người dùng upload tệp (tối đa 20MB) tới Spring API.
 2. Spring lưu tệp vào SeaweedFS, ghi sự kiện vào `internal_event_outbox`, trả HTTP 202 Accepted.
 3. Relay đẩy sự kiện tới RabbitMQ. Worker nhận job, đánh dấu lease trong Redis, cập nhật `PROCESSING`.
@@ -89,16 +91,18 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 5. Worker gửi sự kiện `COMPLETED` về RabbitMQ; Spring cập nhật trạng thái tài liệu sang `COMPLETED`.
 
 #### C. Phê duyệt tài liệu hai cấp (Approval Sequence)
+
 1. Thành viên nộp tài liệu kèm đích công bố (`workspace`/`shared`/`public`). Spring ghi số và biến quy trình rồi chạy BPMN nhúng Flowable trong cùng PostgreSQL (`eofficeDocumentApproval`).
 2. Service task tính độ nhạy cảm theo hợp đồng dùng chung `contracts/approval/v1/sensitive-policy.json` (`sensitive-keyword-v1`) — Java không giữ danh sách từ khóa thứ hai. Hệ thống — không phải người nộp — quyết định cấp phê duyệt: nhạy cảm hoặc đích `shared`/`public` → cấp 2 (`ORG_OWNER`), thường → cấp 1 (`WORKSPACE_ADMIN`).
 3. Đường tắt theo quyền hạn: đăng tài liệu thường (`workspace`-target, không nhạy cảm) bởi người đã giữ thẩm quyền duyệt của workspace đó — workspace admin hoặc chủ sở hữu tổ chức (trường hợp đăng lên General) — được quyết bằng quyền hạn sẵn có ngay trong giao dịch; quy trình vẫn chạy nhánh APPROVE (lịch sử thống nhất), ghi `selfApproved=true`. Không thêm ceremony khi người nộp đã giữ thẩm quyền duyệt; tài liệu nhạy cảm luôn giữ lại trình duyệt.
 4. Chống tự duyệt: trong trình duyệt thật, người nộp có thể rút tài liệu (từ chối kèm lý do) hoặc bàn giao lên trên, nhưng quyết định tài liệu của chính mình phải đến từ người khác — chỉ chủ sở hữu tổ chức, đỉnh của chuỗi, được quyết tài liệu của mình (`selfDecision` có ghi audit). Task đã claim chỉ người claim được hoàn tất; task trống trong nhóm được claim-tại-hoàn-tất.
 5. Nghiệp vụ được ghi vào nhật ký kiểm toán (`workflow_process`): bắt đầu, nhận xử lý, phê duyệt, từ chối (bắt buộc có lý do), bàn giao L1→L2, bỏ qua không được phép. `GET /api/v1/workflow/processes/{id}/log` trả nhật ký audit theo từng quy trình, resolve tên người thực hiện phía server; trang approvals hiển thị log theo dialog của từng tài liệu.
-6. Timer SLA cấu hình được theo từng tổ chức (mặc định PT24H nhắc nhở, PT48H leo thang trong `openvie.workflow.*`; hàng đè trong `workflow_sla_configs`): nhắc nhở không gián đoạn, quá hạn leo thang nhiệm vụ cấp 1 sang cấp 2 và ghi nhật ký leo thang (overdue, không phải quyết định thủ công).
+6. Timer SLA cấu hình được theo từng tổ chức (mặc định PT24H nhắc nhở, PT48H chuyển tiếp trong `openvie.workflow.*`; hàng đè trong `workflow_sla_configs`): nhắc nhở không gián đoạn, quá hạn chuyển tiếp nhiệm vụ cấp 1 sang cấp 2 và ghi nhật ký chuyển tiếp (overdue, không phải quyết định thủ công).
 7. Trạng thái chạy nằm trong bảng engine `ACT_*` của PostgreSQL nên API khởi động lại (deploy/crash) vẫn tái hiện quy trình và nhiệm vụ đang chờ mà không cần trình phát lại.
 8. Ghi nhận trạng thái chính thức: Khi quy trình kết thúc (duyệt hoặc từ chối), `DocumentApi.recordApprovalDecision` ghi trực tiếp `approval_status` và người duyệt vào bảng `documents`, đồng thời phát sự kiện `WorkflowDecisionEvent` gửi email thông báo kết quả phê duyệt cho người nộp qua kênh SMTP (`WORKFLOW_DECIDED`).
 
 #### D. BizApp runtime (Tier 3 — ứng dụng cài được)
+
 1. `ORG_OWNER` cài template từ marketplace (`platform:crm` hoặc bản copy của tổ chức): validator chặn manifest trước → đóng băng manifest vào `bizapp_installations` → deploy BPMN `bizapp-<kind>` qua engine khi app khai báo block phê duyệt.
 2. Người dùng thao tác trên khung xem form/registry/timeline/report sinh từ manifest; mọi bản ghi nằm trong bảng JSONB chung `bizapp_records`, validate chặt theo schema và RBAC giải lại mỗi request (không tin client).
 3. Nộp duyệt khởi động process Flowable, hoàn tất qua inbox tác vụ tổng quát; delegate cuối ghi quyết định vào `runtime` và phát webhook `bizapp.<kind>.record.decided` sau commit.
@@ -122,18 +126,19 @@ This reference describes OpenVie's runtime architecture, trust boundaries, and c
 ## 1. Runtime topology
 
 See the shared topology diagram above. Key boundaries:
+
 - **Client to Edge:** Apache APISIX (:8088) reverse-proxies `/api/v1/*` to Spring Boot (:8080) and `/*` to Next.js (:3000) with edge rate limiting (`limit-req`).
 - **Internal gRPC:** Spring communicates with Python AI (:50051) using server-streaming `GenerateAnswer`; document-unit reads and index deletion remain unary.
 - **Data Isolation:** PostgreSQL is Spring-exclusive. Qdrant, Kuzu, and RabbitMQ ingestion workers are managed by Python. SeaweedFS holds raw uploads and Parquet artifacts.
 
 ## 2. Four-plane target and delivered boundary
 
-| Plane | Delivered | Not delivered |
-|---|---|---|
-| **Control** | Spring Boot workspace/auth/chat API, PostgreSQL persistence (orgs, workspaces, memberships, notification channels), Redis runtime state. | Dynamic runtime model switching/promotion service. |
-| **Async data** | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. Optional OCR for scanned PDFs/images (off by default). | General audio or video pipelines. |
-| **Inference** | FastAPI server-streaming answer gRPC, conservative greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. | Trained verifier runtime, standalone legal corpus, automated cloud provider failover. |
-| **Offline alignment** | Local trace replay evaluating sensitive routes and citation markers without remote API calls. | Model fine-tuning (SFT/DPO), automatic candidate promotion. |
+| Plane                 | Delivered                                                                                                                                                                 | Not delivered                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Control**           | Spring Boot workspace/auth/chat API, PostgreSQL persistence (orgs, workspaces, memberships, notification channels), Redis runtime state.                                  | Dynamic runtime model switching/promotion service.                                    |
+| **Async data**        | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. Optional OCR for scanned PDFs/images (off by default).                               | General audio or video pipelines.                                                     |
+| **Inference**         | FastAPI server-streaming answer gRPC, conservative greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. | Trained verifier runtime, standalone legal corpus, automated cloud provider failover. |
+| **Offline alignment** | Local trace replay evaluating sensitive routes and citation markers without remote API calls.                                                                             | Model fine-tuning (SFT/DPO), automatic candidate promotion.                           |
 
 ## 3. Data ownership
 
@@ -146,6 +151,7 @@ See the shared topology diagram above. Key boundaries:
 ## 4. Key execution flows
 
 ### Chat execution
+
 1. Client submits message with JWT via APISIX gateway.
 2. Spring authenticates workspace scope, checks idempotency key, persists user turn as `PENDING`.
 3. Spring invokes server-streaming gRPC `GenerateAnswer` with recent history.
@@ -157,6 +163,7 @@ See the shared topology diagram above. Key boundaries:
 POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and JWT authentication but returns `text/event-stream` events: `content`, `reset`, `complete`, `error`. `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no` prevent proxy/compression buffering. The UI shows a writing status, subtle dots and cursor, and disables animations for reduced motion.
 
 ### Document ingestion
+
 1. Client uploads document (up to 20MB) to Spring API.
 2. Spring stores raw object in SeaweedFS, records outbox event, returns HTTP 202 Accepted.
 3. Outbox relay forwards message to RabbitMQ. Worker claims job lease via Redis, sets `PROCESSING`.
@@ -164,6 +171,7 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 5. Worker publishes `COMPLETED` to RabbitMQ; Spring marks document `COMPLETED`.
 
 ### Two-level document approval
+
 1. A workspace member submits a COMPLETED document with a publish target (`workspace`, `shared`, or `public`); Spring starts the embedded Flowable process `eofficeDocumentApproval` in the shared PostgreSQL.
 2. The scoring service task applies the shared sensitivity contract (`contracts/approval/v1/sensitive-policy.json`, `sensitive-keyword-v1`) — Java has no second keyword list — and the system (not the submitter) fixes the approval level: sensitive or `shared`/`public` targets need level 2 (`ORG_OWNER`), ordinary documents stay at level 1 (`WORKSPACE_ADMIN`).
 3. Authority short-circuit: a workspace publishing an ordinary (`workspace`-target, non-sensitive) document by someone who already holds that workspace's approval authority — its admin, or the org owner (the General case) — is decided by their own authority in the same transaction; the process still runs its APPROVE path (uniform history), audited with `selfApproved=true`. No ceremony is added where the submitter already holds the reviewing authority; sensitive documents always keep the review.
@@ -174,6 +182,7 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 8. Authoritative decision write-back: upon terminal settlement (approved or rejected), `DocumentApi.recordApprovalDecision` commits `approval_status`, timestamp, and the deciding user directly onto the `documents` record, invalidating document caches and publishing `WorkflowDecisionEvent` for transactional submitter email notification (`WORKFLOW_DECIDED`).
 
 #### D. BizApp runtime (Tier 3 — installable apps)
+
 1. An `ORG_OWNER` installs a marketplace template (`platform:crm` or an org-crafted copy): the manifest validator gates first, the manifest freezes onto `bizapp_installations`, and the engine deploys the `bizapp-<kind>` BPMN when the app declares an approval block.
 2. Users work through manifest-generated form/registry/timeline/report views; every record lands in the shared JSONB table `bizapp_records`, strictly validated against the schema with workspace RBAC re-resolved per request — the client is never trusted.
 3. Submitting for approval starts a Flowable process completed through the generic engine inbox; the terminal delegate writes the decision into `runtime` and raises the `bizapp.<kind>.record.decided` webhook after commit.
