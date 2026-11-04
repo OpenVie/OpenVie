@@ -217,6 +217,40 @@ docker compose --profile monitoring up -d
 - **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): datasource Prometheus (`http://prometheus:9090`) và hai dashboard (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) được provision từ file trong `monitoring/grafana/`. Đăng nhập bằng `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; truy cập ẩn danh đã bị tắt.
 - **Bảo mật:** cả ba cổng chỉ bind `127.0.0.1`. Muốn truy cập từ xa, đặt sau reverse proxy TLS của bạn (như với APISIX); không mở trực tiếp ra Internet.
 
+### 12. Hướng dẫn Nâng cấp lên v1.0.0 & Cấu hình An toàn Truy hồi
+
+#### A. Quy trình nâng cấp bắt buộc theo thứ tự
+1. **Sao lưu toàn bộ dữ liệu:** Chạy `scripts/ops/backup.sh` (Postgres, Qdrant, Kuzu, SeaweedFS).
+2. **Cảnh báo Checksum Flyway:** Tuyệt đối không chỉnh sửa các tệp migration từ `V1` đến `V17`. Khởi chạy API để Flyway áp dụng tự động `V18__document_provenance.sql` và `V19__chat_turn_intent.sql`.
+3. **Cập nhật Node Table Kuzu:** Chạy lệnh DDL bổ sung cột nguồn gốc trên bảng `Source` của Kuzu:
+   ```cypher
+   ALTER TABLE Source ADD document_kind STRING DEFAULT 'USER';
+   ALTER TABLE Source ADD source_ref STRING DEFAULT '';
+   ```
+4. **Phân loại lại dữ liệu cũ (W0.7 Backfill):** Chạy lệnh chuẩn hóa tài liệu hệ thống (chạy dry-run trước để kiểm tra, sau đó chạy chính thức ngoài giờ cao điểm):
+   ```bash
+   # Dry-run:
+   java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill --dry-run
+   # Chạy thật:
+   java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill
+   ```
+5. **Kiểm tra sau nâng cấp:** Xác nhận tài liệu hệ thống không bị lộ trong UI và không xuất hiện trong citation câu hỏi tài liệu thường.
+
+#### B. Ma trận cấu hình Graph Ingest & Retrieval
+Hệ thống cung cấp hai công tắc độc lập cho kênh đồ thị:
+
+| `GRAPH_EXTRACTION_ENABLED` | `GRAPH_RETRIEVAL_ENABLED` | Kết quả vận hành |
+|---|---|---|
+| `true` (mặc định) | `true` (mặc định) | Chuẩn v1.0.0: trích xuất lúc ingest + truy hồi đồ thị kết hợp dense/sparse. |
+| `true` | `false` | Đồ thị vẫn được trích xuất nhưng không dùng để truy hồi (lãng phí compute lúc ingest — chỉ dùng khi muốn chuẩn bị dữ liệu đồ thị trước). |
+| `false` | `true` | Ingest nhanh (không gọi LLM trích xuất đồ thị); truy hồi graph chạy nhưng trả về ít/không có kết quả. |
+| `false` | `false` | Thuần Dense + Sparse (nhanh nhất, tiết kiệm tài nguyên compute tối đa). |
+
+#### C. Chính sách bộ đệm & Cache Policy Version
+- Cờ `GRAPH_RETRIEVAL_ENABLED` và hằng số `document_kind_policy_version` (hiện tại `document-kind-v1`) được đưa vào `retrieval_configuration_fingerprint`.
+- Mọi thay đổi về chính sách loại trừ hoặc chuyển đổi công tắc graph sẽ tự động tách khóa bộ đệm retrieval và semantic answer cache, tránh phục vụ kết quả của chế độ cũ.
+- Tham số `include_system=true` trên `/api/v1/documents` chỉ khả dụng cho vai trò `ORG_OWNER` phục vụ kiểm tra vận hành.
+
 ---
 
 # Self-hosted installation guide
@@ -424,5 +458,37 @@ docker compose --profile monitoring up -d
   Configuration: `monitoring/prometheus/prometheus.yml` (prod) and `monitoring/prometheus/prometheus.dev.yml` (dev); scrape interval is 15 seconds.
 - **Alert rules**: `monitoring/prometheus/rules/openvie-alerts.yml` (target down, 5xx error ratio, JVM heap, cache error ratio, Redis errors, chat-model timeouts, retrieval fallbacks).
 - **Alertmanager** (`127.0.0.1:${ALERTMANAGER_PORT:-9093}`): `monitoring/alertmanager/alertmanager.yml` ships a single `default` route. **Operator-owned step:** the `default` receiver intentionally has no delivery address — add a webhook/email/Slack integration there so alerts leave the host. An `inhibit_rules` entry lets a `critical` alert mute the `warning` version of the same `alertname` until it resolves.
-- **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): a Prometheus datasource (`http://prometheus:9090`) and two dashboards (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) are file-provisioned from `monitoring/grafana/`. Sign in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; anonymous access is disabled.
 - **Security:** all three ports bind to `127.0.0.1` only. To reach them remotely, put them behind your own TLS reverse proxy (as with APISIX); never expose them directly to the Internet.
+
+## 12. Upgrade Guide to v1.0.0 & Retrieval Safety Matrix
+
+### A. Mandatory Upgrade Sequence
+1. **Full Backup:** Execute `scripts/ops/backup.sh` (Postgres, Qdrant, Kuzu, SeaweedFS).
+2. **Flyway Checksum Guard:** Never modify historical migrations `V1` through `V17`. Run API to apply `V18__document_provenance.sql` and `V19__chat_turn_intent.sql`.
+3. **Kuzu Source Node Table Update:** Execute DDL adding provenance attributes to `Source`:
+   ```cypher
+   ALTER TABLE Source ADD document_kind STRING DEFAULT 'USER';
+   ALTER TABLE Source ADD source_ref STRING DEFAULT '';
+   ```
+4. **Legacy System Document Reclassification (W0.7 Backfill):** Run the idempotent backfill command (dry-run first, then execute during maintenance window):
+   ```bash
+   # Dry-run:
+   java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill --dry-run
+   # Live run:
+   java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill
+   ```
+5. **Post-Upgrade Verification:** Confirm system documents are hidden from UI and excluded from document citations.
+
+### B. Graph Ingest & Retrieval Configuration Matrix
+
+| `GRAPH_EXTRACTION_ENABLED` | `GRAPH_RETRIEVAL_ENABLED` | Operational Behavior |
+|---|---|---|
+| `true` (default) | `true` (default) | Standard v1.0.0: graph extraction during ingest + hybrid graph retrieval. |
+| `true` | `false` | Graph is extracted but skipped during retrieval (wastes ingest compute; use only when prebuilding graph). |
+| `false` | `true` | Fast ingest (no LLM extraction); graph retrieval runs with empty/sparse graph results. |
+| `false` | `false` | Pure Dense + Sparse retrieval (fastest execution, minimal compute overhead). |
+
+### C. Cache Policy Fingerprinting
+- `GRAPH_RETRIEVAL_ENABLED` and `document_kind_policy_version` (`document-kind-v1`) are included in `retrieval_configuration_fingerprint`.
+- Toggling graph retrieval or updating exclusion policy automatically invalidates both retrieval cache and semantic answer cache, preventing stale responses across modes.
+- `include_system=true` on `/api/v1/documents` is restricted to `ORG_OWNER` for administrative inspection only.

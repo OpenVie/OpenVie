@@ -14,7 +14,6 @@
 
 package com.openvie.api.bizapp.service.block;
 
-import com.openvie.api.chat.api.ChatRuntimeApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -29,8 +28,6 @@ import org.springframework.stereotype.Component;
 public class AssistantBlock implements BizAppBlockExecutor {
 
     public static final String TYPE = "assistant";
-
-    private final ChatRuntimeApi chatRuntimeApi;
 
     @Override
     public String supports() {

@@ -639,6 +639,24 @@
       "COMPLETED": "Ready",
       "FAILED": "Failed"
     },
+    "bizappAction": {
+      "installTitle": "Install Application",
+      "installConfirm": "Confirm Install",
+      "uninstallTitle": "Uninstall Application",
+      "uninstallConfirm": "Confirm Uninstall",
+      "uninstallWarning": "Uninstalling will disable this application in your workspace.",
+      "catalogTitle": "Application Catalog",
+      "openCatalog": "Open App Marketplace",
+      "suggestTitle": "Suggested Applications",
+      "draftTitle": "Application Draft",
+      "openComposer": "Open in Visual Composer",
+      "installToWorkspace": "Install into Workspace",
+      "executing": "Executing...",
+      "executed": "Executed successfully",
+      "failed": "Execution failed",
+      "denied": "Permission denied (Requires Organization Owner)",
+      "onlyOwnerCanExecute": "Only organization owners can install or uninstall applications."
+    },
     "fallback": {
       "loadWorkspace": "Unable to load workspace",
       "loadDocuments": "Unable to load documents",

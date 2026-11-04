@@ -33,4 +33,6 @@ public interface BizAppInstallationRepository extends JpaRepository<BizAppInstal
     Optional<BizAppInstallation> findByTenantIdAndKindAndStatus(UUID tenantId, String kind, String status);
 
     boolean existsByTenantIdAndKindAndStatus(UUID tenantId, String kind, String status);
+
+    List<BizAppInstallation> findByStatus(String status);
 }

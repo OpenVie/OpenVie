@@ -14,6 +14,7 @@
 
 package com.openvie.api.bizapp.controller;
 
+import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.bizapp.dto.BizAppDtos;
 import com.openvie.api.bizapp.dto.BizAppDtos.RecordView;
 import com.openvie.api.bizapp.service.BizAppInstallService;
@@ -60,12 +61,18 @@ public class BizAppController extends BaseController {
     private final BizAppInstallService installService;
     private final BizAppRecordService recordService;
     private final BizAppReportResolver reportResolver;
-
+    private final BizAppRuntimeApi runtimeApi;
     @Operation(summary = "List installed apps of the active workspace")
     @ApiResponses(@ApiResponse(responseCode = "200", description = "Installed apps"))
     @GetMapping("/bizapps")
     public List<BizAppDtos.InstalledAppView> installed(HttpServletRequest request) {
         return installService.listInstalled(getTenantId(request));
+    }
+
+    @Operation(summary = "List installed app summary for active workspace (deterministic metrics/catalog)")
+    @GetMapping("/bizapps/installed-summary")
+    public List<BizAppRuntimeApi.InstalledAppSummary> installedSummary(HttpServletRequest request) {
+        return runtimeApi.listInstalledSummary(getTenantId(request));
     }
 
     @Operation(summary = "One installed app with its frozen manifest")

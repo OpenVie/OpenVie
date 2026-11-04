@@ -50,7 +50,7 @@ class GenerationContext:
     # Optional retrieval scope: restricts the answer to these indexed documents.
     # Empty means the whole knowledge base.
     document_ids: tuple[str, ...] = ()
-
+    excluded_document_kinds: tuple[str, ...] = ()
 
 @dataclass(frozen=True, slots=True)
 class Citation:

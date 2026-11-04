@@ -43,8 +43,30 @@ public interface AiInferenceApi {
             String promptSchemaVersion,
             List<UUID> documentIds,
             String requestId,
-            String traceId
+            String traceId,
+            List<String> excludedDocumentKinds
     ) {
+        public GenerationRequest(
+                UUID generationId,
+                UUID turnId,
+                UUID tenantId,
+                UUID chatbotId,
+                UUID knowledgeBaseId,
+                long authoritativeRevision,
+                String channel,
+                String locale,
+                String question,
+                List<PriorMessage> priorMessages,
+                String tenantName,
+                String promptSchemaVersion,
+                List<UUID> documentIds,
+                String requestId,
+                String traceId
+        ) {
+            this(generationId, turnId, tenantId, chatbotId, knowledgeBaseId, authoritativeRevision,
+                    channel, locale, question, priorMessages, tenantName, promptSchemaVersion,
+                    documentIds, requestId, traceId, List.of());
+        }
     }
 
     record PriorMessage(String role, String content) {

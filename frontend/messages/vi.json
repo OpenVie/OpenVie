@@ -639,6 +639,24 @@
       "COMPLETED": "Sẵn sàng",
       "FAILED": "Thất bại"
     },
+    "bizappAction": {
+      "installTitle": "Cài đặt ứng dụng",
+      "installConfirm": "Xác nhận cài đặt",
+      "uninstallTitle": "Gỡ cài đặt ứng dụng",
+      "uninstallConfirm": "Xác nhận gỡ",
+      "uninstallWarning": "Gỡ cài đặt sẽ vô hiệu hoá ứng dụng này trong không gian làm việc của bạn.",
+      "catalogTitle": "Danh mục ứng dụng",
+      "openCatalog": "Mở kho ứng dụng",
+      "suggestTitle": "Gợi ý ứng dụng",
+      "draftTitle": "Bản thảo ứng dụng",
+      "openComposer": "Chỉnh sửa trên Visual Composer",
+      "installToWorkspace": "Cài đặt vào Workspace",
+      "executing": "Đang thực thi...",
+      "executed": "Đã thực thi thành công",
+      "failed": "Thực thi thất bại",
+      "denied": "Từ chối quyền (Yêu cầu Chủ tổ chức)",
+      "onlyOwnerCanExecute": "Chỉ chủ tổ chức mới có quyền cài đặt hoặc gỡ ứng dụng."
+    },
     "fallback": {
       "loadWorkspace": "Không thể tải không gian làm việc",
       "loadDocuments": "Không thể tải tài liệu",

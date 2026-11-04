@@ -145,12 +145,14 @@ class DocumentPagingIntegrationTest {
         jdbcTemplate.update("""
                 INSERT INTO documents (
                     id, tenant_id, knowledge_base_id, uploaded_by, file_name, file_type,
-                    file_size_bytes, storage_path, status, job_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    file_size_bytes, storage_path, status, job_id, created_at, updated_at,
+                    document_kind
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 UUID.fromString(id), tenantId, knowledgeBaseId, UUID.randomUUID(), fileName, fileType,
                 100L, "storage/" + id, status, UUID.randomUUID().toString(),
-                Timestamp.valueOf(LocalDateTime.parse(createdAt)), Timestamp.valueOf(LocalDateTime.parse(createdAt))
+                Timestamp.valueOf(LocalDateTime.parse(createdAt)), Timestamp.valueOf(LocalDateTime.parse(createdAt)),
+                "USER"
         );
     }
 

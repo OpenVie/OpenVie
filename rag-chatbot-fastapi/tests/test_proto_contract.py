@@ -44,6 +44,7 @@ def test_generate_answer_descriptor_field_numbers() -> None:
         "prompt_schema_version": 12,
         "trace": 13,
         "document_ids": 14,
+        "excluded_document_kinds": 15,
     }
     assert pb.DESCRIPTOR.message_types_by_name.get("TicketDraft") is None
     assert pb.DESCRIPTOR.message_types_by_name.get("PrepareInterviewSessionRequest") is None

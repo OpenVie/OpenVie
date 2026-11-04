@@ -117,15 +117,50 @@ Khối `external_call` được tăng cường bảo vệ an ninh mạng:
 > **Tuyên bố ranh giới pháp lý:**
 > OpenVie là nền tảng phần mềm mã nguồn mở. OpenVie **không** tạo, không nắm giữ khóa ký riêng tư (private key), và không thực hiện quy trình ký số hay kiểm tra tính hợp lệ pháp lý của chứng thư điện tử. Mọi tác vụ ký số được thực hiện bằng cách ủy quyền thông qua khối `external_call` tới nhà cung cấp dịch vụ ký số bên ngoài do tổ chức tự hợp đồng và cấu hình.
 > Giá trị pháp lý của văn bản ký kết phụ thuộc hoàn toàn vào dịch vụ của nhà cung cấp đó và các quy định pháp luật hiện hành tại quốc gia sở tại. Người vận hành hệ thống có trách nhiệm tự tham vấn ý kiến pháp lý chuyên môn cho các hoạt động ký kết điện tử của mình.
+### 8. Trợ lý ảo & Ứng dụng (Conversational BizApps)
 
-### 8. Các mục tiêu cố ý nằm ngoài phạm vi (Non-Goals)
+Từ phiên bản `v1.0.0`, trợ lý ảo có khả năng nhận biết ứng dụng, gợi ý cài đặt, đề xuất thẻ hành động, và tạo ứng dụng mới từ lịch sử hội thoại:
 
-- Không tích hợp thư viện ký số nhúng hay giữ private key trong quy trình.
-- Không tạo endpoint webhook riêng biệt cho từng nhà cung cấp ký số (cập nhật trạng thái được thực hiện qua `PATCH /api/v1/bizapp-data/{kind}/{entity}/{id}` bằng API key máy `ovk_...`).
+1. **Ba tầng tách biệt (Three-tier Architecture):**
+   - **Tầng A (Deterministic):** Liệt kê ứng dụng đã cài, thông tin chi tiết, thực thi hành động cài/gỡ có xác nhận an toàn. Không gọi model, không chạm KB.
+   - **Tầng B (Structured LLM):** Phân loại ý định người dùng (`LIST_APPS`, `APP_DETAIL`, `APP_DATA`, `INSTALL`, `UNINSTALL`, `SUGGEST`, `CREATE_APP`) qua RPC `CompleteJson` riêng có schema nghiêm ngặt.
+   - **Tầng C (Document RAG):** Trả lời câu hỏi tài liệu nguyên trạng, được bảo vệ tuyệt đối khỏi ô nhiễm dữ liệu hệ thống.
+
+2. **Thẻ hành động tương tác (Action Cards):**
+   - Được lưu tại cột `chat_messages.action` (`jsonb`).
+   - Trạng thái vòng đời: `PROPOSED -> EXECUTING -> EXECUTED | FAILED | DENIED`.
+   - Điểm thực thi server-authoritative: `POST /api/v1/chat/actions/execute`. Quyền `ORG_OWNER` được kiểm tra nghiêm ngặt phía server. Tham số thực thi đọc lại từ cơ sở dữ liệu theo `messageId` và `actionId`, tuyệt đối không tin cậy dữ liệu do client hoặc LLM gửi lên.
+
+3. **Tạo ứng dụng từ lịch sử chat:**
+   - Endpoint `POST /api/v1/bizapps/drafts/from-chat` (`ORG_OWNER`): trích xuất các lượt chat gần nhất từ `ChatRuntimeApi.listRecentTurns`, gọi `CompleteJson` sinh bản thảo manifest `bizapp.v1`, kiểm định qua `BizAppManifestValidator` và lưu vào `bizapp_drafts`.
+   - Không bao giờ tự động cài đặt. Người dùng có thể chỉnh sửa trên Visual Composer hoặc bấm nút cài đặt sau khi kiểm tra kỹ.
+
+### 9. Nguồn gốc tài liệu & Quy tắc truy cập an toàn
+
+1. **Cột nguồn gốc `document_kind` (`USER`, `BIZAPP_RECORD`, `BIZAPP_DIGEST`):**
+   - Mọi tài liệu tải lên bởi người dùng mang loại `USER`.
+   - Các bản ghi được chiếu mang loại `BIZAPP_RECORD` với `source_ref = "bizapp:<kind>"`.
+   - Các báo cáo tổng hợp mang loại `BIZAPP_DIGEST`.
+2. **Quy tắc an toàn bất biến:**
+   - **Ẩn mặc định trong UI:** Trang tài liệu chỉ hiển thị tài liệu người dùng (`include_system=false`). Chỉ `ORG_OWNER` mới có thể xem tài liệu hệ thống (`include_system=true`) cho mục đích kiểm toán.
+   - **Không thể xoá bởi người dùng:** Mọi yêu cầu xoá tài liệu hệ thống từ người dùng đều bị chặn với mã lỗi `403 Forbidden` (`AccessDeniedException`).
+   - **Không trích dẫn nhầm:** Mọi truy vấn tài liệu thường (`intent = NONE`) tự động loại trừ `BIZAPP_RECORD` và `BIZAPP_DIGEST` ở cả Qdrant (dense/sparse) và Kuzu (graph). Chỉ khi người dùng hỏi đích danh dữ liệu ứng dụng (`intent = APP_DATA`), phạm vi mới được mở có chủ đích.
+   - **Tên phẳng duy nhất:** Tài liệu hệ thống sử dụng định dạng phẳng `bizapp__<kind>__<entity>__<id>.md` và `bizapp__<kind>__digest.md`, khắc phục hoàn toàn rủi ro ghi đè basename chéo ứng dụng.
+
+### 10. Giới hạn gộp Digest & Ngữ nghĩa Revision
+
+- **Gộp dao động (Debounce):** `refreshDigest` được gộp với cửa sổ 30 giây (`app.bizapps.projection-debounce-ms=30000`) cho mỗi `(tenant, kind)`. Nhiều thay đổi liên tiếp chỉ kích hoạt một lần tạo digest sau khi kết thúc cửa sổ.
+- **Bảo vệ Revision:** Cài đặt và gỡ bỏ ứng dụng **không** ghi vào Knowledge Base, do đó **không** làm tăng `search_revision` và không thể gây lỗi `409 KNOWLEDGE_BASE_CHANGED` cho các lượt chat đang phát trực tiếp.
+- **Metric quan sát:** `chat_turn_revision_conflicts_total`, `chat_action_execute_total{action,outcome}`, `chat_app_intent_total{intent}`.
+
+### 11. Các mục tiêu cố ý nằm ngoài phạm vi (Non-Goals)
+
+- Không tích hợp thư viện ký số nhúng hay giữ private key trong tiến trình.
+- Không tạo endpoint webhook riêng biệt cho từng nhà cung cấp ký số.
 - Không tạo bảng cơ sở dữ liệu động từ manifest của người dùng (chỉ các template platform cốt lõi mới có bảng typed table).
 - Không sử dụng Text-to-SQL hay truy vấn do LLM tự sinh.
+- Không tự động cài đặt ứng dụng mà không có nút bấm xác nhận từ người dùng.
 - Không xác thực chữ ký mật mã detached cho remote template (v1.0.0 neo kiểm tra bằng mã băm SHA-256 từ catalog index).
-
 ---
 
 ## BizApps — the installable business app platform
@@ -239,10 +274,47 @@ The `external_call` block features strict SSRF defense:
 > OpenVie is an open-source software platform. OpenVie does **not** create, hold private signing keys for, or verify digital signatures; it delegates outbound requests through `external_call` to an external signing service contracted and configured by the operator.
 > The legal validity and enforceability of signatures depend entirely on that external provider and applicable electronic transaction laws in the relevant jurisdiction. Operators must obtain their own legal advice.
 
-### 8. Explicit Non-Goals
+### 8. Conversational BizApps & Smart Assistant Integration
+
+In `v1.0.0`, the virtual assistant seamlessly understands business applications, recommends templates, offers safe interactive action cards, and drafts new applications from conversation history:
+
+1. **Three-Tier Architecture:**
+   - **Tier A (Deterministic):** Listing installed applications, manifest inspection, safe install/uninstall execution without model invocation or KB writes.
+   - **Tier B (Structured LLM):** Intent classification (`LIST_APPS`, `APP_DETAIL`, `APP_DATA`, `INSTALL`, `UNINSTALL`, `SUGGEST`, `CREATE_APP`) via dedicated `CompleteJson` RPC with strict JSON schemas.
+   - **Tier C (Document RAG):** Unmodified document retrieval, completely isolated from system document leakage.
+
+2. **Interactive Action Cards:**
+   - Delivered directly inside `chat_messages.action` (`jsonb`).
+   - Lifecycle states: `PROPOSED -> EXECUTING -> EXECUTED | FAILED | DENIED`.
+   - Server-authoritative endpoint: `POST /api/v1/chat/actions/execute`. Requires `ORG_OWNER` authority; execution parameters are re-read from the database by `messageId` and `actionId` rather than trusting client-provided payloads.
+
+3. **Application Drafting from Conversation History:**
+   - `POST /api/v1/bizapps/drafts/from-chat` (`ORG_OWNER`): extracts recent turns via `ChatRuntimeApi.listRecentTurns`, generates a `bizapp.v1` manifest draft via `CompleteJson`, validates against `BizAppManifestValidator`, and persists into `bizapp_drafts`.
+   - Never installs automatically. The user reviews in Visual Composer or confirms installation via server-authenticated action cards.
+
+### 9. Document Provenance & Safe Retrieval Access Rules
+
+1. **Provenance Column `document_kind` (`USER`, `BIZAPP_RECORD`, `BIZAPP_DIGEST`):**
+   - Human uploads are tagged `USER`.
+   - Projected records are tagged `BIZAPP_RECORD` with `source_ref = "bizapp:<kind>"`.
+   - Aggregated report views are tagged `BIZAPP_DIGEST`.
+2. **Inviolable Access Guards:**
+   - **Hidden by default:** Document lists omit system documents (`include_system=false`). Only `ORG_OWNER` can inspect them (`include_system=true`) for administrative review.
+   - **User deletion blocked:** Attempting to delete system documents returns `403 Forbidden` (`AccessDeniedException`).
+   - **Citation isolation:** Regular document queries (`intent = NONE`) exclude system documents across all channels (dense, sparse, and graph). Only explicit application data queries (`intent = APP_DATA`) scope to application records.
+   - **Flat unique names:** Flat identifiers `bizapp__<kind>__<entity>__<id>.md` and `bizapp__<kind>__digest.md` prevent cross-app collisions.
+
+### 10. Digest Debouncing & Revision Semantics
+
+- **Debounced Digest:** `refreshDigest` is debounced to run at most once per 30-second window (`app.bizapps.projection-debounce-ms=30000`) per `(tenant, kind)`.
+- **Revision Churn Immunity:** App install/uninstall does not touch the knowledge base, producing zero revision bumps and preventing `409 KNOWLEDGE_BASE_CHANGED` during active streams.
+- **Observability Metrics:** `chat_turn_revision_conflicts_total`, `chat_action_execute_total{action,outcome}`, `chat_app_intent_total{intent}`.
+
+### 11. Explicit Non-Goals
 
 - No in-process digital signature creation or key custody.
-- No vendor-specific inbound callback endpoints (status write-back occurs via standard `PATCH /api/v1/bizapp-data/{kind}/{entity}/{id}` using `ovk_...` API keys).
-- No dynamic DDL execution generated from user manifests (typed storage is platform-bundled only).
+- No vendor-specific inbound callback endpoints.
+- No dynamic DDL execution generated from user manifests.
 - No Text-to-SQL or LLM-generated database queries.
-- No detached cryptographic signature verification for remote templates (pinned via SHA-256 hashes in v1.0.0).
+- No auto-install without explicit user confirmation.
+- No detached cryptographic signature verification for remote templates.

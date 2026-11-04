@@ -170,4 +170,9 @@ public final class ChatDtos {
             @JsonProperty("source_end") Integer sourceEnd
     ) {
     }
+
+    public record ExecuteActionRequest(
+            @jakarta.validation.constraints.NotNull UUID messageId,
+            @jakarta.validation.constraints.NotNull UUID actionId
+    ) {}
 }

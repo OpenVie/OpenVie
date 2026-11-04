@@ -14,6 +14,7 @@
 
 package com.openvie.api.chat.service.implement;
 
+import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.chat.api.ChatRuntimeApi;
 import com.openvie.api.chat.dto.ChatDtos;
 import com.openvie.api.chat.query.ChatControlPlaneService;
@@ -27,7 +28,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class ChatRuntimeApiImpl implements ChatRuntimeApi {
+public class ChatRuntimeApiImpl implements ChatRuntimeApi, BizAppRuntimeApi.RecentTurnsProvider {
 
     private final ChatControlPlaneService controlPlaneService;
 
@@ -71,5 +72,17 @@ public class ChatRuntimeApiImpl implements ChatRuntimeApi {
             }
         }
         return new AppAnswerResult(resp.content(), citations);
+    }
+
+    @Override
+    public List<RecentTurn> listRecentTurns(UUID tenantId, UUID actorId, UUID sessionId, int limit) {
+        return controlPlaneService.listRecentTurns(tenantId, actorId, sessionId, limit);
+    }
+
+    @Override
+    public List<BizAppRuntimeApi.RecentTurn> fetchRecentTurns(UUID tenantId, UUID actorId, UUID sessionId, int limit) {
+        return controlPlaneService.listRecentTurns(tenantId, actorId, sessionId, limit).stream()
+                .map(t -> new BizAppRuntimeApi.RecentTurn(t.role(), t.content()))
+                .toList();
     }
 }

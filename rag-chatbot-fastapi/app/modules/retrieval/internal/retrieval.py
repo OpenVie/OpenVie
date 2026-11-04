@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 import time
 from collections import Counter
@@ -146,13 +147,32 @@ class HybridRetriever:
         self._settings = settings
         self._index = index
         self._sparse_encoder = sparse_encoder
+        for name, adapter in (
+            ("dense", dense),
+            ("sparse", sparse),
+            ("neighbor_loader", neighbor_loader),
+        ):
+            if adapter is not None:
+                method = (
+                    getattr(adapter, "retrieve", None)
+                    or getattr(adapter, "load_neighbors", None)
+                    or getattr(adapter, "load", None)
+                )
+                if method is not None:
+                    params = inspect.signature(method).parameters
+                    has_kw = any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+                    )
+                    if "excluded_document_kinds" not in params and not has_kw:
+                        raise ValueError(
+                            f"Legacy adapter {name} does not accept excluded_document_kinds"
+                        )
         self._legacy_dense = dense
         self._legacy_sparse = sparse
         self._legacy_neighbors = neighbor_loader
         self._graph = graph
         self._reranker = reranker
         self._router = router or QueryRouter(settings)
-
     async def retrieve(
         self,
         *,
@@ -161,6 +181,7 @@ class HybridRetriever:
         query_text: str,
         query_vector: Sequence[float],
         document_ids: Sequence[str] | None = None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         profile = self._router.route(query_text)
         weights = self._router.weights(profile)
@@ -171,62 +192,85 @@ class HybridRetriever:
             else None
         )
 
-        channel_results = await asyncio.gather(
-            self._timed_channel(
-                "dense",
-                (
-                    self._legacy_dense.retrieve(
-                        tenant_id=tenant_id,
-                        knowledge_base_id=knowledge_base_id,
-                        query_text=query_text,
-                        query_vector=query_vector,
-                        limit=self._settings.DENSE_CANDIDATE_COUNT,
-                        document_ids=document_ids,
-                    )
-                    if self._legacy_dense is not None
-                    else self._dense_results(
-                        tenant_id, knowledge_base_id, query_vector, document_ids
-                    )
-                ),
-            ),
-            self._timed_channel(
-                "sparse",
-                (
-                    self._legacy_sparse.retrieve(
-                        tenant_id=tenant_id,
-                        knowledge_base_id=knowledge_base_id,
-                        query_text=query_text,
-                        limit=self._settings.SPARSE_CANDIDATE_COUNT,
-                        document_ids=document_ids,
-                    )
-                    if self._legacy_sparse is not None
-                    else self._sparse_results(
-                        tenant_id,
-                        knowledge_base_id,
-                        sparse_vector,
-                        document_ids,
-                    )
-                ),
-            ),
-            self._timed_channel(
-                "graph",
-                self._graph_results(
+        graph_enabled = getattr(self._settings, "GRAPH_RETRIEVAL_ENABLED", True)
+        dense_task = self._timed_channel(
+            "dense",
+            (
+                self._legacy_dense.retrieve(
                     tenant_id=tenant_id,
                     knowledge_base_id=knowledge_base_id,
                     query_text=query_text,
+                    query_vector=query_vector,
+                    limit=self._settings.DENSE_CANDIDATE_COUNT,
                     document_ids=document_ids,
-                ),
+                    excluded_document_kinds=excluded_document_kinds,
+                )
+                if self._legacy_dense is not None
+                else self._dense_results(
+                    tenant_id, knowledge_base_id, query_vector, document_ids, excluded_document_kinds
+                )
             ),
-            return_exceptions=True,
         )
-        normalized: list[list[RetrievedChunk]] = []
-        for channel, result in zip(("dense", "sparse", "graph"), channel_results, strict=True):
-            if isinstance(result, BaseException):
-                AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
-                normalized.append([])
-            else:
-                normalized.append(result)
-        dense_results, sparse_results, graph_results = normalized
+        sparse_task = self._timed_channel(
+            "sparse",
+            (
+                self._legacy_sparse.retrieve(
+                    tenant_id=tenant_id,
+                    knowledge_base_id=knowledge_base_id,
+                    query_text=query_text,
+                    limit=self._settings.SPARSE_CANDIDATE_COUNT,
+                    document_ids=document_ids,
+                    excluded_document_kinds=excluded_document_kinds,
+                )
+                if self._legacy_sparse is not None
+                else self._sparse_results(
+                    tenant_id,
+                    knowledge_base_id,
+                    sparse_vector,
+                    document_ids,
+                    excluded_document_kinds,
+                )
+            ),
+        )
+        if graph_enabled:
+            channel_results = await asyncio.gather(
+                dense_task,
+                sparse_task,
+                self._timed_channel(
+                    "graph",
+                    self._graph_results(
+                        tenant_id=tenant_id,
+                        knowledge_base_id=knowledge_base_id,
+                        query_text=query_text,
+                        document_ids=document_ids,
+                        excluded_document_kinds=excluded_document_kinds,
+                    ),
+                ),
+                return_exceptions=True,
+            )
+            normalized: list[list[RetrievedChunk]] = []
+            for channel, result in zip(("dense", "sparse", "graph"), channel_results, strict=True):
+                if isinstance(result, BaseException):
+                    AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
+                    normalized.append([])
+                else:
+                    normalized.append(result)
+            dense_results, sparse_results, graph_results = normalized
+        else:
+            channel_results = await asyncio.gather(
+                dense_task,
+                sparse_task,
+                return_exceptions=True,
+            )
+            normalized = []
+            for channel, result in zip(("dense", "sparse"), channel_results, strict=True):
+                if isinstance(result, BaseException):
+                    AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
+                    normalized.append([])
+                else:
+                    normalized.append(result)
+            dense_results, sparse_results = normalized
+            graph_results = []
         fused = weighted_reciprocal_rank_fusion(
             dense_results,
             sparse_results,
@@ -272,6 +316,7 @@ class HybridRetriever:
         knowledge_base_id: str,
         query_vector: Sequence[float],
         document_ids: Sequence[str] | None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         assert self._index is not None
         rows = await self._index.search_dense(
@@ -281,6 +326,9 @@ class HybridRetriever:
                 query_vector=tuple(float(value) for value in query_vector),
                 limit=self._settings.DENSE_CANDIDATE_COUNT,
                 document_ids=(tuple(document_ids) if document_ids is not None else None),
+                excluded_document_kinds=(
+                    tuple(excluded_document_kinds) if excluded_document_kinds is not None else None
+                ),
             )
         )
         return [_retrieved(row) for row in rows]
@@ -291,6 +339,7 @@ class HybridRetriever:
         knowledge_base_id: str,
         query_vector: Any,
         document_ids: Sequence[str] | None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         assert self._index is not None
         rows = await self._index.search_sparse(
@@ -302,6 +351,9 @@ class HybridRetriever:
                 ),
                 limit=self._settings.SPARSE_CANDIDATE_COUNT,
                 document_ids=(tuple(document_ids) if document_ids is not None else None),
+                excluded_document_kinds=(
+                    tuple(excluded_document_kinds) if excluded_document_kinds is not None else None
+                ),
             )
         )
         return [_retrieved(row) for row in rows]
@@ -313,6 +365,7 @@ class HybridRetriever:
         knowledge_base_id: str,
         query_text: str,
         document_ids: Sequence[str] | None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         rows = await self._graph.search(
             GraphSearchQuery(
@@ -322,6 +375,9 @@ class HybridRetriever:
                 limit=self._settings.GRAPH_CANDIDATE_COUNT,
                 max_hops=self._settings.GRAPH_MAX_HOPS,
                 document_ids=(tuple(document_ids) if document_ids is not None else None),
+                excluded_document_kinds=(
+                    tuple(excluded_document_kinds) if excluded_document_kinds is not None else None
+                ),
             )
         )
         # Keep a caller-side guard for mixed-version deployments and defensive isolation.
@@ -574,4 +630,5 @@ class RetrievalService(RetrievalApi):
             query_vector=vector,
             authoritative_revision=query.authoritative_revision,
             document_ids=query.document_ids,
+            excluded_document_kinds=query.excluded_document_kinds,
         )

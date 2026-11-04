@@ -205,6 +205,7 @@ class QdrantKnowledgeIndex:
             ("table_id", models.PayloadSchemaType.KEYWORD),
             ("parser_version", models.PayloadSchemaType.KEYWORD),
             ("chunk_index", models.PayloadSchemaType.INTEGER),
+            ("document_kind", models.PayloadSchemaType.KEYWORD),
         ):
             await self._client.create_payload_index(
                 collection_name=self._collection,
@@ -253,6 +254,8 @@ class QdrantKnowledgeIndex:
             "image_height": chunk.image_height,
             "text": chunk.text,
             "content_hash": chunk.content_hash,
+            "document_kind": getattr(command, "document_kind", None) or "USER",
+            "source_ref": getattr(command, "source_ref", None),
         }
 
     @staticmethod

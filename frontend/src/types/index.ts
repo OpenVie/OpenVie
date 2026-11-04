@@ -369,10 +369,12 @@ export interface AssistantMessageResponse {
 }
 
 export interface ChatHistoryMessageResponse {
+  id?: string;
   role: "user" | "assistant" | "system";
   content: string;
   citations: ChatCitation[];
   sequence_number?: number | null;
+  action?: Record<string, unknown> | null;
 }
 
 export interface PlaygroundSession {

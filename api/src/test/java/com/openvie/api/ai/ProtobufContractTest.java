@@ -52,7 +52,7 @@ class ProtobufContractTest {
                 Map.entry("channel", 7), Map.entry("locale", 8), Map.entry("question", 9),
                 Map.entry("prior_messages", 10), Map.entry("tenant_name", 11),
                 Map.entry("prompt_schema_version", 12), Map.entry("trace", 13),
-                Map.entry("document_ids", 14)));
+                Map.entry("document_ids", 14), Map.entry("excluded_document_kinds", 15)));
         assertFields("GenerateAnswerEvent", Map.of("content", 1, "completed", 2));
         var event = OpenVieAiProto.getDescriptor().findMessageTypeByName("GenerateAnswerEvent");
         assertEquals(List.of("payload"), event.getOneofs().stream()

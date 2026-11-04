@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-11-02
+## [1.0.0] - 2026-11-04
 
 ### Added
+- **Conversational BizApp Platform & Smart Assistant Integration**:
+  - **Three-Tier Architecture**: Clean architectural isolation separating Tier A (deterministic catalog inspection), Tier B (structured LLM intent classification), and Tier C (unmodified document RAG).
+  - **Interactive Action Cards (W2.1, W5.1)**: Support for interactive `bizapp.install`, `bizapp.uninstall`, `bizapp.catalog`, `bizapp.suggest`, and `bizapp.draft` cards delivered through `chat_messages.action` and `AssistantMessageResponse.action`.
+  - **Server-Authoritative Action Execution (W2.2)**: `POST /api/v1/chat/actions/execute` endpoint guarded by `ORG_OWNER` authority; execution parameters read from DB by `messageId` and `actionId` to prevent prompt injection; replay-safe idempotency.
+  - **Drafting BizApps from Chat History (W3)**: `POST /api/v1/bizapps/drafts/from-chat` generates valid `bizapp.v1` manifest drafts from conversation context via `CompleteJson` without auto-installation.
+  - **Deterministic Answer Composer (W1.2)**: `CatalogAnswerComposer` renders localized, citation-free markdown responses for `LIST_APPS` and `APP_DETAIL` directly from database manifests without calling LLM.
+  - **Document Provenance & Safe Retrieval Access Rules (W0.1, W0.5, W4.5)**: Flyway `V18__document_provenance.sql` introduces `document_kind` (`USER`, `BIZAPP_RECORD`, `BIZAPP_DIGEST`) and `source_ref`. System documents are hidden by default from UI (`include_system=false`), undeletable by any user role (403), and excluded from regular document RAG citations.
+  - **Wire Protocol Exclusions (W0.3)**: Extended `GenerateAnswerRequest` in `proto/openvie_ai_v1.proto` with additive field `repeated string excluded_document_kinds = 15;`. Filtering applied across Qdrant (`must_not`) and Kuzu Cypher queries.
+  - **Graph Retrieval Control (W0.6)**: Added `GRAPH_RETRIEVAL_ENABLED` toggle (defaults to `true`); when disabled, skips HTTP queries to graph-service entirely and feeds empty graph results to fusion.
+  - **Debounced Knowledge Projection & Revision Churn Protection (W4)**: Debounced digest refresh to 30 seconds (`app.bizapps.projection-debounce-ms`), enforced flat non-colliding names (`bizapp__<kind>__...`), and eliminated revision bumps on app install/uninstall.
+  - **Operational Backfill Command (W0.7)**: Added `ProvenanceBackfillCommand` (`--app.command.mode=bizapp-provenance-backfill`) for normalizing legacy projected documents with `--dry-run` safety.
+  - **CI Anti-Regression Gates G-1 to G-10**: Verified prompt invariance (G-3), wire neutrality (G-4), Qdrant backward compatibility (G-5), ArchUnit module boundaries (G-2, G-6), and 15-row matrix coverage (G-10).
 - **Full DX-OS 3-Tier Completion & BizApp Platform GA (Tier 3)**:
   - **Frozen `bizapp.v1` Canonical Schema**: Replaced unreleased draft report SQL with declarative, parameter-bound report views (`groupBy`, `metrics`, `filters`, `orderBy`, `limit`, `engine`). Eliminated raw SQL injection and cross-tenant leakage vectors.
   - **Hybrid Storage Architecture (Workstream T)**: Implemented `BizAppStorageRouter` providing clean storage routing between dedicated typed tables (`bizapp_crm_leads`, `bizapp_booking_appointments` via Flyway V16/V17) for platform flagship templates and the generic JSONB store (`bizapp_records`) for org-custom applications.

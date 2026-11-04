@@ -64,6 +64,8 @@ class GraphBatchPayload(BaseModel):
     entities: tuple[GraphEntityPayload, ...] = ()
     relations: tuple[GraphRelationPayload, ...] = ()
     extraction_version: str = "entity-relations-v1"
+    document_kind: str = "USER"
+    source_ref: str | None = None
 
 
 class GraphSearchPayload(BaseModel):
@@ -73,6 +75,7 @@ class GraphSearchPayload(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
     max_hops: int = Field(default=0, ge=0, le=3)
     document_ids: tuple[Annotated[str, Field(min_length=1)], ...] | None = None
+    excluded_document_kinds: tuple[Annotated[str, Field(min_length=1)], ...] | None = None
 
 
 class DeleteSourceRequest(BaseModel):
@@ -120,6 +123,7 @@ def create_graph_app(
                 limit=payload.limit,
                 max_hops=payload.max_hops,
                 document_ids=payload.document_ids,
+                excluded_document_kinds=payload.excluded_document_kinds,
             ),
         )
         return {"results": [_search_payload(asdict(row)) for row in rows]}
@@ -150,6 +154,8 @@ def _batch(payload: GraphBatchPayload) -> GraphBatch:
         entities=tuple(GraphEntity(**item.model_dump()) for item in payload.entities),
         relations=tuple(GraphRelation(**item.model_dump()) for item in payload.relations),
         extraction_version=payload.extraction_version,
+        document_kind=payload.document_kind,
+        source_ref=payload.source_ref,
     )
 
 

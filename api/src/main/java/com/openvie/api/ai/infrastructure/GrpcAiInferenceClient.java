@@ -109,6 +109,11 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                     .filter(java.util.Objects::nonNull)
                     .forEach(documentId -> builder.addDocumentIds(documentId.toString()));
         }
+        if (request.excludedDocumentKinds() != null) {
+            request.excludedDocumentKinds().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(builder::addExcludedDocumentKinds);
+        }
         request.priorMessages().stream().limit(20).forEach(message -> builder.addPriorMessages(
                 com.openvie.ai.v1.PriorMessage.newBuilder()
                         .setRole(message.role()).setContent(message.content())));

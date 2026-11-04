@@ -90,6 +90,7 @@ type ChatMessage = {
   citations?: ChatCitation[]
   /** Suggested follow-up questions returned with this answer (rendered for the latest turn). */
   suggestions?: string[]
+  action?: Record<string, unknown> | null
   loading?: boolean
   error?: boolean
 }
@@ -356,6 +357,7 @@ function Playground() {
               role: item.role as "user" | "assistant",
               content: item.content,
               citations: item.citations,
+              action: item.action,
             })),
         )
       })
@@ -608,6 +610,7 @@ function Playground() {
               content: response.content,
               citations: response.citations,
               suggestions: response.suggested_questions,
+              action: response.action,
             }
           : item,
       ))
@@ -799,6 +802,13 @@ function Playground() {
                         content={item.content}
                         citations={item.citations}
                         error={item.error}
+                        action={item.action}
+                        messageId={item.id}
+                        onActionExecuted={(updated) => {
+                          setMessages((curr) => curr.map((msg) =>
+                            msg.id === item.id ? { ...msg, action: updated.action } : msg
+                          ))
+                        }}
                       />
                       {index === messages.length - 1 && !sending && !item.error &&
                         item.suggestions && item.suggestions.length > 0 && (

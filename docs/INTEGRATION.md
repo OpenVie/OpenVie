@@ -167,6 +167,20 @@ Hồ dữ liệu Lakehouse tách biệt hoàn toàn dữ liệu giao dịch th�
 | Báo cáo dung lượng & định dạng tài liệu Hấp thụ | `GET /api/v1/analytics/lakehouse/documents` |
 | Báo cáo an ninh, nhật ký truy vết & kiểm toán | `GET /api/v1/analytics/lakehouse/audit` |
 | Báo cáo tiến độ & SLA phê duyệt quy trình | `GET /api/v1/analytics/lakehouse/workflows` |
+
+### 10. Tương tác Ứng dụng qua Chat & Nguồn gốc Tài liệu (v1.0.0)
+
+Phiên bản `v1.0.0` bổ sung các endpoint tương tác ứng dụng và mở rộng wire proto (tuân thủ SemVer 1.0 cộng thêm):
+
+| Phương thức | Đường dẫn | Quyền hạn | Mô tả |
+|---|---|---|---|
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Thực thi thẻ hành động (`install` / `uninstall`) đề xuất từ chat. Tham số đọc từ DB theo `messageId`+`actionId`; chống replay. |
+| `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Soạn bản thảo ứng dụng `bizapp.v1` từ ngữ cảnh hội thoại của `sessionId`. Không tự cài đặt. |
+| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Dữ liệu tất định tóm tắt ứng dụng đã cài cho UI và báo cáo (không dùng làm prompt RAG). |
+| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Liệt kê tài liệu; `include_system` mặc định `false` ẩn tài liệu hệ thống; `true` chỉ cho `ORG_OWNER`. |
+
+**Giao thức Wire gRPC:**
+- `GenerateAnswerRequest` thêm trường cộng thêm: `repeated string excluded_document_kinds = 15;`. Danh sách rỗng bảo toàn 100% hành vi hiện hữu; khi điền `["BIZAPP_RECORD", "BIZAPP_DIGEST"]`, hệ thống loại trừ triệt để tài liệu hệ thống khỏi mọi kênh truy hồi.
 ---
 
 ## Integrating with the OpenVie core
@@ -337,3 +351,17 @@ The Lakehouse architecture decouples operational transaction processing (Postgre
 | Document ingestion volume & format metrics | `GET /api/v1/analytics/lakehouse/documents` |
 | Security, audit trail & access metrics | `GET /api/v1/analytics/lakehouse/audit` |
 | Workflow approval progress & SLA metrics | `GET /api/v1/analytics/lakehouse/workflows` |
+
+### 10. Conversational App Management & Document Provenance (v1.0.0)
+
+Version `v1.0.0` introduces conversational app endpoints and additive proto fields (strictly SemVer 1.0 additive):
+
+| Method | Path | Required Role | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Executes interactive install/uninstall action cards proposed in chat. Authoritative DB lookup; replay-safe. |
+| `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Drafts a new `bizapp.v1` application manifest from recent session turns. Never auto-installed. |
+| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Deterministic installed app summary for UI/metrics (never injected into raw RAG prompts). |
+| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Lists documents; `include_system` defaults to `false` (hiding system docs); `true` is owner-only. |
+
+**gRPC Wire Protocol:**
+- `GenerateAnswerRequest` adds field: `repeated string excluded_document_kinds = 15;`. An empty list preserves 100% byte-neutral behavior; passing `["BIZAPP_RECORD", "BIZAPP_DIGEST"]` ensures system documents never contaminate document answers.

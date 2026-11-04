@@ -35,7 +35,11 @@ public interface ChatRuntimeApi {
             List<String> citations
     ) {}
 
+    record RecentTurn(String role, String content) {}
+
     AppSessionResult createScopedSession(UUID tenantId, UUID actorId, UUID chatbotId, UUID knowledgeBaseId, String locale);
 
     AppAnswerResult submitScopedTurn(UUID tenantId, UUID actorId, UUID sessionId, String query, List<UUID> documentScope);
+
+    List<RecentTurn> listRecentTurns(UUID tenantId, UUID actorId, UUID sessionId, int limit);
 }

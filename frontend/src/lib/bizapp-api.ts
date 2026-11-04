@@ -20,6 +20,7 @@ import type { ApiRequest } from "@/lib/api-request";
 import { getApiBase } from "@/lib/auth-api";
 import { readJsonOrThrow } from "@/lib/api-error";
 import type {
+  AssistantMessageResponse,
   BizAppBlock,
   BizAppCredentialView,
   BizAppDraftView,
@@ -368,6 +369,32 @@ export async function deleteBizAppCredentialApi(
   await request(`${getApiBase()}/bizapp-credentials/${encodeURIComponent(credentialId)}`, {
     method: "DELETE",
   });
+}
+
+export async function executeChatActionApi(
+  request: ApiRequest,
+  messageId: string,
+  actionId: string,
+): Promise<AssistantMessageResponse> {
+  return readJsonOrThrow<AssistantMessageResponse>(
+    await request(`${getApiBase()}/chat/actions/execute`, {
+      method: "POST",
+      body: JSON.stringify({ messageId, actionId }),
+    }),
+  );
+}
+
+export async function createDraftFromChatApi(
+  request: ApiRequest,
+  sessionId: string,
+  hint?: string,
+): Promise<BizAppGenerateDraftResult> {
+  return readJsonOrThrow<BizAppGenerateDraftResult>(
+    await request(`${getApiBase()}/bizapps/drafts/from-chat`, {
+      method: "POST",
+      body: JSON.stringify({ sessionId, hint }),
+    }),
+  );
 }
 
 // ─── Manifest helpers ───────────────────────────────────────────────────────
