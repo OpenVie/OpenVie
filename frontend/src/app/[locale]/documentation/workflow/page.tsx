@@ -23,6 +23,7 @@ import {
   ParameterTable,
   RelatedLinks,
 } from "@/components/documentation/DocumentationComponents"
+import { DocFigure } from "@/components/documentation/DocumentationFigure"
 import type { AppLocale } from "@/i18n/routing"
 import { documentationPage } from "@/lib/documentation"
 
@@ -44,6 +45,11 @@ export default async function WorkflowDocumentationPage({ params }: PageProps) {
     <DocArticle title={page.title} description={page.description}>
       <DocSection id="approval-levels" title={sections["approval-levels"]}>
         <p>{t("twoLevelBody")}</p>
+        <DocFigure
+          src={`/docs/approval-flow-${locale}.svg`}
+          alt={t("approvalFlowAlt")}
+          caption={t("approvalFlowCaption")}
+        />
         <Callout type="tip" title={t("twoLevelTitle")}>
           {t("sensitivePolicyTip")}
         </Callout>

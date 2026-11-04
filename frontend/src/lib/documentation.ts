@@ -14,7 +14,7 @@
 
 import type { AppLocale } from "@/i18n/routing"
 
-export type DocumentationGroupId = "start" | "product" | "bizapps"
+export type DocumentationGroupId = "start" | "product" | "admin" | "bizapps"
 
 export type DocumentationSection = {
   id: string
@@ -38,18 +38,23 @@ type LocalizedPage = Omit<DocumentationPage, "href" | "group" | "sections"> & {
 const structure = [
   { href: "/documentation", group: "start", sections: ["core-concepts", "quickstarts", "start-paths"] },
   { href: "/documentation/getting-started", group: "start", sections: ["upload", "index", "test", "next-step"] },
+  { href: "/documentation/auth", group: "start", sections: ["password-sso", "first-login", "switch-workspace", "recover-access"] },
   { href: "/documentation/documents", group: "product", sections: ["supported-files", "indexing", "viewer-citations", "manage"] },
   { href: "/documentation/playground", group: "product", sections: ["ask", "sources", "history", "manage"] },
   { href: "/documentation/workflow", group: "product", sections: ["approval-levels", "task-inbox", "sla-timers", "role-permissions"] },
+  { href: "/documentation/members", group: "admin", sections: ["org-accounts", "create-account", "invite-workspace", "password-status"] },
+  { href: "/documentation/workspaces", group: "admin", sections: ["default-workspace", "visibility", "lifecycle", "membership"] },
+  { href: "/documentation/settings", group: "admin", sections: ["organization", "self-registration", "email-channels"] },
+  { href: "/documentation/api-keys", group: "admin", sections: ["when", "create", "secret-once", "manage", "first-calls"] },
   { href: "/documentation/bizapps", group: "bizapps", sections: ["overview", "marketplace-install", "runtime-views", "credential-vault"] },
   { href: "/documentation/composer", group: "bizapps", sections: ["canvas-editing", "blocks-entities", "ai-drafting", "template-exchange"] },
 ] as const
 
-export const documentationGroupOrder: DocumentationGroupId[] = ["start", "product", "bizapps"]
+export const documentationGroupOrder: DocumentationGroupId[] = ["start", "product", "admin", "bizapps"]
 
 const groupTitles: Record<AppLocale, Record<DocumentationGroupId, string>> = {
-  en: { start: "Start here", product: "Knowledge & Approvals", bizapps: "BizApp Platform" },
-  vi: { start: "Bắt đầu", product: "Tri thức & Phê duyệt", bizapps: "Nền tảng BizApp" },
+  en: { start: "Start here", product: "Knowledge & Approvals", admin: "Organization admin", bizapps: "BizApp Platform" },
+  vi: { start: "Bắt đầu", product: "Tri thức & Phê duyệt", admin: "Quản trị tổ chức", bizapps: "Nền tảng BizApp" },
 }
 
 const content: Record<AppLocale, Record<string, LocalizedPage>> = {
@@ -69,6 +74,17 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
       description: "Upload your first source, wait for indexing, and test an answer.",
       keywords: ["upload", "indexing", "first answer", "setup"],
       sections: { upload: { title: "1. Upload a document" }, index: { title: "2. Wait for indexing" }, test: { title: "3. Test the playground" }, "next-step": { title: "4. Choose what to explore next" } },
+    },
+    "/documentation/auth": {
+      title: "Sign in & sessions",
+      description: "Password and SSO sign-in, first-login password change, workspace switching, and account recovery.",
+      keywords: ["login", "sso", "keycloak", "password", "workspace switch", "recovery"],
+      sections: {
+        "password-sso": { title: "1. Password or SSO sign-in" },
+        "first-login": { title: "2. First login & password change" },
+        "switch-workspace": { title: "3. Switch workspace & language" },
+        "recover-access": { title: "4. Lost access" },
+      },
     },
     "/documentation/documents": {
       title: "Documents",
@@ -115,7 +131,51 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
           "template-exchange": { title: "4. Export, import & remix templates" },
         },
       },
+    "/documentation/members": {
+      title: "Accounts & members",
+      description: "Create organization accounts, invite members, and manage passwords or status.",
+      keywords: ["users", "accounts", "invitations", "password", "activate", "deactivate", "owner"],
+      sections: {
+        "org-accounts": { title: "1. Organization accounts vs workspace membership" },
+        "create-account": { title: "2. Creating an organization account" },
+        "invite-workspace": { title: "3. Inviting members to a workspace" },
+        "password-status": { title: "4. Passwords, activation, and removal" },
+      },
     },
+    "/documentation/workspaces": {
+      title: "Workspaces",
+      description: "Default workspace semantics, public versus private spaces, lifecycle, and membership.",
+      keywords: ["workspace", "general", "public", "private", "archive", "membership", "delete documents"],
+      sections: {
+        "default-workspace": { title: "1. The default workspace" },
+        visibility: { title: "2. Public vs private" },
+        lifecycle: { title: "3. Create, rename, archive" },
+        membership: { title: "4. Membership and document permissions" },
+      },
+    },
+    "/documentation/settings": {
+      title: "Organization settings",
+      description: "Organization profile, self-registration toggle, and SMTP email channels.",
+      keywords: ["settings", "self registration", "register", "smtp", "email channel", "test email"],
+      sections: {
+        organization: { title: "1. Organization profile" },
+        "self-registration": { title: "2. Allow self-registration" },
+        "email-channels": { title: "3. Email notification channels" },
+      },
+    },
+    "/documentation/api-keys": {
+      title: "API keys & integrations",
+      description: "Let another internal application call the chat API: create a machine key, store the one-time secret, and make the first calls.",
+      keywords: ["api", "api key", "integration", "machine", "bearer", "token", "curl", "chat api"],
+      sections: {
+        when: { title: "1. When to use an API key" },
+        create: { title: "2. Creating a key" },
+        "secret-once": { title: "3. The one-time secret" },
+        manage: { title: "4. Listing, usage, and revocation" },
+        "first-calls": { title: "5. Your first three calls" },
+      },
+    },
+  },
   vi: {
     "/documentation": {
       title: "Tổng quan tài liệu",
@@ -132,6 +192,17 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
       description: "Tải nguồn dữ liệu đầu tiên lên, chờ lập chỉ mục và thử một câu trả lời.",
       keywords: ["tải lên", "lập chỉ mục", "câu trả lời đầu tiên", "thiết lập"],
       sections: { upload: { title: "1. Tải tài liệu lên" }, index: { title: "2. Chờ lập chỉ mục" }, test: { title: "3. Thử khu trò chuyện" }, "next-step": { title: "4. Chọn bước tiếp theo" } },
+    },
+    "/documentation/auth": {
+      title: "Đăng nhập & phiên",
+      description: "Đăng nhập bằng mật khẩu hoặc SSO, đổi mật khẩu lần đăng nhập đầu, chuyển workspace và phục hồi quyền truy cập.",
+      keywords: ["dang nhap", "sso", "keycloak", "mat khau", "chuyen workspace", "phuc hoi"],
+      sections: {
+        "password-sso": { title: "1. Đăng nhập bằng mật khẩu hoặc SSO" },
+        "first-login": { title: "2. Lần đăng nhập đầu & đổi mật khẩu" },
+        "switch-workspace": { title: "3. Chuyển workspace & đổi ngôn ngữ" },
+        "recover-access": { title: "4. Khi mất quyền truy cập" },
+      },
     },
     "/documentation/documents": {
       title: "Tài liệu",
@@ -154,6 +225,50 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
           "task-inbox": { title: "2. Tiếp nhận & xử lý tác vụ" },
           "sla-timers": { title: "3. Bộ đếm SLA nhắc nhở & leo thang" },
           "role-permissions": { title: "4. Phân định quyền theo vai trò" },
+        },
+      },
+      "/documentation/members": {
+        title: "Tài khoản & thành viên",
+        description: "Tạo tài khoản của tổ chức, mời thành viên vào workspace và quản lý mật khẩu, trạng thái.",
+        keywords: ["tai khoan", "nguoi dung", "moi", "mat khau", "kich hoat", "vo hieu hoa", "chu so huu"],
+        sections: {
+          "org-accounts": { title: "1. Tài khoản tổ chức & thành viên workspace" },
+          "create-account": { title: "2. Tạo tài khoản tổ chức" },
+          "invite-workspace": { title: "3. Mời thành viên vào workspace" },
+          "password-status": { title: "4. Mật khẩu, kích hoạt và gỡ bỏ" },
+        },
+      },
+      "/documentation/workspaces": {
+        title: "Không gian làm việc",
+        description: "Workspace mặc định, không gian công khai so với riêng tư, vòng đời và tình trạng thành viên.",
+        keywords: ["workspace", "general", "cong khai", "rieng tu", "luu tru", "thanh vien", "xoa tai lieu"],
+        sections: {
+          "default-workspace": { title: "1. Workspace mặc định" },
+          visibility: { title: "2. Công khai so với riêng tư" },
+          lifecycle: { title: "3. Tạo, đổi tên, lưu trữ" },
+          membership: { title: "4. Thành viên & quyền tài liệu" },
+        },
+      },
+      "/documentation/settings": {
+        title: "Cài đặt tổ chức",
+        description: "Hồ sơ tổ chức, bật/tắt tự đăng ký và kênh email SMTP.",
+        keywords: ["cai dat", "tu dang ky", "dang ky", "smtp", "kenh email", "email thu nghiem"],
+        sections: {
+          organization: { title: "1. Hồ sơ tổ chức" },
+          "self-registration": { title: "2. Cho phép tự đăng ký" },
+          "email-channels": { title: "3. Kênh thư thông báo" },
+        },
+      },
+      "/documentation/api-keys": {
+        title: "API key & tích hợp",
+        description: "Cho phép một ứng dụng nội bộ khác gọi chat API: tạo khóa máy, lưu secret một lần và thực hiện các lời gọi đầu tiên.",
+        keywords: ["api", "api key", "tich hop", "may", "bearer", "token", "curl", "chat api"],
+        sections: {
+          when: { title: "1. Khi nào dùng API key" },
+          create: { title: "2. Tạo khóa" },
+          "secret-once": { title: "3. Secret chỉ hiện một lần" },
+          manage: { title: "4. Danh sách, sử dụng & thu hồi" },
+          "first-calls": { title: "5. Ba lời gọi đầu tiên" },
         },
       },
       "/documentation/bizapps": {

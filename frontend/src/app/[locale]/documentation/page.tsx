@@ -23,6 +23,7 @@ import {
   FeatureBadge,
   RelatedLinks,
 } from "@/components/documentation/DocumentationComponents"
+import { DocFigure } from "@/components/documentation/DocumentationFigure"
 import { Link } from "@/i18n/navigation"
 import type { AppLocale } from "@/i18n/routing"
 import { documentationPage } from "@/lib/documentation"
@@ -60,6 +61,11 @@ export default async function DocumentationOverviewPage({ params }: PageProps) {
   return (
     <DocArticle title={page.title} description={page.description}>
       <DocSection id="core-concepts" title={sections["core-concepts"]}>
+        <DocFigure
+          src={`/docs/core-flow-${locale}.svg`}
+          alt={t("coreFlowAlt")}
+          caption={t("coreFlowCaption")}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           {concepts.map(([title, text]) => (
             <div key={title} className="rounded-lg border border-slate-200 p-4">

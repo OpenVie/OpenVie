@@ -389,16 +389,16 @@ export default function ApiKeysPage() {
 
     {/* One-time secret display */}
     <Dialog open={createdKey !== null} onOpenChange={open => { if (!open && copied) setCreatedKey(null); }}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><KeyRound className="size-4" />{t("createdTitle")}</DialogTitle>
           <DialogDescription>{t("createdDescription")}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-sm" aria-label={t("secretLabel")}>
+        <div className="flex min-w-0 w-full items-center gap-2">
+          <code className="min-w-0 flex-1 block select-all truncate rounded-md bg-muted px-3 py-2 font-mono text-xs sm:text-sm" aria-label={t("secretLabel")}>
             {createdKey?.key}
           </code>
-          <Button size="sm" variant="outline" onClick={() => void copySecret()} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => void copySecret()} className="shrink-0 gap-1.5">
             <Copy className="size-3.5" />
             {copied ? t("copied") : t("copy")}
           </Button>

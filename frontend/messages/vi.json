@@ -49,7 +49,7 @@
     "changePassword": "Đổi mật khẩu",
     "register": "Tạo tài khoản"
   },
-    "BizApps": {
+  "BizApps": {
     "title": "Ứng dụng",
     "subtitle": "Các ứng dụng kinh doanh cài từ kho ứng dụng, chạy ngay trên nền tảng.",
     "refresh": "Làm mới",
@@ -229,7 +229,7 @@
       "remixSuccess": "Đã tạo draft remix: {name}"
     }
   },
-"DocumentationShell": {
+  "DocumentationShell": {
     "docs": "Tài liệu",
     "documentation": "Tài liệu hướng dẫn",
     "navigation": "Điều hướng tài liệu",
@@ -262,7 +262,8 @@
     "required": "Bắt buộc",
     "description": "Mô tả",
     "yes": "Có",
-    "no": "Không"
+    "no": "Không",
+    "figure": "Hình minh họa —"
   },
   "DocumentationContent": {
     "overview": {
@@ -295,7 +296,9 @@
       "playgroundTitle": "Phòng thí nghiệm chat",
       "playgroundDescription": "Chạy câu hỏi với các tài liệu đã lập chỉ mục và kiểm tra nguồn trích dẫn.",
       "citationsTitle": "Trích dẫn đến từ tài liệu của bạn",
-      "citationsText": "Mỗi câu trả lời đều liên kết về tài liệu đã lập chỉ mục mà nó sử dụng, để người duyệt có thể mở nguồn chỉ với <code>một cú nhấp</code>."
+      "citationsText": "Mỗi câu trả lời đều liên kết về tài liệu đã lập chỉ mục mà nó sử dụng, để người duyệt có thể mở nguồn chỉ với <code>một cú nhấp</code>.",
+      "coreFlowAlt": "Vòng đời tri thức OpenVie: tải tài liệu, lập chỉ mục bất đồng bộ và nhận câu trả lời kèm trích dẫn.",
+      "coreFlowCaption": "Vòng đời tài liệu: nạp tệp nguồn (PDF, DOCX, XLSX, CSV), vector hóa vào kho tri thức theo workspace và tạo trích dẫn kiểm chứng cho mọi câu trả lời."
     },
     "gettingStarted": {
       "signInTitle": "Đăng nhập bằng email công ty",
@@ -375,7 +378,9 @@
       "ownerRoleTitle": "Chủ sở hữu (Organization Owner)",
       "ownerRoleText": "Toàn quyền sửa đổi cấu hình SLA tổ chức (/workflow/sla), phê duyệt các hồ sơ nhạy cảm Level 2 và quản lý BizApps.",
       "approvalInboxTitle": "Hộp thư phê duyệt",
-      "approvalInboxDescription": "Xem xét các tác vụ đang chờ xử lý, kiểm tra tài liệu và ghi nhận quyết định."
+      "approvalInboxDescription": "Xem xét các tác vụ đang chờ xử lý, kiểm tra tài liệu và ghi nhận quyết định.",
+      "approvalFlowAlt": "Quy trình phê duyệt tài liệu hai cấp kèm đồng hồ SLA.",
+      "approvalFlowCaption": "Quy trình nhiều giai đoạn: tài liệu luân chuyển từ người nộp qua Quản trị workspace (Cấp 1) tới Chủ sở hữu tổ chức (Cấp 2), với bộ đếm nhắc nhở và leo thang SLA tự động."
     },
     "bizapps": {
       "introTitle": "BizApp là gì?",
@@ -415,6 +420,110 @@
       "templateExchangeBody": "Xuất template dưới dạng gói openvie.template.v1 kèm mã kiểm tra SHA-256, nhập gói an toàn từ catalog hoặc remix ứng dụng sẵn có với đầy đủ lịch sử tác giả.",
       "openComposerTitle": "Trình thiết kế ứng dụng",
       "openComposerDescription": "Mở trình thiết kế kéo thả trực quan để tạo hoặc chỉnh sửa manifest BizApp."
+    },
+    "auth": {
+      "passwordSsoBody": "OpenVie hỗ trợ đăng nhập trực tiếp bằng mật khẩu cũng như đăng nhập một lần (SSO) cấp doanh nghiệp thông qua giao thức OpenID Connect (Keycloak). Thành viên có thể sử dụng email và mật khẩu hoặc nhấn nút đăng nhập bằng SSO.",
+      "ssoTip": "Khi SSO được cấu hình, người dùng sẽ xác thực trực tiếp qua thư mục tài khoản doanh nghiệp của bạn mà không cần tạo mật khẩu riêng trên OpenVie.",
+      "firstLoginBody": "Khi người quản trị tạo tài khoản cho bạn, bạn sẽ nhận được một mật khẩu tạm thời ban đầu hoặc một liên kết mời. Trong lần đăng nhập đầu tiên, OpenVie yêu cầu bạn đổi mật khẩu tạm thời trước khi truy cập các workspace.",
+      "passwordRequirement": "Mật khẩu mới phải dài tối thiểu 8 ký tự và chứa kết hợp chữ hoa, chữ thường, chữ số cùng ký tự đặc biệt.",
+      "securityTip": "Không gửi mật khẩu tạm thời hoặc mật khẩu vĩnh viễn qua các kênh chat hoặc email không được mã hóa.",
+      "switchWorkspaceBody": "OpenVie cung cấp các workspace riêng biệt cho các phòng ban và dự án khác nhau. Bạn có thể chuyển đổi giữa các workspace mà bạn có quyền từ thanh menu điều hướng ở đầu trang bất cứ lúc nào.",
+      "languageBody": "Để chuyển đổi giữa tiếng Việt và tiếng Anh, hãy chọn ngôn ngữ từ thanh điều hướng. Lựa chọn của bạn sẽ được lưu lại cho các phiên làm việc sau.",
+      "workspaceDataNote": "Mọi tài liệu tải lên, cuộc trò chuyện và chỉ mục tìm kiếm đều được cô lập nghiêm ngặt theo workspace đang hoạt động.",
+      "recoverAccessBody": "Nếu quên mật khẩu hoặc mất quyền truy cập vào tài khoản, hãy liên hệ với Chủ sở hữu hoặc Quản trị viên tổ chức. Quản trị viên có thể đặt lại mật khẩu hoặc cấp liên kết mời mới từ trang quản trị tổ chức.",
+      "ssoRecoveryNote": "Đối với tài khoản SSO, việc đặt lại mật khẩu phải được thực hiện thông qua nhà cung cấp danh tính (IdP) của doanh nghiệp.",
+      "memberDocLink": "Tài liệu tài khoản & thành viên",
+      "memberDocDesc": "Tìm hiểu cách quản trị viên tạo tài khoản và phân quyền workspace.",
+      "loginLink": "Đăng nhập OpenVie",
+      "loginDesc": "Quay lại màn hình đăng nhập để đăng nhập hoặc chấp nhận lời mời."
+    },
+    "members": {
+      "orgAccountsBody": "OpenVie phân chia quyền truy cập thành hai tầng: Tài khoản tổ chức và Thành viên workspace. Tài khoản tổ chức xác lập danh tính của người dùng trên toàn công ty, trong khi thành viên workspace cấp quyền truy cập vào các tập tài liệu và luồng phê duyệt cụ thể.",
+      "roleOwnerTitle": "Chủ sở hữu tổ chức (ORG_OWNER)",
+      "roleOwnerText": "Toàn quyền quản trị tất cả workspace, cài đặt tổ chức, phân quyền và API key.",
+      "roleAdminTitle": "Quản trị viên tổ chức (ORG_ADMIN)",
+      "roleAdminText": "Có thể tạo tài khoản, quản lý phân bổ workspace và xem nhật ký kiểm toán.",
+      "roleMemberTitle": "Thành viên (MEMBER)",
+      "roleMemberText": "Chỉ truy cập các workspace cụ thể mà họ được mời tham gia.",
+      "createAccountBody": "Chủ sở hữu và Quản trị viên tổ chức tạo tài khoản người dùng mới từ trang Quản trị tổ chức (/admin/organization).",
+      "createStep1": "Mở trang Quản trị tổ chức (/admin/organization) và nhấn nút 'Tạo người dùng'.",
+      "createStep2": "Điền email doanh nghiệp, họ tên đầy đủ và chọn vai trò tổ chức.",
+      "createStep3": "Thiết lập mật khẩu tạm thời ban đầu hoặc gửi lời mời kích hoạt.",
+      "inviteWorkspaceBody": "Sau khi tạo tài khoản, hãy phân bổ người dùng vào một hoặc nhiều workspace từ trang Không gian làm việc (/admin/workspaces) hoặc tab quản lý thành viên.",
+      "inviteStep1": "Chọn workspace đích từ danh sách không gian làm việc.",
+      "inviteStep2": "Nhấn 'Thêm thành viên' và tìm kiếm người dùng theo tên hoặc email.",
+      "inviteStep3": "Chọn vai trò trong workspace (WORKSPACE_ADMIN hoặc MEMBER) và xác nhận.",
+      "passwordStatusBody": "Quản trị viên có thể đặt lại mật khẩu, kích hoạt, vô hiệu hóa hoặc xóa tài khoản bất kỳ lúc nào từ trang quản trị tổ chức.",
+      "deactivateWarning": "Vô hiệu hóa tài khoản sẽ lập tức chặn đăng nhập nhưng vẫn giữ lại các tài liệu và nhật ký phê duyệt lịch sử do người dùng đó tạo.",
+      "adminOrgLink": "Trang quản trị tổ chức",
+      "adminOrgDesc": "Quản lý tài khoản người dùng, lời mời và phân quyền.",
+      "workspacesLink": "Quản lý không gian làm việc",
+      "workspacesDesc": "Phân bổ thành viên và cấu hình quyền truy cập workspace."
+    },
+    "workspaces": {
+      "defaultWorkspaceBody": "Mỗi tổ chức OpenVie đều có một workspace mặc định (Chung). Workspace mặc định đóng vai trò là kho lưu trữ chung cho các tài liệu toàn công ty, quy trình thao tác chuẩn và hướng dẫn dùng chung.",
+      "defaultWorkspaceNote": "Mọi thành viên mới của tổ chức đều được tự động cấp quyền vào workspace mặc định, giúp họ truy cập ngay lập tức vào các tài liệu nền tảng.",
+      "visibilityBody": "Các workspace có thể được cấu hình ở chế độ Công khai (Public) hoặc Riêng tư (Private) tùy theo mức độ bảo mật của tài liệu chứa bên trong.",
+      "publicVisibilityTitle": "Không gian làm việc công khai",
+      "publicVisibilityText": "Mọi thành viên trong tổ chức đều có thể nhìn thấy và truy cập. Phù hợp cho tài liệu liên phòng ban, chính sách công ty và tài liệu đào tạo.",
+      "privateVisibilityTitle": "Không gian làm việc riêng tư",
+      "privateVisibilityText": "Chỉ giới hạn cho các thành viên được mời đích danh. Cần thiết cho nhân sự, pháp chế, kiểm toán tài chính và chiến lược ban điều hành.",
+      "lifecycleBody": "Workspace vận hành theo vòng đời rõ ràng: tạo mới, hoạt động, lưu trữ và xóa.",
+      "lifecycleCreate": "Tạo mới: Đặt tên, mô tả và chọn chế độ hiển thị khi thành lập phòng ban hoặc dự án mới.",
+      "lifecycleArchive": "Lưu trữ: Chuyển workspace sang chế độ chỉ đọc. Thành viên vẫn có thể tra cứu tài liệu và lịch sử chat cũ, nhưng không thể tải lên hoặc chỉnh sửa thêm.",
+      "lifecycleDelete": "Xóa: Xóa vĩnh viễn toàn bộ tài liệu, vector trích xuất và lịch sử trò chuyện của workspace. Chỉ Chủ sở hữu tổ chức mới có quyền xóa.",
+      "archiveWarning": "Thao tác xóa workspace không thể hoàn tác. Luôn ưu tiên lưu trữ nếu có yêu cầu lưu giữ hồ sơ theo quy định pháp lý.",
+      "membershipBody": "Thành viên workspace tương tác với kho tri thức và luồng phê duyệt theo vai trò được gán trong workspace.",
+      "roleAdminNote": "WORKSPACE_ADMIN có quyền tải lên tài liệu, kích hoạt lập chỉ mục lại, phê duyệt hồ sơ Cấp 1 và quản lý thành viên.",
+      "roleMemberNote": "MEMBER có quyền đặt câu hỏi trong bảng trò chuyện, xem trích dẫn và nộp tài liệu phê duyệt.",
+      "documentsLink": "Tài liệu quản lý tài liệu",
+      "documentsDesc": "Tìm hiểu cách tài liệu được lập chỉ mục và cô lập theo workspace.",
+      "workspacesAdminLink": "Trang quản lý không gian làm việc",
+      "workspacesAdminDesc": "Tạo mới, cấu hình và giám sát các workspace của bạn."
+    },
+    "settings": {
+      "orgProfileBody": "Hồ sơ tổ chức xác định định danh pháp lý, tên hiển thị, mã định danh và email liên hệ của tổ chức trong OpenVie.",
+      "orgProfileTip": "Luôn cập nhật email liên hệ của tổ chức để đảm bảo nhận được các cảnh báo quản trị và thông báo bảo mật quan trọng.",
+      "selfRegBody": "Công tắc tự đăng ký kiểm soát việc người dùng mới có thể tự đăng ký tài khoản qua trang /register công khai hay không.",
+      "selfRegEnabled": "Khi bật, người dùng có địa chỉ email doanh nghiệp có thể tự tạo tài khoản mà không cần thư mời trước từ quản trị viên.",
+      "selfRegDisabled": "Khi tắt, hệ thống hoạt động ở chế độ chỉ mời. Mọi tài khoản phải do Quản trị viên tổ chức tạo thủ công.",
+      "selfRegSecurity": "Đối với môi trường doanh nghiệp, chúng tôi khuyến nghị tắt tự đăng ký và quản lý việc cấp tài khoản qua SSO hoặc thư mời của quản trị viên.",
+      "emailChannelsBody": "OpenVie sử dụng kênh email SMTP để gửi thư mời, liên kết đặt lại mật khẩu và thông báo nhắc nhở SLA quy trình.",
+      "smtpFieldHost": "Máy chủ và cổng SMTP (ví dụ: smtp.sendgrid.net:587 hoặc email-smtp.us-east-1.amazonaws.com:465).",
+      "smtpFieldAuth": "Tên đăng nhập, mật khẩu hoặc mã API token, và giao thức bảo mật TLS/STARTTLS.",
+      "smtpFieldFrom": "Địa chỉ email người gửi và tên hiển thị gửi đến người nhận.",
+      "testEmailTip": "Sử dụng nút 'Gửi email thử nghiệm' trong trang cài đặt để kiểm tra thông số SMTP và kết nối gửi thư ngay lập tức.",
+      "authLink": "Tài liệu xác thực & phiên làm việc",
+      "authDesc": "Xem lại các tùy chọn đăng nhập, chính sách mật khẩu và tích hợp SSO.",
+      "settingsConsoleLink": "Trang cài đặt tổ chức",
+      "settingsConsoleDesc": "Cấu hình hồ sơ, kênh email và chính sách đăng ký."
+    },
+    "apiKeys": {
+      "whenBody": "OpenVie cung cấp kiến trúc headless, cho phép các ứng dụng nội bộ, chatbot tùy biến, cầu nối CRM và bot tác nghiệp tương tác trực tiếp với kho tri thức qua REST API mà không cần sử dụng giao diện web.",
+      "whenTip": "Sử dụng API key cho các tích hợp giữa máy với máy (M2M). Đối với người dùng tương tác trực tiếp, hãy luôn xác thực bằng phiên web tiêu chuẩn hoặc SSO.",
+      "createBody": "Chủ sở hữu tổ chức có thể tạo API key từ trang Quản trị tổ chức (/admin/organization/api-keys). Mỗi khóa được liên kết với một workspace duy nhất và được gán một vai trò cụ thể (WORKSPACE_ADMIN hoặc MEMBER).",
+      "createFigureAlt": "Hộp thoại tạo API key trong trang quản trị tổ chức.",
+      "createFigureCaption": "Hộp thoại tạo API key: nhập tên khóa mô tả, chọn workspace liên kết, phân quyền vai trò và tùy chọn ngày hết hạn.",
+      "paramName": "Tên mô tả cho ứng dụng tích hợp (ví dụ: 'Cầu nối CRM nội bộ'). Tối đa 120 ký tự.",
+      "paramWorkspace": "Mã định danh workspace đích mà khóa này được quyền truy cập tài liệu và phiên chat.",
+      "paramRole": "Mức phân quyền trong workspace được liên kết: WORKSPACE_ADMIN hoặc MEMBER.",
+      "paramExpiry": "Thời điểm hết hạn tùy chọn theo chuẩn ISO 8601. Các yêu cầu gửi sau thời điểm này sẽ nhận mã lỗi 401 Unauthorized.",
+      "secretOnceBody": "Khi tạo API key, OpenVie sẽ sinh một chuỗi mã bảo mật bắt đầu bằng tiền tố ovk_. Chuỗi bí mật đầy đủ này chỉ được hiển thị đúng một lần duy nhất trong hộp thoại. OpenVie chỉ lưu trữ mã băm SHA-256 của secret trong cơ sở dữ liệu.",
+      "secretFigureAlt": "Hộp thoại hiển thị mã secret API key một lần kèm nút sao chép và cảnh báo bảo mật.",
+      "secretFigureCaption": "Hiển thị secret một lần duy nhất: sao chép ngay mã secret có tiền tố ovk_ và lưu vào trình quản lý khóa bảo mật trước khi xác nhận.",
+      "secretSecurity": "Không bao giờ để lộ secret của API key trong mã frontend phía người dùng hoặc mã nguồn công khai. Nếu secret bị mất hoặc rò rỉ, hãy thu hồi khóa ngay lập tức.",
+      "manageBody": "Trang quản trị API Keys liệt kê tất cả các khóa đang hoạt động và đã thu hồi. Bạn có thể theo dõi thời gian sử dụng, kiểm tra ngày hết hạn và thu hồi ngay các khóa không còn dùng.",
+      "tableFigureAlt": "Bảng quản trị API key hiển thị danh sách khóa hoạt động và đã thu hồi.",
+      "tableFigureCaption": "Bảng quản lý API key: theo dõi tên khóa, workspace liên kết, vai trò, trạng thái hoạt động theo thời gian thực và thu hồi khóa tức thì.",
+      "revokeWarning": "Thu hồi khóa có hiệu lực tức thì và không thể đảo ngược. Mọi dịch vụ tự động đang sử dụng khóa đó sẽ lập tức nhận mã lỗi 401 Unauthorized.",
+      "firstCallsBody": "Sau khi có API key, bạn có thể bắt đầu tích hợp OpenVie vào hệ thống của mình bằng các yêu cầu HTTP tiêu chuẩn.",
+      "call1Title": "1. Kiểm tra xác thực & danh sách workspace",
+      "call2Title": "2. Tạo phiên trò chuyện mới",
+      "call3Title": "3. Gửi câu hỏi và nhận câu trả lời có trích dẫn",
+      "apiKeysConsoleLink": "Trang quản trị API Key",
+      "apiKeysConsoleDesc": "Tạo và quản lý các khóa API máy cho tổ chức của bạn.",
+      "playgroundLink": "Bảng trò chuyện",
+      "playgroundDesc": "Thử nghiệm đặt câu hỏi trực tiếp trước khi tích hợp vào ứng dụng."
     }
   },
   "Auth": {

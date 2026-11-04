@@ -49,7 +49,7 @@
     "changePassword": "Change Password",
     "register": "Create Account"
   },
-    "BizApps": {
+  "BizApps": {
     "title": "Apps",
     "subtitle": "Business apps installed from the marketplace, running on the platform.",
     "refresh": "Refresh",
@@ -229,7 +229,7 @@
       "remixSuccess": "Remix draft created: {name}"
     }
   },
-"DocumentationShell": {
+  "DocumentationShell": {
     "docs": "Docs",
     "documentation": "Documentation",
     "navigation": "Documentation navigation",
@@ -262,7 +262,8 @@
     "required": "Required",
     "description": "Description",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "figure": "Figure —"
   },
   "DocumentationContent": {
     "overview": {
@@ -295,7 +296,9 @@
       "playgroundTitle": "Chat playground",
       "playgroundDescription": "Run a prompt against your indexed documents and inspect the cited sources.",
       "citationsTitle": "Citations come from your documents",
-      "citationsText": "Every answer links back to the indexed document it used, so reviewers can open the source with <code>one click</code>."
+      "citationsText": "Every answer links back to the indexed document it used, so reviewers can open the source with <code>one click</code>.",
+      "coreFlowAlt": "OpenVie knowledge lifecycle: upload documents, index asynchronously, and receive cited answers.",
+      "coreFlowCaption": "Document lifecycle: ingest source files (PDF, DOCX, XLSX, CSV), vectorize into the workspace knowledge base, and generate citations with every answer."
     },
     "gettingStarted": {
       "signInTitle": "Sign in with your company email",
@@ -375,7 +378,9 @@
       "ownerRoleTitle": "Organization Owner",
       "ownerRoleText": "Exclusive authority to configure organization SLA timers (/workflow/sla), approve Level 2 tasks, and manage BizApps.",
       "approvalInboxTitle": "Approval Inbox",
-      "approvalInboxDescription": "Review pending tasks, inspect documents, and record decisions."
+      "approvalInboxDescription": "Review pending tasks, inspect documents, and record decisions.",
+      "approvalFlowAlt": "Two-level document approval workflow with SLA timers.",
+      "approvalFlowCaption": "Multi-stage workflow: documents progress from submitter through Workspace Admin (Level 1) to Organization Owner (Level 2), with automated SLA reminder and escalation timers."
     },
     "bizapps": {
       "introTitle": "What is a BizApp?",
@@ -415,6 +420,110 @@
       "templateExchangeBody": "Export templates as openvie.template.v1 packages with SHA-256 checksums, import verified packages from catalogs, or remix existing apps while preserving upstream attribution.",
       "openComposerTitle": "App Composer",
       "openComposerDescription": "Open the visual drag-and-drop editor to create or modify BizApp manifests."
+    },
+    "auth": {
+      "passwordSsoBody": "OpenVie supports direct password-based sign-in as well as enterprise Single Sign-On (SSO) via OpenID Connect (Keycloak). Organization members can log in using either their company email and password or by clicking the SSO provider button.",
+      "ssoTip": "When SSO is configured, users authenticate against your enterprise directory without needing a separate OpenVie password.",
+      "firstLoginBody": "When an administrator provisions your account, you will receive an initial temporary password or an invitation link. Upon your first sign-in, OpenVie requires you to change your temporary password before accessing workspaces.",
+      "passwordRequirement": "New passwords must be at least 8 characters long and contain a mix of uppercase and lowercase letters, numbers, and special characters.",
+      "securityTip": "Never transmit temporary or permanent credentials over unsecured chat or email channels.",
+      "switchWorkspaceBody": "OpenVie provides isolated workspaces for different departments and projects. You can switch between authorized workspaces from the workspace switcher in the top navigation bar at any time.",
+      "languageBody": "To switch between Vietnamese and English, use the locale selector in the navigation bar. Your selection persists across sessions.",
+      "workspaceDataNote": "All uploaded documents, conversations, and search indexes are strictly isolated to the active workspace.",
+      "recoverAccessBody": "If you forget your password or lose access to your account, reach out to your Organization Owner or Administrator. Administrators can reset passwords or generate new invitation links from the organization admin console.",
+      "ssoRecoveryNote": "For SSO accounts, password resets must be performed through your corporate identity provider (IdP).",
+      "memberDocLink": "Accounts & members documentation",
+      "memberDocDesc": "Learn how administrators provision accounts and assign workspace roles.",
+      "loginLink": "OpenVie Sign In",
+      "loginDesc": "Return to the login screen to sign in or accept an invitation."
+    },
+    "members": {
+      "orgAccountsBody": "OpenVie organizes user access into two tiers: Organization Accounts and Workspace Memberships. An organization account establishes a user identity across the company, while workspace memberships grant access to specific document sets and approval queues.",
+      "roleOwnerTitle": "Organization Owner (ORG_OWNER)",
+      "roleOwnerText": "Full administrative control over all workspaces, billing, organization settings, and API keys.",
+      "roleAdminTitle": "Organization Admin (ORG_ADMIN)",
+      "roleAdminText": "Can create accounts, manage workspace allocations, and inspect audit logs.",
+      "roleMemberTitle": "Member (MEMBER)",
+      "roleMemberText": "Accesses only the specific workspaces they have been invited into.",
+      "createAccountBody": "Organization Owners and Admins create new user accounts from the Organization Admin console (/admin/organization).",
+      "createStep1": "Open the Organization Admin page (/admin/organization) and click the 'Create user' button.",
+      "createStep2": "Provide the user's corporate email, full name, and assign an organization role.",
+      "createStep3": "Set an initial temporary password or choose to send an activation invitation.",
+      "inviteWorkspaceBody": "After creating an account, assign the user to one or more workspaces from the Workspaces console (/admin/workspaces) or the workspace member management tab.",
+      "inviteStep1": "Select the target workspace from the workspace list.",
+      "inviteStep2": "Click 'Add member' and search for the user by name or email.",
+      "inviteStep3": "Select the workspace role (WORKSPACE_ADMIN or MEMBER) and confirm.",
+      "passwordStatusBody": "Administrators can reset user passwords, activate, deactivate, or permanently remove accounts at any time from the organization console.",
+      "deactivateWarning": "Deactivating an account immediately blocks sign-in while preserving the user's historical document uploads and approval logs.",
+      "adminOrgLink": "Organization Admin Console",
+      "adminOrgDesc": "Manage user accounts, invitations, and permissions.",
+      "workspacesLink": "Workspace Management",
+      "workspacesDesc": "Assign members and configure workspace access."
+    },
+    "workspaces": {
+      "defaultWorkspaceBody": "Every OpenVie organization includes a default workspace (General). The default workspace serves as the common repository for company-wide documentation, standard operating procedures, and shared guidelines.",
+      "defaultWorkspaceNote": "All new organization members are granted access to the default workspace by default, ensuring immediate access to foundational resources.",
+      "visibilityBody": "Workspaces can be configured as either Public or Private depending on the confidentiality of the materials they contain.",
+      "publicVisibilityTitle": "Public workspace",
+      "publicVisibilityText": "Discoverable and accessible by all members of the organization. Ideal for cross-departmental documentation, company policies, and training materials.",
+      "privateVisibilityTitle": "Private workspace",
+      "privateVisibilityText": "Restricted exclusively to explicitly invited members. Critical for human resources, legal affairs, financial audits, and executive strategy.",
+      "lifecycleBody": "Workspaces follow a structured lifecycle: creation, active operation, archiving, and deletion.",
+      "lifecycleCreate": "Create: Define name, description, and visibility when establishing a new department or project.",
+      "lifecycleArchive": "Archive: Sets the workspace to read-only mode. Members can still query existing documents and chat history, but new uploads and edits are blocked.",
+      "lifecycleDelete": "Delete: Permanently purges all documents, vector embeddings, and conversation histories associated with the workspace. Only Organization Owners can delete workspaces.",
+      "archiveWarning": "Deleting a workspace cannot be undone. Always archive first if there is any requirement for regulatory record retention.",
+      "membershipBody": "Workspace members interact with knowledge bases and approval queues based on their assigned workspace role.",
+      "roleAdminNote": "WORKSPACE_ADMIN can upload documents, trigger re-indexing, review Level 1 approvals, and manage membership.",
+      "roleMemberNote": "MEMBER can ask questions in the chat playground, view citations, and submit documents for review.",
+      "documentsLink": "Document Management Documentation",
+      "documentsDesc": "Learn how documents are indexed and isolated per workspace.",
+      "workspacesAdminLink": "Manage Workspaces Console",
+      "workspacesAdminDesc": "Create, configure, and monitor your workspaces."
+    },
+    "settings": {
+      "orgProfileBody": "The Organization Profile defines your organization's legal identity, display name, slug, and contact email within OpenVie.",
+      "orgProfileTip": "Keep your organization contact email up to date to ensure critical administrative alerts and security notifications are delivered.",
+      "selfRegBody": "The self-registration toggle controls whether new users can independently sign up via the public /register page.",
+      "selfRegEnabled": "When enabled, visitors with corporate email addresses can create accounts without prior administrative invitation.",
+      "selfRegDisabled": "When disabled, registration is invitation-only. All accounts must be explicitly created by Organization Admins.",
+      "selfRegSecurity": "For enterprise deployments, we recommend keeping self-registration disabled and managing provisioning through SSO or administrative invites.",
+      "emailChannelsBody": "OpenVie uses SMTP email channels to deliver invitation emails, password reset links, and workflow SLA reminder notifications.",
+      "smtpFieldHost": "SMTP Host and Port (e.g., smtp.sendgrid.net:587 or email-smtp.us-east-1.amazonaws.com:465).",
+      "smtpFieldAuth": "Username, password or API token, and TLS/STARTTLS security protocol.",
+      "smtpFieldFrom": "Sender email address and display name shown to recipients.",
+      "testEmailTip": "Use the 'Send test email' button in the settings console to verify your SMTP credentials and delivery connectivity immediately.",
+      "authLink": "Authentication & Sessions Documentation",
+      "authDesc": "Review login options, password policies, and SSO integration.",
+      "settingsConsoleLink": "Organization Settings Console",
+      "settingsConsoleDesc": "Configure profile, email channels, and registration policies."
+    },
+    "apiKeys": {
+      "whenBody": "OpenVie provides a headless architecture, allowing internal enterprise applications, custom chatbots, CRM bridges, and workflow bots to interact with your knowledge base directly over REST APIs without using the web interface.",
+      "whenTip": "Use API keys for machine-to-machine integrations. For interactive human users, always authenticate using standard web sessions or SSO.",
+      "createBody": "Organization Owners can create API keys from the Organization Admin console (/admin/organization/api-keys). Each key is bound to a single workspace and assigned a specific role (WORKSPACE_ADMIN or MEMBER).",
+      "createFigureAlt": "API key creation dialog in the organization admin console.",
+      "createFigureCaption": "API key creation dialog: set a descriptive name, select the bound workspace, assign the service role, and optionally specify an expiration date.",
+      "paramName": "Descriptive name for the integration (e.g., 'Internal CRM Bridge'). Maximum 120 characters.",
+      "paramWorkspace": "Target workspace identifier whose documents and chat sessions this key can access.",
+      "paramRole": "Permission level within the bound workspace: WORKSPACE_ADMIN or MEMBER.",
+      "paramExpiry": "Optional ISO 8601 expiration date. Requests made after this time return 401 Unauthorized.",
+      "secretOnceBody": "When an API key is created, OpenVie generates a cryptographically secure token prefixed with ovk_. This full secret is displayed exactly once in a modal dialog. OpenVie stores only a SHA-256 hash of the secret in the database.",
+      "secretFigureAlt": "One-time API key secret display modal with copy button and warning.",
+      "secretFigureCaption": "One-time secret display: copy the ovk_ secret immediately and save it in a secure password vault before clicking acknowledge.",
+      "secretSecurity": "Never expose your API key secret in client-side code, frontend bundles, or public version control. If a secret is lost or compromised, revoke it immediately.",
+      "manageBody": "The API Keys console lists all active and revoked keys. You can monitor key usage, check expiration dates, and revoke compromised keys with immediate effect.",
+      "tableFigureAlt": "API keys administration table displaying active and revoked keys.",
+      "tableFigureCaption": "API keys table: review key names, bound workspaces, service roles, real-time statuses, and revoke access with a single click.",
+      "revokeWarning": "Revoking a key is permanent and instantaneous. Any automated services currently using the key will immediately receive 401 Unauthorized.",
+      "firstCallsBody": "Once you have your API key, you can start integrating OpenVie into your systems using standard HTTP requests.",
+      "call1Title": "1. Verify authentication & list accessible workspaces",
+      "call2Title": "2. Create a new chat session",
+      "call3Title": "3. Send a chat query with cited response",
+      "apiKeysConsoleLink": "API Keys Console",
+      "apiKeysConsoleDesc": "Generate and manage machine API keys for your organization.",
+      "playgroundLink": "Chat Playground",
+      "playgroundDesc": "Test queries interactively before integrating into your applications."
     }
   },
   "Auth": {
