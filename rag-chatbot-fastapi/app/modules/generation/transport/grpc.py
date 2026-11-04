@@ -124,12 +124,20 @@ class GenerationGrpcHandler:
 
         output = "{}"
         gen = self._generation
-        model = getattr(gen, "model", None) or getattr(gen, "_model", None)
-        if model and hasattr(model, "complete_text"):
+        model = (
+            getattr(gen, "model", None)
+            or getattr(gen, "_model", None)
+            or getattr(getattr(gen, "_delegate", None), "_chat_model", None)
+            or getattr(getattr(gen, "_delegate", None), "chat_model", None)
+        )
+        if model:
             try:
-                output = await model.complete_text(
-                    messages, max_output_tokens=max_tokens, temperature=temperature
-                )
+                if hasattr(model, "complete_text"):
+                    output = await model.complete_text(
+                        messages, max_output_tokens=max_tokens, temperature=temperature
+                    )
+                elif hasattr(model, "complete"):
+                    output = await model.complete(messages)
             except Exception as exc:
                 logger.warning("CompleteJson model invocation failed: %s", exc)
                 output = "{}"

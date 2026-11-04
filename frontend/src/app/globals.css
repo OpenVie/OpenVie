@@ -742,7 +742,7 @@ html[data-theme="light"] .ov-results { color: #5c685f; }
 /* Desktop keeps the single-line hero pill; phones use the same stacked layout as the conversation composer. */
 @media (min-width: 640px) {
   .ov-chat-composer-empty { display: flex; align-items: center; gap: 10px; border-radius: 999px; padding: 7px 8px 7px 16px; }
-  .ov-chat-composer-empty textarea { width: auto; min-height: 28px; flex: 1; padding: 3px 0; overflow-x: hidden; white-space: nowrap; text-align: center; }
+  .ov-chat-composer-empty textarea { width: auto; min-height: 28px; flex: 1; padding: 3px 0; overflow-x: hidden; white-space: nowrap; text-align: left; }
   .ov-chat-composer-empty > div { height: auto; flex: none; }
 }
 
@@ -752,10 +752,6 @@ html[data-theme="light"] .ov-results { color: #5c685f; }
   .ov-chat-composer-empty .ov-composer-action-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .ov-chat-composer-empty button[type="button"] { width: 34px; justify-content: center; padding-inline: 0; }
   .ov-chat-composer-empty > div { gap: 4px; }
-}
-@media (min-width: 640px) and (max-width: 1400px) {
-  .ov-chat-composer-empty textarea { width: 100%; text-align: center; }
-  .ov-chat-composer-empty > div { position: absolute; z-index: 1; right: 8px; top: 50%; transform: translateY(-50%); }
 }
 .ov-chat-composer button[type="submit"], .ov-chat-composer button[type="button"]:last-child { color: #07090c !important; }
 
