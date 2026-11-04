@@ -29,7 +29,8 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
@@ -195,23 +196,19 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
         )}
 
         {kind === "bizapp.catalog" && (
-          <Button asChild size="sm" variant="outline" className="text-xs">
-            <Link href="/apps">
-              {t("openCatalog")}
-              <ExternalLink className="ml-1.5 size-3.5" />
-            </Link>
-          </Button>
+          <Link href="/apps" className={cn(buttonVariants({ size: "sm", variant: "outline" }), "text-xs")}>
+            {t("openCatalog")}
+            <ExternalLink className="ml-1.5 size-3.5" />
+          </Link>
         )}
 
         {kind === "bizapp.draft" && (
           <div className="flex gap-2">
-            {raw.payload?.draftId && (
-              <Button asChild size="sm" variant="outline" className="text-xs">
-                <Link href={`/admin/apps/compose/${raw.payload.draftId}`}>
-                  {t("openComposer")}
-                  <ExternalLink className="ml-1.5 size-3.5" />
-                </Link>
-              </Button>
+            {Boolean(raw.payload?.draftId) && (
+              <Link href={`/admin/apps/compose/${String(raw.payload?.draftId)}`} className={cn(buttonVariants({ size: "sm", variant: "outline" }), "text-xs")}>
+                {t("openComposer")}
+                <ExternalLink className="ml-1.5 size-3.5" />
+              </Link>
             )}
             {!isExecuted && (
               <Button

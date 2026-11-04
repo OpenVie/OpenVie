@@ -148,4 +148,14 @@ class BizAppIntentRouterTest {
         assertEquals("bizapp.install", result.actionCard().get("kind"));
         assertEquals(actionId.toString(), result.actionCard().get("actionId"));
     }
+    @Test
+    void listAppsWithAllOrEmptyAppKindDoesNotDowngrade() {
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse("{\"intent\":\"LIST_APPS\",\"appKind\":\"ALL\",\"confidence\":0.99,\"reply\":\"Danh sách ứng dụng\",\"reason\":\"\"}", "model", 10, 10)
+        );
+
+        var result = router.route(tenantId, orgId, actorId, "ORG_OWNER", "Hiện tại đang có bao nhiêu ứng dụng được cài đặt?", "vi-VN", sessionId);
+        assertEquals(BizAppIntentRouter.Intent.LIST_APPS, result.intent());
+        assertNull(result.appKind());
+    }
 }

@@ -3,6 +3,16 @@
 app:
   cors:
     allowed-origin-patterns: "${ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}"
+  chat:
+    bizapp-actions:
+      enabled: ${CHAT_BIZAPP_ACTIONS_ENABLED:true}
+    intent-confidence-threshold: ${CHAT_INTENT_CONFIDENCE_THRESHOLD:0.75}
+    intent-classify-all-turns: ${CHAT_INTENT_CLASSIFY_ALL_TURNS:false}
+  documents:
+    video-uploads-enabled: ${VIDEO_UPLOADS_ENABLED:true}
+    audio-uploads-enabled: ${ASR_UPLOADS_ENABLED:${AUDIO_UPLOADS_ENABLED:true}}
+    image-uploads-enabled: ${OCR_UPLOADS_ENABLED:${IMAGE_UPLOADS_ENABLED:true}}
+    max-file-size-mb: ${DOCUMENT_MAX_SIZE_MB:200}
   security:
     cookie-secure: ${COOKIE_SECURE:false}
   seaweedfs:
@@ -38,6 +48,10 @@ spring:
   config:
     activate:
       on-profile: dev
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:200MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:-1}
   devtools:
     add-properties: true
   flyway:

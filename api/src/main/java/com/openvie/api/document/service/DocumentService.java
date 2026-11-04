@@ -709,6 +709,7 @@ public class DocumentService {
                     document.setTextSource(event.textSource());
                     document.setPageCount(event.pageCount());
                     document.setErrorMessage(event.errorMessage());
+                    documentRepository.save(document);
                     if (status == DocumentStatus.COMPLETED
                             && previousStatus != DocumentStatus.COMPLETED) {
                         incrementSearchRevision(event.tenantId(), document.getKnowledgeBaseId());

@@ -171,12 +171,18 @@ public class BizAppIntentRouter {
             }
 
             String appKind = root.path("appKind").asText(null);
-            if (appKind != null) {
+            if (appKind != null && !appKind.isBlank() && !"null".equalsIgnoreCase(appKind)) {
                 appKind = appKind.trim().toLowerCase(Locale.ROOT);
-                if (!knownKinds.contains(appKind)) {
-                    log.info("Unknown appKind {} proposed by classifier; downgrading to NONE", appKind);
-                    return RoutingResult.none();
+                if (intent == Intent.INSTALL || intent == Intent.UNINSTALL || intent == Intent.APP_DETAIL || intent == Intent.APP_DATA) {
+                    if (!knownKinds.contains(appKind)) {
+                        log.info("Unknown appKind {} proposed by classifier; downgrading to NONE", appKind);
+                        return RoutingResult.none();
+                    }
+                } else {
+                    appKind = knownKinds.contains(appKind) ? appKind : null;
                 }
+            } else {
+                appKind = null;
             }
 
             String reply = root.path("reply").asText("");
