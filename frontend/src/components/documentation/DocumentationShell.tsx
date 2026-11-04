@@ -14,7 +14,7 @@
 
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import Image from "next/image"
 import { useLocale, useTranslations } from "next-intl"
 import { ArrowLeft, ArrowRight, BookOpen, Menu, MessageSquare, Moon, Search, Sun, X } from "lucide-react"
@@ -36,9 +36,27 @@ import { transitionTheme } from "@/lib/theme-transition"
 type SearchResult = { href: string; pageTitle: string; title: string; description: string }
 type Theme = "light" | "dark"
 
+const THEME_KEY = "openvie.theme"
+const THEME_CHANGE_EVENT = "openvie:themechange"
+
 function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-  return window.localStorage.getItem("openvie.theme") === "dark" ? "dark" : "light"
+  if (typeof window === "undefined") return "dark"
+  const stored = window.localStorage.getItem(THEME_KEY)
+  if (stored === "light" || stored === "dark") return stored
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark"
+}
+
+
+function subscribeToThemeChange(onStoreChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === THEME_KEY) onStoreChange()
+  }
+  window.addEventListener(THEME_CHANGE_EVENT, onStoreChange)
+  window.addEventListener("storage", onStorage)
+  return () => {
+    window.removeEventListener(THEME_CHANGE_EVENT, onStoreChange)
+    window.removeEventListener("storage", onStorage)
+  }
 }
 
 function buildSearchResults(query: string, pages: DocumentationPage[]): SearchResult[] {
@@ -175,7 +193,7 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
   const next = currentIndex < pages.length - 1 ? pages[currentIndex + 1] : null
   const [searchOpen, setSearchOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+  const theme = useSyncExternalStore(subscribeToThemeChange, readStoredTheme, (): Theme => "dark")
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -189,12 +207,13 @@ export function DocumentationShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset.ovTheme = theme
     document.documentElement.dataset.theme = theme
-    window.localStorage.setItem("openvie.theme", theme)
-    window.dispatchEvent(new Event("openvie:themechange"))
   }, [theme])
 
   function changeTheme(nextTheme: Theme) {
-    transitionTheme(() => setTheme(nextTheme))
+    transitionTheme(() => {
+      window.localStorage.setItem(THEME_KEY, nextTheme)
+      window.dispatchEvent(new Event(THEME_CHANGE_EVENT))
+    })
   }
 
   return (
