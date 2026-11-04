@@ -62,6 +62,9 @@ class GraphBatch:
     entities: tuple[GraphEntity, ...] = ()
     relations: tuple[GraphRelation, ...] = ()
     extraction_version: str = "entity-relations-v1"
+    document_kind: str = "USER"
+    source_ref: str | None = None
+
 
     def __post_init__(self) -> None:
         converted = tuple(
@@ -105,6 +108,7 @@ class GraphSearchQuery:
     limit: int = 10
     max_hops: int = 0
     document_ids: tuple[str, ...] | None = None
+    excluded_document_kinds: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.tenant_id or not self.knowledge_base_id:
@@ -124,7 +128,12 @@ class GraphSearchQuery:
             "document_ids",
             tuple(sorted({str(document_id) for document_id in self.document_ids})),
         )
-
+        if self.excluded_document_kinds is not None:
+            object.__setattr__(
+                self,
+                "excluded_document_kinds",
+                tuple(sorted({str(k) for k in self.excluded_document_kinds if str(k).strip()})),
+            )
 
 @dataclass(frozen=True, slots=True)
 class GraphSearchResult:

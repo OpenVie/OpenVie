@@ -15,7 +15,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
+from contextvars import ContextVar
 from typing import Any
+
+_active_excluded_kinds: ContextVar[tuple[str, ...]] = ContextVar(
+    "_active_excluded_kinds", default=()
+)
 
 from app.modules.generation.api import (
     GenerationApi,
@@ -57,6 +62,7 @@ class GenerationRetrievalAdapter:
                 query_vector=tuple(float(value) for value in query_vector),
                 authoritative_revision=authoritative_revision,
                 document_ids=(tuple(document_ids) if document_ids is not None else None),
+                excluded_document_kinds=_active_excluded_kinds.get(),
             )
         )
 
@@ -91,6 +97,7 @@ class GenerationService(GenerationApi):
             for index, item in enumerate(context.prior_messages[:20], start=1)
             if item.role in {"user", "assistant", "system"}
         )
+        token = _active_excluded_kinds.set(context.excluded_document_kinds)
         try:
             message = await self._delegate.submit_message(
                 session=session,
@@ -103,6 +110,8 @@ class GenerationService(GenerationApi):
             raise GenerationTimeoutError("Model deadline exceeded") from exc
         except ModelUnavailableError as exc:
             raise GenerationUnavailableError("Model provider failed") from exc
+        finally:
+            _active_excluded_kinds.reset(token)
 
         return GenerationResult(
             generation_id=context.generation_id,

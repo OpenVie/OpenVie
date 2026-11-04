@@ -74,7 +74,20 @@ public interface DocumentApi {
      */
     void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy);
 
-    UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent);
+    default UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent) {
+        return ingestText(tenantId, actorId, knowledgeBaseId, fileName, markdownContent, DocumentKind.USER, null);
+    }
+
+    UUID ingestText(
+            UUID tenantId,
+            UUID actorId,
+            UUID knowledgeBaseId,
+            String fileName,
+            String markdownContent,
+            DocumentKind documentKind,
+            String sourceRef);
 
     void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName);
+
+    List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind);
 }

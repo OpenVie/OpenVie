@@ -25,8 +25,11 @@ import com.openvie.api.common.controller.BaseController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -47,9 +50,34 @@ import java.util.UUID;
 @RequestMapping("/api/v1/bizapps")
 @RequiredArgsConstructor
 public class BizAppDraftController extends BaseController {
-
     private final BizAppDraftService draftService;
 
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private BizAppRuntimeApi.RecentTurnsProvider recentTurnsProvider;
+
+    public record DraftFromChatRequest(
+            @NotNull UUID sessionId,
+            String hint
+    ) {}
+
+    @Operation(summary = "Generate draft from chat history", description = "Drafts a new manifest using conversation turns from chat session (ORG_OWNER only).")
+    @PostMapping("/drafts/from-chat")
+    public ResponseEntity<GenerateDraftResponse> generateFromChat(
+            @Valid @RequestBody DraftFromChatRequest body,
+            HttpServletRequest httpReq
+    ) {
+        requireOrgOwner(httpReq);
+        UUID orgId = getOrgId(httpReq);
+        UUID tenantId = getTenantId(httpReq);
+        UUID actorId = getUserId(httpReq);
+        List<BizAppRuntimeApi.RecentTurn> turns = recentTurnsProvider != null
+                ? recentTurnsProvider.fetchRecentTurns(tenantId, actorId, body.sessionId(), 20)
+                : List.of();
+        List<String> formatted = turns.stream().map(t -> t.role() + ": " + t.content()).toList();
+        var resp = draftService.generateDraftFromChat(orgId, tenantId, actorId, body.sessionId(), body.hint(), formatted);
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
     @Operation(summary = "Stateless manifest validation", description = "Validates a manifest against bizapp.v1 without saving.")
     @PostMapping("/validate")
     public ResponseEntity<ValidationResult> validate(

@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +141,31 @@ public class BizAppDraftService {
                 saved.getId(), Map.of("title", title, "valid", validation.ok()));
 
         return new GenerateDraftResponse(saved.getId(), saved.getManifest(), validation, saved.getMeta());
+    }
+
+    @Transactional
+    public GenerateDraftResponse generateDraftFromChat(
+            UUID orgId, UUID tenantId, UUID actorId, UUID sessionId, String hint, List<String> conversationTurns) {
+        if (!properties.aiDraftingEnabled()) {
+            throw new ResourceNotFoundException("AI manifest drafting is disabled on this installation");
+        }
+        StringBuilder sb = new StringBuilder();
+        if (hint != null && !hint.isBlank()) {
+            sb.append("Hint: ").append(hint).append("\n\n");
+        }
+        sb.append("Recent conversation turns:\n");
+        for (String turn : conversationTurns) {
+            sb.append(turn).append("\n");
+        }
+        GenerateDraftResponse resp = generateDraft(orgId, tenantId, actorId, new GenerateDraftRequest(sb.toString(), "vi", null));
+        draftRepository.findByIdAndOrgId(resp.draftId(), orgId).ifPresent(d -> {
+            Map<String, Object> meta = new HashMap<>(d.getMeta() != null ? d.getMeta() : Map.of());
+            meta.put("sessionId", sessionId != null ? sessionId.toString() : null);
+            meta.put("model", "vylinh");
+            d.setMeta(meta);
+            draftRepository.save(d);
+        });
+        return resp;
     }
 
     @Transactional(readOnly = true)

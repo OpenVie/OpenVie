@@ -33,4 +33,6 @@ public interface BizAppRecordRepository extends JpaRepository<BizAppRecord, UUID
             UUID tenantId, String appKind, String entity, Pageable pageable);
 
     long countByTenantIdAndAppKindAndEntityAndStatus(UUID tenantId, String appKind, String entity, String status);
+
+    java.util.List<BizAppRecord> findByTenantIdAndAppKind(UUID tenantId, String appKind);
 }

@@ -60,6 +60,8 @@ class ReplaceDocumentIndex:
     units: tuple[IndexUnit, ...]
     dense_vectors: tuple[tuple[float, ...], ...]
     sparse_vectors: tuple[IndexSparseVector, ...]
+    document_kind: str = "USER"
+    source_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +71,7 @@ class KnowledgeIndexQuery:
     query_vector: tuple[float, ...]
     limit: int
     document_ids: tuple[str, ...] | None = None
+    excluded_document_kinds: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +81,7 @@ class SparseKnowledgeIndexQuery:
     query_vector: IndexSparseVector
     limit: int
     document_ids: tuple[str, ...] | None = None
+    excluded_document_kinds: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

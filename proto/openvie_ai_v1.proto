@@ -56,6 +56,8 @@ message GenerateAnswerRequest {
   // Optional document scope for retrieval: restricts the answer to the given
   // indexed documents. An empty list means the whole knowledge base.
   repeated string document_ids = 14;
+  // Optional document kinds to exclude from retrieval.
+  repeated string excluded_document_kinds = 15;
 }
 
 message Citation {

@@ -117,4 +117,18 @@ class ModularMonolithArchitectureTest {
                         "org.springframework.jdbc..", "jakarta.persistence.EntityManager")
                 .check(classes);
     }
+
+    @Test
+    void chatAndBizappDoNotDependOnDocumentService() {
+        noClasses().that().resideInAnyPackage("com.openvie.api.chat..", "com.openvie.api.bizapp..")
+                .should().dependOnClassesThat().resideInAPackage("com.openvie.api.document.service..")
+                .check(classes);
+    }
+
+    @Test
+    void aiDoesNotDirectlyCallInstall() {
+        noClasses().that().resideInAPackage("com.openvie.api.ai..")
+                .should().dependOnClassesThat().haveFullyQualifiedName("com.openvie.api.bizapp.service.BizAppInstallService")
+                .check(classes);
+    }
 }

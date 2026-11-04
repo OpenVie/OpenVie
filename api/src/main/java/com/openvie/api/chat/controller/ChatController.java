@@ -35,6 +35,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.openvie.api.chat.service.ChatActionService;
+import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
@@ -67,6 +70,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @SecurityRequirement(name = "bearerAuth")
 public class ChatController extends BaseController {
     private final ChatControlPlaneService chatService;
+    @Autowired(required = false)
+    private ChatActionService chatActionService;
     private final Map<Thread, Context.CancellableContext> activeStreams = new ConcurrentHashMap<>();
     @Value("${app.ai.grpc.answer-deadline-seconds:100}")
     private long answerDeadlineSeconds = 100;
@@ -335,5 +340,26 @@ public class ChatController extends BaseController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void hide(@PathVariable UUID sessionId, HttpServletRequest request) {
         chatService.hidePlayground(getTenantId(request), getUserId(request), sessionId);
+    }
+
+    @Operation(summary = "Execute a proposed app action card (ORG_OWNER only)",
+            description = "Executes an install or uninstall action card proposed in chat history.")
+    @PostMapping("/actions/execute")
+    public ResponseEntity<ChatDtos.AssistantMessageResponse> executeAction(
+            @Valid @RequestBody ChatDtos.ExecuteActionRequest body,
+            HttpServletRequest request
+    ) {
+        if (!"ORG_OWNER".equals(getOrgRole(request))) {
+            throw new AccessDeniedException("Only organization owners may execute chat app actions");
+        }
+        if (chatActionService == null) {
+            throw new ResourceNotFoundException("Chat action execution is unavailable");
+        }
+        UUID tenantId = getTenantId(request);
+        UUID orgId = getOrgId(request);
+        UUID actorId = getUserId(request);
+        String role = getOrgRole(request);
+        var response = chatActionService.executeAction(tenantId, orgId, actorId, role, body.messageId(), body.actionId());
+        return ResponseEntity.ok(response);
     }
 }

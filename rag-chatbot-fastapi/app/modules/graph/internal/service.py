@@ -57,7 +57,7 @@ class KuzuGraphRepository:
     def _schema(self) -> None:
         statements = (
             "CREATE NODE TABLE IF NOT EXISTS Source(id STRING, tenant_id STRING, "
-            "knowledge_base_id STRING, name STRING, PRIMARY KEY(id))",
+            "knowledge_base_id STRING, name STRING, document_kind STRING, source_ref STRING, PRIMARY KEY(id))",
             "CREATE NODE TABLE IF NOT EXISTS KnowledgeUnit(id STRING, source_id STRING, "
             "text STRING, page_number INT64, section_path STRING, sheet_name STRING, "
             "cell_range STRING, PRIMARY KEY(id))",
@@ -73,18 +73,28 @@ class KuzuGraphRepository:
         with self._lock:
             for statement in statements:
                 self._connection.execute(statement)
-
+            for alter in (
+                "ALTER TABLE Source ADD document_kind STRING DEFAULT 'USER'",
+                "ALTER TABLE Source ADD source_ref STRING DEFAULT ''",
+            ):
+                try:
+                    self._connection.execute(alter)
+                except Exception:
+                    pass
     def replace_source(self, batch: GraphBatch) -> None:
         with self._lock, self._transaction():
             self._delete_source(batch.tenant_id, batch.source_id)
             self._connection.execute(
-                "CREATE (:Source {id: $id, tenant_id: $tenant, "
-                "knowledge_base_id: $kb, name: $name})",
+                "MERGE (s:Source {id: $id}) SET s.tenant_id=$tenant, "
+                "s.knowledge_base_id=$kb, s.name=$name, s.document_kind=$document_kind, "
+                "s.source_ref=$source_ref",
                 {
                     "id": batch.source_id,
                     "tenant": batch.tenant_id,
                     "kb": batch.knowledge_base_id,
                     "name": batch.source_name,
+                    "document_kind": getattr(batch, "document_kind", None) or "USER",
+                    "source_ref": getattr(batch, "source_ref", None) or "",
                 },
             )
             entity_metadata: dict[str, tuple[str, str, set[str]]] = {}
@@ -245,6 +255,8 @@ class KuzuGraphRepository:
         parameters = _search_parameters(request)
         if request.document_ids is not None:
             query += "AND s.id IN $documents "
+        if request.excluded_document_kinds:
+            query += "AND (s.document_kind IS NULL OR NOT (s.document_kind IN $excluded_kinds)) "
         query += (
             "RETURN DISTINCT e.id, e.normalized_name, e.aliases "
             "ORDER BY e.normalized_name, e.id"
@@ -277,6 +289,8 @@ class KuzuGraphRepository:
         parameters["entity_ids"] = list(entity_ids)
         if request.document_ids is not None:
             query += "AND s.id IN $documents "
+        if request.excluded_document_kinds:
+            query += "AND (s.document_kind IS NULL OR NOT (s.document_kind IN $excluded_kinds)) "
         query += (
             "RETURN e.id, m.evidence_unit_id, u.source_id, s.name, u.text, "
             "u.page_number, u.section_path, u.sheet_name, u.cell_range "
@@ -305,12 +319,23 @@ class KuzuGraphRepository:
         if not frontier_ids or request.document_ids == ():
             return []
         anchor = "a" if outgoing else "b"
-        query = (
-            "MATCH (a:Entity)-[r:RELATED_TO]->(b:Entity) "
-            f"WHERE {anchor}.id IN $frontier_ids "
-            "AND a.tenant_id=$tenant AND a.knowledge_base_id=$kb "
-            "AND b.tenant_id=$tenant AND b.knowledge_base_id=$kb "
-        )
+        if request.excluded_document_kinds:
+            query = (
+                "MATCH (a:Entity)-[r:RELATED_TO]->(b:Entity), (s:Source) "
+                f"WHERE {anchor}.id IN $frontier_ids "
+                "AND s.id = r.source_id "
+                "AND a.tenant_id=$tenant AND a.knowledge_base_id=$kb "
+                "AND b.tenant_id=$tenant AND b.knowledge_base_id=$kb "
+                "AND s.tenant_id=$tenant AND s.knowledge_base_id=$kb "
+                "AND (s.document_kind IS NULL OR NOT (s.document_kind IN $excluded_kinds)) "
+            )
+        else:
+            query = (
+                "MATCH (a:Entity)-[r:RELATED_TO]->(b:Entity) "
+                f"WHERE {anchor}.id IN $frontier_ids "
+                "AND a.tenant_id=$tenant AND a.knowledge_base_id=$kb "
+                "AND b.tenant_id=$tenant AND b.knowledge_base_id=$kb "
+            )
         parameters = _search_parameters(request)
         parameters.update({"frontier_ids": list(frontier_ids), "edge_limit": limit})
         if request.document_ids is not None:
@@ -353,6 +378,8 @@ class KuzuGraphRepository:
         parameters["unit_node_ids"] = list(sorted(identities_by_node_id))
         if request.document_ids is not None:
             query += "AND s.id IN $documents "
+        if request.excluded_document_kinds:
+            query += "AND (s.document_kind IS NULL OR NOT (s.document_kind IN $excluded_kinds)) "
         query += (
             "RETURN u.id, u.source_id, s.name, u.text, u.page_number, "
             "u.section_path, u.sheet_name, u.cell_range ORDER BY u.source_id, u.id"
@@ -410,6 +437,8 @@ class GraphServiceClient:
                 "entities": [asdict(item) for item in batch.entities],
                 "relations": [asdict(item) for item in batch.relations],
                 "extraction_version": batch.extraction_version,
+                "document_kind": getattr(batch, "document_kind", None) or "USER",
+                "source_ref": getattr(batch, "source_ref", None),
             },
         )
 
@@ -461,6 +490,8 @@ def _search_parameters(request: GraphSearchQuery) -> dict[str, Any]:
     }
     if request.document_ids is not None:
         parameters["documents"] = list(request.document_ids)
+    if request.excluded_document_kinds is not None:
+        parameters["excluded_kinds"] = list(request.excluded_document_kinds)
     return parameters
 
 

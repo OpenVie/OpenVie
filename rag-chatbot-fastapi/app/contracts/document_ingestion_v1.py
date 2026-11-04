@@ -36,6 +36,8 @@ class DocumentIngestRequestedEvent(BaseModel):
     content_type: str = Field(min_length=1)
     file_size_bytes: int = Field(ge=0)
     occurred_at: datetime
+    document_kind: str = "USER"
+    source_ref: str | None = None
 
     @classmethod
     def parse_payload(cls, payload: bytes) -> DocumentIngestRequestedEvent:

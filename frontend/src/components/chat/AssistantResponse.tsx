@@ -37,8 +37,8 @@ import {
   isMediaSource,
   isVideoSource,
 } from "@/lib/preview-renderers";
-import type { ChatCitation, ChatCitationImage, DocumentUnit } from "@/types";
-
+import type { AssistantMessageResponse, ChatCitation, ChatCitationImage, DocumentUnit } from "@/types";
+import { BizAppActionCard } from "@/components/chat/BizAppActionCard";
 function CitationImagePreview({
   documentId,
   image,
@@ -497,10 +497,16 @@ export function AssistantResponse({
   content,
   citations = [],
   error = false,
+  action,
+  messageId,
+  onActionExecuted,
 }: {
   content: string;
   citations?: ChatCitation[];
   error?: boolean;
+  action?: Record<string, unknown> | null;
+  messageId?: string;
+  onActionExecuted?: (updated: AssistantMessageResponse) => void;
 }) {
   const t = useTranslations("AssistantResponse");
   const [selectedImage, setSelectedImage] = useState<{
@@ -523,6 +529,13 @@ export function AssistantResponse({
   return (
     <div className={error ? "break-words rounded-xl bg-destructive/10 px-4 py-3 text-destructive" : "break-words text-foreground"}>
       <div className="text-sm sm:text-[15px]">{markdownBlocks(content, citationsById)}</div>
+      {action && typeof action === "object" && action.type === "bizapp_action" && (
+        <BizAppActionCard
+          action={action}
+          messageId={messageId}
+          onActionExecuted={onActionExecuted}
+        />
+      )}
       {grouped.length > 0 && (
         <div className="chat-sources-enter mt-6 border-t border-border pt-4">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("sources")}</p>

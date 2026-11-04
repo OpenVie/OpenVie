@@ -22,19 +22,18 @@ import com.openvie.api.bizapp.model.BizAppRecord;
 import com.openvie.api.bizapp.service.BizAppReportResolver;
 import com.openvie.api.bizapp.service.storage.BizAppStorageRouter;
 import com.openvie.api.document.api.DocumentApi;
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.tenant.api.TenantKnowledgeApi;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * Projects BizApp records and aggregate report views into synthetic Markdown documents
@@ -59,6 +58,15 @@ public class BizAppKnowledgeProjector {
     private final TenantKnowledgeApi tenantKnowledgeApi;
     private final BizAppStorageRouter storageRouter;
     private final BizAppReportResolver reportResolver;
+
+    @Setter
+    @Value("${app.bizapps.projection-debounce-ms:30000}")
+    private long debounceMs = 30000;
+
+    private final ConcurrentHashMap<String, Object> fileLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> lastDigestRefresh = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingRefreshes = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService debounceExecutor = Executors.newSingleThreadScheduledExecutor();
 
     @Async
     public void projectRecord(
@@ -90,23 +98,26 @@ public class BizAppKnowledgeProjector {
         }
 
         UUID kbId = resolveKnowledgeBaseId(tenantId, installation);
-        String fileName = "bizapp_" + record.getAppKind() + "_" + record.getEntity() + "_" + record.getId() + ".md";
+        String fileName = "bizapp__" + record.getAppKind() + "__" + record.getEntity() + "__" + record.getId() + ".md";
+        Object lock = fileLocks.computeIfAbsent(tenantId + ":" + kbId + ":" + fileName, k -> new Object());
 
-        try {
-            if ("ARCHIVED".equalsIgnoreCase(record.getStatus())) {
-                documentApi.deleteByFileName(tenantId, kbId, fileName);
-                updateRecordKnowledgeState(record, "DELETED");
-                return;
+        synchronized (lock) {
+            try {
+                if ("ARCHIVED".equalsIgnoreCase(record.getStatus())) {
+                    documentApi.deleteByFileName(tenantId, kbId, fileName);
+                    updateRecordKnowledgeState(record, "DELETED");
+                    return;
+                }
+
+                String markdown = buildRecordMarkdown(entityDef, record, manifest);
+                documentApi.ingestText(tenantId, actorId, kbId, fileName, markdown, DocumentKind.BIZAPP_RECORD, "bizapp:" + record.getAppKind());
+                updateRecordKnowledgeState(record, "PROJECTED");
+                log.info("Projected record {} ({}) to knowledge base {}", record.getId(), record.getEntity(), kbId);
+
+            } catch (Exception ex) {
+                log.warn("Failed to project record {} to knowledge base: {}", record.getId(), ex.getMessage());
+                updateRecordKnowledgeState(record, "FAILED");
             }
-
-            String markdown = buildRecordMarkdown(entityDef, record, manifest);
-            documentApi.ingestText(tenantId, actorId, kbId, fileName, markdown);
-            updateRecordKnowledgeState(record, "PROJECTED");
-            log.info("Projected record {} ({}) to knowledge base {}", record.getId(), record.getEntity(), kbId);
-
-        } catch (Exception ex) {
-            log.warn("Failed to project record {} to knowledge base: {}", record.getId(), ex.getMessage());
-            updateRecordKnowledgeState(record, "FAILED");
         }
     }
 
@@ -121,9 +132,42 @@ public class BizAppKnowledgeProjector {
             return;
         }
 
-        UUID kbId = resolveKnowledgeBaseId(tenantId, installation);
-        String fileName = "bizapp_" + installation.getKind() + "__digest.md";
+        String debounceKey = tenantId + ":" + installation.getKind();
+        long now = System.currentTimeMillis();
+        Long last = lastDigestRefresh.get(debounceKey);
+        if (debounceMs > 0 && last != null && (now - last) < debounceMs) {
+            if (!pendingRefreshes.containsKey(debounceKey)) {
+                long delay = debounceMs - (now - last);
+                ScheduledFuture<?> future = debounceExecutor.schedule(() -> {
+                    pendingRefreshes.remove(debounceKey);
+                    doRefreshDigest(tenantId, actorId, installation, manifest);
+                }, delay, TimeUnit.MILLISECONDS);
+                pendingRefreshes.put(debounceKey, future);
+            }
+            return;
+        }
 
+        doRefreshDigest(tenantId, actorId, installation, manifest);
+    }
+
+    public void doRefreshDigest(
+            UUID tenantId,
+            UUID actorId,
+            BizAppInstallation installation,
+            Manifest manifest) {
+
+        if (manifest == null || manifest.blocks() == null) {
+            return;
+        }
+
+        String debounceKey = tenantId + ":" + installation.getKind();
+        lastDigestRefresh.put(debounceKey, System.currentTimeMillis());
+
+        UUID kbId = resolveKnowledgeBaseId(tenantId, installation);
+        String fileName = "bizapp__" + installation.getKind() + "__digest.md";
+        Object lock = fileLocks.computeIfAbsent(tenantId + ":" + kbId + ":" + fileName, k -> new Object());
+
+        synchronized (lock) {
         try {
             StringBuilder sb = new StringBuilder();
             sb.append("# ").append(installation.getKind()).append(" Application Digest\n\n");
@@ -165,11 +209,12 @@ public class BizAppKnowledgeProjector {
             }
 
             if (hasReports) {
-                documentApi.ingestText(tenantId, actorId, kbId, fileName, sb.toString());
+                documentApi.ingestText(tenantId, actorId, kbId, fileName, sb.toString(), DocumentKind.BIZAPP_DIGEST, "bizapp:" + installation.getKind());
                 log.info("Refreshed digest document for app {} in knowledge base {}", installation.getKind(), kbId);
             }
         } catch (Exception ex) {
             log.warn("Failed to refresh digest for app {}: {}", installation.getKind(), ex.getMessage());
+        }
         }
     }
 
@@ -219,7 +264,7 @@ public class BizAppKnowledgeProjector {
         }
     }
 
-    private UUID resolveKnowledgeBaseId(UUID tenantId, BizAppInstallation installation) {
+    public UUID resolveKnowledgeBaseId(UUID tenantId, BizAppInstallation installation) {
         Map<String, Object> config = installation.getConfig();
         if (config != null && config.get("knowledgeBaseId") != null) {
             try {

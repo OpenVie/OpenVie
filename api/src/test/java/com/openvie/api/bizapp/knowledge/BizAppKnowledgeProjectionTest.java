@@ -131,8 +131,10 @@ class BizAppKnowledgeProjectionTest {
         ArgumentCaptor<String> markdownCaptor = ArgumentCaptor.forClass(String.class);
         verify(documentApi).ingestText(
                 eq(tenantId), eq(actorId), eq(kbId),
-                eq("bizapp_crm_leads_" + record.getId() + ".md"),
-                markdownCaptor.capture()
+                eq("bizapp__crm__leads__" + record.getId() + ".md"),
+                markdownCaptor.capture(),
+                eq(com.openvie.api.document.api.DocumentKind.BIZAPP_RECORD),
+                eq("bizapp:crm")
         );
 
         String markdown = markdownCaptor.getValue();
@@ -169,6 +171,6 @@ class BizAppKnowledgeProjectionTest {
 
         projector.projectRecord(tenantId, actorId, installation(), manifest(true), record);
 
-        verify(documentApi).deleteByFileName(tenantId, kbId, "bizapp_crm_leads_" + record.getId() + ".md");
+        verify(documentApi).deleteByFileName(tenantId, kbId, "bizapp__crm__leads__" + record.getId() + ".md");
     }
 }

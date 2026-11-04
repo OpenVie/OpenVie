@@ -61,6 +61,7 @@ x-prod-environment: &prod-environment
   KUZU_DATABASE_PATH: /data/kuzu/openvie.kuzu
   GRAPH_SERVICE_URL: http://graph-service:8010
   GRAPH_INTERNAL_TOKEN: ${GRAPH_INTERNAL_TOKEN:-development-graph-token}
+  GRAPH_RETRIEVAL_ENABLED: ${GRAPH_RETRIEVAL_ENABLED:-true}
   SEAWEEDFS_MASTER_URL: http://seaweedfs-master:9333
   SEAWEEDFS_FILER_URL: http://seaweedfs-filer:8888
   SEAWEEDFS_S3_ENDPOINT: http://seaweedfs-s3:8333

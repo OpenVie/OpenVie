@@ -321,6 +321,7 @@ async def test_qdrant_adapter_creates_collection_and_upserts_payloads() -> None:
         "table_id",
         "parser_version",
         "chunk_index",
+        "document_kind",
     }
 
 

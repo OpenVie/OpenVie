@@ -29,8 +29,13 @@ import com.openvie.api.chat.model.ChatTurn;
 import com.openvie.api.chat.repository.ChatMessageRepository;
 import com.openvie.api.chat.repository.ChatSessionRepository;
 import com.openvie.api.chat.repository.ChatTurnRepository;
+import com.openvie.api.bizapp.api.BizAppRuntimeApi;
+import com.openvie.api.chat.api.ChatRuntimeApi;
+import com.openvie.api.chat.service.CatalogAnswerComposer;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +56,7 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +82,26 @@ public class ChatControlPlaneService {
     private final TransactionTemplate transactions;
     @Autowired(required = false)
     private NamedParameterJdbcTemplate namedJdbc;
+    @Autowired(required = false)
+    private BizAppIntentRouter intentRouter;
+    @Autowired(required = false)
+    private CatalogAnswerComposer catalogAnswerComposer;
+    @Autowired(required = false)
+    private BizAppRuntimeApi bizAppRuntimeApi;
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
 
+    public void setIntentRouter(BizAppIntentRouter intentRouter) {
+        this.intentRouter = intentRouter;
+    }
+
+    public void setCatalogAnswerComposer(CatalogAnswerComposer catalogAnswerComposer) {
+        this.catalogAnswerComposer = catalogAnswerComposer;
+    }
+
+    public void setBizAppRuntimeApi(BizAppRuntimeApi bizAppRuntimeApi) {
+        this.bizAppRuntimeApi = bizAppRuntimeApi;
+    }
     public interface AnswerStreamListener {
         void onContent(String content);
         void onReset();
@@ -104,6 +129,15 @@ public class ChatControlPlaneService {
             return prepared.replayed();
         }
 
+        if (prepared.isShortCircuit()) {
+            checkCancelled();
+            listener.onContent(prepared.shortCircuitContent());
+            FinalizeResult finalized = transactions.execute(status -> {
+                checkCancelled();
+                return finalizeShortCircuitTurn(prepared.turnId(), prepared.shortCircuitContent(), prepared.actionCard(), prepared.context());
+            });
+            return finalized.response();
+        }
         GenerationContext context = prepared.context();
         for (int revisionAttempt = 0; revisionAttempt < 2; revisionAttempt++) {
             try {
@@ -117,12 +151,14 @@ public class ChatControlPlaneService {
                 GenerationContext completedContext = context;
                 FinalizeResult finalized = transactions.execute(status -> {
                     checkCancelled();
-                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                        @Override
-                        public void beforeCommit(boolean readOnly) {
-                            checkCancelled();
-                        }
-                    });
+                    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                            @Override
+                            public void beforeCommit(boolean readOnly) {
+                                checkCancelled();
+                            }
+                        });
+                    }
                     return finalizeTurn(prepared.turnId(), answer, completedContext);
                 });
                 Objects.requireNonNull(finalized);
@@ -131,6 +167,9 @@ public class ChatControlPlaneService {
                 }
                 if (revisionAttempt == 1) {
                     markFailed(prepared.turnId(), "REVISION_CHANGED");
+                    if (meterRegistry != null) {
+                        meterRegistry.counter("chat_turn_revision_conflicts_total").increment();
+                    }
                     throw new ChatApiException(HttpStatus.CONFLICT, "KNOWLEDGE_BASE_CHANGED",
                             "The knowledge base changed while the answer was generated.");
                 }
@@ -252,6 +291,44 @@ public class ChatControlPlaneService {
         turn.setKnowledgeRevision(workspace.searchRevision());
         turn.setAttemptCount(1);
         turn = turnRepository.save(turn);
+
+        BizAppIntentRouter.RoutingResult routing = (intentRouter != null)
+                ? intentRouter.route(tenantId, session.getTenantId(), userId, session.getChannel().name(), content, session.getLocale(), sessionId)
+                : BizAppIntentRouter.RoutingResult.none();
+
+        if (routing.intent() != BizAppIntentRouter.Intent.NONE) {
+            turn.setIntent(routing.intent().name());
+            turn.setIntentConfidence(routing.confidence());
+            turn.setIntentAppKind(routing.appKind());
+            if (meterRegistry != null) {
+                meterRegistry.counter("chat_app_intent_total", "intent", routing.intent().name()).increment();
+            }
+        }
+
+        if (routing.intent() == BizAppIntentRouter.Intent.APP_DATA && routing.appKind() != null && bizAppRuntimeApi != null) {
+            List<UUID> projectedDocs = bizAppRuntimeApi.listProjectedDocumentIds(tenantId, routing.appKind());
+            GenerationContext context = captureContext(session, turn, userMessage, prior, requestId)
+                    .withAppScope(projectedDocs);
+            turn.setKnowledgeRevision(context.revision());
+            turn.setGenerationContext(context.asMap());
+            turn = turnRepository.save(turn);
+            return new PreparedTurn(turn.getId(), context, null, false, null, null);
+        }
+
+        if (routing.intent() != BizAppIntentRouter.Intent.NONE && routing.intent() != BizAppIntentRouter.Intent.APP_DATA) {
+            String shortCircuitContent;
+            switch (routing.intent()) {
+                case LIST_APPS -> shortCircuitContent = catalogAnswerComposer != null ? catalogAnswerComposer.composeListApps(tenantId, session.getLocale()) : "Installed apps";
+                case APP_DETAIL -> shortCircuitContent = catalogAnswerComposer != null ? catalogAnswerComposer.composeAppDetail(tenantId, routing.appKind(), session.getLocale()) : "App details";
+                default -> shortCircuitContent = routing.reply() != null && !routing.reply().isBlank() ? routing.reply() : "Action proposed";
+            }
+            GenerationContext context = captureContext(session, turn, userMessage, prior, requestId);
+            turn.setKnowledgeRevision(context.revision());
+            turn.setGenerationContext(context.asMap());
+            turn = turnRepository.save(turn);
+            return new PreparedTurn(turn.getId(), context, null, true, shortCircuitContent, routing.actionCard());
+        }
+
         GenerationContext context =
                 captureContext(session, turn, userMessage, prior, requestId)
                         .withDocumentScope(scope.isEmpty() ? null : scope);
@@ -286,6 +363,32 @@ public class ChatControlPlaneService {
         turn.setStatus(ChatTurnStatus.COMPLETED);
         turn.setFailureCode(null);
         return new FinalizeResult(false, toAssistant(assistant, session, answer.suggestedQuestions()));
+    }
+
+    private FinalizeResult finalizeShortCircuitTurn(
+            UUID turnId, String content, Map<String, Object> action, GenerationContext context) {
+        ChatTurn turn = turnRepository.findById(turnId).orElseThrow();
+        ChatSession session = sessionRepository.findForUpdate(turn.getSessionId(), turn.getTenantId())
+                .orElseThrow(() -> sessionNotFound());
+        var workspace = tenantWorkspaceApi.requireActiveKnowledgeBase(
+                session.getTenantId(), session.getKnowledgeBaseId());
+        if (workspace.searchRevision() != context.revision()) {
+            return new FinalizeResult(true, null);
+        }
+        checkCancelled();
+        ChatMessage assistant = new ChatMessage();
+        assistant.setSessionId(session.getId());
+        assistant.setTenantId(session.getTenantId());
+        assistant.setRole("assistant");
+        assistant.setContent(content);
+        assistant.setCitations(List.of());
+        assistant.setAction(action != null ? action : Map.of());
+        assistant.setSequenceNumber(allocateSequence(session));
+        assistant = messageRepository.save(assistant);
+        turn.setAssistantMessageId(assistant.getId());
+        turn.setStatus(ChatTurnStatus.COMPLETED);
+        turn.setFailureCode(null);
+        return new FinalizeResult(false, toAssistant(assistant, session, List.of()));
     }
 
     private ChatDtos.CitationResponse toChatCitation(AiInferenceApi.Citation citation) {
@@ -690,14 +793,18 @@ public class ChatControlPlaneService {
 
     private ChatDtos.AssistantMessageResponse toAssistant(
             ChatMessage message, ChatSession session, List<String> suggestedQuestions) {
+        Map<String, Object> action = message.getAction() != null && !message.getAction().isEmpty()
+                ? message.getAction() : null;
         return new ChatDtos.AssistantMessageResponse(
-                message.getRole(), message.getContent(), citations(message), null, suggestedQuestions);
+                message.getRole(), message.getContent(), citations(message), action, suggestedQuestions);
     }
 
     private ChatDtos.MessageResponse toMessage(ChatMessage message, ChatSession session) {
+        Map<String, Object> action = message.getAction() != null && !message.getAction().isEmpty()
+                ? message.getAction() : null;
         return new ChatDtos.MessageResponse(
                 message.getRole(), message.getContent(), citations(message),
-                message.getSequenceNumber(), null);
+                message.getSequenceNumber(), action);
     }
 
     private List<ChatDtos.CitationResponse> citations(ChatMessage message) {
@@ -761,11 +868,36 @@ public class ChatControlPlaneService {
                 "The inference service returned an invalid citation.");
     }
 
+    @Transactional(readOnly = true)
+    public List<ChatRuntimeApi.RecentTurn> listRecentTurns(
+            UUID tenantId, UUID actorId, UUID sessionId, int limit) {
+        int max = limit > 0 ? Math.min(limit, 20) : 10;
+        List<ChatMessage> messages = messageRepository.findBySessionIdOrderBySequenceNumberDesc(
+                sessionId, org.springframework.data.domain.PageRequest.of(0, max));
+        List<ChatMessage> ordered = new ArrayList<>(messages);
+        Collections.reverse(ordered);
+        return ordered.stream()
+                .map(m -> {
+                    String content = m.getContent() != null ? m.getContent() : "";
+                    if (content.length() > 2000) {
+                        content = content.substring(0, 2000);
+                    }
+                    return new ChatRuntimeApi.RecentTurn(m.getRole(), content);
+                })
+                .toList();
+    }
+
     private record PreparedTurn(
             UUID turnId,
             GenerationContext context,
-            ChatDtos.AssistantMessageResponse replayed
+            ChatDtos.AssistantMessageResponse replayed,
+            boolean isShortCircuit,
+            String shortCircuitContent,
+            Map<String, Object> actionCard
     ) {
+        PreparedTurn(UUID turnId, GenerationContext context, ChatDtos.AssistantMessageResponse replayed) {
+            this(turnId, context, replayed, false, null, null);
+        }
     }
 
     private record FinalizeResult(
@@ -787,21 +919,44 @@ public class ChatControlPlaneService {
             List<AiInferenceApi.PriorMessage> priorMessages,
             String tenantName,
             String requestId,
-            List<UUID> documentIds
+            List<UUID> documentIds,
+            List<String> excludedDocumentKinds
     ) {
+        GenerationContext(
+                UUID generationId, UUID turnId, UUID tenantId, UUID chatbotId, UUID knowledgeBaseId,
+                long revision, String channel, String locale, String question,
+                List<AiInferenceApi.PriorMessage> priorMessages, String tenantName, String requestId,
+                List<UUID> documentIds
+        ) {
+            this(generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision, channel, locale,
+                    question, priorMessages, tenantName, requestId, documentIds,
+                    List.of("BIZAPP_RECORD", "BIZAPP_DIGEST"));
+        }
+
         private GenerationContext withDocumentScope(List<UUID> documentIds) {
             return new GenerationContext(
                     generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision,
                     channel, locale, question, priorMessages, tenantName, requestId,
-                    documentIds == null || documentIds.isEmpty() ? null : documentIds);
+                    documentIds == null || documentIds.isEmpty() ? null : documentIds,
+                    excludedDocumentKinds);
+        }
+
+        private GenerationContext withAppScope(List<UUID> documentIds) {
+            return new GenerationContext(
+                    generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision,
+                    channel, locale, question, priorMessages, tenantName, requestId,
+                    documentIds == null || documentIds.isEmpty() ? null : documentIds,
+                    List.of());
         }
 
         AiInferenceApi.GenerationRequest toRequest() {
+            List<String> exclusions = excludedDocumentKinds != null ? excludedDocumentKinds
+                    : List.of("BIZAPP_RECORD", "BIZAPP_DIGEST");
             return new AiInferenceApi.GenerationRequest(
                     generationId, turnId, tenantId, chatbotId, knowledgeBaseId, revision,
                     channel, locale, question, priorMessages, tenantName,
                     PROMPT_SCHEMA_VERSION, documentIds == null ? List.of() : documentIds,
-                    requestId, requestId);
+                    requestId, requestId, exclusions);
         }
 
         Map<String, Object> asMap() {

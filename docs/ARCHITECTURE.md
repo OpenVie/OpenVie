@@ -108,6 +108,15 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` giữ nguyên body và xác th
 3. Nộp duyệt khởi động process Flowable, hoàn tất qua inbox tác vụ tổng quát; delegate cuối ghi quyết định vào `runtime` và phát webhook `bizapp.<kind>.record.decided` sau commit.
 4. HTTP outbound lấy secret từ vault mã hóa AES-256-GCM (`BIZAPP_ENC_KEY`); mọi bước đều ghi audit và đi outbox webhook ký HMAC. Chi tiết: [BIZAPPS.md](BIZAPPS.md).
 
+#### E. Trợ lý hội thoại & Ứng dụng (Conversational BizApps v1.0.0)
+
+Hệ thống tách biệt thành ba tầng độc lập để ngăn chặn ô nhiễm tài liệu:
+1. **Tầng A (Deterministic):** Liệt kê danh mục, chi tiết app, quyết định cài/gỡ server-authoritative. Không gọi model, không chạm KB.
+2. **Tầng B (Structured LLM):** Phân loại ý định qua RPC `CompleteJson` riêng (`bizapp_intent.schema.json`), soạn manifest draft từ lịch sử chat.
+3. **Tầng C (Document RAG):** Truy hồi đa kênh (dense + sparse + graph) với công tắc `GRAPH_RETRIEVAL_ENABLED` (mặc định `true`). Khi tắt, kênh graph bị bỏ qua hoàn toàn và không phát sinh request HTTP tới graph-service. Mọi truy vấn tài liệu thường được cách ly triệt để khỏi tài liệu hệ thống (`excluded_document_kinds`).
+
+Ranh giới module được chuẩn hóa thành các interface công bố: `BizAppRuntimeApi` (cung cấp khả năng quản lý ứng dụng cho chat) và `ChatRuntimeApi` (cung cấp lịch sử phiên cho drafting), bảo đảm cấu trúc đồ thị module phi chu trình (`ModularMonolithArchitectureTest`).
+
 ### 5. Bảo mật và phân lập
 
 - **Phân quyền 3 vai trò:** `ORG_OWNER` (quản trị toàn tổ chức, tạo workspace), `WORKSPACE_ADMIN` (quản lý thành viên và tài liệu trong workspace), `MEMBER` (chat, tải/xóa tài liệu của chính mình).
@@ -187,6 +196,15 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 2. Users work through manifest-generated form/registry/timeline/report views; every record lands in the shared JSONB table `bizapp_records`, strictly validated against the schema with workspace RBAC re-resolved per request — the client is never trusted.
 3. Submitting for approval starts a Flowable process completed through the generic engine inbox; the terminal delegate writes the decision into `runtime` and raises the `bizapp.<kind>.record.decided` webhook after commit.
 4. Outbound HTTP pulls secrets from the AES-256-GCM credential vault (`BIZAPP_ENC_KEY`); every step is audited and pushed through the HMAC-signed webhook outbox. Details: [BIZAPPS.md](BIZAPPS.md).
+
+#### E. Three-Tier Conversational Architecture & Graph Toggle (v1.0.0)
+
+The platform strictly isolates application management from document knowledge retrieval:
+1. **Tier A (Deterministic):** Catalog listings, app details, and server-authoritative action execution. Zero LLM calls, zero knowledge base writes.
+2. **Tier B (Structured LLM):** Intent routing and manifest drafting via isolated `CompleteJson` RPC with strict schema contracts.
+3. **Tier C (Document RAG):** Multi-channel hybrid retrieval governed by `GRAPH_RETRIEVAL_ENABLED` toggle (defaults to `true`). When disabled, graph HTTP queries are skipped entirely. All normal turns enforce `excluded_document_kinds` against system records.
+
+Published module boundaries `BizAppRuntimeApi` and `ChatRuntimeApi` enforce strict acyclic dependency graphs across the monolith.
 
 ## 5. Security and isolation
 
