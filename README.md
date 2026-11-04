@@ -24,17 +24,17 @@ năng lực H-P-D-I nào.
 
 ## Phạm vi hiện tại
 
-| Lĩnh vực | Ranh giới triển khai hiện có |
-| --- | --- |
-| Chat trên tài liệu | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối |
-| Tuyến nhạy cảm có giới hạn | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện |
-| Hấp thụ tài liệu | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP); phiên âm ASR tùy chọn cho âm thanh và video — đều tắt theo mặc định |
-| Định danh và quản trị | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán |
-| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL; sơ đồ phả hệ dữ liệu DAG và khung kiểm định chất lượng dữ liệu tự động |
-| Đánh giá ngoại tuyến | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model |
-| Bộ đệm tùy chọn | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng |
-| Kiểm dịch biên mạng & GitOps | Trạm kiểm dịch ClamAV quét và cách ly mã độc tại biên mạng; APISIX edge gateway phòng thủ lọc URI; tự động hóa GitOps và tự phục hồi tức thì |
-| Chưa cung cấp | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng; thích ứng model vẫn là nghiên cứu |
+| Lĩnh vực                           | Ranh giới triển khai hiện có                                                                                                                                                                                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat trên tài liệu                 | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối                                                                         |
+| Tuyến nhạy cảm có giới hạn         | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện                                                                            |
+| Hấp thụ tài liệu                   | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP); phiên âm ASR tùy chọn cho âm thanh và video — đều tắt theo mặc định |
+| Định danh và quản trị              | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán                                                          |
+| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL; sơ đồ phả hệ dữ liệu DAG và khung kiểm định chất lượng dữ liệu tự động                  |
+| Đánh giá ngoại tuyến               | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model                                                                                                                                |
+| Bộ đệm tùy chọn                    | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng                                                                                                                                                                |
+| Kiểm dịch biên mạng & GitOps       | Trạm kiểm dịch ClamAV quét và cách ly mã độc tại biên mạng; APISIX edge gateway phòng thủ lọc URI; tự động hóa GitOps và tự phục hồi tức thì                                                                                                             |
+| Chưa cung cấp                      | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng; thích ứng model vẫn là nghiên cứu                        |
 
 Chỉ có mã nguồn trong repo chưa phải là bằng chứng dịch vụ production: tích hợp provider tùy
 chọn và gia cố triển khai phải được kiểm chứng trong môi trường của riêng bạn.
@@ -43,11 +43,11 @@ Xem [hướng dẫn hấp thụ và truy hồi](docs/RETRIEVAL.md) cho ranh gi�
 
 ### Mô hình vai trò
 
-| Vai trò | Phạm vi | Thẩm quyền |
-| --- | --- | --- |
-| `ORG_OWNER` | Tổ chức | Đăng ký cài đặt qua `/setup`, quản lý thiết lập tổ chức (bật/tắt tự đăng ký, kênh email), tạo/đổi tên/lưu trữ workspace, xem tài khoản tổ chức, tạo trực tiếp tài khoản tổ chức thường, thêm tài khoản tổ chức hiện có vào workspace đang hoạt động, đặt lại mật khẩu ngoại tuyến qua `make recover-owner` |
-| `WORKSPACE_ADMIN` | Workspace đang hoạt động | Mời và quản lý thành viên workspace, thêm tài khoản tổ chức hiện có vào workspace riêng/tư hoặc công khai đang hoạt động, đặt mật khẩu ban đầu, xóa bất kỳ tài liệu nào trong workspace |
-| `MEMBER` | Workspace đang hoạt động | Trò chuyện, tải tài liệu lên, xóa tài liệu do mình tải lên; có thể thêm tài khoản tổ chức hiện có làm thành viên thường trong workspace công khai |
+| Vai trò           | Phạm vi                  | Thẩm quyền                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ORG_OWNER`       | Tổ chức                  | Đăng ký cài đặt qua `/setup`, quản lý thiết lập tổ chức (bật/tắt tự đăng ký, kênh email), tạo/đổi tên/lưu trữ workspace, xem tài khoản tổ chức, tạo trực tiếp tài khoản tổ chức thường, thêm tài khoản tổ chức hiện có vào workspace đang hoạt động, đặt lại mật khẩu ngoại tuyến qua `make recover-owner` |
+| `WORKSPACE_ADMIN` | Workspace đang hoạt động | Mời và quản lý thành viên workspace, thêm tài khoản tổ chức hiện có vào workspace riêng/tư hoặc công khai đang hoạt động, đặt mật khẩu ban đầu, xóa bất kỳ tài liệu nào trong workspace                                                                                                                    |
+| `MEMBER`          | Workspace đang hoạt động | Trò chuyện, tải tài liệu lên, xóa tài liệu do mình tải lên; có thể thêm tài khoản tổ chức hiện có làm thành viên thường trong workspace công khai                                                                                                                                                          |
 
 Sau khi chủ sở hữu hoàn tất `/setup`, nếu bật **Cho phép tự đăng ký** trong cài đặt
 tổ chức thì trang `/login` hiển thị liên kết **Tạo tài khoản** tới `/register`.
@@ -61,14 +61,14 @@ chính sách có giới hạn, không phải model pháp lý/an toàn đã huấ
 
 ## Sơ đồ kho mã
 
-| Đường dẫn | Trách nhiệm | Bắt đầu đọc |
-| --- | --- | --- |
-| [`api/`](api/) | Java 21 / Spring Boot API nghiệp vụ; PostgreSQL, phân quyền workspace, kênh thông báo | [Module guide](api/GUIDE.md) |
-| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Suy luận Python, document worker, truy hồi, graph service | [Module guide](rag-chatbot-fastapi/GUIDE.md) |
-| [`frontend/`](frontend/) | Web client Next.js | [Phát triển web](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) |
-| [`contracts/`](contracts/) | Sự kiện JSON và fixture dùng chung giữa Java và Python | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md) |
-| [`proto/`](proto/) | Định nghĩa gRPC nội bộ | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md) |
-| [`docs/`](docs/) | Tài liệu phát triển, kiến trúc, tính năng | [Mục lục tài liệu](docs/README.md) |
+| Đường dẫn                                      | Trách nhiệm                                                                           | Bắt đầu đọc                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`api/`](api/)                                 | Java 21 / Spring Boot API nghiệp vụ; PostgreSQL, phân quyền workspace, kênh thông báo | [Module guide](api/GUIDE.md)                               |
+| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Suy luận Python, document worker, truy hồi, graph service                             | [Module guide](rag-chatbot-fastapi/GUIDE.md)               |
+| [`frontend/`](frontend/)                       | Web client Next.js                                                                    | [Phát triển web](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) |
+| [`contracts/`](contracts/)                     | Sự kiện JSON và fixture dùng chung giữa Java và Python                                | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md)             |
+| [`proto/`](proto/)                             | Định nghĩa gRPC nội bộ                                                                | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md)             |
+| [`docs/`](docs/)                               | Tài liệu phát triển, kiến trúc, tính năng                                             | [Mục lục tài liệu](docs/README.md)                         |
 
 ## Kiến trúc tổng quan
 
@@ -148,12 +148,12 @@ Xem chi tiết tại [hướng dẫn triển khai (DEPLOYMENT.md)](docs/DEPLOYME
 
 ## Làm việc với mã nguồn
 
-| Lĩnh vực thay đổi | Quy tắc và kiểm tra |
-| --- | --- |
-| Java | Đọc [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify` |
-| Python | Đọc [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
-| Web | Script trong [`frontend/package.json`](frontend/package.json); xem [kiểm tra xác minh](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) |
-| Thông điệp liên service | Cập nhật model sở hữu, schema/fixture dùng chung hoặc protobuf, kết quả sinh ra, và cả hai phía tiêu thụ cùng lúc |
+| Lĩnh vực thay đổi       | Quy tắc và kiểm tra                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Java                    | Đọc [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify`                                                                                        |
+| Python                  | Đọc [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11`                       |
+| Web                     | Script trong [`frontend/package.json`](frontend/package.json); xem [kiểm tra xác minh](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) |
+| Thông điệp liên service | Cập nhật model sở hữu, schema/fixture dùng chung hoặc protobuf, kết quả sinh ra, và cả hai phía tiêu thụ cùng lúc                               |
 
 Test cần Redis, Qdrant hoặc provider thật yêu cầu môi trường được mô tả. Đọc
 [hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) trước khi hiểu check tích hợp bị skip
@@ -161,19 +161,21 @@ là kiểm chứng end-to-end thành công.
 
 ## Lộ trình MVP
 
-| Phiên bản | Phạm vi | Tiêu chí xong (Done) |
-| --- | --- | --- |
-| `v0.1.x` (đã phát hành) | Nền tảng RAG self-host: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, xác thực mật khẩu + JWT, streaming SSE | Cài được từ clone mới, hấp thụ tài liệu có quyền, chat có trích dẫn, từ chối khi thiếu bằng chứng |
-| `v0.2.0` (đã phát hành) — Keycloak SSO | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật |
-| `v0.3.0` (đã phát hành) — Workflow BPMN | Tích hợp Flowable OSS làm BPMN engine cho luồng phê duyệt e-Office 2 cấp trong không gian `[P]`; API + UI hộp thư phê duyệt; trích dẫn ảnh đa phương thức & zoom lightbox; sao lưu/phục hồi SHA-256 | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật |
-| `v0.3.1` (đã phát hành) — Lakehouse & DuckDB OLAP | Kiến trúc hồ dữ liệu Lakehouse (Parquet Snappy trên SeaweedFS S3), Change Data Capture (CDC) streaming qua RabbitMQ, cỗ máy OLAP nhúng DuckDB | Phân tách vòng đời dữ liệu nóng (Postgres) và lạnh (Parquet), SQL phân tích không nghẽn database lõi |
+| Phiên bản                                                            | Phạm vi                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Tiêu chí xong (Done)                                                                                                                                                                                                           |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `v0.1.x` (đã phát hành)                                              | Nền tảng RAG self-host: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, xác thực mật khẩu + JWT, streaming SSE                                                                                                                                                                                                                                                                                                            | Cài được từ clone mới, hấp thụ tài liệu có quyền, chat có trích dẫn, từ chối khi thiếu bằng chứng                                                                                                                              |
+| `v0.2.0` (đã phát hành) — Keycloak SSO                               | Tích hợp Keycloak làm IdP OIDC cho đăng nhập; Spring đóng vai Resource Server; ánh xạ role IdP sang `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; giữ tương thích tài khoản mật khẩu hiện có                                                                                                                                                                                                                                                                       | Đăng nhập SSO end-to-end qua gateway, phân quyền workspace vẫn đúng, tài liệu triển khai cập nhật                                                                                                                              |
+| `v0.3.0` (đã phát hành) — Workflow BPMN                              | Tích hợp Flowable OSS làm BPMN engine cho luồng phê duyệt e-Office 2 cấp trong không gian `[P]`; API + UI hộp thư phê duyệt; trích dẫn ảnh đa phương thức & zoom lightbox; sao lưu/phục hồi SHA-256                                                                                                                                                                                                                                                          | Luồng phê duyệt chạy demo được, trạng thái bền vững, tài liệu vận hành cập nhật                                                                                                                                                |
+| `v0.3.1` (đã phát hành) — Lakehouse & DuckDB OLAP                    | Kiến trúc hồ dữ liệu Lakehouse (Parquet Snappy trên SeaweedFS S3), Change Data Capture (CDC) streaming qua RabbitMQ, cỗ máy OLAP nhúng DuckDB                                                                                                                                                                                                                                                                                                                | Phân tách vòng đời dữ liệu nóng (Postgres) và lạnh (Parquet), SQL phân tích không nghẽn database lõi                                                                                                                           |
 | **`v1.0.0` (phát hành chính thức)** — DX-OS 3 Tầng & Nền tảng BizApp | Hoàn thiện cả 3 tầng DX-OS: đóng băng hợp đồng SemVer 2.0 `bizapp.v1`, kho lưu trữ hybrid (bảng typed SQL `bizapp_crm_leads`, `bizapp_booking_appointments` và generic JSONB), visual composer canvas (`@xyflow/react`), soạn thảo manifest bằng AI, chiếu tri thức bản ghi sang tài liệu KB và digest report, luồng CDC Lakehouse `bizapp_records`, HTTP outbound bảo vệ SSRF, công thức yêu cầu ký số e-signature và các cổng kiểm thử cấp phép Apache-2.0 | Cài đặt CRM / Booking / Signature Request chỉ với 1 lệnh, visual canvas soạn thảo và cài đặt mượt mà, trợ lý AI trả lời kèm dẫn chứng từ dữ liệu bản ghi, bộ kiểm thử red-team cách ly tenant và kiểm thử license CI 100% xanh |
+
 Tiến độ theo dõi qua milestone GitHub `v0.2.0` và `v0.3.0`; mỗi milestone chia nhỏ thành issue có tiêu chí nghiệm thu riêng.
 
 ## Đọc thêm
+
 - [Keycloak OIDC baseline](docs/KEYCLOAK.md) — cấu hình realm, client ID, redirect URI và chạy kiểm thử.
 
-- [Workflow](docs/WORKFLOW.md) — luồng phê duyệt Flowable nhúng runtime: nộp/duyệt/leo thang hai cấp, SLA theo tổ chức, ghi kết quả vào tài liệu.
+- [Workflow](docs/WORKFLOW.md) — luồng phê duyệt Flowable nhúng runtime: nộp/duyệt/chuyển tiếp hai cấp, SLA theo tổ chức, ghi kết quả vào tài liệu.
 - [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, dữ liệu demo, worker và hướng dẫn chạy thử.
 
 - [Mục lục tài liệu](docs/README.md) — chọn guide theo việc cần làm.
@@ -212,16 +214,16 @@ H-P-D-I capability space each screen of the web client belongs to.
 
 ## Current scope
 
-| Area | Current implementation boundary |
-| --- | --- |
-| Document-grounded chat | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence |
-| Bounded sensitive route | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment |
-| Ingestion | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP); optional ASR transcription for audio and video — both off by default |
-| Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records |
-| Lakehouse & Analytics | Asynchronous CDC streaming over RabbitMQ archiving partitioned Snappy Parquet to SeaweedFS S3; embedded DuckDB OLAP engine for analytical reporting without loading PostgreSQL |
-| Offline evaluation | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model |
-| Optional caches | Implemented but disabled by default; enable only after the applicable correctness and performance gates |
-| Not delivered | A Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
+| Area                        | Current implementation boundary                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document-grounded chat      | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence                                                                                                                                                                                                   |
+| Bounded sensitive route     | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment                                                                                                                                                                                                      |
+| Ingestion                   | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP); optional ASR transcription for audio and video — both off by default                                                                                                                   |
+| Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records                                                                                                                                                              |
+| Lakehouse & Analytics       | Asynchronous CDC streaming over RabbitMQ archiving partitioned Snappy Parquet to SeaweedFS S3; embedded DuckDB OLAP engine for analytical reporting without loading PostgreSQL                                                                                                                                                                                                                  |
+| Offline evaluation          | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model                                                                                                                                                                                                                                                  |
+| Optional caches             | Implemented but disabled by default; enable only after the applicable correctness and performance gates                                                                                                                                                                                                                                                                                         |
+| Not delivered               | A Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
 
 Repository code alone is not evidence of a production-ready service: optional provider
 integrations and deployment hardening must be verified in their own environment.
@@ -230,11 +232,11 @@ See the [ingestion and retrieval guide](docs/RETRIEVAL.md) for detailed boundari
 
 ### Role model
 
-| Role | Scope | Authority |
-| --- | --- | --- |
-| `ORG_OWNER` | Organization | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, views organization accounts, creates regular organization accounts directly, adds existing organization accounts to the active workspace, offline password reset via `make recover-owner` |
-| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, adds existing organization accounts to the active private or public workspace, sets initial passwords, deletes any document in the workspace |
-| `MEMBER` | Active workspace | Queries chat, uploads documents, deletes own uploaded documents; may add an existing organization account as a regular member in a public workspace |
+| Role              | Scope            | Authority                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ORG_OWNER`       | Organization     | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, views organization accounts, creates regular organization accounts directly, adds existing organization accounts to the active workspace, offline password reset via `make recover-owner` |
+| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, adds existing organization accounts to the active private or public workspace, sets initial passwords, deletes any document in the workspace                                                                                                                                                   |
+| `MEMBER`          | Active workspace | Queries chat, uploads documents, deletes own uploaded documents; may add an existing organization account as a regular member in a public workspace                                                                                                                                                                                   |
 
 After the owner completes `/setup`, enabling **Allow self-registration** in
 organization settings shows a **Create account** link on `/login` to `/register`.
@@ -247,14 +249,14 @@ bounded policy checks, not a trained legal or safety model. See [architecture st
 
 ## Repository map
 
-| Path | Responsibility | Start reading |
-| --- | --- | --- |
-| [`api/`](api/) | Java 21 / Spring Boot business API; PostgreSQL, workspace authorization, and notification channels | [Module guide](api/GUIDE.md) |
-| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Python inference, document workers, retrieval, and graph service | [Module guide](rag-chatbot-fastapi/GUIDE.md) |
-| [`frontend/`](frontend/) | Next.js web client | [Web development](docs/DEVELOPMENT.md#2-step-by-step-setup) |
-| [`contracts/`](contracts/) | Shared JSON event schemas and fixtures used across Java and Python | [Architecture and boundaries](docs/ARCHITECTURE.md) |
-| [`proto/`](proto/) | Internal gRPC interface and message definitions | [Architecture and boundaries](docs/ARCHITECTURE.md) |
-| [`docs/`](docs/) | Development, architecture, and feature references | [Documentation index](docs/README.md) |
+| Path                                           | Responsibility                                                                                     | Start reading                                               |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`api/`](api/)                                 | Java 21 / Spring Boot business API; PostgreSQL, workspace authorization, and notification channels | [Module guide](api/GUIDE.md)                                |
+| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Python inference, document workers, retrieval, and graph service                                   | [Module guide](rag-chatbot-fastapi/GUIDE.md)                |
+| [`frontend/`](frontend/)                       | Next.js web client                                                                                 | [Web development](docs/DEVELOPMENT.md#2-step-by-step-setup) |
+| [`contracts/`](contracts/)                     | Shared JSON event schemas and fixtures used across Java and Python                                 | [Architecture and boundaries](docs/ARCHITECTURE.md)         |
+| [`proto/`](proto/)                             | Internal gRPC interface and message definitions                                                    | [Architecture and boundaries](docs/ARCHITECTURE.md)         |
+| [`docs/`](docs/)                               | Development, architecture, and feature references                                                  | [Documentation index](docs/README.md)                       |
 
 ## Architecture at a glance
 
@@ -335,12 +337,12 @@ For details on operations, backups, and security hardening, see the [deployment 
 
 ## Working on the code
 
-| Change area | Rules and checks |
-| --- | --- |
-| Java | Read [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify` |
-| Python | Read [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
-| Web | Scripts are in [`frontend/package.json`](frontend/package.json); see [verification](docs/DEVELOPMENT.md#5-verification) |
-| Cross-service messages | Update the owning models, shared schemas/fixtures or protobuf source, generated outputs, and both consumers together |
+| Change area            | Rules and checks                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Java                   | Read [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify`                                                                  |
+| Python                 | Read [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
+| Web                    | Scripts are in [`frontend/package.json`](frontend/package.json); see [verification](docs/DEVELOPMENT.md#5-verification)    |
+| Cross-service messages | Update the owning models, shared schemas/fixtures or protobuf source, generated outputs, and both consumers together       |
 
 Tests with real Redis, Qdrant, or external providers require their documented environments.
 Read the [verification guide](docs/DEVELOPMENT.md#5-verification) before interpreting skipped
@@ -348,20 +350,21 @@ integration checks as successful end-to-end verification.
 
 ## MVP roadmap
 
-| Version | Scope | Done criteria |
-| --- | --- | --- |
-| `v0.1.x` (released) | Self-hosted RAG platform: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, password + JWT auth, SSE streaming | Fresh-clone install, authorized ingestion, cited chat, abstention without evidence |
-| `v0.2.0` (released) — Keycloak SSO | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated |
-| `v0.3.0` (released) — BPMN workflow | Embedded Flowable OSS BPMN engine for 2-level e-Office approval flow in `[P]`; approval inbox API + UI; multi-modal image citations & lightbox zoom; automated sha256 backup/restore | Demonstrable approval flow, durable state, operational documentation updated |
-| `v0.3.1` (released) — Lakehouse & DuckDB OLAP | Lakehouse data architecture (Snappy Parquet on SeaweedFS S3), Change Data Capture (CDC) streaming via RabbitMQ, embedded DuckDB OLAP engine | Lifecycle separation of hot (Postgres) and cold (Parquet) data, analytical SQL queries with zero core database contention |
+| Version                                                         | Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Done criteria                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `v0.1.x` (released)                                             | Self-hosted RAG platform: Spring Boot + FastAPI + Next.js, APISIX gateway, PostgreSQL/SeaweedFS/Qdrant/Kuzu, password + JWT auth, SSE streaming                                                                                                                                                                                                                                                                                                                                          | Fresh-clone install, authorized ingestion, cited chat, abstention without evidence                                                                                                                                                              |
+| `v0.2.0` (released) — Keycloak SSO                              | Keycloak as OIDC IdP for login; Spring as Resource Server; IdP role mapping to `ORG_OWNER`/`WORKSPACE_ADMIN`/`MEMBER`; existing password accounts keep working                                                                                                                                                                                                                                                                                                                           | End-to-end SSO login through the gateway, workspace authorization still enforced, deployment docs updated                                                                                                                                       |
+| `v0.3.0` (released) — BPMN workflow                             | Embedded Flowable OSS BPMN engine for 2-level e-Office approval flow in `[P]`; approval inbox API + UI; multi-modal image citations & lightbox zoom; automated sha256 backup/restore                                                                                                                                                                                                                                                                                                     | Demonstrable approval flow, durable state, operational documentation updated                                                                                                                                                                    |
+| `v0.3.1` (released) — Lakehouse & DuckDB OLAP                   | Lakehouse data architecture (Snappy Parquet on SeaweedFS S3), Change Data Capture (CDC) streaming via RabbitMQ, embedded DuckDB OLAP engine                                                                                                                                                                                                                                                                                                                                              | Lifecycle separation of hot (Postgres) and cold (Parquet) data, analytical SQL queries with zero core database contention                                                                                                                       |
 | **`v1.0.0` (GA release)** — Full DX-OS 3-Tier & BizApp Platform | Completion of all 3 DX-OS tiers under frozen SemVer 2.0 public contracts: `bizapp.v1` declarative schemas, hybrid storage (typed SQL `bizapp_crm_leads`, `bizapp_booking_appointments` and generic JSONB), low-code visual composer canvas (`@xyflow/react`), AI manifest drafting, knowledge projection into app KB documents & digest reports, Lakehouse CDC for `bizapp_records`, SSRF-hardened outbound HTTP, e-signature recipe template, and automated Apache-2.0 compliance gates | One-click marketplace install of CRM / Booking / Signature Request, visual canvas creation and installation, AI assistant answers with verified citations over business records, red-team tenant isolation and dependency license CI 100% green |
+
 Progress is tracked via GitHub milestones `v0.2.0` and `v0.3.0`; each milestone is broken into issues with their own acceptance criteria.
 
 ## Further reading
+
 - [Keycloak OIDC baseline](docs/KEYCLOAK.md) — realm/client setup and verification.
 - [Workflow](docs/WORKFLOW.md) — embedded Flowable approval flow: two-level submit/approve/escalate, per-organization SLA, decision write-back.
 - [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, demo data, worker, and run instructions.
-
 
 - [Documentation index](docs/README.md) — choose a guide by task.
 - [Ingestion, models, and retrieval](docs/RETRIEVAL.md).
@@ -376,5 +379,3 @@ LinkedNodeDigital; see [NOTICE](NOTICE). Anyone may self-host, fork, or sell hos
 that license. Third-party packages, container images, services, model weights, and datasets
 retain their own terms. Publishing a new public repository still requires the
 [release review](docs/OPEN_SOURCE.md#publication-gate).
-
-

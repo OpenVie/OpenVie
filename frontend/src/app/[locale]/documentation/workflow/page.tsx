@@ -103,7 +103,7 @@ export default async function WorkflowDocumentationPage({ params }: PageProps) {
         <RelatedLinks
           links={[
             {
-              href: "/workflow",
+              href: "/approvals",
               title: t("approvalInboxTitle"),
               description: t("approvalInboxDescription"),
             },

@@ -223,7 +223,7 @@ const content: Record<AppLocale, Record<string, LocalizedPage>> = {
         sections: {
           "approval-levels": { title: "1. Luồng phê duyệt hai cấp" },
           "task-inbox": { title: "2. Tiếp nhận & xử lý tác vụ" },
-          "sla-timers": { title: "3. Bộ đếm SLA nhắc nhở & leo thang" },
+          "sla-timers": { title: "3. Bộ đếm SLA nhắc nhở & chuyển tiếp" },
           "role-permissions": { title: "4. Phân định quyền theo vai trò" },
         },
       },
