@@ -114,6 +114,7 @@ public final class ChatDtos {
     @Schema(description = "The assistant's answer for the current turn: content, citations, and optional "
             + "follow-up action and suggested next questions.")
     public record AssistantMessageResponse(
+            UUID id,
             String role,
             String content,
             List<CitationResponse> citations,
@@ -123,11 +124,15 @@ public final class ChatDtos {
                     + "in the answer language. Absent when no suggestions were made.")
             @JsonProperty("suggested_questions") List<String> suggestedQuestions
     ) {
+        public AssistantMessageResponse(String role, String content, List<CitationResponse> citations, Map<String, Object> action, List<String> suggestedQuestions) {
+            this(null, role, content, citations, action, suggestedQuestions);
+        }
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @Schema(description = "A stored chat message (user or assistant) with its position in the session history.")
     public record MessageResponse(
+            UUID id,
             String role,
             String content,
             List<CitationResponse> citations,
@@ -135,6 +140,9 @@ public final class ChatDtos {
             @JsonProperty("sequence_number") Integer sequenceNumber,
             Map<String, Object> action
     ) {
+        public MessageResponse(String role, String content, List<CitationResponse> citations, Integer sequenceNumber, Map<String, Object> action) {
+            this(null, role, content, citations, sequenceNumber, action);
+        }
     }
 
     @Schema(description = "One row of the playground session overview.")
@@ -172,7 +180,7 @@ public final class ChatDtos {
     }
 
     public record ExecuteActionRequest(
-            @jakarta.validation.constraints.NotNull UUID messageId,
+            String messageId,
             @jakarta.validation.constraints.NotNull UUID actionId
     ) {}
 }

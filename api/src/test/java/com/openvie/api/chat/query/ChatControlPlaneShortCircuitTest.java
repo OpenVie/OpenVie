@@ -152,7 +152,7 @@ class ChatControlPlaneShortCircuitTest {
                 card
         );
 
-        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), eq("cài app crm"), any(), eq(sessionId)))
+        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), eq("cài app crm"), any(), eq(sessionId), any()))
                 .thenReturn(routing);
 
         AssistantMessageResponse response = controlPlaneService.submitEmployeeMessage(
@@ -190,7 +190,7 @@ class ChatControlPlaneShortCircuitTest {
                 null
         );
 
-        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), eq("danh sách ứng dụng"), any(), eq(sessionId)))
+        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), eq("danh sách ứng dụng"), any(), eq(sessionId), any()))
                 .thenReturn(routing);
         when(catalogAnswerComposer.composeListApps(eq(tenantId), eq("vi-VN")))
                 .thenReturn("### Danh sách ứng dụng đã cài đặt: CRM, Booking");

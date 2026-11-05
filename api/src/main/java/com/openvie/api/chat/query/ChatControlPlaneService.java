@@ -293,8 +293,11 @@ public class ChatControlPlaneService {
         turn = turnRepository.save(turn);
 
         BizAppIntentRouter.RoutingResult routing = (intentRouter != null)
-                ? intentRouter.route(tenantId, session.getTenantId(), userId, session.getChannel().name(), content, session.getLocale(), sessionId)
+                ? intentRouter.route(tenantId, session.getTenantId(), userId, session.getChannel().name(), content, session.getLocale(), sessionId, prior)
                 : BizAppIntentRouter.RoutingResult.none();
+        if (routing == null) {
+            routing = BizAppIntentRouter.RoutingResult.none();
+        }
 
         if (routing.intent() != BizAppIntentRouter.Intent.NONE) {
             turn.setIntent(routing.intent().name());
@@ -306,7 +309,23 @@ public class ChatControlPlaneService {
         }
 
         if (routing.intent() == BizAppIntentRouter.Intent.APP_DATA && routing.appKind() != null && bizAppRuntimeApi != null) {
-            List<UUID> projectedDocs = bizAppRuntimeApi.listProjectedDocumentIds(tenantId, routing.appKind());
+            List<UUID> projectedDocs = routing.entity() != null
+                    ? bizAppRuntimeApi.listProjectedDocumentIds(tenantId, routing.appKind(), routing.entity())
+                    : bizAppRuntimeApi.listProjectedDocumentIds(tenantId, routing.appKind());
+            // Anti-regression rule: if entity scope is empty but app has projected docs, fallback to app scope
+            if (projectedDocs.isEmpty() && routing.entity() != null) {
+                projectedDocs = bizAppRuntimeApi.listProjectedDocumentIds(tenantId, routing.appKind());
+            }
+            if (projectedDocs.isEmpty()) {
+                String emptyAppReply = (session.getLocale() != null && session.getLocale().toLowerCase(Locale.ROOT).startsWith("vi"))
+                        ? "Ứng dụng " + routing.appKind() + " hiện chưa có bản ghi dữ liệu nào trong không gian làm việc này."
+                        : "Application " + routing.appKind() + " currently has no data records in this workspace.";
+                GenerationContext context = captureContext(session, turn, userMessage, prior, requestId);
+                turn.setKnowledgeRevision(context.revision());
+                turn.setGenerationContext(context.asMap());
+                turn = turnRepository.save(turn);
+                return new PreparedTurn(turn.getId(), context, null, true, emptyAppReply, null);
+            }
             GenerationContext context = captureContext(session, turn, userMessage, prior, requestId)
                     .withAppScope(projectedDocs);
             turn.setKnowledgeRevision(context.revision());
@@ -796,14 +815,14 @@ public class ChatControlPlaneService {
         Map<String, Object> action = message.getAction() != null && !message.getAction().isEmpty()
                 ? message.getAction() : null;
         return new ChatDtos.AssistantMessageResponse(
-                message.getRole(), message.getContent(), citations(message), action, suggestedQuestions);
+                message.getId(), message.getRole(), message.getContent(), citations(message), action, suggestedQuestions);
     }
 
     private ChatDtos.MessageResponse toMessage(ChatMessage message, ChatSession session) {
         Map<String, Object> action = message.getAction() != null && !message.getAction().isEmpty()
                 ? message.getAction() : null;
         return new ChatDtos.MessageResponse(
-                message.getRole(), message.getContent(), citations(message),
+                message.getId(), message.getRole(), message.getContent(), citations(message),
                 message.getSequenceNumber(), action);
     }
 

@@ -360,6 +360,7 @@ export interface ChatCitation {
 }
 
 export interface AssistantMessageResponse {
+  id?: string;
   role: "assistant";
   content: string;
   citations: ChatCitation[];

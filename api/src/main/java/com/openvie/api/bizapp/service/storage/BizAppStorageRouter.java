@@ -14,6 +14,7 @@
 
 package com.openvie.api.bizapp.service.storage;
 
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -26,33 +27,21 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class BizAppStorageRouter {
-
     private final JsonbRecordStore jsonbStore;
-    private final CrmLeadsTypedStore crmLeadsStore;
-    private final BookingAppointmentsTypedStore bookingStore;
 
     public BizAppStorageStore route(String appKind, String entity) {
-        if ("crm".equalsIgnoreCase(appKind) && "leads".equalsIgnoreCase(entity)) {
-            return crmLeadsStore;
-        }
-        if ("booking".equalsIgnoreCase(appKind) && "bookings".equalsIgnoreCase(entity)) {
-            return bookingStore;
-        }
         return jsonbStore;
     }
 
     public boolean isTyped(String appKind, String entity) {
-        return ("crm".equalsIgnoreCase(appKind) && "leads".equalsIgnoreCase(entity))
-                || ("booking".equalsIgnoreCase(appKind) && "bookings".equalsIgnoreCase(entity));
+        return false;
     }
 
     public String getTableName(String appKind, String entity) {
-        if ("crm".equalsIgnoreCase(appKind) && "leads".equalsIgnoreCase(entity)) {
-            return "bizapp_crm_leads";
-        }
-        if ("booking".equalsIgnoreCase(appKind) && "bookings".equalsIgnoreCase(entity)) {
-            return "bizapp_booking_appointments";
-        }
         return "bizapp_records";
+    }
+
+    public Optional<com.openvie.api.bizapp.model.BizAppRecord> findAny(java.util.UUID recordId, String appKind) {
+        return jsonbStore.findById(null, appKind, recordId);
     }
 }

@@ -87,7 +87,26 @@ public class CatalogAnswerComposer {
             if (app.description() != null && !app.description().isBlank()) {
                 sb.append("- **").append(isVi ? "Mô tả" : "Description").append("**: ").append(app.description()).append("\n");
             }
-            if (app.entities() != null && !app.entities().isEmpty()) {
+            if (app.entityDetails() != null && !app.entityDetails().isEmpty()) {
+                sb.append("- **").append(isVi ? "Thực thể & Trường dữ liệu" : "Entities & Fields").append("**:\n");
+                for (BizAppRuntimeApi.EntityDetail entity : app.entityDetails()) {
+                    sb.append("  - `").append(entity.name()).append("`");
+                    if (entity.label() != null && !entity.label().equalsIgnoreCase(entity.name())) {
+                        sb.append(" (").append(entity.label()).append(")");
+                    }
+                    sb.append(":\n");
+                    for (BizAppRuntimeApi.FieldDetail field : entity.fields()) {
+                        sb.append("    - `").append(field.name()).append("` (").append(field.type());
+                        if (field.required()) {
+                            sb.append(isVi ? ", Bắt buộc" : ", required");
+                        }
+                        if (field.label() != null && !field.label().equalsIgnoreCase(field.name())) {
+                            sb.append(" - ").append(field.label());
+                        }
+                        sb.append(")\n");
+                    }
+                }
+            } else if (app.entities() != null && !app.entities().isEmpty()) {
                 sb.append("- **").append(isVi ? "Thực thể" : "Entities").append("**: ")
                         .append(String.join(", ", app.entities())).append("\n");
             }
@@ -108,6 +127,33 @@ public class CatalogAnswerComposer {
             sb.append("- **").append(isVi ? "Phiên bản" : "Version").append("**: ").append(tmpl.version()).append("\n");
             if (tmpl.description() != null && !tmpl.description().isBlank()) {
                 sb.append("- **").append(isVi ? "Mô tả" : "Description").append("**: ").append(tmpl.description()).append("\n");
+            }
+            if (tmpl.entityDetails() != null && !tmpl.entityDetails().isEmpty()) {
+                sb.append("- **").append(isVi ? "Thực thể & Trường dữ liệu" : "Entities & Fields").append("**:\n");
+                for (BizAppRuntimeApi.EntityDetail entity : tmpl.entityDetails()) {
+                    sb.append("  - `").append(entity.name()).append("`");
+                    if (entity.label() != null && !entity.label().equalsIgnoreCase(entity.name())) {
+                        sb.append(" (").append(entity.label()).append(")");
+                    }
+                    sb.append(":\n");
+                    for (BizAppRuntimeApi.FieldDetail field : entity.fields()) {
+                        sb.append("    - `").append(field.name()).append("` (").append(field.type());
+                        if (field.required()) {
+                            sb.append(isVi ? ", Bắt buộc" : ", required");
+                        }
+                        if (field.label() != null && !field.label().equalsIgnoreCase(field.name())) {
+                            sb.append(" - ").append(field.label());
+                        }
+                        sb.append(")\n");
+                    }
+                }
+            } else if (tmpl.entities() != null && !tmpl.entities().isEmpty()) {
+                sb.append("- **").append(isVi ? "Thực thể" : "Entities").append("**: ")
+                        .append(String.join(", ", tmpl.entities())).append("\n");
+            }
+            if (tmpl.views() != null && !tmpl.views().isEmpty()) {
+                sb.append("- **").append(isVi ? "Giao diện" : "Views").append("**: ")
+                        .append(String.join(", ", tmpl.views())).append("\n");
             }
             return sb.toString().trim();
         }

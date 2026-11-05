@@ -224,6 +224,18 @@ class BizAppInstallFlowIntegrationTest {
                 .noneMatch(app -> "booking".equals(app.kind())));
     }
 
+    @Test
+    void appCanBeReinstalledAfterBeingUninstalled() {
+        installCrm();
+        installService.uninstall(workspaceId, ownerId, "crm");
+        assertTrue(installService.listInstalled(workspaceId).isEmpty());
+
+        InstallResult reinstalled = installCrm();
+        assertNotNull(reinstalled);
+        assertEquals("crm", reinstalled.kind());
+        assertEquals(1, installService.listInstalled(workspaceId).size());
+    }
+
     private InstallResult installCrm() {
         Map<String, Object> manifest = marketplaceService.templateManifest(orgId, "platform:crm");
         assertEquals("crm", manifest.get("kind"), "the platform ref resolves the bundled manifest");

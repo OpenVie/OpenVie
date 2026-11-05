@@ -33,7 +33,8 @@ public class JsonbRecordStore implements BizAppStorageStore {
     @Override
     public Optional<BizAppRecord> findById(UUID tenantId, String appKind, UUID recordId) {
         return recordRepository.findById(recordId)
-                .filter(row -> row.getTenantId().equals(tenantId) && row.getAppKind().equals(appKind));
+                .filter(row -> (tenantId == null || row.getTenantId().equals(tenantId))
+                        && (appKind == null || appKind.isBlank() || row.getAppKind().equalsIgnoreCase(appKind)));
     }
 
     @Override

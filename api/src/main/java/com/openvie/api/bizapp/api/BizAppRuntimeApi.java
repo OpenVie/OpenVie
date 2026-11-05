@@ -15,6 +15,7 @@
 package com.openvie.api.bizapp.api;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface BizAppRuntimeApi {
@@ -32,6 +33,101 @@ public interface BizAppRuntimeApi {
 
     List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind);
 
+    List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind, String entity);
+
+    record FieldSummary(
+            String name,
+            String type,
+            boolean required,
+            List<String> options,
+            Integer maxLen,
+            String format,
+            String label
+    ) {}
+
+    record EntitySchemaSummary(
+            String name,
+            String label,
+            List<FieldSummary> fields
+    ) {}
+
+    record AppSchemaSummary(
+            String kind,
+            String name,
+            int version,
+            List<EntitySchemaSummary> entities
+    ) {}
+
+    List<AppSchemaSummary> listAppSchemas(UUID tenantId);
+
+    RecordCommandOutcome executeRecordCommand(UUID tenantId, UUID orgId, UUID actorId, String callerRole, RecordCommand command);
+    record RecordCommand(
+            String kind,
+            String appKind,
+            String entity,
+            UUID recordId,
+            Map<String, Object> payload,
+            String payloadHash
+    ) {}
+
+    record RecordCommandOutcome(
+            boolean success,
+            UUID recordId,
+            String message
+    ) {}
+    record FieldDetail(
+            String name,
+            String type,
+            boolean required,
+            String label,
+            List<String> options,
+            String format,
+            Map<String, String> optionDisplayLabels,
+            Map<String, List<String>> optionAliases
+    ) {
+        public FieldDetail(String name, String type, boolean required, String label) {
+            this(name, type, required, label, List.of(), null, Map.of(), Map.of());
+        }
+
+        public FieldDetail(String name, String type, boolean required, String label, List<String> options) {
+            this(name, type, required, label, options, null, Map.of(), Map.of());
+        }
+
+        public FieldDetail(String name, String type, boolean required, String label, List<String> options, String format) {
+            this(name, type, required, label, options, format, Map.of(), Map.of());
+        }
+    }
+
+    record EntityDetail(
+            String name,
+            String label,
+            List<FieldDetail> fields
+    ) {
+        public EntityDetail {
+            fields = fields == null ? List.of() : List.copyOf(fields);
+        }
+
+        public String fieldLabel(String fieldName) {
+            if (fields == null || fieldName == null) return fieldName;
+            for (FieldDetail f : fields) {
+                if (fieldName.equalsIgnoreCase(f.name())) {
+                    return f.label() != null && !f.label().isBlank() ? f.label() : f.name();
+                }
+            }
+            return fieldName;
+        }
+
+        public FieldDetail findField(String fieldName) {
+            if (fields == null || fieldName == null) return null;
+            for (FieldDetail f : fields) {
+                if (fieldName.equalsIgnoreCase(f.name())) {
+                    return f;
+                }
+            }
+            return null;
+        }
+    }
+
     record InstalledAppSummary(
             UUID id,
             String kind,
@@ -40,11 +136,42 @@ public interface BizAppRuntimeApi {
             String description,
             List<String> entities,
             List<String> views,
-            String status
+            String status,
+            List<EntityDetail> entityDetails,
+            List<String> triggers
     ) {
         public InstalledAppSummary {
             entities = entities == null ? List.of() : List.copyOf(entities);
             views = views == null ? List.of() : List.copyOf(views);
+            entityDetails = entityDetails == null ? List.of() : List.copyOf(entityDetails);
+            triggers = triggers == null ? List.of() : List.copyOf(triggers);
+        }
+
+        public InstalledAppSummary(
+                UUID id,
+                String kind,
+                String name,
+                int version,
+                String description,
+                List<String> entities,
+                List<String> views,
+                String status,
+                List<EntityDetail> entityDetails
+        ) {
+            this(id, kind, name, version, description, entities, views, status, entityDetails, List.of());
+        }
+
+        public InstalledAppSummary(
+                UUID id,
+                String kind,
+                String name,
+                int version,
+                String description,
+                List<String> entities,
+                List<String> views,
+                String status
+        ) {
+            this(id, kind, name, version, description, entities, views, status, List.of(), List.of());
         }
     }
 
@@ -55,11 +182,40 @@ public interface BizAppRuntimeApi {
             String description,
             List<String> entities,
             List<String> views,
-            String templateRef
+            String templateRef,
+            List<EntityDetail> entityDetails,
+            List<String> triggers
     ) {
         public MarketplaceTemplateSummary {
             entities = entities == null ? List.of() : List.copyOf(entities);
             views = views == null ? List.of() : List.copyOf(views);
+            entityDetails = entityDetails == null ? List.of() : List.copyOf(entityDetails);
+            triggers = triggers == null ? List.of() : List.copyOf(triggers);
+        }
+
+        public MarketplaceTemplateSummary(
+                String kind,
+                String name,
+                int version,
+                String description,
+                List<String> entities,
+                List<String> views,
+                String templateRef,
+                List<EntityDetail> entityDetails
+        ) {
+            this(kind, name, version, description, entities, views, templateRef, entityDetails, List.of());
+        }
+
+        public MarketplaceTemplateSummary(
+                String kind,
+                String name,
+                int version,
+                String description,
+                List<String> entities,
+                List<String> views,
+                String templateRef
+        ) {
+            this(kind, name, version, description, entities, views, templateRef, List.of(), List.of());
         }
     }
 

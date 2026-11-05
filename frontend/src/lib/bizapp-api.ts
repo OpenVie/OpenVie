@@ -373,13 +373,13 @@ export async function deleteBizAppCredentialApi(
 
 export async function executeChatActionApi(
   request: ApiRequest,
-  messageId: string,
+  messageId: string | undefined,
   actionId: string,
 ): Promise<AssistantMessageResponse> {
   return readJsonOrThrow<AssistantMessageResponse>(
     await request(`${getApiBase()}/chat/actions/execute`, {
       method: "POST",
-      body: JSON.stringify({ messageId, actionId }),
+      body: JSON.stringify({ messageId: messageId || undefined, actionId }),
     }),
   );
 }
