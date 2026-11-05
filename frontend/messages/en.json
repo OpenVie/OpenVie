@@ -655,7 +655,18 @@
       "executed": "Executed successfully",
       "failed": "Execution failed",
       "denied": "Permission denied (Requires Organization Owner)",
-      "onlyOwnerCanExecute": "Only organization owners can install or uninstall applications."
+      "onlyOwnerCanExecute": "Only organization owners can install or uninstall applications.",
+      "recordCreateTitle": "Create Record",
+      "recordCreateConfirm": "Confirm Create",
+      "recordUpdateTitle": "Update Record",
+      "recordUpdateConfirm": "Confirm Update",
+      "recordArchiveTitle": "Archive Record",
+      "recordArchiveConfirm": "Confirm Archive",
+      "recordArchiveWarning": "Archiving will hide this record from active views.",
+      "recordSubmitTitle": "Submit for Approval",
+      "recordSubmitConfirm": "Submit Approval",
+      "invalidTitle": "Missing Required Fields",
+      "invalid": "Invalid"
     },
     "fallback": {
       "loadWorkspace": "Unable to load workspace",

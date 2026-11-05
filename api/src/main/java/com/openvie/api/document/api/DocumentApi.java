@@ -90,4 +90,6 @@ public interface DocumentApi {
     void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName);
 
     List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind);
+
+    List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind, String entity);
 }

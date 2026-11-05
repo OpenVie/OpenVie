@@ -23,11 +23,14 @@ import {
   AppWindow,
   CheckCircle2,
   ExternalLink,
+  FileEdit,
+  FilePlus,
+  FileText,
   Layers,
   Loader2,
+  Send,
   Sparkles,
 } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,8 +43,9 @@ import type { AssistantMessageResponse } from "@/types";
 export interface BizAppActionData {
   type: "bizapp_action";
   actionId: string;
-  kind: "bizapp.install" | "bizapp.uninstall" | "bizapp.catalog" | "bizapp.suggest" | "bizapp.draft" | "bizapp.open_composer";
-  status: "PROPOSED" | "EXECUTING" | "EXECUTED" | "FAILED" | "DENIED" | "EXPIRED";
+  kind: "bizapp.install" | "bizapp.uninstall" | "bizapp.catalog" | "bizapp.suggest" | "bizapp.draft" | "bizapp.open_composer"
+    | "bizapp.record.create" | "bizapp.record.update" | "bizapp.record.archive" | "bizapp.record.submit";
+  status: "PROPOSED" | "EXECUTING" | "EXECUTED" | "FAILED" | "DENIED" | "EXPIRED" | "INVALID";
   appKind?: string;
   appName?: string;
   version?: number;
@@ -51,8 +55,15 @@ export interface BizAppActionData {
   executedAt?: string | null;
   result?: Record<string, unknown> | null;
   payload?: Record<string, unknown> | null;
+  entity?: string;
+  entityLabel?: string;
+  recordId?: string;
+  fields?: Record<string, unknown>;
+  fieldLabels?: Record<string, string>;
+  diff?: Record<string, { before: unknown; after: unknown }>;
+  invalid?: Array<{ field: string; code: string; message: string }>;
+  payloadHash?: string;
 }
-
 export interface BizAppActionCardProps {
   action: BizAppActionData | Record<string, unknown>;
   messageId?: string;
@@ -80,8 +91,7 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
   const version = raw.version ?? 1;
 
   async function handleExecute() {
-    if (!messageId || !actionId) return;
-    setStatus("EXECUTING");
+    if (!actionId) return;
     setErrorMessage(null);
     try {
       const resp = await executeChatActionApi(request, messageId, actionId);
@@ -105,6 +115,14 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
   const isFailed = status === "FAILED";
   const isDenied = status === "DENIED";
 
+  const isInvalid = status === "INVALID";
+  const entityTitle = raw.entityLabel || raw.entity;
+  const cardTitle = entityTitle && appName
+    ? `${appName} — ${entityTitle}`
+    : appName
+    ? `${appName} (v${version})`
+    : t("catalogTitle");
+
   return (
     <Card
       role="region"
@@ -119,8 +137,12 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
             {kind === "bizapp.catalog" && <Layers className="size-4 text-primary" />}
             {kind === "bizapp.suggest" && <Sparkles className="size-4 text-primary" />}
             {kind === "bizapp.draft" && <Sparkles className="size-4 text-primary" />}
+            {kind === "bizapp.record.create" && <FilePlus className="size-4 text-emerald-600 dark:text-emerald-400" />}
+            {kind === "bizapp.record.update" && <FileEdit className="size-4 text-blue-600 dark:text-blue-400" />}
+            {kind === "bizapp.record.archive" && <AlertTriangle className="size-4 text-destructive" />}
+            {kind === "bizapp.record.submit" && <Send className="size-4 text-purple-600 dark:text-purple-400" />}
             <CardTitle className="text-sm font-semibold text-foreground">
-              {appName ? `${appName} (v${version})` : t("catalogTitle")}
+              {cardTitle}
             </CardTitle>
           </div>
           <div>
@@ -142,19 +164,65 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
                 {t("denied")}
               </Badge>
             )}
-            {!isExecuted && !isFailed && !isDenied && (
+            {isInvalid && (
+              <Badge variant="destructive" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                <AlertCircle className="mr-1 size-3" />
+                {t("invalid")}
+              </Badge>
+            )}
+            {!isExecuted && !isFailed && !isDenied && !isInvalid && (
               <Badge variant="secondary" className="text-xs font-normal">
-                {kind === "bizapp.install" ? t("installTitle") : kind === "bizapp.uninstall" ? t("uninstallTitle") : t("catalogTitle")}
+                {kind === "bizapp.install"
+                  ? t("installTitle")
+                  : kind === "bizapp.uninstall"
+                  ? t("uninstallTitle")
+                  : kind === "bizapp.record.create"
+                  ? t("recordCreateTitle")
+                  : kind === "bizapp.record.update"
+                  ? t("recordUpdateTitle")
+                  : kind === "bizapp.record.archive"
+                  ? t("recordArchiveTitle")
+                  : kind === "bizapp.record.submit"
+                  ? t("recordSubmitTitle")
+                  : t("catalogTitle")}
               </Badge>
             )}
           </div>
         </div>
       </CardHeader>
-
       <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
         {description && <p className="mb-2 leading-relaxed">{description}</p>}
         {kind === "bizapp.uninstall" && status === "PROPOSED" && (
           <p className="text-xs text-destructive/90">{t("uninstallWarning")}</p>
+        )}
+        {kind === "bizapp.record.archive" && status === "PROPOSED" && (
+          <p className="text-xs text-destructive/90">{t("recordArchiveWarning")}</p>
+        )}
+
+        {raw.fields && Object.keys(raw.fields).length > 0 && (
+          <div className="my-2 overflow-x-auto rounded border border-border/60 bg-muted/20">
+            <table className="w-full text-left text-xs">
+              <tbody>
+                {Object.entries(raw.fields).map(([k, v]) => (
+                  <tr key={k} className="border-b border-border/30 last:border-b-0">
+                    <td className="w-1/3 px-2 py-1 font-medium text-foreground">{raw.fieldLabels?.[k] || k}</td>
+                    <td className="px-2 py-1 text-muted-foreground">{String(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {raw.invalid && raw.invalid.length > 0 && (
+          <div className="my-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-amber-700 dark:text-amber-300">
+            <p className="font-medium">{t("invalidTitle")}:</p>
+            <ul className="mt-1 list-inside list-disc">
+              {raw.invalid.map((err, idx) => (
+                <li key={idx}>{err.message || err.field}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         <div aria-live="polite" className="mt-2 text-xs">
@@ -201,7 +269,6 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
             <ExternalLink className="ml-1.5 size-3.5" />
           </Link>
         )}
-
         {kind === "bizapp.draft" && (
           <div className="flex gap-2">
             {Boolean(raw.payload?.draftId) && (
@@ -223,6 +290,55 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
               </Button>
             )}
           </div>
+        )}
+
+        {kind === "bizapp.record.create" && !isExecuted && (
+          <Button
+            size="sm"
+            disabled={isInvalid || isExecuting}
+            onClick={() => void handleExecute()}
+            className="text-xs"
+          >
+            {isExecuting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {isExecuting ? t("executing") : t("recordCreateConfirm")}
+          </Button>
+        )}
+
+        {kind === "bizapp.record.update" && !isExecuted && (
+          <Button
+            size="sm"
+            disabled={isInvalid || isExecuting}
+            onClick={() => void handleExecute()}
+            className="text-xs"
+          >
+            {isExecuting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {isExecuting ? t("executing") : t("recordUpdateConfirm")}
+          </Button>
+        )}
+
+        {kind === "bizapp.record.archive" && !isExecuted && (
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={isInvalid || isExecuting}
+            onClick={() => void handleExecute()}
+            className="text-xs"
+          >
+            {isExecuting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {isExecuting ? t("executing") : t("recordArchiveConfirm")}
+          </Button>
+        )}
+
+        {kind === "bizapp.record.submit" && !isExecuted && (
+          <Button
+            size="sm"
+            disabled={isInvalid || isExecuting}
+            onClick={() => void handleExecute()}
+            className="text-xs"
+          >
+            {isExecuting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+            {isExecuting ? t("executing") : t("recordSubmitConfirm")}
+          </Button>
         )}
       </CardFooter>
     </Card>

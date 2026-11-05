@@ -353,7 +353,7 @@ function Playground() {
           history
             .filter((item) => item.role === "user" || item.role === "assistant")
             .map((item) => ({
-              id: `${sessionId}-${item.sequence_number ?? makeId()}`,
+              id: item.id || `${sessionId}-${item.sequence_number ?? makeId()}`,
               role: item.role as "user" | "assistant",
               content: item.content,
               citations: item.citations,
@@ -605,7 +605,7 @@ function Playground() {
       setMessages((current) => current.map((item): ChatMessage =>
         item.id === assistantId
           ? {
-              id: assistantId,
+              id: response.id || assistantId,
               role: "assistant",
               content: response.content,
               citations: response.citations,

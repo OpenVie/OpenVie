@@ -142,7 +142,7 @@ class ProjectionConcurrencyTest {
 
         verify(documentApi, times(2)).ingestText(
                 eq(tenantId), eq(actorId), eq(kbId), eq("bizapp__crm__lead__" + recordId + ".md"),
-                anyString(), eq(DocumentKind.BIZAPP_RECORD), eq("bizapp:crm")
+                anyString(), eq(DocumentKind.BIZAPP_RECORD), eq("bizapp:crm:lead")
         );
     }
 }

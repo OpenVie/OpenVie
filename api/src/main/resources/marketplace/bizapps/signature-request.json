@@ -32,6 +32,17 @@
         "WORKSPACE_ADMIN"
       ]
     },
+    "conversational": {
+      "triggers": [
+        "ký số",
+        "chữ ký",
+        "trình ký",
+        "ký văn bản",
+        "signature",
+        "signature-request"
+      ],
+      "description": "Quy trình trình ký và ký số tài liệu điện tử"
+    },
     "entities": [
       {
         "name": "signature_requests",

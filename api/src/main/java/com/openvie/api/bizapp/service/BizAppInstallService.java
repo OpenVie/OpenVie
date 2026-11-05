@@ -66,14 +66,15 @@ public class BizAppInstallService {
     public InstallResult install(UUID tenantId, UUID orgId, UUID actorId, Map<String, Object> rawManifest) {
         requireEnabled();
         Manifest parsed = parser.parse(rawManifest);
-        boolean isPlatform = Set.of("crm", "booking", "signature-request").contains(parsed.kind());
+        boolean isPlatform = isPlatformBundledTemplate(parsed.kind());
         validator.validate(parsed, isPlatform);
-        if (installationRepository.existsByTenantIdAndKindAndStatus(tenantId, parsed.kind(), "ACTIVE")) {
+        BizAppInstallation installation = installationRepository.findByTenantIdAndKind(tenantId, parsed.kind())
+                .orElseGet(BizAppInstallation::new);
+        if (installation.getId() != null && "ACTIVE".equalsIgnoreCase(installation.getStatus())) {
             throw new ConflictException("App " + parsed.kind() + " is already installed");
         }
         String processKey = deployApprovalDefinition(parsed, tenantId, actorId);
 
-        BizAppInstallation installation = new BizAppInstallation();
         installation.setOrgId(orgId);
         installation.setTenantId(tenantId);
         installation.setKind(parsed.kind());
@@ -82,8 +83,7 @@ public class BizAppInstallService {
         installation.setProcessKey(processKey);
         installation.setInstalledBy(actorId);
         installation.setStatus("ACTIVE");
-        installationRepository.save(installation);
-
+        installation = installationRepository.save(installation);
         runtime.audit(tenantId, actorId, LogAction.BIZAPP_APP_INSTALLED, "bizapp_installation",
                 installation.getId(), Map.of("app", parsed.kind()));
         log.info("BizApp {} installed workspace={} processKey={}", parsed.kind(), tenantId, processKey);
@@ -160,6 +160,15 @@ public class BizAppInstallService {
             }
         } catch (Exception exception) {
             throw new ResourceNotFoundException("BPMN template not available: " + templatePath);
+        }
+    }
+
+    private boolean isPlatformBundledTemplate(String kind) {
+        if (kind == null || kind.isBlank()) return false;
+        try {
+            return new ClassPathResource("marketplace/bizapps/" + kind + ".json").exists();
+        } catch (Exception ex) {
+            return false;
         }
     }
 

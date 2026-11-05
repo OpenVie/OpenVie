@@ -151,6 +151,21 @@ class ChatActionServiceTest {
     }
 
     @Test
+    void executeActionFallsBackToActionIdLookupWhenMessageIdNullOrInvalid() {
+        ChatMessage msg = createProposedMessage("bizapp.uninstall", "booking", "PROPOSED");
+        when(messageRepository.findByTenantIdAndActionId(tenantId, actionId.toString())).thenReturn(Optional.of(msg));
+        InstalledAppSummary booking = new InstalledAppSummary(UUID.randomUUID(), "booking", "Booking", 1, "", List.of(), List.of(), "ACTIVE");
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(booking));
+        when(bizAppRuntimeApi.executeOffer(eq(tenantId), eq(orgId), eq(actorId), any(AppActionOffer.class)))
+                .thenReturn(new InstallOutcome(true, null, "Successfully uninstalled Booking"));
+
+        var response = service.executeAction(tenantId, orgId, actorId, "ORG_OWNER", "non-uuid-fake-message-id", actionId);
+        assertNotNull(response);
+        assertEquals("Successfully uninstalled Booking", response.content());
+        assertEquals("EXECUTED", msg.getAction().get("status"));
+    }
+
+    @Test
     void idempotentExecutionReturnsExistingResult() {
         ChatMessage msg = createProposedMessage("bizapp.install", "booking", "EXECUTED");
         msg.getAction().put("result", Map.of("installationId", UUID.randomUUID().toString(), "message", "Already installed"));

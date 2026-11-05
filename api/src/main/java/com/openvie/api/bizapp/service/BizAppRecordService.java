@@ -333,17 +333,7 @@ public class BizAppRecordService {
     }
 
     private BizAppRecord findAny(UUID recordId, String appKind) {
-        if ("crm".equalsIgnoreCase(appKind)) {
-            var crmLead = storageRouter.route("crm", "leads").findById(null, "crm", recordId);
-            if (crmLead.isPresent()) return crmLead.get();
-        }
-        if ("booking".equalsIgnoreCase(appKind)) {
-            var bAppt = storageRouter.route("booking", "bookings").findById(null, "booking", recordId);
-            if (bAppt.isPresent()) return bAppt.get();
-        }
-        return recordRepository.findById(recordId)
-                .filter(row -> appKind.equals(row.getAppKind()) && "ACTIVE".equals(row.getStatus()))
-                .orElse(null);
+        return storageRouter.findAny(recordId, appKind).orElse(null);
     }
 
     private BizAppInstallation installationOf(UUID tenantId, String appKind) {
@@ -376,12 +366,38 @@ public class BizAppRecordService {
     }
 
     /** Manifest RBAC: write defaults to admins only unless MEMBER is listed. */
-    boolean canWrite(Manifest manifest, boolean admin) {
+    public boolean canWrite(Manifest manifest, boolean admin) {
         List<String> write = manifest.rbac() == null ? null : manifest.rbac().get("write");
         if (write == null || write.isEmpty()) {
             return admin;
         }
         return admin || write.contains("MEMBER");
+    }
+
+    public boolean canWrite(Manifest manifest, String orgRole) {
+        if ("ORG_OWNER".equalsIgnoreCase(orgRole)) return true;
+        boolean admin = "WORKSPACE_ADMIN".equalsIgnoreCase(orgRole);
+        return canWrite(manifest, admin);
+    }
+
+    public boolean canDelete(Manifest manifest, String orgRole) {
+        if ("ORG_OWNER".equalsIgnoreCase(orgRole)) return true;
+        boolean admin = "WORKSPACE_ADMIN".equalsIgnoreCase(orgRole);
+        List<String> delete = manifest.rbac() == null ? null : manifest.rbac().get("delete");
+        if (delete == null || delete.isEmpty()) {
+            return admin;
+        }
+        return admin || (orgRole != null && delete.contains(orgRole));
+    }
+
+    public boolean canApprove(Manifest manifest, String orgRole) {
+        if ("ORG_OWNER".equalsIgnoreCase(orgRole)) return true;
+        boolean admin = "WORKSPACE_ADMIN".equalsIgnoreCase(orgRole);
+        List<String> approve = manifest.rbac() == null ? null : manifest.rbac().get("approve");
+        if (approve == null || approve.isEmpty()) {
+            return admin;
+        }
+        return admin || (orgRole != null && approve.contains(orgRole));
     }
 
     private RecordView toView(BizAppRecord record, Manifest manifest) {

@@ -74,7 +74,12 @@ app:
       hosts: ${BIZAPPS_REMOTE_CATALOG_HOSTS:}
   chat:
     bizapp-actions:
-      enabled: ${CHAT_BIZAPP_ACTIONS_ENABLED:false}
+      enabled: ${CHAT_BIZAPP_ACTIONS_ENABLED:true}
+    bizapp-records:
+      enabled: ${CHAT_BIZAPP_RECORDS_ENABLED:true}
+      max-apps: 20
+      max-entities-per-app: 10
+      max-fields-per-entity: 40
     intent-confidence-threshold: ${CHAT_INTENT_CONFIDENCE_THRESHOLD:0.75}
     intent-classify-all-turns: ${CHAT_INTENT_CLASSIFY_ALL_TURNS:false}
   security:

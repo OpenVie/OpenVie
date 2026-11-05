@@ -26,8 +26,9 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 /**
  * Field-level payload validation for BizApp records, driven by the manifest's
  * {@code entity.fields} schema: strict allow-list (unknown keys rejected),
@@ -114,11 +115,119 @@ public class BizAppPayloadValidator {
     }
 
     private Object dateValue(Entity entity, Field field, Object value) {
+        if (value == null) return null;
+        String str = String.valueOf(value).trim();
+        LocalDate resolved = resolveNaturalDate(str);
+        if (resolved != null) {
+            return resolved.toString();
+        }
         try {
-            return LocalDate.parse(String.valueOf(value)).toString();
+            return LocalDate.parse(str).toString();
         } catch (DateTimeParseException exception) {
             throw new BadRequestException(entityMessage(entity, field, "must be an ISO date (yyyy-MM-dd)"));
         }
+    }
+
+    public static LocalDate resolveNaturalDate(String str) {
+        if (str == null || str.isBlank()) return null;
+        String lower = str.trim().toLowerCase(Locale.ROOT);
+        String norm = removeDiacritics(lower);
+        LocalDate today = LocalDate.now();
+
+        if (norm.contains("hom nay") || norm.contains("ngay nay") || norm.contains("chieu nay")
+                || norm.contains("sang nay") || norm.contains("toi nay") || norm.contains("today")) {
+            return today;
+        }
+        if (norm.contains("ngay mai") || norm.contains("mai") || norm.contains("tomorrow")) {
+            return today.plusDays(1);
+        }
+        if (norm.contains("ngay kia") || norm.contains("kia") || norm.contains("mot")) {
+            return today.plusDays(2);
+        }
+        if (norm.contains("hom qua") || norm.contains("yesterday")) {
+            return today.minusDays(1);
+        }
+
+        int currentDow = today.getDayOfWeek().getValue(); // Monday=1, ..., Sunday=7
+        LocalDate mondayThisWeek = today.minusDays(currentDow - 1);
+
+        if (norm.contains("cuoi tuan sau") || norm.contains("next weekend")) {
+            return mondayThisWeek.plusDays(12); // Saturday next week
+        }
+        if (norm.contains("cuoi tuan nay") || norm.contains("cuoi tuan") || norm.contains("this weekend") || norm.contains("weekend")) {
+            return mondayThisWeek.plusDays(5); // Saturday this week
+        }
+
+        String[] dayKeys = {
+            "thu hai", "thu bay", "thu sau", "thu nam", "thu ba", "thu tu",
+            "chu nhat", "wednesday", "thursday", "saturday", "tuesday", "monday", "friday", "sunday",
+            "thu 2", "thu 3", "thu 4", "thu 5", "thu 6", "thu 7",
+            "\\bmon\\b", "\\btue\\b", "\\bwed\\b", "\\bthu\\b", "\\bfri\\b", "\\bsat\\b", "\\bsun\\b", "\\bcn\\b"
+        };
+        int[] dayVals = {
+            1, 6, 5, 4, 2, 3,
+            7, 3, 4, 6, 2, 1, 5, 7,
+            1, 2, 3, 4, 5, 6,
+            1, 2, 3, 4, 5, 6, 7, 7
+        };
+
+        Integer targetDay = null;
+        for (int i = 0; i < dayKeys.length; i++) {
+            String k = dayKeys[i];
+            if (k.startsWith("\\b")) {
+                if (Pattern.compile(k).matcher(norm).find()) {
+                    targetDay = dayVals[i];
+                    break;
+                }
+            } else if (norm.contains(k)) {
+                targetDay = dayVals[i];
+                break;
+            }
+        }
+
+        if (targetDay != null) {
+            boolean isNextWeek = norm.contains("tuan sau") || norm.contains("tuan toi") || norm.contains("next");
+            boolean isThisWeek = norm.contains("tuan nay") || norm.contains("this");
+
+            if (isNextWeek) {
+                LocalDate mondayNextWeek = mondayThisWeek.plusDays(7);
+                return mondayNextWeek.plusDays(targetDay - 1);
+            } else if (isThisWeek) {
+                return mondayThisWeek.plusDays(targetDay - 1);
+            } else {
+                if (targetDay > currentDow) {
+                    return mondayThisWeek.plusDays(targetDay - 1);
+                } else {
+                    LocalDate mondayNextWeek = mondayThisWeek.plusDays(7);
+                    return mondayNextWeek.plusDays(targetDay - 1);
+                }
+            }
+        }
+
+        Matcher m = Pattern.compile("(\\d{1,2})[/-](\\d{1,2})(?:[/-](\\d{2,4}))?").matcher(str.trim());
+        if (m.find()) {
+            try {
+                int day = Integer.parseInt(m.group(1));
+                int month = Integer.parseInt(m.group(2));
+                int year = m.group(3) != null
+                        ? (m.group(3).length() == 2 ? 2000 + Integer.parseInt(m.group(3)) : Integer.parseInt(m.group(3)))
+                        : today.getYear();
+                return LocalDate.of(year, month, day);
+            } catch (Exception ignored) {}
+        }
+
+        try {
+            return LocalDate.parse(str.trim());
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private static String removeDiacritics(String text) {
+        if (text == null) return "";
+        String nfd = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD);
+        String withoutMarks = nfd.replaceAll("\\p{M}", "");
+        return withoutMarks.replace('đ', 'd').replace('Đ', 'D');
     }
 
     private Object enumValue(Entity entity, Field field, Object value) {

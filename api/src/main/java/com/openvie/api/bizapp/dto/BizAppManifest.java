@@ -40,6 +40,16 @@ public final class BizAppManifest {
     public record Localized(String vi, String en) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public record OptionDetail(
+            String label,
+            List<String> aliases
+    ) {
+        public OptionDetail {
+            aliases = aliases == null ? List.of() : List.copyOf(aliases);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Field(
             String name,
             String type,
@@ -49,9 +59,13 @@ public final class BizAppManifest {
             String format,
             List<String> options,
             Boolean pii,
-            Localized label) {
+            Localized label,
+            Map<String, OptionDetail> optionLabels) {
         public Field(String name, String type, Boolean required, Integer maxLen, String format, List<String> options) {
-            this(name, type, null, required, maxLen, format, options, null, null);
+            this(name, type, null, required, maxLen, format, options, null, null, Map.of());
+        }
+        public Field(String name, String type, String entity, Boolean required, Integer maxLen, String format, List<String> options, Boolean pii, Localized label) {
+            this(name, type, entity, required, maxLen, format, options, pii, label, Map.of());
         }
     }
 
@@ -84,6 +98,16 @@ public final class BizAppManifest {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Conversational(
+            List<String> triggers,
+            String description
+    ) {
+        public Conversational {
+            triggers = triggers == null ? List.of() : List.copyOf(triggers);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Manifest(
             String schema,
             String kind,
@@ -94,10 +118,15 @@ public final class BizAppManifest {
             Map<String, List<String>> rbac,
             List<Entity> entities,
             List<Block> blocks,
-            Ui ui) {
+            Ui ui,
+            Conversational conversational) {
         public Manifest(String schema, String kind, Localized name, Integer version, String icon,
                 Map<String, List<String>> rbac, List<Entity> entities, List<Block> blocks, Ui ui) {
-            this(schema, kind, name, version, icon, null, rbac, entities, blocks, ui);
+            this(schema, kind, name, version, icon, null, rbac, entities, blocks, ui, null);
+        }
+        public Manifest(String schema, String kind, Localized name, Integer version, String icon, String storage,
+                Map<String, List<String>> rbac, List<Entity> entities, List<Block> blocks, Ui ui) {
+            this(schema, kind, name, version, icon, storage, rbac, entities, blocks, ui, null);
         }
         public String entityField(String entityName, String fieldName) {
             if (entities == null) {

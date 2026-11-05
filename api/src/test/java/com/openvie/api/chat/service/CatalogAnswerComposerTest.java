@@ -80,6 +80,31 @@ class CatalogAnswerComposerTest {
     }
 
     @Test
+    void composeAppDetailFormatsFieldsForEntity() {
+        InstalledAppSummary crm = new InstalledAppSummary(
+                UUID.randomUUID(), "crm", "CRM Lite", 1, "Quản lý khách hàng",
+                List.of("leads"), List.of("registry:leads", "form:leads"), "ACTIVE",
+                List.of(new BizAppRuntimeApi.EntityDetail(
+                        "leads", "Khách hàng tiềm năng",
+                        List.of(
+                                new BizAppRuntimeApi.FieldDetail("name", "string", true, "Tên khách hàng"),
+                                new BizAppRuntimeApi.FieldDetail("stage", "enum", false, "Giai đoạn")
+                        )
+                ))
+        );
+        when(runtimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(crm));
+
+        String detail = composer.composeAppDetail(tenantId, "crm", "vi-VN");
+        assertTrue(detail.contains("CRM Lite"));
+        assertTrue(detail.contains("leads"));
+        assertTrue(detail.contains("Khách hàng tiềm năng"));
+        assertTrue(detail.contains("name"));
+        assertTrue(detail.contains("Bắt buộc"));
+        assertTrue(detail.contains("stage"));
+        assertTrue(detail.contains("Giai đoạn"));
+    }
+
+    @Test
     void composeAppDetailFallsBackToMarketplaceCatalog() {
         when(runtimeApi.listInstalledSummary(tenantId)).thenReturn(List.of());
         MarketplaceTemplateSummary template = new MarketplaceTemplateSummary(

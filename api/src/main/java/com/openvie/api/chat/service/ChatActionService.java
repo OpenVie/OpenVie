@@ -20,6 +20,7 @@ import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstallOutcome;
 import com.openvie.api.chat.dto.ChatDtos.AssistantMessageResponse;
 import com.openvie.api.chat.model.ChatMessage;
+import com.openvie.api.chat.query.BizAppIntentRouter;
 import com.openvie.api.chat.model.ChatSession;
 import com.openvie.api.chat.repository.ChatMessageRepository;
 import com.openvie.api.chat.repository.ChatSessionRepository;
@@ -58,13 +59,29 @@ public class ChatActionService {
     @Autowired(required = false)
     private MeterRegistry meterRegistry;
 
+    public static final Set<String> SUPPORTED_ACTION_KINDS = Set.of(
+            "bizapp.install",
+            "bizapp.uninstall",
+            "bizapp.record.create",
+            "bizapp.record.update",
+            "bizapp.record.archive",
+            "bizapp.record.submit"
+    );
+
     @Value("${app.chat.bizapp-actions.enabled:false}")
     private boolean actionsEnabled = false;
+
+    @Value("${app.chat.bizapp-records.enabled:false}")
+    private boolean recordActionsEnabled = false;
 
     private final ConcurrentHashMap<String, Object> actionLocks = new ConcurrentHashMap<>();
 
     public void setActionsEnabled(boolean actionsEnabled) {
         this.actionsEnabled = actionsEnabled;
+    }
+
+    public void setRecordActionsEnabled(boolean recordActionsEnabled) {
+        this.recordActionsEnabled = recordActionsEnabled;
     }
 
     @Transactional
@@ -76,15 +93,36 @@ public class ChatActionService {
             UUID messageId,
             UUID actionId
     ) {
+        return executeAction(tenantId, orgId, actorId, callerRole, messageId != null ? messageId.toString() : null, actionId);
+    }
+
+    @Transactional
+    public AssistantMessageResponse executeAction(
+            UUID tenantId,
+            UUID orgId,
+            UUID actorId,
+            String callerRole,
+            String messageId,
+            UUID actionId
+    ) {
         if (!actionsEnabled) {
             throw new ResourceNotFoundException("BizApp actions are disabled on this installation");
         }
 
         Object lock = actionLocks.computeIfAbsent(actionId.toString(), k -> new Object());
         synchronized (lock) {
-            ChatMessage message = messageRepository.findById(messageId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
-
+            ChatMessage message = null;
+            if (messageId != null && !messageId.isBlank()) {
+                try {
+                    UUID parsedId = UUID.fromString(messageId.trim());
+                    message = messageRepository.findById(parsedId).orElse(null);
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (message == null) {
+                message = messageRepository.findByTenantIdAndActionId(tenantId, actionId.toString())
+                        .orElseThrow(() -> new ResourceNotFoundException("Message or action not found: " + actionId));
+            }
             if (!tenantId.equals(message.getTenantId())) {
                 throw new ResourceNotFoundException("Message not found in active workspace");
             }
@@ -145,57 +183,115 @@ public class ChatActionService {
             int version = action.get("version") instanceof Number n ? n.intValue() : 1;
             String description = String.valueOf(action.getOrDefault("description", ""));
 
-            Map<?, ?> payload = action.get("payload") instanceof Map<?, ?> p ? p : Map.of();
-            String templateRef = payload.get("templateRef") != null ? String.valueOf(payload.get("templateRef")) : null;
-
-            if (!"bizapp.install".equalsIgnoreCase(kind) && !"bizapp.uninstall".equalsIgnoreCase(kind)) {
+            if (!SUPPORTED_ACTION_KINDS.contains(kind.toLowerCase(Locale.ROOT))) {
                 throw new ConflictException("Unsupported executable action kind: " + kind);
             }
 
-            List<InstalledAppSummary> installed = bizAppRuntimeApi.listInstalledSummary(tenantId);
-
-            if ("bizapp.install".equalsIgnoreCase(kind)) {
-                boolean alreadyInstalled = installed.stream().anyMatch(i -> i.kind().equalsIgnoreCase(appKind));
-                if (alreadyInstalled) {
-                    throw new ConflictException("App " + appKind + " is already installed in this workspace");
-                }
-            } else {
-                boolean isInstalled = installed.stream().anyMatch(i -> i.kind().equalsIgnoreCase(appKind));
-                if (!isInstalled) {
-                    throw new ResourceNotFoundException("App " + appKind + " is not installed in this workspace");
-                }
+            if (kind.startsWith("bizapp.record.") && !recordActionsEnabled) {
+                throw new ResourceNotFoundException("BizApp record actions are disabled on this installation");
             }
 
-            AppActionOffer offer = new AppActionOffer(
-                    actionId, kind, appKind, appName, version, description, "ORG_OWNER", templateRef);
-
-            InstallOutcome outcome;
-            try {
-                outcome = bizAppRuntimeApi.executeOffer(tenantId, orgId, actorId, offer);
-            } catch (Exception ex) {
-                log.warn("Action execution failed: {}", ex.getMessage());
-                action.put("status", "FAILED");
-                action.put("executedBy", actorId.toString());
-                action.put("executedAt", Instant.now().toString());
-                action.put("result", Map.of("error", ex.getMessage()));
-                message.setAction(action);
-                messageRepository.save(message);
-
-                if (meterRegistry != null) {
-                    meterRegistry.counter("chat_action_execute_total", "action", kind, "outcome", "failed").increment();
-                }
-                throw ex;
-            }
-
-            if (!outcome.success()) {
-                throw new IllegalStateException("Offer execution failed: " + outcome.message());
-            }
-
+            String outcomeMessage;
             Map<String, Object> resultMap = new LinkedHashMap<>();
-            if (outcome.installationId() != null) {
-                resultMap.put("installationId", outcome.installationId().toString());
+
+            if ("bizapp.install".equalsIgnoreCase(kind) || "bizapp.uninstall".equalsIgnoreCase(kind)) {
+                Map<?, ?> payload = action.get("payload") instanceof Map<?, ?> p ? p : Map.of();
+                String templateRef = payload.get("templateRef") != null ? String.valueOf(payload.get("templateRef")) : null;
+                if (templateRef == null || templateRef.isBlank()) {
+                    templateRef = "platform:" + appKind;
+                }
+
+                List<InstalledAppSummary> installed = bizAppRuntimeApi.listInstalledSummary(tenantId);
+                if ("bizapp.install".equalsIgnoreCase(kind)) {
+                    boolean alreadyInstalled = installed.stream().anyMatch(i -> i.kind().equalsIgnoreCase(appKind));
+                    if (alreadyInstalled) {
+                        throw new ConflictException("App " + appKind + " is already installed in this workspace");
+                    }
+                } else {
+                    boolean isInstalled = installed.stream().anyMatch(i -> i.kind().equalsIgnoreCase(appKind));
+                    if (!isInstalled) {
+                        throw new ResourceNotFoundException("App " + appKind + " is not installed in this workspace");
+                    }
+                }
+
+                AppActionOffer offer = new AppActionOffer(
+                        actionId, kind, appKind, appName, version, description, "ORG_OWNER", templateRef);
+
+                InstallOutcome outcome;
+                try {
+                    outcome = bizAppRuntimeApi.executeOffer(tenantId, orgId, actorId, offer);
+                } catch (Exception ex) {
+                    log.warn("Action execution failed: {}", ex.getMessage());
+                    action.put("status", "FAILED");
+                    action.put("executedBy", actorId.toString());
+                    action.put("executedAt", Instant.now().toString());
+                    action.put("result", Map.of("error", ex.getMessage()));
+                    message.setAction(action);
+                    messageRepository.save(message);
+
+                    if (meterRegistry != null) {
+                        meterRegistry.counter("chat_action_execute_total", "action", kind, "outcome", "failed").increment();
+                    }
+                    throw ex;
+                }
+
+                if (!outcome.success()) {
+                    throw new IllegalStateException("Offer execution failed: " + outcome.message());
+                }
+
+                if (outcome.installationId() != null) {
+                    resultMap.put("installationId", outcome.installationId().toString());
+                }
+                outcomeMessage = outcome.message();
+                resultMap.put("message", outcomeMessage);
+            } else {
+                // Record actions: create, update, archive, submit
+                String expectedHash = String.valueOf(action.get("payloadHash"));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> fields = action.get("fields") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+                String actualHash = BizAppIntentRouter.computePayloadHash(fields);
+                if (expectedHash != null && !expectedHash.equals("null") && !expectedHash.equals(actualHash)) {
+                    throw new ConflictException("Payload hash mismatch; action card has been tampered with");
+                }
+
+                UUID recordId = null;
+                if (action.get("recordId") != null && !String.valueOf(action.get("recordId")).isBlank()) {
+                    try {
+                        recordId = UUID.fromString(String.valueOf(action.get("recordId")));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+
+                BizAppRuntimeApi.RecordCommand command = new BizAppRuntimeApi.RecordCommand(
+                        kind, appKind, String.valueOf(action.get("entity")), recordId, fields, expectedHash);
+
+                BizAppRuntimeApi.RecordCommandOutcome outcome;
+                try {
+                    outcome = bizAppRuntimeApi.executeRecordCommand(tenantId, orgId, actorId, callerRole, command);
+                } catch (Exception ex) {
+                    log.warn("Record action execution failed: {}", ex.getMessage());
+                    action.put("status", "FAILED");
+                    action.put("executedBy", actorId.toString());
+                    action.put("executedAt", Instant.now().toString());
+                    action.put("result", Map.of("error", ex.getMessage()));
+                    message.setAction(action);
+                    messageRepository.save(message);
+
+                    if (meterRegistry != null) {
+                        meterRegistry.counter("chat_action_execute_total", "action", kind, "outcome", "failed").increment();
+                    }
+                    throw ex;
+                }
+
+                if (!outcome.success()) {
+                    throw new IllegalStateException("Record command failed: " + outcome.message());
+                }
+
+                if (outcome.recordId() != null) {
+                    resultMap.put("recordId", outcome.recordId().toString());
+                }
+                outcomeMessage = outcome.message();
+                resultMap.put("message", outcomeMessage);
             }
-            resultMap.put("message", outcome.message());
 
             action.put("status", "EXECUTED");
             action.put("executedBy", actorId.toString());
@@ -214,7 +310,7 @@ public class ChatActionService {
             confirmation.setSessionId(session.getId());
             confirmation.setTenantId(tenantId);
             confirmation.setRole("assistant");
-            confirmation.setContent(outcome.message());
+            confirmation.setContent(outcomeMessage);
             confirmation.setCitations(List.of());
             confirmation.setAction(action);
             confirmation.setSequenceNumber(nextSeq);

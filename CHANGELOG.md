@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Conversational BizApp Platform & Smart Assistant Integration**:
   - **Three-Tier Architecture**: Clean architectural isolation separating Tier A (deterministic catalog inspection), Tier B (structured LLM intent classification), and Tier C (unmodified document RAG).
+  - **Generic BizApp Data Interaction (W7)**:
+    - **Schema-Driven Data Operations**: LLM can now inspect, create, update, archive, and submit records for *any* application in the workspace (bundled or org-custom) driven entirely by the `bizapp.v1` manifest.
+    - **Dynamic Schema Digest & PII Shield (W7.1)**: `BizAppSchemaDigest` exposes strictly allow-listed manifest fields to the LLM context while automatically stripping `pii: true` fields (Invariant I-14).
+    - **Server-Authoritative Record Actions (W7.4, W7.5)**: Interactive Action Cards (`bizapp.record.create`, `bizapp.record.update`, `bizapp.record.archive`, `bizapp.record.submit`) with SHA-256 `payloadHash` tamper protection, dry-run validation (`INVALID` status badge on missing required fields), and manifest RBAC enforcement.
+    - **Entity-Scoped App Data Retrieval (W7.6)**: Projector tags record documents with `source_ref = "bizapp:<kind>:<entity>"`, allowing query scope narrowing to specific entities with safe fallback to app-level scope.
+    - **Zero-Latency RAG Neutrality & CI Gates G-11 to G-14**: Full elimination of hardcoded platform app kind literals across the chat module (G-11), closed dispatcher verification (G-12), architectural layer isolation (G-13), and procedure question protection ensuring 100% invariance for regular document RAG.
   - **Interactive Action Cards (W2.1, W5.1)**: Support for interactive `bizapp.install`, `bizapp.uninstall`, `bizapp.catalog`, `bizapp.suggest`, and `bizapp.draft` cards delivered through `chat_messages.action` and `AssistantMessageResponse.action`.
   - **Server-Authoritative Action Execution (W2.2)**: `POST /api/v1/chat/actions/execute` endpoint guarded by `ORG_OWNER` authority; execution parameters read from DB by `messageId` and `actionId` to prevent prompt injection; replay-safe idempotency.
   - **Drafting BizApps from Chat History (W3)**: `POST /api/v1/bizapps/drafts/from-chat` generates valid `bizapp.v1` manifest drafts from conversation context via `CompleteJson` without auto-installation.

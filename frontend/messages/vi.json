@@ -655,7 +655,18 @@
       "executed": "Đã thực thi thành công",
       "failed": "Thực thi thất bại",
       "denied": "Từ chối quyền (Yêu cầu Chủ tổ chức)",
-      "onlyOwnerCanExecute": "Chỉ chủ tổ chức mới có quyền cài đặt hoặc gỡ ứng dụng."
+      "onlyOwnerCanExecute": "Chỉ chủ tổ chức mới có quyền cài đặt hoặc gỡ ứng dụng.",
+      "recordCreateTitle": "Tạo bản ghi mới",
+      "recordCreateConfirm": "Xác nhận tạo",
+      "recordUpdateTitle": "Cập nhật bản ghi",
+      "recordUpdateConfirm": "Xác nhận cập nhật",
+      "recordArchiveTitle": "Lưu trữ / Xoá bản ghi",
+      "recordArchiveConfirm": "Xác nhận xoá / lưu trữ",
+      "recordArchiveWarning": "Lưu trữ sẽ ẩn bản ghi này khỏi danh sách đang hoạt động.",
+      "recordSubmitTitle": "Gửi phê duyệt",
+      "recordSubmitConfirm": "Gửi duyệt",
+      "invalidTitle": "Thiếu thông tin bắt buộc",
+      "invalid": "Không hợp lệ"
     },
     "fallback": {
       "loadWorkspace": "Không thể tải không gian làm việc",

@@ -121,4 +121,25 @@ public class DocumentApiImpl implements DocumentApi {
                 .map(Document::getId)
                 .toList();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind, String entity) {
+        if (entity == null || entity.isBlank()) {
+            return listProjectedDocumentIds(tenantId, appKind);
+        }
+        String ref = "bizapp:" + appKind + ":" + entity;
+        List<UUID> ids = repository.findByTenantIdAndSourceRef(tenantId, ref).stream()
+                .map(Document::getId)
+                .toList();
+        if (!ids.isEmpty()) {
+            return ids;
+        }
+        // Fallback for legacy documents projected before sourceRef entity suffix
+        String prefix = "bizapp__" + appKind + "__" + entity + "__";
+        return repository.findByTenantIdAndSourceRef(tenantId, "bizapp:" + appKind).stream()
+                .filter(d -> d.getFileName() != null && d.getFileName().startsWith(prefix))
+                .map(Document::getId)
+                .toList();
+    }
 }

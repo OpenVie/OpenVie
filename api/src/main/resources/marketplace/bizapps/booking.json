@@ -18,7 +18,7 @@
     },
     "version": 1,
     "icon": "calendar",
-    "storage": "typed",
+    "storage": "jsonb",
     "rbac": {
       "read": [
         "ORG_OWNER",
@@ -29,6 +29,22 @@
         "WORKSPACE_ADMIN",
         "MEMBER"
       ]
+    },
+    "conversational": {
+      "triggers": [
+        "lập lịch",
+        "đặt lịch",
+        "hẹn lịch",
+        "lên lịch",
+        "tạo lịch",
+        "cuộc hẹn",
+        "lịch hẹn",
+        "hẹn gặp",
+        "book lịch",
+        "schedule",
+        "booking"
+      ],
+      "description": "Ứng dụng đặt lịch hẹn, lên lịch gặp gỡ khách hàng"
     },
     "entities": [
       {
@@ -53,22 +69,48 @@
             "type": "string",
             "format": "email",
             "required": true,
-            "maxLen": 200
+            "maxLen": 200,
+            "label": {
+              "vi": "Email khách",
+              "en": "Customer email"
+            }
           },
           {
             "name": "service",
             "type": "enum",
             "required": true,
+            "label": {
+              "vi": "Dịch vụ",
+              "en": "Service"
+            },
             "options": [
               "consultation",
               "tour",
               "meeting-room"
-            ]
+            ],
+            "optionLabels": {
+              "consultation": {
+                "label": "Tư vấn",
+                "aliases": ["tư vấn", "hỏi ý kiến", "tư vấn viên"]
+              },
+              "tour": {
+                "label": "Tham quan",
+                "aliases": ["tham quan", "du lịch", "tour"]
+              },
+              "meeting-room": {
+                "label": "Phòng họp",
+                "aliases": ["phòng họp", "thuê phòng", "họp"]
+              }
+            }
           },
           {
             "name": "bookingDate",
             "type": "date",
-            "required": true
+            "required": true,
+            "label": {
+              "vi": "Thời gian hẹn",
+              "en": "Booking date/time"
+            }
           },
           {
             "name": "guests",

@@ -110,7 +110,8 @@ public class BizAppKnowledgeProjector {
                 }
 
                 String markdown = buildRecordMarkdown(entityDef, record, manifest);
-                documentApi.ingestText(tenantId, actorId, kbId, fileName, markdown, DocumentKind.BIZAPP_RECORD, "bizapp:" + record.getAppKind());
+                String sourceRef = "bizapp:" + record.getAppKind() + ":" + record.getEntity();
+                documentApi.ingestText(tenantId, actorId, kbId, fileName, markdown, DocumentKind.BIZAPP_RECORD, sourceRef);
                 updateRecordKnowledgeState(record, "PROJECTED");
                 log.info("Projected record {} ({}) to knowledge base {}", record.getId(), record.getEntity(), kbId);
 

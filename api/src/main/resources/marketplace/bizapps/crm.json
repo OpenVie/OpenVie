@@ -18,7 +18,7 @@
     },
     "version": 1,
     "icon": "briefcase",
-    "storage": "typed",
+    "storage": "jsonb",
     "rbac": {
       "read": [
         "ORG_OWNER",
@@ -29,6 +29,18 @@
         "WORKSPACE_ADMIN",
         "MEMBER"
       ]
+    },
+    "conversational": {
+      "triggers": [
+        "khách hàng",
+        "khách",
+        "lead",
+        "leads",
+        "hợp đồng",
+        "thương vụ",
+        "crm"
+      ],
+      "description": "Quản lý thông tin khách hàng tiềm năng và quy trình bán hàng"
     },
     "entities": [
       {
