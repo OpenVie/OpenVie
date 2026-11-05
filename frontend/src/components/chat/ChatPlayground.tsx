@@ -646,12 +646,22 @@ function Playground() {
       element.style.height = ""
       return
     }
-    element.style.height = "auto"
-    element.style.height = `${Math.min(element.scrollHeight, 256)}px`
+    const updateHeight = () => {
+      const savedScroll = element.scrollTop
+      element.style.height = "auto"
+      element.style.height = `${Math.min(element.scrollHeight, 256)}px`
+      if (element.scrollHeight > 256) {
+        element.scrollTop = savedScroll
+      }
+    }
+    updateHeight()
+    window.addEventListener("resize", updateHeight)
+    return () => window.removeEventListener("resize", updateHeight)
   }, [message, composerExpanded, sending])
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
+      if (event.nativeEvent.isComposing) return
       event.preventDefault()
       void submitMessage()
     }
@@ -861,31 +871,31 @@ function Playground() {
           {messages.length > 0 && sourceProcessList}
 
           <div className={cn(
-            "ov-chat-composer relative rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:p-2",
+            "ov-chat-composer relative rounded-2xl sm:rounded-3xl border border-border bg-card p-2 sm:p-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20",
             composerExpanded && "flex h-[min(65dvh,34rem)] flex-col",
-            messages.length === 0 && !composerExpanded && "ov-chat-composer-empty ov-up",
+            messages.length === 0 && !composerExpanded && "ov-up",
           )} style={messages.length === 0 && !composerExpanded ? { animationDelay: ".55s" } : undefined}>
             <textarea
               ref={composerTextareaRef}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              rows={messages.length === 0 ? 1 : 2}
-              wrap={messages.length === 0 ? "off" : "soft"}
+              rows={1}
+              wrap="soft"
               placeholder={
                 hasCompletedSource
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
               className={cn(
-                "ov-chat-composer-scroll block w-full resize-none bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:py-1.5 sm:text-sm",
+                "ov-chat-composer-scroll block w-full resize-none break-words bg-transparent px-2.5 py-1.5 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-sm",
                 composerExpanded
                   ? "min-h-0 flex-1 overflow-y-auto"
-                  : "max-h-64 min-h-16 overflow-y-auto sm:min-h-14",
+                  : "max-h-64 min-h-[40px] overflow-y-auto sm:min-h-[36px]",
               )}
               aria-label={t("message")}
             />
-            <div className="flex h-9 items-center justify-between gap-2">
+            <div className="flex h-9 items-center justify-between gap-2 pt-1">
               <div className="relative flex items-center gap-0.5">
                 <button
                   type="button"
