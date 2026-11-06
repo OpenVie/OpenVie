@@ -19,6 +19,7 @@ import com.openvie.api.ai.api.AiInferenceApi;
 import com.openvie.api.ai.api.AiInferenceApi.StructuredJsonRequest;
 import com.openvie.api.ai.api.AiInferenceApi.StructuredJsonResponse;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -45,7 +46,8 @@ class CompleteJsonLocaleTest {
     void setUp() {
         bizAppRuntimeApi = mock(BizAppRuntimeApi.class);
         aiInferenceApi = mock(AiInferenceApi.class);
-        router = new BizAppIntentRouter(bizAppRuntimeApi, aiInferenceApi, new ObjectMapper());
+        router = new BizAppIntentRouter(bizAppRuntimeApi, aiInferenceApi, new ObjectMapper(),
+                new BizAppSlotAgent(aiInferenceApi, new ObjectMapper()));
         router.setActionsEnabled(true);
 
         when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of());

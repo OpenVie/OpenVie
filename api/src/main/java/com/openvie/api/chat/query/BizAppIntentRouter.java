@@ -21,6 +21,8 @@ import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.AppActionOffer;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.MarketplaceTemplateSummary;
+import com.openvie.api.chat.model.ChatMessage;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +45,34 @@ import com.openvie.api.chat.model.ChatMessage;
 @Component
 @Slf4j(topic = "INTENT-ROUTER")
 public class BizAppIntentRouter {
+
+    /**
+     * Inline structured-output schema handed to the inference service. Mirrors
+     * contracts/bizapp/bizapp_intent.schema.json (extended with the record
+     * intents and slot fields the runtime contract supports).
+     */
+    private static final String INTENT_JSON_SCHEMA = """
+            {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "$id": "https://openvie.local/contracts/bizapp/bizapp_intent.schema.json",
+              "type": "object",
+              "required": ["intent", "confidence"],
+              "properties": {
+                "intent": {
+                  "type": "string",
+                  "enum": ["NONE", "LIST_APPS", "APP_DETAIL", "APP_DATA", "INSTALL", "UNINSTALL",
+                    "SUGGEST", "CREATE_APP", "APP_RECORD_CREATE", "APP_RECORD_UPDATE",
+                    "APP_RECORD_ARCHIVE", "APP_RECORD_SUBMIT"]
+                },
+                "appKind": { "type": "string" },
+                "entity": { "type": "string" },
+                "fields": { "type": "object" },
+                "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+                "reply": { "type": "string" },
+                "reason": { "type": "string" }
+              }
+            }
+            """;
 
     public enum Intent {
         NONE,
@@ -94,11 +124,21 @@ public class BizAppIntentRouter {
             "\\b(app|apps|ung dung|phan mem|ban ghi|record|records|lead|leads|item|items|du lieu|data|thuc the|entity|entities|truong|fields?|cai dat|install|go cai dat|uninstall|marketplace|catalog|danh muc)\\b",
             Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern MANAGEMENT_NEED = Pattern.compile(
+            "\\b(quan ly|theo doi|kiem soat|giam sat|quan tri|luu tru thong tin|manage|track|monitor)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
 
     private static final Pattern PROCEDURE_KEYWORDS = Pattern.compile(
             "\\b(quy trinh|huong dan|chinh sach|cach|cach nao|lam sao|lam the nao|nhu the nao|quy dinh|thu tuc|policy|guideline|procedure|how to)\\b",
             Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern HARD_POLICY_KEYWORDS = Pattern.compile(
+            "\\b(quy trinh|huong dan|chinh sach|quy dinh|thu tuc|policy|guideline|procedure)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
 
     private static final Pattern DETAIL_KEYWORDS = Pattern.compile(
             "\\b(truong|truong nao|fields?|thuoc tinh|thuc the|entities|entity|cau truc|chi tiet|detail|details|thong tin|gom nhung)\\b",
@@ -114,18 +154,50 @@ public class BizAppIntentRouter {
         if (normalized == null) return false;
         return FILLER_KEYWORDS.matcher(normalized).find();
     }
+
+    // App-lifecycle phrasings address THE APP as an object ("gỡ ứng dụng đặt
+    // lịch", "cài đặt app quản lý...", "uninstall the app") — not a record
+    // inside it. They are matched against the diacritics-stripped normalized
+    // form (see removeDiacritics), so the alternations stay plain ASCII.
+    private static final Pattern UNINSTALL_APP_REQUEST = Pattern.compile(
+            "\\b(?:go|xoa|uninstall|remove|delete|bo)\\s*(?:bo\\s+|the\\s+|a\\s+|an\\s+)?(?:[a-z]{1,4}\\s+){0,2}"
+                    + "(?:ung\\s+dung|ap\\s+dung|apps?|phan\\s+mem)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern INSTALL_APP_REQUEST = Pattern.compile(
+            "\\b(?:cai(?:\\s+dat)?|them(?=\\s)|tao(?=\\s)|lap(?=\\s)|install)\\s*"
+                    + "(?:moi\\s+|the\\s+|a\\s+|an\\s+)?(?:[a-z]{1,4}\\s+){0,2}"
+                    + "(?:ung\\s+dung|ap\\s+dung|apps?|phan\\s+mem)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /** True when the turn asks to REMOVE the app itself (vs. a record inside it). */
+    public static boolean isUninstallAppRequest(String normalized) {
+        if (normalized == null || normalized.isBlank()) return false;
+        return UNINSTALL_APP_REQUEST.matcher(normalized).find();
+    }
+
+    /** True when the turn asks to INSTALL/set up the app itself. */
+    public static boolean isInstallAppRequest(String normalized) {
+        if (normalized == null || normalized.isBlank()) return false;
+        return INSTALL_APP_REQUEST.matcher(normalized).find();
+    }
     private final BizAppRuntimeApi bizAppRuntimeApi;
     private final AiInferenceApi aiInferenceApi;
     private final ObjectMapper objectMapper;
+    private final BizAppSlotAgent slotAgent;
 
     public BizAppIntentRouter(
             @org.springframework.context.annotation.Lazy BizAppRuntimeApi bizAppRuntimeApi,
             AiInferenceApi aiInferenceApi,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            BizAppSlotAgent slotAgent
     ) {
         this.bizAppRuntimeApi = bizAppRuntimeApi;
         this.aiInferenceApi = aiInferenceApi;
         this.objectMapper = objectMapper;
+        this.slotAgent = slotAgent;
     }
     @Value("${app.chat.bizapp-actions.enabled:false}")
     private boolean actionsEnabled = false;
@@ -197,6 +269,8 @@ public class BizAppIntentRouter {
 
         // 1. Resolve app kind from content
         String directKind = resolveAppKind(content, knownKinds, aliasToKind);
+        // True when the kind came from THIS message (as opposed to conversation lookback)
+        boolean directFromContent = directKind != null;
 
         // 2. Multi-turn lookback window: if content alone doesn't have an app kind, check prior messages!
         boolean fromContext = false;
@@ -207,8 +281,10 @@ public class BizAppIntentRouter {
             }
         }
 
-        // Procedure/policy/guideline questions must always go to RAG
-        if (PROCEDURE_KEYWORDS.matcher(normalized).find()) {
+        // Procedure/policy/guideline questions must always go to RAG,
+        // unless it is an inquiry about managing/tracking a workflow domain.
+        if (PROCEDURE_KEYWORDS.matcher(normalized).find()
+                && (!MANAGEMENT_NEED.matcher(normalized).find() || HARD_POLICY_KEYWORDS.matcher(normalized).find())) {
             return RoutingResult.none();
         }
 
@@ -217,7 +293,6 @@ public class BizAppIntentRouter {
         if (!classifyAllTurns && !matchesDeterministicGate(content, aliasToKind.keySet()) && !inActiveContext) {
             return RoutingResult.none();
         }
-
         // Handle filler/pause turn when in active app context (e.g. "Chờ tôi tý tôi đi lấy thông tin đã")
         if (inActiveContext && isFillerTurn(normalized)) {
             String reply = (locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi"))
@@ -249,8 +324,27 @@ public class BizAppIntentRouter {
             );
         }
 
-        // Fast deterministic record create match or prompt to install
-        if (directKind != null && (WRITE_VERBS.matcher(normalized).find() || fromContext)) {
+        // Manifest triggers carry action semantics ("đặt lịch", "lên lịch", ...):
+        // a message that names an app through one of its triggers is an action
+        // request, unless it is phrased as an information question ("X là gì?",
+        // "ở đâu?", "khi nào?"...), which still flows through the LLM classifier.
+        boolean triggerInContent = directFromContent
+                && containsAppActionTrigger(normalized, directKind, aliasToKind)
+                && !isInformationalQuestion(normalized);
+
+        // Fast deterministic record create match or prompt to install, unless
+        // the turn is an app-lifecycle request: uninstall phrasing must reach
+        // the classifier (where the INSTALL/UNINSTALL arm and guardrails live),
+        // and install phrasing on an ALREADY-INSTALLED app must not be turned
+        // into a record prompt. The deterministic install prompt for a catalog
+        // app that is not installed yet is kept (zero LLM latency there).
+        final String lifecycleKind = directKind;
+        boolean targetInstalled = installed.stream().anyMatch(i -> i.kind().equalsIgnoreCase(lifecycleKind));
+        boolean appLifecycleTurn = isUninstallAppRequest(normalized)
+                || (isInstallAppRequest(normalized) && targetInstalled);
+        if (directKind != null
+                && (WRITE_VERBS.matcher(normalized).find() || fromContext || triggerInContent)
+                && !appLifecycleTurn) {
             final String targetAppKind = directKind;
             var instOpt = installed.stream().filter(i -> i.kind().equalsIgnoreCase(targetAppKind)).findFirst();
             if (instOpt.isPresent()) {
@@ -258,7 +352,7 @@ public class BizAppIntentRouter {
                 String accumulatedText = buildAccumulatedUserText(priorMessages, content);
                 EntityDetail targetEntity = resolveEntity(accumulatedText, app.entityDetails());
                 if (targetEntity != null) {
-                    Map<String, Object> fields = extractFieldsFromPrompt(accumulatedText, targetEntity);
+                    Map<String, Object> fields = resolveRecordFields(priorMessages, content, targetEntity, app.name(), locale);
 
                     // If user is asking generally without any fields, prompt for details instead of failing or going to RAG
                     if (fields.isEmpty()) {
@@ -362,14 +456,14 @@ public class BizAppIntentRouter {
             }
         }
 
-        String systemPrompt = buildSystemPrompt(installed, catalog, role, locale);
+        String systemPrompt = buildSystemPrompt(installed, catalog, role, locale, content, directKind, aliasToKind);
         String prompt = "User statement: " + content;
 
         try {
             var structuredResponse = aiInferenceApi.completeJson(new AiInferenceApi.StructuredJsonRequest(
                     prompt,
                     systemPrompt,
-                    "bizapp_intent.schema.json",
+                    INTENT_JSON_SCHEMA,
                     "vylinh",
                     0.1f,
                     512
@@ -433,14 +527,15 @@ public class BizAppIntentRouter {
                         "requiresRole", "MEMBER"
                 );
             } else if (intent == Intent.CREATE_APP) {
-                actionCard = Map.of(
-                        "type", "bizapp_action",
-                        "actionId", UUID.randomUUID().toString(),
-                        "kind", "bizapp.draft",
-                        "status", "PROPOSED",
-                        "requiresRole", "ORG_OWNER",
-                        "payload", sessionId != null ? Map.of("sessionId", sessionId.toString()) : Map.of()
-                );
+                Map<String, Object> card = new LinkedHashMap<>();
+                card.put("type", "bizapp_action");
+                card.put("actionId", UUID.randomUUID().toString());
+                card.put("kind", "bizapp.draft");
+                card.put("appName", rawKind != null && !rawKind.isBlank() ? rawKind : "Ứng dụng mới");
+                card.put("status", "PROPOSED");
+                card.put("requiresRole", "ORG_OWNER");
+                card.put("payload", sessionId != null ? Map.of("sessionId", sessionId.toString()) : Map.of());
+                actionCard = card;
             } else if (intent == Intent.APP_RECORD_CREATE || intent == Intent.APP_RECORD_UPDATE
                     || intent == Intent.APP_RECORD_ARCHIVE || intent == Intent.APP_RECORD_SUBMIT) {
                 if (!recordActionsEnabled) {
@@ -464,8 +559,13 @@ public class BizAppIntentRouter {
                             fields.put(e.getKey(), e.getValue().asText());
                         }
                     }
-                    if (fields.isEmpty() && intent == Intent.APP_RECORD_CREATE) {
-                        fields.putAll(extractFieldsFromPrompt(content, targetEntity));
+                    if (fields.isEmpty()) {
+                        fields = resolveRecordFields(priorMessages, content, targetEntity, app.name(), locale);
+                    } else {
+                        fields = slotAgent.normalize(fields, targetEntity);
+                        if (fields.isEmpty() && intent == Intent.APP_RECORD_CREATE) {
+                            fields = resolveRecordFields(priorMessages, content, targetEntity, app.name(), locale);
+                        }
                     }
 
                     List<Map<String, String>> invalidList = (intent == Intent.APP_RECORD_CREATE)
@@ -506,6 +606,32 @@ public class BizAppIntentRouter {
         }
     }
 
+    /**
+     * Slot value resolution for record actions: deterministic (regex) extraction
+     * first as a cheap in-JVM base, then LLM-assisted extraction when enabled.
+     * LLM values win on conflicts (the model sees the whole conversation);
+     * regex results backfill only the keys the LLM omitted. Both paths are
+     * strictly whitelisted against the manifest's field contract.
+     */
+    private Map<String, Object> resolveRecordFields(
+            List<ChatMessage> priorMessages,
+            String content,
+            EntityDetail targetEntity,
+            String appName,
+            String locale
+    ) {
+        String accumulatedText = buildAccumulatedUserText(priorMessages, content);
+        Map<String, Object> fields = new LinkedHashMap<>(extractFieldsFromPrompt(accumulatedText, targetEntity));
+        // General asks with zero deterministic signal ("đặt lịch cho tôi?") keep
+        // the zero-LLM prompt-for-details path; the agent only runs when there
+        // is at least one anchor key to complete.
+        if (slotAgent != null && slotAgent.llmEnabled() && !fields.isEmpty()) {
+            Map<String, Object> llmSlots = slotAgent.extractSlots(targetEntity, appName, locale, priorMessages, content);
+            llmSlots.forEach(fields::put);
+        }
+        return fields;
+    }
+
     public static boolean matchesDeterministicGate(String query) {
         return matchesDeterministicGate(query, List.of());
     }
@@ -519,7 +645,8 @@ public class BizAppIntentRouter {
         boolean hasWrite = WRITE_VERBS.matcher(normalized).find();
         boolean hasVocab = GENERIC_APP_VOCAB.matcher(normalized).find();
         boolean hasDetail = DETAIL_KEYWORDS.matcher(normalized).find();
-        if (hasAdmin || hasWrite || hasVocab || hasDetail) {
+        boolean hasManagement = MANAGEMENT_NEED.matcher(normalized).find();
+        if (hasAdmin || hasWrite || hasVocab || hasDetail || hasManagement) {
             return true;
         }
         if (dynamicAliases != null) {
@@ -545,7 +672,10 @@ public class BizAppIntentRouter {
             List<InstalledAppSummary> installed,
             List<MarketplaceTemplateSummary> catalog,
             String role,
-            String locale
+            String locale,
+            String content,
+            String directKind,
+            Map<String, String> aliasToKind
     ) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are OpenVie's Conversational BizApp intent classifier.\n");
@@ -556,7 +686,7 @@ public class BizAppIntentRouter {
         sb.append("- INSTALL: user wants to install an app from the catalog\n");
         sb.append("- UNINSTALL: user wants to uninstall/remove an installed app\n");
         sb.append("- SUGGEST: user asks for app suggestions/recommendations\n");
-        sb.append("- CREATE_APP: user wants to build or create a new app\n");
+        sb.append("- CREATE_APP: user wants to build or create a new app, OR asks how to manage/track/organize a domain or workflow that no installed or marketplace app covers (e.g. \"có cách nào quản lý thiết bị IT không?\", \"tôi muốn quản lý kho\", \"làm sao theo dõi tài sản?\"). In the reply, explain that no app is currently installed for this, propose relevant entities and key fields, and suggest generating the app.\n");
         sb.append("- APP_RECORD_CREATE: user wants to create/add/insert a new record/data into an app\n");
         sb.append("- APP_RECORD_UPDATE: user wants to update/edit an existing record in an app\n");
         sb.append("- APP_RECORD_ARCHIVE: user wants to delete/archive a record in an app\n");
@@ -568,7 +698,15 @@ public class BizAppIntentRouter {
         sb.append("Marketplace Catalog: ");
         sb.append(catalog.stream().map(MarketplaceTemplateSummary::kind).toList()).append("\n");
         sb.append("Caller Role: ").append(role != null ? role : "MEMBER").append("\n");
-        sb.append("Locale: ").append(locale != null ? locale : "vi").append("\n\n");
+        sb.append("Locale: ").append(locale != null ? locale : "vi").append("\n");
+
+        buildAppHint(sb, content, directKind, installed, catalog, aliasToKind);
+
+        sb.append("\nGuardrails:\n");
+        sb.append("- NEVER return INSTALL for an app already listed under Installed Apps, and NEVER return UNINSTALL for an app that is NOT in Installed Apps. For an installed app, use the matching app/record intent for its data operations.\n");
+        sb.append("- Polite capability requests mapping to an app's domain action (e.g. \"Bạn có thể đặt lịch/lên lịch/đặt xe... cho tôi không?\") ARE that app's record/data intent, not general conversation.\n");
+        sb.append("- Return NONE only for document questions, procedures/policies (\"cách\", \"quy trình\", \"làm sao\"...), or chit-chat unrelated to every known app.\n");
+        sb.append("- An app reachable only through its trigger phrase still counts as the app's kind when two kind names collide.\n\n");
         sb.append("Output JSON schema:\n");
         sb.append("{\"intent\":\"NONE|LIST_APPS|APP_DETAIL|APP_DATA|INSTALL|UNINSTALL|SUGGEST|CREATE_APP|APP_RECORD_CREATE|APP_RECORD_UPDATE|APP_RECORD_ARCHIVE|APP_RECORD_SUBMIT\",");
         sb.append("\"appKind\":\"kind or null\",");
@@ -578,12 +716,119 @@ public class BizAppIntentRouter {
         sb.append("\"reply\":\"conversational explanation for user in the given locale\",");
         sb.append("\"reason\":\"brief reason\"}\n\n");
         sb.append("Few-shot Examples:\n");
+        sb.append("- \"Gỡ ứng dụng đặt lịch giúp tôi.\" (Booking installed) -> {\"intent\":\"UNINSTALL\",\"appKind\":\"booking\",\"confidence\":0.95,\"reply\":\"Gỡ ứng dụng Booking\"}\n");
         sb.append("- \"Ứng dụng kho bao gồm những trường nào?\" -> {\"intent\":\"APP_DETAIL\",\"appKind\":\"inventory\",\"confidence\":0.98,\"reply\":\"Chi tiết các trường của ứng dụng\"}\n");
         sb.append("- \"Hiện tại đang có bao nhiêu ứng dụng đang được cài đặt?\" -> {\"intent\":\"LIST_APPS\",\"appKind\":null,\"confidence\":0.98,\"reply\":\"Danh sách ứng dụng\"}\n");
         sb.append("- \"Cài đặt ứng dụng quản lý tài sản\" -> {\"intent\":\"INSTALL\",\"appKind\":\"asset-mgmt\",\"confidence\":0.98,\"reply\":\"Cài đặt ứng dụng\"}\n");
         sb.append("- \"Thêm tài sản mới tên Máy in HP vào sổ tài sản\" -> {\"intent\":\"APP_RECORD_CREATE\",\"appKind\":\"asset-registry\",\"entity\":\"assets\",\"fields\":{\"name\":\"Máy in HP\"},\"confidence\":0.95,\"reply\":\"Chuẩn bị thêm tài sản\"}\n");
         sb.append("- \"Quy trình thêm khách hàng gồm mấy bước?\" -> {\"intent\":\"NONE\",\"appKind\":null,\"confidence\":0.98,\"reply\":\"\"}\n");
+        sb.append("- \"Bạn có thể đặt lịch cho tôi không?\" (scheduling app installed) -> {\"intent\":\"APP_RECORD_CREATE\",\"appKind\":\"booking\",\"confidence\":0.97,\"reply\":\"Chuẩn bị tạo lịch hẹn trong Booking\"}\n");
+        sb.append("- \"Bạn có thể lên lịch giúp tôi không?\" (no scheduling app installed yet) -> {\"intent\":\"INSTALL\",\"appKind\":\"booking\",\"confidence\":0.9,\"reply\":\"Cần cài đặt ứng dụng đặt lịch trước\"}\n");
+        sb.append("- \"Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?\" -> {\"intent\":\"CREATE_APP\",\"appKind\":\"it-equipment\",\"confidence\":0.95,\"reply\":\"Hiện tại chưa có ứng dụng quản lý thiết bị IT trong không gian làm việc. Tôi có thể tạo ứng dụng giúp bạn theo dõi: Mã máy, Tên thiết bị, Loại máy, Người đang giữ và Tình trạng. Bạn có muốn tôi tạo ứng dụng này không?\",\"reason\":\"User expresses management need for uninstalled domain\"}\n");
         return sb.toString();
+    }
+
+    /**
+     * Emits the deterministic trigger match as a ranked hint for the model.
+     * The alias resolution already proved the app intent at zero cost — sharing
+     * it prevents small models from re-deriving appKind from prose. The hint
+     * explicitly preserves information-question semantics so procedure/geometry
+     * questions are not converted into actions (the deterministic
+     * PROCEDURE_KEYWORDS gate also stops those turns upstream).
+     */
+    private void buildAppHint(
+            StringBuilder sb,
+            String content,
+            String directKind,
+            List<InstalledAppSummary> installed,
+            List<MarketplaceTemplateSummary> catalog,
+            Map<String, String> aliasToKind
+    ) {
+        if (directKind == null) {
+            return;
+        }
+        String lower = content == null ? null : content.trim().toLowerCase(Locale.ROOT);
+        String normalized = removeDiacritics(lower);
+        String matchedTrigger = matchedTriggerAlias(normalized, directKind, aliasToKind);
+        String appName = null;
+        String appDescription = null;
+        boolean installedApp = false;
+        for (InstalledAppSummary i : installed) {
+            if (i.kind().equalsIgnoreCase(directKind)) {
+                appName = i.name();
+                appDescription = i.description();
+                installedApp = true;
+                break;
+            }
+        }
+        if (!installedApp) {
+            for (MarketplaceTemplateSummary c : catalog) {
+                if (c.kind().equalsIgnoreCase(directKind)) {
+                    appName = c.name();
+                    appDescription = c.description();
+                    break;
+                }
+            }
+        }
+        sb.append("\nDeterministic trigger match (HIGH TRUST): the user message matches ")
+          .append(installedApp ? "installed app" : "catalog app").append(" '").append(directKind).append("'");
+        if (appName != null) {
+            sb.append(" (").append(appName).append(appDescription != null && !appDescription.isBlank() ? " — " + appDescription : "").append(")");
+        }
+        if (matchedTrigger != null) {
+            sb.append(" via manifest trigger \"").append(matchedTrigger).append("\"");
+        }
+        sb.append(".\nIf the statement is an action request about it, choose the corresponding record/data intent and set appKind='")
+          .append(directKind).append("'; if it is an information question or a procedure, choose NONE/APP_DATA instead.\n");
+    }
+
+    private String matchedTriggerAlias(String normalized, String directKind, Map<String, String> aliasToKind) {
+        if (normalized == null) return null;
+        String best = null;
+        for (Map.Entry<String, String> e : aliasToKind.entrySet()) {
+            String alias = e.getKey();
+            if (alias == null || alias.length() < 3 || !directKind.equalsIgnoreCase(e.getValue())) continue;
+            String aliasNorm = removeDiacritics(alias.toLowerCase(Locale.ROOT));
+            if (normalized.contains(aliasNorm) || normalized.contains(alias)) {
+                if (best == null || alias.length() > best.length()) {
+                    best = alias;
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * True when the content contains a manifest-declared conversational trigger
+     * of the resolved app kind (as opposed to matching the raw kind name).
+     * Optional cheap O(alias-map) scan used by the deterministic fast path.
+     */
+    public static boolean containsAppActionTrigger(
+            String normalizedContent, String kind, Map<String, String> aliasToKind
+    ) {
+        if (normalizedContent == null || kind == null || aliasToKind == null) return false;
+        for (Map.Entry<String, String> e : aliasToKind.entrySet()) {
+            String alias = e.getKey();
+            if (alias == null || alias.length() < 3 || !kind.equalsIgnoreCase(e.getValue())) continue;
+            String aliasNorm = removeDiacritics(alias.toLowerCase(Locale.ROOT));
+            if (normalizedContent.contains(aliasNorm) || normalizedContent.contains(alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Index/information questions ("X là gì?", "ở đâu?", "khi nào?" — true) keep
+     *  RAG/detail semantics instead of being converted into app actions.
+     *  Pattern matches the DIACRITICS-STRIPPED normalized form only. */
+    public static boolean isInformationalQuestion(String normalized) {
+        if (normalized == null || normalized.isBlank()) return false;
+        return Pattern.compile(
+                "(?i)\\b(la gi|la sao|nghia la gi|the nao|nhu the nao|lam sao|"
+                + "o dau|o cho nao|vi tri nao|khi nao|gio nao|ngay nao|vi sao|tai sao|"
+                + "bao nhieu|may buoc|what\\s+is|what's|what\\s+are|"
+                + "how\\s+(?:does|do|much|many)|when\\s+is|where\\s+is|explain|meaning)\\b"
+        ).matcher(normalized).find();
     }
 
     public static String resolveAppKind(String raw, Collection<String> knownKinds) {
@@ -752,10 +997,24 @@ public class BizAppIntentRouter {
         return invalid;
     }
 
+    /** Lowercase Vietnamese forms of address (and Latin titles) in front of a name. */
+    private static final Pattern HONORIFIC = Pattern.compile(
+            "^(?:(?:anh|chị|chi|em|ông|ong|bà|cô|chú|bác)|(?i:mr|mrs|ms|miss))\\.?\\s+(?=\\S)");
+
+    /**
+     * Drops a leading form of address ("anh Trấn Thành" -> "Trấn Thành"). Vietnamese
+     * forms are matched in lowercase only, so a capitalized given name such as
+     * "Anh Thư" is left intact; a bare "anh" with no name after it is left alone too.
+     */
+    public static String stripHonorific(String name) {
+        return name == null ? "" : HONORIFIC.matcher(name.trim()).replaceFirst("").trim();
+    }
+
     public static String cleanNameValue(String text) {
         if (text == null) return "";
         String cleaned = text.trim();
         cleaned = cleaned.replaceAll("(?i)^(?:kh[aá]ch\\s+(?:h[aà]ng\\s+)?(?:l[aà]|t[eê]n)?|t[eê]n\\s+(?:kh[aá]ch\\s+)?(?:l[aà])?|l[aà]|ng[uư][oờ]i)\\s+", "").trim();
+        cleaned = stripHonorific(cleaned);
         cleaned = cleaned.replaceAll("[?.,!;:~]+$", "").trim();
         String lower = cleaned.toLowerCase(Locale.ROOT);
         String norm = removeDiacritics(lower);

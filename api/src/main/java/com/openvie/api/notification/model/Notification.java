@@ -59,4 +59,13 @@ public class Notification extends BaseImmutableEntity {
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
 
+    @Column(name = "read_at")
+    private LocalDateTime readAt;
+
+    @Column(name = "link", length = 500)
+    private String link;
+
+    public boolean isRead() {
+        return readAt != null;
+    }
 }

@@ -36,7 +36,7 @@ public class BizAppProperties {
     public BizAppProperties(
             @Value("${app.bizapps.enabled:true}") boolean enabled,
             @Value("${app.bizapps.outbound.allow-http:false}") boolean outboundAllowHttp,
-            @Value("${app.bizapps.ai-drafting.enabled:false}") boolean aiDraftingEnabled,
+            @Value("${app.bizapps.ai-drafting.enabled:true}") boolean aiDraftingEnabled,
             @Value("${app.bizapps.remote-catalog.enabled:false}") boolean remoteCatalogEnabled,
             @Value("${app.bizapps.remote-catalog.hosts:}") String remoteCatalogHosts) {
         this.enabled = enabled;

@@ -46,7 +46,8 @@ public class BizAppManifestValidator {
 
     public static final Set<String> FIELD_TYPES = Set.of("string", "number", "boolean", "enum", "date", "ref");
 
-    private static final Set<String> APPROVABLE_ROLES = Set.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER");
+    /** Roles that may approve/author content in a workspace (validator authority). */
+    public static final Set<String> APPROVABLE_ROLES = Set.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER");
     private static final Set<String> RBAC_KEYS = Set.of("read", "write", "delete", "approve");
     private static final Set<String> HOOK_KEYS = Set.of("onCreate", "onUpdate", "onDecide");
     private static final Set<String> VIEW_PREFIXES = Set.of("registry:", "form:", "assistant:", "report:", "timeline:");

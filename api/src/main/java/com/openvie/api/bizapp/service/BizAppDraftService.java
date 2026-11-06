@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -55,6 +56,11 @@ public class BizAppDraftService {
     private final BizAppProperties properties;
     private final BizAppRuntime runtime;
     private final ObjectMapper objectMapper;
+
+    /** The only BizApp-tier approval process bundled with the platform. */
+    private static final String GENERIC_APPROVAL_BPMN = "processes/bizapp-single-approval.bpmn20.xml";
+
+    private static final String APPROVAL_WORKITEM_BLOCK = "approval_workitem";
 
     public ValidationResult validateStateless(Map<String, Object> rawManifest) {
         if (rawManifest == null) {
@@ -86,12 +92,19 @@ public class BizAppDraftService {
                 1. schema MUST be "bizapp.v1".
                 2. kind: lowercase letters and hyphens (e.g. "inventory", "leads").
                 3. name: localized object {"en": "...", "vi": "..."}.
-                4. entities: array of entities with name, label, fields.
+                4. entities: array of entities with name, label (localized object {"en": "...", "vi": "..."}), and fields.
                 5. Field types: "string", "number", "boolean", "enum", "date", "ref".
                 6. storage: "jsonb" (never "typed").
                 7. rbac: map of capabilities to role arrays (allowed: "ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER").
                 8. NO SQL anywhere in the manifest! Reports must use declarative views with groupBy, metrics, filters, orderBy.
                 9. Never include credentials or private keys in the manifest.
+                10. blocks: optional array of blocks to automate workflows:
+                    - approval_workitem: {"id": "approvalBlockId", "type": "approval_workitem", "params": {"bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml", "candidateRole": "WORKSPACE_ADMIN"|"ORG_OWNER"}}
+                    - notify: {"id": "notifyBlockId", "type": "notify", "params": {"to": ["creator"|"record.<emailField>"], "title": "...", "subject": "..."}}
+                11. hooks: inside an entity, link lifecycle events to declared block IDs:
+                    - "onCreate": ["blockId"] (runs when a record is created)
+                    - "onUpdate": ["blockId"] (runs when updated, e.g. requesting approval on stage changes)
+                    - "onDecide": ["blockId"] (runs after approval verdict, e.g. sending notification email)
                 """;
 
         String userPrompt = "Create an application manifest for: " + request.prompt();
@@ -111,7 +124,9 @@ public class BizAppDraftService {
                         2048
                 ));
                 currentOutput = aiResp.jsonOutput();
-                manifestMap = objectMapper.readValue(currentOutput, new TypeReference<Map<String, Object>>() {});
+                String json = extractJson(currentOutput);
+                Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                manifestMap = normalizeGeneratedManifest(parsed, "app-draft");
                 validation = validateStateless(manifestMap);
                 if (validation.ok()) {
                     break;
@@ -122,9 +137,13 @@ public class BizAppDraftService {
             }
         }
 
-        String title = "Draft: " + request.prompt().substring(0, Math.min(request.prompt().length(), 40));
-        if (manifestMap.containsKey("name") && manifestMap.get("name") instanceof Map<?, ?> mName && mName.get("en") != null) {
-            title = String.valueOf(mName.get("en"));
+        String title = "Bản thảo ứng dụng";
+        if (manifestMap.containsKey("name") && manifestMap.get("name") instanceof Map<?, ?> mName) {
+            if (mName.get("vi") != null && !String.valueOf(mName.get("vi")).isBlank()) {
+                title = String.valueOf(mName.get("vi"));
+            } else if (mName.get("en") != null) {
+                title = String.valueOf(mName.get("en"));
+            }
         }
 
         BizAppDraft draft = new BizAppDraft();
@@ -134,7 +153,12 @@ public class BizAppDraftService {
         draft.setTitle(title);
         draft.setManifest(manifestMap);
         draft.setValidation(Map.of("ok", validation.ok(), "errors", validation.errors()));
-        draft.setMeta(Map.of("generator", "ai", "model", "vylinh", "prompt", request.prompt()));
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("generator", "ai");
+        meta.put("model", "vylinh");
+        meta.put("prompt", request.prompt());
+        meta.put("title", title);
+        draft.setMeta(meta);
 
         BizAppDraft saved = draftRepository.save(draft);
         runtime.audit(tenantId, actorId, LogAction.BIZAPP_DRAFT_GENERATED, "bizapp_draft",
@@ -215,6 +239,202 @@ public class BizAppDraftService {
         draftRepository.delete(draft);
         runtime.audit(tenantId, actorId, LogAction.BIZAPP_DRAFT_DELETED, "bizapp_draft",
                 draftId, Map.of("title", draft.getTitle()));
+    }
+
+    private static String extractJson(String text) {
+        if (text == null || text.isBlank()) return "{}";
+        String s = text.trim();
+        if (s.contains("```json")) {
+            int start = s.indexOf("```json") + 7;
+            int end = s.lastIndexOf("```");
+            if (end > start) s = s.substring(start, end).trim();
+        } else if (s.contains("```")) {
+            int start = s.indexOf("```") + 3;
+            int end = s.lastIndexOf("```");
+            if (end > start) s = s.substring(start, end).trim();
+        }
+        int firstBrace = s.indexOf('{');
+        int lastBrace = s.lastIndexOf('}');
+        if (firstBrace != -1 && lastBrace > firstBrace) {
+            return s.substring(firstBrace, lastBrace + 1).trim();
+        }
+        return s;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> normalizeGeneratedManifest(Map<String, Object> raw, String fallbackKind) {
+        if (raw == null) return Map.of();
+        Map<String, Object> map = new LinkedHashMap<>(raw);
+        if (map.containsKey("manifest") && map.get("manifest") instanceof Map<?, ?> inner) {
+            map = new LinkedHashMap<>((Map<String, Object>) inner);
+        } else if (map.containsKey("app") && map.get("app") instanceof Map<?, ?> inner) {
+            map = new LinkedHashMap<>((Map<String, Object>) inner);
+        }
+
+        if (!map.containsKey("schema") || !"bizapp.v1".equals(map.get("schema"))) {
+            map.put("schema", "bizapp.v1");
+        }
+        if (!map.containsKey("storage")) {
+            map.put("storage", "jsonb");
+        }
+        if (!map.containsKey("version")) {
+            map.put("version", 1);
+        }
+        if (!map.containsKey("kind") || map.get("kind") == null || String.valueOf(map.get("kind")).isBlank()) {
+            map.put("kind", fallbackKind != null && !fallbackKind.isBlank() ? fallbackKind : "custom-app");
+        } else {
+            String k = String.valueOf(map.get("kind")).trim().toLowerCase(java.util.Locale.ROOT)
+                    .replaceAll("[^a-z0-9-]", "-").replaceAll("-+", "-").replaceAll("^-|-$", "");
+            if (k.length() < 2) k = "app-" + k;
+            map.put("kind", k);
+        }
+
+        // Ensure name is localized
+        Object nameObj = map.get("name");
+        if (nameObj instanceof String s) {
+            map.put("name", Map.of("vi", s, "en", s));
+        }
+
+        // Ensure entities have valid fields
+        List<Map<String, Object>> normEntities = new ArrayList<>();
+        Object entitiesObj = map.get("entities");
+        if (entitiesObj instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> em) {
+                    Map<String, Object> entityMap = new LinkedHashMap<>((Map<String, Object>) em);
+                    String eName = String.valueOf(entityMap.getOrDefault("name", "item")).trim().toLowerCase(java.util.Locale.ROOT)
+                            .replaceAll("[^a-z0-9_]", "_").replaceAll("_+", "_").replaceAll("^_|_$", "");
+                    if (eName.length() < 2) eName = "entity_" + eName;
+                    entityMap.put("name", eName);
+
+                    Object lObj = entityMap.get("label");
+                    if (lObj instanceof String s) {
+                        entityMap.put("label", Map.of("vi", s, "en", s));
+                    }
+
+                    // Normalize fields
+                    Object fieldsObj = entityMap.get("fields");
+                    if (fieldsObj instanceof List<?> fList) {
+                        List<Map<String, Object>> normFields = new ArrayList<>();
+                        for (Object fItem : fList) {
+                            if (fItem instanceof Map<?, ?> fm) {
+                                Map<String, Object> fieldMap = new LinkedHashMap<>((Map<String, Object>) fm);
+                                String fName = String.valueOf(fieldMap.getOrDefault("name", "field")).trim();
+                                fieldMap.put("name", fName);
+                                String fType = String.valueOf(fieldMap.getOrDefault("type", "string")).toLowerCase(java.util.Locale.ROOT);
+                                if (!Set.of("string", "number", "boolean", "enum", "date", "ref").contains(fType)) {
+                                    fType = "string";
+                                }
+                                fieldMap.put("type", fType);
+
+                                // If enum used "values" instead of "options"
+                                if ("enum".equals(fType) && !fieldMap.containsKey("options") && fieldMap.containsKey("values")) {
+                                    fieldMap.put("options", fieldMap.get("values"));
+                                }
+                                if ("enum".equals(fType) && (!fieldMap.containsKey("options") || !(fieldMap.get("options") instanceof List<?>) || ((List<?>) fieldMap.get("options")).isEmpty())) {
+                                    fieldMap.put("options", List.of("default"));
+                                }
+
+                                // If ref used "reference" instead of "entity"
+                                if ("ref".equals(fType) && !fieldMap.containsKey("entity") && fieldMap.containsKey("reference")) {
+                                    fieldMap.put("entity", fieldMap.get("reference"));
+                                }
+
+                                Object fLabel = fieldMap.get("label");
+                                if (fLabel instanceof String s) {
+                                    fieldMap.put("label", Map.of("vi", s, "en", s));
+                                }
+                                normFields.add(fieldMap);
+                            }
+                        }
+                        entityMap.put("fields", normFields);
+                    }
+                    normEntities.add(entityMap);
+                }
+            }
+        }
+        if (normEntities.isEmpty()) {
+            normEntities.add(Map.of(
+                    "name", "items",
+                    "label", Map.of("vi", "Dữ liệu", "en", "Items"),
+                    "fields", List.of(Map.of("name", "title", "type", "string", "required", true))
+            ));
+        }
+        map.put("entities", normEntities);
+
+        // Normalize RBAC: ensure valid capability keys
+        Object rbacObj = map.get("rbac");
+        boolean validRbac = false;
+        if (rbacObj instanceof Map<?, ?> rbacMap) {
+            validRbac = rbacMap.keySet().stream()
+                    .anyMatch(k -> Set.of("read", "write", "delete", "approve").contains(String.valueOf(k).toLowerCase(java.util.Locale.ROOT)));
+        }
+        if (!validRbac) {
+            map.put("rbac", Map.of(
+                    "read", List.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"),
+                    "write", List.of("ORG_OWNER", "WORKSPACE_ADMIN"),
+                    "delete", List.of("ORG_OWNER"),
+                    "approve", List.of("ORG_OWNER", "WORKSPACE_ADMIN")
+            ));
+        }
+
+        // Clamp workflow blocks onto the platform asset catalog. A manifest
+        // binds to platform assets that actually exist: approval blocks may
+        // only reference the bundled generic single-approval BPMN (its
+        // candidateRole/SLA params parameterize it at submit time). Small
+        // models invent bespoke process file paths that do not exist and
+        // would deadlock the app at install time; rewriting here is the
+        // deterministic backstop so the draft stays installable without a
+        // repair round-trip ("skip, not fail" like the other normalizers).
+        normalizeGeneratedBlocks(map);
+
+        // Normalize UI views: ensure default registry and form views exist
+        Object uiObj = map.get("ui");
+        boolean validUi = false;
+        if (uiObj instanceof Map<?, ?> uiMap && uiMap.get("views") instanceof List<?> vList && !vList.isEmpty()) {
+            validUi = true;
+        }
+        if (!validUi) {
+            List<String> views = new ArrayList<>();
+            for (Map<String, Object> em : normEntities) {
+                String eName = String.valueOf(em.get("name"));
+                views.add("registry:" + eName);
+                views.add("form:" + eName);
+            }
+            map.put("ui", Map.of("views", views));
+        }
+
+        return map;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void normalizeGeneratedBlocks(Map<String, Object> map) {
+        if (!(map.get("blocks") instanceof List<?> blocks)) {
+            return;
+        }
+        List<Map<String, Object>> normBlocks = new ArrayList<>();
+        for (Object blockItem : blocks) {
+            if (!(blockItem instanceof Map<?, ?> blockRaw)) {
+                continue;
+            }
+            Map<String, Object> blockMap = new LinkedHashMap<>((Map<String, Object>) blockRaw);
+            if (APPROVAL_WORKITEM_BLOCK.equals(String.valueOf(blockMap.get("type")))) {
+                Map<String, Object> params = blockMap.get("params") instanceof Map<?, ?> paramsRaw
+                        ? new LinkedHashMap<>((Map<String, Object>) paramsRaw)
+                        : new LinkedHashMap<>();
+                String bpmn = String.valueOf(params.get("bpmnTemplate"));
+                if (!GENERIC_APPROVAL_BPMN.equals(bpmn)) {
+                    params.put("bpmnTemplate", GENERIC_APPROVAL_BPMN);
+                }
+                String candidateRole = String.valueOf(params.get("candidateRole"));
+                if (!BizAppManifestValidator.APPROVABLE_ROLES.contains(candidateRole)) {
+                    params.put("candidateRole", "WORKSPACE_ADMIN");
+                }
+                blockMap.put("params", params);
+            }
+            normBlocks.add(blockMap);
+        }
+        map.put("blocks", normBlocks);
     }
 
     private DraftView toView(BizAppDraft d) {

@@ -43,6 +43,7 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
     private final BizAppDraftService draftService;
     private final BizAppRecordService recordService;
     private final BizAppManifestParser parser;
+    private final BizAppMaterializer materializer;
     private final DocumentApi documentApi;
     @Autowired(required = false)
     @org.springframework.context.annotation.Lazy
@@ -61,18 +62,23 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
             List<EntityDetail> entityDetails = extractEntityDetails(manifest);
             List<String> triggers = manifest.conversational() != null ? manifest.conversational().triggers() : List.of();
             if (triggers.isEmpty() || entityDetails.stream().allMatch(e -> e.fields().stream().allMatch(f -> f.optionAliases().isEmpty()))) {
-                try {
-                    Map<String, Object> raw = marketplaceService.templateManifest(null, "platform:" + inst.getKind());
-                    if (raw != null) {
-                        Manifest diskManifest = parser.parse(raw);
-                        if (triggers.isEmpty() && diskManifest.conversational() != null && diskManifest.conversational().triggers() != null) {
-                            triggers = diskManifest.conversational().triggers();
-                        }
-                        if (entityDetails.stream().allMatch(e -> e.fields().stream().allMatch(f -> f.optionAliases().isEmpty()))) {
-                            entityDetails = extractEntityDetails(diskManifest);
-                        }
+                // Best-effort enrichment from the bundled disk manifest. MUST NOT
+                // route through a @Transactional marketplace method: an absent
+                // bundled template is an expected outcome for org-built apps
+                // (created from chat drafts) and a transactional roll-mark here
+                // would poison the caller's ambient transaction (e.g. the chat
+                // prepareTurn transaction) — every turn would then commit-fail
+                // with "silently rolled back".
+                Map<String, Object> raw = materializer.loadBundledOrNull(inst.getKind());
+                if (raw != null) {
+                    Manifest diskManifest = parser.parse(raw);
+                    if (triggers.isEmpty() && diskManifest.conversational() != null && diskManifest.conversational().triggers() != null) {
+                        triggers = diskManifest.conversational().triggers();
                     }
-                } catch (Exception ignored) {}
+                    if (entityDetails.stream().allMatch(e -> e.fields().stream().allMatch(f -> f.optionAliases().isEmpty()))) {
+                        entityDetails = extractEntityDetails(diskManifest);
+                    }
+                }
             }
             return new InstalledAppSummary(inst.getId(), inst.getKind(), name, inst.getVersion(), desc, entities, views, inst.getStatus(), entityDetails, triggers);
         }).toList();
@@ -89,16 +95,19 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
             String templateRef = "platform:" + kind;
             List<EntityDetail> entityDetails = List.of();
             List<String> triggers = List.of();
-            try {
-                Map<String, Object> raw = marketplaceService.templateManifest(null, templateRef);
-                if (raw != null) {
-                    Manifest tmplManifest = parser.parse(raw);
-                    entityDetails = extractEntityDetails(tmplManifest);
-                    if (tmplManifest.conversational() != null) {
-                        triggers = tmplManifest.conversational().triggers();
-                    }
+            // Best-effort enrichment from the bundled disk manifest: absence or
+            // unreadability is an everyday expected outcome ("skip, not fail").
+            // Never call the @Transactional marketplace method from here — a
+            // throwing transactional participation would mark the caller's
+            // ambient transaction rollback-only even when this probe is caught.
+            Map<String, Object> raw = materializer.loadBundledOrNull(kind);
+            if (raw != null) {
+                Manifest tmplManifest = parser.parse(raw);
+                entityDetails = extractEntityDetails(tmplManifest);
+                if (tmplManifest.conversational() != null) {
+                    triggers = tmplManifest.conversational().triggers();
                 }
-            } catch (Exception ignored) {}
+            }
             List<String> entities = entityDetails.stream().map(EntityDetail::name).toList();
             return new MarketplaceTemplateSummary(kind, name, version, desc, entities, List.of(), templateRef, entityDetails, triggers);
         }).toList();

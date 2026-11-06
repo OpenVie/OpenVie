@@ -651,6 +651,7 @@
       "draftTitle": "Bản thảo ứng dụng",
       "openComposer": "Chỉnh sửa trên Visual Composer",
       "installToWorkspace": "Cài đặt vào Workspace",
+      "createAppConfirm": "Tạo ứng dụng",
       "executing": "Đang thực thi...",
       "executed": "Đã thực thi thành công",
       "failed": "Thực thi thất bại",
@@ -1212,5 +1213,12 @@
     "evidenceTimestamp": "Dẫn chứng tại mốc: {time}",
     "seekToEvidence": "Tua đến dẫn chứng",
     "sheetAria": "Chọn sheet"
+  },
+  "Notifications": {
+    "title": "Thông báo",
+    "empty": "Chưa có thông báo nào",
+    "markAllRead": "Đánh dấu tất cả đã đọc",
+    "reminderBadge": "Nhắc lịch",
+    "unreadCountAria": "{count} thông báo chưa đọc"
   }
 }

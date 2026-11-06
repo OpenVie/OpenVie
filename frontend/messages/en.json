@@ -651,6 +651,7 @@
       "draftTitle": "Application Draft",
       "openComposer": "Open in Visual Composer",
       "installToWorkspace": "Install into Workspace",
+      "createAppConfirm": "Create Application",
       "executing": "Executing...",
       "executed": "Executed successfully",
       "failed": "Execution failed",
@@ -1212,5 +1213,12 @@
     "evidenceTimestamp": "Evidence at timestamp: {time}",
     "seekToEvidence": "Seek to evidence",
     "sheetAria": "Choose sheet"
+  },
+  "Notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet",
+    "markAllRead": "Mark all as read",
+    "reminderBadge": "Reminder",
+    "unreadCountAria": "{count} unread notifications"
   }
 }

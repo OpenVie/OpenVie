@@ -49,6 +49,9 @@ import java.util.UUID;
 @Slf4j(topic = "BIZAPP")
 public class BizAppInstallService {
 
+    /** The bundled generic record-approval process parameterized by block params. */
+    private static final String GENERIC_APPROVAL_BPMN = "processes/bizapp-single-approval.bpmn20.xml";
+
     private final BizAppInstallationRepository installationRepository;
     private final BizAppManifestValidator validator;
     private final BizAppManifestParser parser;
@@ -153,13 +156,38 @@ public class BizAppInstallService {
     }
 
     private String readTemplate(String templatePath) {
+        String xml = tryRead(templatePath);
+        if (xml != null) {
+            return xml;
+        }
+        // Chat-drafted and locally authored manifests may reference a bespoke
+        // process file that does not ship with the platform. The bundled
+        // generic single-approval definition is parameterized by the block's
+        // own params (candidateRole, SLA timers), so it is a faithful
+        // drop-in: degrade to it ("skip, not fail") instead of refusing the
+        // whole install over a template path the generator could never
+        // create. Only a missing GENERIC template is fatal.
+        if (templatePath != null && !templatePath.isBlank() && !"null".equals(templatePath)) {
+            log.warn("BPMN template {} is not bundled; falling back to the generic single-approval process", templatePath);
+        }
+        xml = tryRead(GENERIC_APPROVAL_BPMN);
+        if (xml != null) {
+            return xml;
+        }
+        throw new ResourceNotFoundException("BPMN template not available: " + templatePath);
+    }
+
+    private String tryRead(String path) {
+        if (path == null || path.isBlank() || "null".equals(path)) {
+            return null;
+        }
         try {
-            ClassPathResource resource = new ClassPathResource(templatePath);
+            ClassPathResource resource = new ClassPathResource(path);
             try (InputStream stream = resource.getInputStream()) {
                 return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             }
-        } catch (Exception exception) {
-            throw new ResourceNotFoundException("BPMN template not available: " + templatePath);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

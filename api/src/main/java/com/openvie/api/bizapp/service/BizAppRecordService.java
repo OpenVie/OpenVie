@@ -242,6 +242,8 @@ public class BizAppRecordService {
         runtime.remove("processId");
         runtime.remove("approvalStatus");
         runtime.remove("decision");
+        runtime.remove("reminderSentAt");
+        runtime.remove("reminderBookingDate");
         return runtime;
     }
 

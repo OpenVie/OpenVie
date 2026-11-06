@@ -111,5 +111,73 @@ public class NotificationService {
     }
     notificationRepository.save(notification);
   }
+  @Transactional
+  public void createInAppNotification(
+      UUID tenantId, UUID userId, String type, String title, String message, String link) {
+    Notification notification = new Notification();
+    notification.setTenantId(tenantId);
+    notification.setUserId(userId);
+    NotificationType notificationType;
+    try {
+      notificationType = NotificationType.valueOf(type);
+    } catch (Exception e) {
+      notificationType = NotificationType.BOOKING_REMINDER;
+    }
+    notification.setType(notificationType);
+    notification.setTitle(title);
+    notification.setMessage(message);
+    notification.setLink(link);
+    notification.setStatus(NotificationStatus.SENT);
+    notification.setSentAt(LocalDateTime.now());
+    notificationRepository.save(notification);
+  }
 
+  @Transactional(readOnly = true)
+  public org.springframework.data.domain.Page<NotificationView> listForUser(UUID tenantId, UUID userId, int page, int size) {
+    int safePage = Math.max(0, page);
+    int safeSize = Math.clamp(size, 1, 100);
+    return notificationRepository.findForUser(tenantId, userId, org.springframework.data.domain.PageRequest.of(safePage, safeSize))
+        .map(this::toView);
+  }
+
+  @Transactional(readOnly = true)
+  public long getUnreadCount(UUID tenantId, UUID userId) {
+    return notificationRepository.countUnreadForUser(tenantId, userId);
+  }
+
+  @Transactional
+  public boolean markAsRead(UUID tenantId, UUID userId, UUID notificationId) {
+    return notificationRepository.markAsRead(notificationId, tenantId, userId, LocalDateTime.now()) > 0;
+  }
+
+  @Transactional
+  public int markAllAsRead(UUID tenantId, UUID userId) {
+    return notificationRepository.markAllAsRead(tenantId, userId, LocalDateTime.now());
+  }
+
+  private NotificationView toView(Notification n) {
+    return new NotificationView(
+        n.getId(),
+        n.getType().name(),
+        n.getTitle(),
+        n.getMessage(),
+        n.getLink(),
+        n.isRead(),
+        n.getReadAt(),
+        n.getCreatedAt()
+    );
+  }
+
+  public record NotificationView(
+      UUID id,
+      String type,
+      String title,
+      String message,
+      String link,
+      boolean read,
+      LocalDateTime readAt,
+      LocalDateTime createdAt
+  ) {}
+
+  public record UnreadCountResponse(long unreadCount) {}
 }

@@ -27,6 +27,7 @@ import com.openvie.api.chat.model.ChatSession;
 import com.openvie.api.chat.query.BizAppIntentRouter;
 import com.openvie.api.chat.repository.ChatMessageRepository;
 import com.openvie.api.chat.repository.ChatSessionRepository;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import com.openvie.api.chat.service.ChatActionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,7 +70,8 @@ class AnyInstalledAppInteractionTest {
         sessionRepository = mock(ChatSessionRepository.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
 
-        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper());
+        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper(),
+                new BizAppSlotAgent(aiInferenceApi, new ObjectMapper()));
         router.setActionsEnabled(true);
         router.setRecordActionsEnabled(true);
 

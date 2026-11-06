@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.local/contracts/bizapp/bizapp_slots.schema.json",
+  "title": "BizApp Record Slot Extraction (envelope)",
+  "description": "Runtime contract for LLM-assisted slot extraction on BizApp record actions. The concrete `fields.properties` (types, enums, extras) and per-field `required` are generated at request time by com.openvie.api.chat.service.BizAppSlotAgent from the INSTALLED APP's manifest (entity.fields) — no per-app knowledge exists in code, so every installed or future marketplace app is covered without code changes. All slots are optional at the grammar level: the agent must omit values it cannot find; required-slot enforcement stays deterministic in BizAppIntentRouter/BizAppPayloadValidator.",
+  "type": "object",
+  "required": ["fields"],
+  "properties": {
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Slot values keyed by manifest field name. Values are normalized after extraction: enums mapped via manifest optionLabels aliases, dates to ISO yyyy-MM-dd or yyyy-MM-ddTHH:mm, numbers to numeric."
+    }
+  }
+}

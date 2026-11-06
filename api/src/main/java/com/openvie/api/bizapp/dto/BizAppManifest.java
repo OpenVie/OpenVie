@@ -37,7 +37,20 @@ public final class BizAppManifest {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Localized(String vi, String en) {}
+    public record Localized(String vi, String en) {
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public static Localized of(Object val) {
+            if (val instanceof String s) {
+                return new Localized(s, s);
+            }
+            if (val instanceof Map<?, ?> m) {
+                String vi = m.get("vi") != null ? String.valueOf(m.get("vi")) : (m.get("en") != null ? String.valueOf(m.get("en")) : "");
+                String en = m.get("en") != null ? String.valueOf(m.get("en")) : vi;
+                return new Localized(vi, en);
+            }
+            return new Localized("", "");
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record OptionDetail(

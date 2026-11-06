@@ -22,6 +22,7 @@ import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.AppActionOffer;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.MarketplaceTemplateSummary;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +52,8 @@ class BizAppIntentRouterTest {
         aiInferenceApi = mock(AiInferenceApi.class);
         objectMapper = new ObjectMapper();
 
-        router = new BizAppIntentRouter(bizAppRuntimeApi, aiInferenceApi, objectMapper);
+        router = new BizAppIntentRouter(bizAppRuntimeApi, aiInferenceApi, objectMapper,
+                new BizAppSlotAgent(aiInferenceApi, objectMapper));
         router.setActionsEnabled(true);
         router.setConfidenceThreshold(0.75);
 
@@ -72,6 +74,8 @@ class BizAppIntentRouterTest {
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("list apps"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("gỡ cài đặt crm"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("xem cac lead trong crm"));
+        assertTrue(BizAppIntentRouter.matchesDeterministicGate("Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?"));
+        assertTrue(BizAppIntentRouter.matchesDeterministicGate("Làm sao để theo dõi tài sản công ty?"));
 
         // General documents / conversation without admin verbs or app vocab
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("xin chào, bạn là ai?"));
@@ -96,6 +100,31 @@ class BizAppIntentRouterTest {
         var result = router.route(tenantId, orgId, actorId, "ORG_OWNER", "cài app đặt lịch", "vi-VN", sessionId);
         assertEquals(BizAppIntentRouter.Intent.NONE, result.intent());
     }
+    @Test
+    void managementNeedForUninstalledDomainProducesCreateAppDraftCard() {
+        when(aiInferenceApi.completeJson(any())).thenReturn(new AiInferenceApi.StructuredJsonResponse(
+                """
+                {
+                  "intent": "CREATE_APP",
+                  "appKind": "it-equipment",
+                  "confidence": 0.95,
+                  "reply": "Hiện tại chưa có ứng dụng quản lý thiết bị IT. Tôi có thể tạo ứng dụng giúp bạn theo dõi mã máy, tên thiết bị, loại máy, người giữ và tình trạng.",
+                  "reason": "User asks how to manage IT equipment"
+                }
+                """,
+                "vylinh", 120, 40
+        ));
+
+        var result = router.route(tenantId, orgId, actorId, "ORG_OWNER",
+                "Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.CREATE_APP, result.intent());
+        assertNotNull(result.actionCard());
+        assertEquals("bizapp.draft", result.actionCard().get("kind"));
+        assertEquals("PROPOSED", result.actionCard().get("status"));
+        assertTrue(result.reply().contains("thiết bị IT"));
+    }
+
 
     @Test
     void unknownAppKindDowngradesToNone() {

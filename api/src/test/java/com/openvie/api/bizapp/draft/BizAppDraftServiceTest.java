@@ -166,6 +166,54 @@ class BizAppDraftServiceTest {
     }
 
     @Test
+    void generateDraftToleratesMarkdownAndPreambleAndWrappedManifest() {
+        var service = new BizAppDraftService(
+                draftRepository, validator, parser, aiInferenceApi,
+                new BizAppProperties(true, false, true, false, ""),
+                runtime, objectMapper
+        );
+
+        String rawOutputWithPreambleAndMarkdown = """
+                Here is the manifest matching your request:
+                ```json
+                {
+                  "manifest": {
+                    "kind": "it-equipment",
+                    "name": "Quản lý thiết bị IT",
+                    "entities": [
+                      {
+                        "name": "devices",
+                        "label": "Thiết bị",
+                        "fields": [
+                          { "name": "deviceId", "type": "string", "required": true }
+                        ]
+                      }
+                    ]
+                  }
+                }
+                ```
+                Hope this helps!
+                """;
+
+        when(aiInferenceApi.completeJson(any())).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(rawOutputWithPreambleAndMarkdown, "vylinh", 50, 100)
+        );
+        when(draftRepository.save(any())).thenAnswer(inv -> {
+            BizAppDraft d = inv.getArgument(0);
+            d.setId(UUID.randomUUID());
+            return d;
+        });
+
+        var resp = service.generateDraft(orgId, tenantId, actorId, new GenerateDraftRequest("IT equipment", "vi", null));
+
+        assertNotNull(resp.draftId());
+        assertTrue(resp.validation().ok(), "validation must pass with unwrapped and normalized manifest: " + resp.validation().errors());
+        assertEquals("bizapp.v1", resp.manifest().get("schema"));
+        assertEquals("it-equipment", resp.manifest().get("kind"));
+        assertEquals("Quản lý thiết bị IT", resp.meta().get("title"));
+    }
+
+    @Test
     void saveAndGetDraftLifecycle() {
         var service = new BizAppDraftService(
                 draftRepository, validator, parser, aiInferenceApi,

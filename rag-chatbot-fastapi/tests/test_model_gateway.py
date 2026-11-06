@@ -139,6 +139,25 @@ async def test_ollama_native_chat_disables_thinking(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_ollama_complete_text_forwards_structured_output_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ complete_json callers can pass a JSON schema; it reaches Ollama as `format`."""
+    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FakeOllamaClient)
+    gateway = OllamaChatModel(settings())
+    schema = {"type": "object", "required": ["fields"]}
+
+    output = await gateway.complete_text(
+        [{"role": "user", "content": "extract slots"}],
+        max_output_tokens=32,
+        format=schema,
+    )
+
+    assert output == "The answer is four."
+    assert FakeOllamaClient.last_json["format"] == schema
+
+
+@pytest.mark.asyncio
 async def test_ollama_preserves_composed_message_content(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FakeOllamaClient)
     gateway = OllamaChatModel(settings())

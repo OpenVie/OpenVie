@@ -17,6 +17,7 @@ package com.openvie.api.chat.query;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.ai.api.AiInferenceApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.EntityDetail;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.FieldDetail;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
@@ -50,7 +51,8 @@ class RecordActionDryRunTest {
     void setUp() {
         runtimeApi = mock(BizAppRuntimeApi.class);
         aiInferenceApi = mock(AiInferenceApi.class);
-        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper());
+        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper(),
+                new BizAppSlotAgent(aiInferenceApi, new ObjectMapper()));
         router.setActionsEnabled(true);
         router.setRecordActionsEnabled(true);
 

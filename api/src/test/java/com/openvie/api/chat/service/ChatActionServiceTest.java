@@ -106,12 +106,30 @@ class ChatActionServiceTest {
     }
 
     @Test
-    void nonProposedStatusIsRejectedWithConflict() {
-        ChatMessage msg = createProposedMessage("bizapp.install", "booking", "FAILED");
+    void nonExecutableStatusIsRejectedWithConflict() {
+        // Statuses outside PROPOSED/FAILED (e.g. a DENIED card) are rejected.
+        ChatMessage msg = createProposedMessage("bizapp.install", "booking", "DENIED");
         when(messageRepository.findById(messageId)).thenReturn(Optional.of(msg));
 
         assertThrows(ConflictException.class, () ->
                 service.executeAction(tenantId, orgId, actorId, "ORG_OWNER", messageId, actionId));
+        verifyNoInteractions(bizAppRuntimeApi);
+    }
+
+    @Test
+    void failedStatusIsRetryableUntilExecuted() {
+        // A card marked FAILED by a previous failed execution must not be a
+        // dead end: retry re-enters the normal execution path.
+        ChatMessage msg = createProposedMessage("bizapp.install", "booking", "FAILED");
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(msg));
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of());
+        when(bizAppRuntimeApi.executeOffer(eq(tenantId), eq(orgId), eq(actorId), any(AppActionOffer.class)))
+                .thenReturn(new InstallOutcome(true, UUID.randomUUID(), "Booking installed"));
+
+        var response = service.executeAction(tenantId, orgId, actorId, "ORG_OWNER", messageId, actionId);
+
+        assertEquals("Booking installed", response.content());
+        assertEquals("EXECUTED", msg.getAction().get("status"));
     }
 
     @Test

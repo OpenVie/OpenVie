@@ -26,6 +26,7 @@ import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { ChatHistoryPanel } from "@/components/chat/ChatHistoryPanel"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
+import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { transitionTheme } from "@/lib/theme-transition"
 import { requestNewChat } from "@/lib/chat-events"
 import {
@@ -301,7 +302,9 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
           >
             <Menu className="size-5" />
           </button>
-          <div className="ov-topbar-controls ml-auto">
+          <div className="ov-topbar-controls ml-auto flex items-center">
+            <NotificationBell />
+            <span className="ov-topbar-divider" aria-hidden="true" />
             <button
               type="button"
               className="ov-topbar-control"
