@@ -15,9 +15,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import suppress
+from typing import Any
 
 import grpc
 
@@ -36,6 +38,20 @@ from app.modules.generation.api import (
 from app.modules.generation.transport.result_cache import ProtobufGenerationResultCache
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_json_schema(raw: str) -> dict[str, Any] | None:
+    """Returns the schema dict when the request carries actual JSON schema
+    content; None for legacy schema *file name* references (kept lenient for
+    older callers)."""
+    schema = (raw or "").strip()
+    if not schema.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(schema)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 class GenerationGrpcHandler:
@@ -122,6 +138,11 @@ class GenerationGrpcHandler:
         max_tokens = request.max_tokens if request.max_tokens > 0 else 2048
         temperature = request.temperature if request.temperature > 0 else 0.2
 
+        # Structured-output schema: callers may pass the JSON schema content
+        # itself. Legacy calls pass a schema *file name* (no JSON body) — those
+        # stay plain completions as before.
+        provider_format = _parse_json_schema(request.json_schema)
+
         output = "{}"
         gen = self._generation
         model = (
@@ -134,7 +155,10 @@ class GenerationGrpcHandler:
             try:
                 if hasattr(model, "complete_text"):
                     output = await model.complete_text(
-                        messages, max_output_tokens=max_tokens, temperature=temperature
+                        messages,
+                        max_output_tokens=max_tokens,
+                        temperature=temperature,
+                        format=provider_format,
                     )
                 elif hasattr(model, "complete"):
                     output = await model.complete(messages)
@@ -143,13 +167,20 @@ class GenerationGrpcHandler:
                 output = "{}"
 
         cleaned = output.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[len("```json"):].strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned[3:].strip()
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3].strip()
-
+        if "```json" in cleaned:
+            start = cleaned.find("```json") + len("```json")
+            end = cleaned.rfind("```")
+            if end > start:
+                cleaned = cleaned[start:end].strip()
+        elif "```" in cleaned:
+            start = cleaned.find("```") + 3
+            end = cleaned.rfind("```")
+            if end > start:
+                cleaned = cleaned[start:end].strip()
+        first_brace = cleaned.find("{")
+        last_brace = cleaned.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            cleaned = cleaned[first_brace : last_brace + 1].strip()
         return pb.CompleteJsonResponse(
             json_output=cleaned,
             model_id=request.model_id or "default",

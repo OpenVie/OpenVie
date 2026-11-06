@@ -526,3 +526,18 @@ export interface BizAppGenerateDraftResult {
   validation: BizAppValidationResult | null;
   meta: Record<string, unknown> | null;
 }
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  read: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface UnreadNotificationsCount {
+  unreadCount: number;
+}

@@ -170,4 +170,47 @@ class BizAppInstallServiceTest {
         assertEquals("DISABLED", active.getStatus());
         verify(installationRepository).save(active);
     }
+
+    @Test
+    void installFallsBackToGenericApprovalProcessWhenBpmnTemplateUnbundled() {
+        // Chat-drafted manifests may point approval_workitem at a bespoke BPMN
+        // file the platform does not bundle (a hallucinated asset path). The
+        // install must degrade to the bundled generic single-approval process
+        // instead of failing with "BPMN template not available".
+        Map<String, Object> rawManifest = Map.of("kind", "leave-management", "version", 1);
+        Manifest manifest = new Manifest(
+                "bizapp.v1",
+                "leave-management",
+                new com.openvie.api.bizapp.dto.BizAppManifest.Localized("Quản lý nghỉ phép", "Leave Management"),
+                1,
+                "icon",
+                "jsonb",
+                Map.of(),
+                List.of(),
+                List.of(new com.openvie.api.bizapp.dto.BizAppManifest.Block(
+                        "approval1", "approval_workitem",
+                        Map.of(
+                                "bpmnTemplate", "processes/leave-management-single-approval.bpmn20.xml",
+                                "candidateRole", "WORKSPACE_ADMIN"))),
+                null
+        );
+        when(parser.parse(rawManifest)).thenReturn(manifest);
+        when(installationRepository.findByTenantIdAndKind(tenantId, "leave-management")).thenReturn(Optional.empty());
+        when(installationRepository.save(any(BizAppInstallation.class))).thenAnswer(inv -> {
+            BizAppInstallation inst = inv.getArgument(0);
+            inst.setId(UUID.randomUUID());
+            return inst;
+        });
+        when(workflowRuntimeApi.deploy(eq(tenantId), eq(actorId), eq("bizapp-leave-management"), anyString()))
+                .thenReturn(new WorkflowRuntimeApi.DeployedDefinition("dep1", "leaveManagement", "Leave approval", 1));
+
+        var result = service.install(tenantId, orgId, actorId, rawManifest);
+
+        assertNotNull(result);
+        assertEquals("leave-management", result.kind());
+        ArgumentCaptor<String> xmlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(workflowRuntimeApi).deploy(eq(tenantId), eq(actorId), eq("bizapp-leave-management"), xmlCaptor.capture());
+        assertTrue(xmlCaptor.getValue().contains("bizappSingleApproval"),
+                "unbundled BPMN template paths must fall back to the bundled generic approval process");
+    }
 }

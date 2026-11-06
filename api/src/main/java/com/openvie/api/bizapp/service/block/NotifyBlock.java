@@ -58,7 +58,7 @@ public class NotifyBlock implements BizAppBlockExecutor {
                 .append(recordSummary(context.payload()));
         int sent = 0;
         for (Object recipient : recipients) {
-            String to = resolveRecipient(String.valueOf(recipient), context.actorId());
+            String to = resolveRecipient(String.valueOf(recipient), context.actorId(), context.payload());
             if (to != null && notificationRuntimeApi.sendRawEmail(context.orgId(), to, subject, body.toString())) {
                 sent++;
             } else if (to == null) {
@@ -68,22 +68,47 @@ public class NotifyBlock implements BizAppBlockExecutor {
         return new BlockResult("notify " + spec.blockId() + " -> " + sent + " email(s)");
     }
 
-    private String resolveRecipient(String token, UUID actorId) {
+    private String resolveRecipient(String token, UUID actorId, Map<String, Object> payload) {
         if ("creator".equalsIgnoreCase(token)) {
             TenantIdentityApi.IdentitySnapshot identity = tenantIdentityApi.findUserById(actorId);
             return identity == null ? null : identity.email();
+        }
+        if (token.startsWith("record.") && payload != null) {
+            String field = token.substring("record.".length());
+            Object val = payload.get(field);
+            if (val instanceof String s && s.contains("@")) {
+                return s.trim();
+            }
         }
         return token.contains("@") ? token : null;
     }
 
     private StringBuilder recordSummary(Map<String, Object> payload) {
-        StringBuilder rows = new StringBuilder("<ul>");
+        StringBuilder rows = new StringBuilder(
+                "<div style=\"margin:20px 0;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px 18px;\">"
+                + "<table style=\"width:100%;border-collapse:collapse;\">");
         if (payload != null) {
-            payload.forEach((key, value) -> rows.append("<li>")
-                    .append(escape(key)).append(": ")
-                    .append("<strong>").append(escape(String.valueOf(value))).append("</strong></li>"));
+            payload.forEach((key, value) -> rows.append("<tr>")
+                    .append("<td style=\"padding:7px 0;color:#8e9992;font-size:13px;width:38%;\">")
+                    .append(escape(humanLabel(key))).append("</td>")
+                    .append("<td style=\"padding:7px 0;color:#f2f5f0;font-size:13px;font-weight:600;\">")
+                    .append(escape(String.valueOf(value))).append("</td>")
+                    .append("</tr>"));
         }
-        return rows.append("</ul>");
+        return rows.append("</table></div>");
+    }
+
+    private static String humanLabel(String key) {
+        if (key == null) return "";
+        return switch (key) {
+            case "customerName" -> "Tên khách";
+            case "customerEmail" -> "Email khách";
+            case "bookingDate" -> "Thời gian hẹn";
+            case "service" -> "Dịch vụ";
+            case "guests" -> "Số người";
+            case "notes" -> "Ghi chú";
+            default -> key;
+        };
     }
 
     private String escape(String value) {

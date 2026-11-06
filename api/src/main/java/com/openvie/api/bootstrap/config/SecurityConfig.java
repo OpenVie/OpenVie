@@ -81,7 +81,8 @@ public class SecurityConfig {
             "/webjars/**",
             "/actuator/health",
             "/actuator/health/**",
-            "/actuator/info"
+            "/actuator/info",
+            "/logo.png"
     };
 
     @Bean

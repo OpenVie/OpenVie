@@ -30,4 +30,9 @@ public interface NotificationRuntimeApi {
      * @return true when the message left through a configured channel
      */
     boolean sendRawEmail(UUID orgId, String toEmail, String subject, String htmlBody);
+
+    /**
+     * Records an in-app notification for a user in a workspace.
+     */
+    void createInAppNotification(UUID tenantId, UUID userId, String type, String title, String message, String link);
 }

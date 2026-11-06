@@ -74,12 +74,20 @@ public class SmtpEmailProvider implements EmailProvider {
         props.put("mail.smtp.writetimeout", "10000");
 
         try {
+            boolean hasInlineLogo = message.htmlContent() != null && message.htmlContent().contains("cid:openvie-logo");
             MimeMessage mimeMessage = sender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, StandardCharsets.UTF_8.name());
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, hasInlineLogo, StandardCharsets.UTF_8.name());
             helper.setFrom(config.fromEmail(), config.fromName());
             helper.setTo(message.toEmail());
             helper.setSubject(message.subject());
             helper.setText(message.htmlContent(), true);
+            if (hasInlineLogo) {
+                org.springframework.core.io.ClassPathResource logoResource =
+                        new org.springframework.core.io.ClassPathResource("static/logo.png");
+                if (logoResource.exists()) {
+                    helper.addInline("openvie-logo", logoResource, "image/png");
+                }
+            }
             sender.send(mimeMessage);
         } catch (org.springframework.mail.MailException exception) {
             throw new EmailDeliveryException("SMTP delivery to " + message.toEmail() + " failed", exception);

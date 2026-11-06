@@ -67,7 +67,7 @@ app:
     outbound:
       allow-http: ${BIZAPPS_OUTBOUND_ALLOW_HTTP:false}
     ai-drafting:
-      enabled: ${BIZAPPS_AI_DRAFTING_ENABLED:false}
+      enabled: ${BIZAPPS_AI_DRAFTING_ENABLED:true}
     projection-debounce-ms: ${BIZAPPS_PROJECTION_DEBOUNCE_MS:30000}
     remote-catalog:
       enabled: ${BIZAPPS_REMOTE_CATALOG_ENABLED:false}
@@ -77,6 +77,10 @@ app:
       enabled: ${CHAT_BIZAPP_ACTIONS_ENABLED:true}
     bizapp-records:
       enabled: ${CHAT_BIZAPP_RECORDS_ENABLED:true}
+      # Slot extraction mode for BizApp record actions: "llm" = LLM-assisted
+      # extraction built from the installed app manifest (plug and play,
+      # deterministic validation still enforced); "regex" = legacy in-JVM rules.
+      slot-mode: ${CHAT_BIZAPP_SLOT_MODE:llm}
       max-apps: 20
       max-entities-per-app: 10
       max-fields-per-entity: 40

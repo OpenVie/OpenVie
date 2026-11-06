@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **In-app notification suite & notification bell UI**:
+  - New `notifications` schema features (Flyway migration `V21__notifications_read_and_booking_reminders.sql`): `read_at` tracking, optional deep `link`, expanded `notifications_type_check` supporting `BOOKING_REMINDER`, and index optimizations (`idx_notification_user_unread`, `idx_notification_tenant_user`).
+  - Full REST controller `/api/v1/notifications`: paged listing `GET /`, unread counter `GET /unread-count`, individual mark-read `POST /{id}/read`, and bulk mark-read `POST /read-all`.
+  - Frontend `NotificationBell` component integrated in `AppShell` topbar: unread counter badge, liquid-glass popover dropdown, mark-read interaction, deep linking to target entity, and auto-refresh polling (30 s).
+- **24-hour appointment reminder scheduler (UI & email)**:
+  - `BizAppBookingReminderScheduler` sweeps active bookings periodically and fires reminders when appointment falls within 24 hours of current time (handling both date-only `yyyy-MM-dd` and datetime `yyyy-MM-ddTHH:mm`).
+  - Emits an in-app `BOOKING_REMINDER` notification to the booking creator with deep link to `/apps/booking`.
+  - Sends reminder transactional emails via the organization's configured mail transport (SMTP / Mailpit) to both `customerEmail` and the creator.
+  - Atomic deduplication: `runtime.reminderSentAt` timestamp prevents duplicate sends; updating the appointment date resets reminder tracking.
+  - Extended `NotifyBlock` and bundled `booking.json` to support `record.<field>` recipient resolution (e.g. `record.customerEmail`).
+
+- **Conversational app creation suggestions for natural management inquiries**:
+  - `BizAppIntentRouter` recognizes natural business management inquiries (e.g. "Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?", "Làm sao để theo dõi tài sản công ty?") as business capability requests instead of routing them to document RAG.
+  - The assistant explains that no app is currently installed, proposes relevant entities and fields (e.g. device ID, name, assigned user, status), and emits an interactive `bizapp.draft` creation card.
+  - Distinguishes software management inquiries from formal document procedures and policy questions (SOPs).
+
+### Fixed
+- **AI-drafted approval apps no longer reference unavailable BPMN files**: generated approval blocks are canonicalized to `processes/bizapp-single-approval.bpmn20.xml`; Flyway `V22__normalize_ai_draft_approval_templates.sql` repairs existing AI drafts, and installation retains a generic-process fallback for legacy manifests.
+- **BizApp record actions no longer carry values the model invented**: the LLM slot agent (`BizAppSlotAgent`) now keeps a free-text slot (name, email, notes...) only when its value occurs in the user's own messages (case-, diacritic- and whitespace-insensitive); otherwise the slot is dropped and the router asks for it. The extraction prompt now contains user turns only, so the assistant's earlier cards and replies can no longer feed a wrong value back into the next turn. Previously a request naming "Nguyễn Văn B" with no email could produce a confirmable card for "Nguyễn Văn A" / `a@example.com`.
+- **Forms of address no longer end up in the stored name**: both the deterministic extractor (`BizAppIntentRouter.cleanNameValue`) and the LLM slot agent drop a leading lowercase "anh/chị/em/ông/bà/cô/chú/bác" (and Latin "Mr/Mrs/Ms/Miss") in name slots, so "anh Trấn Thành" is stored as "Trấn Thành". A capitalized given name such as "Anh Thư" is kept, and the extraction prompt tells the model to omit forms of address.
+- **Email templates and logo aligned with brand theme (standalone backend)**:
+  - Bundled the modern OpenVie raster logo (`#1fb6ff` Sky Blue with white emblem) directly inside the backend at `api/src/main/resources/static/logo.png`, so email delivery requires no web frontend.
+  - `SmtpEmailProvider` embeds the logo directly into MIME messages as an inline `cid:openvie-logo` attachment (RFC 2392), enabling immediate logo display in Mailpit, Gmail, and Outlook even in offline or air-gapped environments.
+  - `EmailService.renderShell` updated brand accent from legacy lime (`#c8f53c`) to platform primary (`#1fb6ff`), and styled all typography, tables, and lists to match the dark theme.
+  - `NotifyBlock` and reminder emails now format record payloads as styled key-value table cards with human-readable labels instead of raw camelCase bullet lists.
+  - Spring Security permits public access to `/logo.png` directly from the backend.
+
+- **Notification bell darkmode contrast and Vietnamese localization**:
+  - Resolved portal variable isolation where Tailwind `--foreground` defaulted to near-black `:root` tokens over dark glass surfaces. Applied explicit high-contrast foreground/background styles (`#f2f5f0` on `#12161a` in dark mode, `#10150f` on `#ffffff` in light mode).
+  - Added `localizeNotification` helper dynamically translating both historical database notifications and new incoming events (e.g. "Document approved" -> "Tài liệu đã được phê duyệt", "was approved at approval level 1" -> "đã được phê duyệt ở cấp phê duyệt 1", "You're invited to..." -> "Lời mời tham gia...").
+  - Replaced harsh Tailwind `divide-y` borders with padded, rounded item cards and subtle section separators matching the app's visual language.
+  - Added localized category badge chips for each notification type (`Phê duyệt`, `Nhắc lịch`, `Lời mời`, `Hoàn tất`, `Thất bại`).
+
+- **BizApp action card footer button alignment**:
+  - Eliminated conflicting `gap-4` spacing between card sections and removed lopsided `pt-0` padding in `BizAppActionCard` footer.
+  - Replaced asymmetric padding with balanced `px-4 py-3`, ensuring action buttons (such as "Cài đặt vào Workspace", "Xác nhận tạo") are vertically centered and seamlessly aligned within the card's bordered footer.
+  - Suppressed empty `CardContent` rendering when cards have no description or field payload, preventing awkward whitespace gaps.
+
+- **Chat action execution now supports bizapp.draft**:
+  - Added `bizapp.draft` to `ChatActionService.SUPPORTED_ACTION_KINDS` and wired execution to `BizAppRuntimeApi.createDraftFromSession`, fixing the `Unsupported executable action kind: bizapp.draft` conflict error.
+  - Generates the `bizapp.v1` manifest draft directly from the active chat session turns, marks the card as `EXECUTED`, and renders a direct link to Visual Composer (`/admin/apps/compose/{draftId}`).
+  - Enabled AI manifest drafting by default (`BIZAPPS_AI_DRAFTING_ENABLED=true` in application.yaml, BizAppProperties, and env files), resolving the `AI manifest drafting is disabled on this installation` error when creating drafts from chat.
+  - Fixed action card title and button label for draft cards (displays "Tạo ứng dụng" / "Create Application" instead of mislabeled "Cài đặt vào Workspace").
+  - Added immediate spinner feedback (`setStatus("EXECUTING")`) and automatic redirection to Visual Composer (`/admin/apps/compose/{draftId}`) upon successful draft creation in `BizAppActionCard`.
+  - Allowed retrying action cards in `FAILED` state in `ChatActionService`, preventing actions from becoming permanently stuck after transient errors.
+  - Added `normalizeGeneratedManifest` and `@JsonCreator` on `Localized` in `BizAppDraftService` and `BizAppManifest`, unwrapping root `manifest` keys and coercing string labels/names so AI-generated drafts always validate cleanly.
+  - Filtered out API key machine service accounts (`@keys.openvie.invalid`) from workspace member directories (`/users`) and organization user lists (`/admin/organization`), keeping human employee rosters clean while preserving backend machine-to-machine authentication.
+  - Enhanced `normalizeGeneratedManifest` in `BizAppDraftService` to automatically sanitize multi-entity schema anomalies (`values` -> `options` for enums, `reference` -> `entity` for refs, inverted RBAC maps, and auto-generated default UI views), ensuring complex multi-table drafts validate without errors.
+  - Added explicit contract rules for `blocks` (approval workitems, notifications) and entity `hooks` (`onCreate`, `onUpdate`, `onDecide`) in `BizAppDraftService` system prompt, allowing AI generators to automatically connect workflow edges on the visual composer canvas.
+
 ## [1.0.0] - 2026-11-04
 
 ### Added

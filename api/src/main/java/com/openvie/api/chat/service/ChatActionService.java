@@ -62,6 +62,7 @@ public class ChatActionService {
     public static final Set<String> SUPPORTED_ACTION_KINDS = Set.of(
             "bizapp.install",
             "bizapp.uninstall",
+            "bizapp.draft",
             "bizapp.record.create",
             "bizapp.record.update",
             "bizapp.record.archive",
@@ -151,8 +152,8 @@ public class ChatActionService {
                 return new AssistantMessageResponse("assistant", replyContent, List.of(), action, List.of());
             }
 
-            if (!"PROPOSED".equalsIgnoreCase(currentStatus)) {
-                throw new ConflictException("Action is not in PROPOSED state (current: " + currentStatus + ")");
+            if (!"PROPOSED".equalsIgnoreCase(currentStatus) && !"FAILED".equalsIgnoreCase(currentStatus)) {
+                throw new ConflictException("Action is not in PROPOSED or FAILED state (current: " + currentStatus + ")");
             }
 
             // Server-authoritative permission check: require ORG_OWNER
@@ -194,7 +195,44 @@ public class ChatActionService {
             String outcomeMessage;
             Map<String, Object> resultMap = new LinkedHashMap<>();
 
-            if ("bizapp.install".equalsIgnoreCase(kind) || "bizapp.uninstall".equalsIgnoreCase(kind)) {
+            if ("bizapp.draft".equalsIgnoreCase(kind)) {
+                Map<?, ?> payload = action.get("payload") instanceof Map<?, ?> p ? p : Map.of();
+                UUID targetSessionId = payload.get("sessionId") != null && !String.valueOf(payload.get("sessionId")).isBlank()
+                        ? UUID.fromString(String.valueOf(payload.get("sessionId")))
+                        : message.getSessionId();
+                String hint = payload.get("hint") != null
+                        ? String.valueOf(payload.get("hint"))
+                        : (appName != null && !appName.isBlank() && !"null".equalsIgnoreCase(appName) ? appName : null);
+
+                BizAppRuntimeApi.DraftOutcome outcome;
+                try {
+                    outcome = bizAppRuntimeApi.createDraftFromSession(tenantId, orgId, actorId, targetSessionId, hint);
+                } catch (Exception ex) {
+                    log.warn("Draft creation failed: {}", ex.getMessage());
+                    action.put("status", "FAILED");
+                    action.put("executedBy", actorId.toString());
+                    action.put("executedAt", Instant.now().toString());
+                    action.put("result", Map.of("error", ex.getMessage()));
+                    message.setAction(action);
+                    messageRepository.save(message);
+
+                    if (meterRegistry != null) {
+                        meterRegistry.counter("chat_action_execute_total", "action", kind, "outcome", "failed").increment();
+                    }
+                    throw ex;
+                }
+
+                if (outcome.draftId() == null) {
+                    throw new ConflictException("Draft generation failed: " + String.join(", ", outcome.errors()));
+                }
+
+                outcomeMessage = "Bản thảo ứng dụng '" + outcome.title() + "' đã được tạo thành công.";
+                resultMap.put("draftId", outcome.draftId().toString());
+                resultMap.put("title", outcome.title());
+                resultMap.put("entities", outcome.entities());
+                resultMap.put("message", outcomeMessage);
+                resultMap.put("composerUrl", "/admin/apps/compose/" + outcome.draftId());
+            } else if ("bizapp.install".equalsIgnoreCase(kind) || "bizapp.uninstall".equalsIgnoreCase(kind)) {
                 Map<?, ?> payload = action.get("payload") instanceof Map<?, ?> p ? p : Map.of();
                 String templateRef = payload.get("templateRef") != null ? String.valueOf(payload.get("templateRef")) : null;
                 if (templateRef == null || templateRef.isBlank()) {

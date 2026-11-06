@@ -7,10 +7,18 @@
   "properties": {
     "intent": {
       "type": "string",
-      "enum": ["NONE", "LIST_APPS", "APP_DETAIL", "APP_DATA", "INSTALL", "UNINSTALL", "SUGGEST", "CREATE_APP"]
+      "enum": ["NONE", "LIST_APPS", "APP_DETAIL", "APP_DATA", "INSTALL", "UNINSTALL", "SUGGEST", "CREATE_APP",
+        "APP_RECORD_CREATE", "APP_RECORD_UPDATE", "APP_RECORD_ARCHIVE", "APP_RECORD_SUBMIT"]
     },
     "appKind": {
       "type": ["string", "null"]
+    },
+    "entity": {
+      "type": ["string", "null"]
+    },
+    "fields": {
+      "type": "object",
+      "description": "Optional raw slot values extracted by the model; the deterministic slot agent re-normalizes them against the installed app manifest."
     },
     "confidence": {
       "type": "number",

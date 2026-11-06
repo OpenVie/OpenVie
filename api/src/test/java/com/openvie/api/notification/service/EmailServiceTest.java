@@ -123,10 +123,10 @@ class EmailServiceTest {
         String html = captured().htmlContent();
         assertTrue(html.contains("background:#07090c"),
                 "the email body must use the app's dark background: " + html);
-        assertTrue(html.contains("background:#c8f53c"),
-                "the button must use the lime accent");
-        assertTrue(html.contains("<img class=\"logo\" src=\"http://localhost:3000/logo.png\""),
-                "the logo must be the derived PNG from the login origin");
+        assertTrue(html.contains("background:#1fb6ff"),
+                "the button must use the primary brand accent");
+        assertTrue(html.contains("<img class=\"logo\" src=\"cid:openvie-logo\""),
+                "the logo must be the bundled backend CID logo");
     }
 
     @Test
@@ -137,19 +137,17 @@ class EmailServiceTest {
                 "Acme", "Finance", "MEMBER");
 
         String html = captured().htmlContent();
-        assertTrue(html.contains("<img class=\"logo\" src=\"http://localhost:3000/logo.png\""));
+        assertTrue(html.contains("<img class=\"logo\" src=\"cid:openvie-logo\""));
         assertTrue(html.contains("Finance"));
     }
 
     @Test
     void logoUrlIsDerivedOrConfigurable() {
         // Unset config derives /logo.png from the login link's origin...
-        assertEquals("http://localhost:3000/logo.png",
+        assertEquals("cid:openvie-logo",
                 EmailService.resolveLogoUrl("", "http://localhost:3000/login"));
-        // ...is robust against a malformed login link...
-        assertEquals("http://localhost:3000/logo.png",
+        assertEquals("cid:openvie-logo",
                 EmailService.resolveLogoUrl(null, "not-a-uri"));
-        // ...and an explicitly configured URL always wins (trimmed).
         assertEquals("https://cdn.example.com/brand.png",
                 EmailService.resolveLogoUrl(" https://cdn.example.com/brand.png ",
                         "http://localhost:3000/login"));

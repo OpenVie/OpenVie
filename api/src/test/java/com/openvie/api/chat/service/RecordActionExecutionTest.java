@@ -127,4 +127,37 @@ class RecordActionExecutionTest {
 
         verifyNoInteractions(bizAppRuntimeApi);
     }
+
+    @Test
+    void executeDraftCreatesDraftFromSessionAndMarksExecuted() {
+        ChatMessage msg = new ChatMessage();
+        msg.setId(messageId);
+        msg.setSessionId(sessionId);
+        msg.setTenantId(tenantId);
+        msg.setRole("assistant");
+        Map<String, Object> action = new HashMap<>();
+        action.put("actionId", actionId.toString());
+        action.put("kind", "bizapp.draft");
+        action.put("appKind", "it-equipment");
+        action.put("appName", "Quản lý thiết bị IT");
+        action.put("status", "PROPOSED");
+        action.put("payload", Map.of("sessionId", sessionId.toString()));
+        msg.setAction(action);
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(msg));
+
+        UUID createdDraftId = UUID.randomUUID();
+        when(bizAppRuntimeApi.createDraftFromSession(eq(tenantId), eq(orgId), eq(actorId), eq(sessionId), eq("Quản lý thiết bị IT")))
+                .thenReturn(new BizAppRuntimeApi.DraftOutcome(true, createdDraftId, "Quản lý thiết bị IT", List.of("devices"), List.of()));
+
+        var response = service.executeAction(tenantId, orgId, actorId, "ORG_OWNER", messageId, actionId);
+
+        assertNotNull(response);
+        assertEquals("EXECUTED", msg.getAction().get("status"));
+        assertEquals(actorId.toString(), msg.getAction().get("executedBy"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) msg.getAction().get("result");
+        assertEquals(createdDraftId.toString(), result.get("draftId"));
+        assertEquals("/admin/apps/compose/" + createdDraftId, result.get("composerUrl"));
+    }
 }

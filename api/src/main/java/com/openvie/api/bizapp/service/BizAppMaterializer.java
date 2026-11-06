@@ -83,6 +83,41 @@ public class BizAppMaterializer {
         return read(resource);
     }
 
+    /**
+     * Best-effort bundled manifest lookup for enrichment paths ("skip, not
+     * fail"): returns null when the platform template is absent or unreadable,
+     * never throws and runs without a transaction of its own. Callers that
+     * invoke this inside an ambient transaction (e.g. the conversational
+     * trigger/alias fallback for installed apps) must not poison that
+     * transaction's rollback-only state for a best-effort read where absence
+     * is an expected, everyday outcome.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> loadBundledOrNull(String kind) {
+        if (kind == null || kind.isBlank()) {
+            return null;
+        }
+        ClassPathResource resource = new ClassPathResource(BUNDLED_DIR + "/" + kind.trim() + ".json");
+        if (!resource.exists()) {
+            return null;
+        }
+        Map<String, Object> raw;
+        try {
+            raw = read(resource);
+        } catch (Exception ignored) {
+            return null;
+        }
+        // Mirror loadRaw's semantics: bundled files may be wrapped in the
+        // openvie.template.v1 envelope, and callers here always want the
+        // MANIFEST, not the envelope (envelope keys are unknown to the
+        // Manifest parser and would silently drop conversational/rss data).
+        if (raw != null && "openvie.template.v1".equals(raw.get("envelope"))
+                && raw.get("manifest") instanceof Map<?, ?> manifestMap) {
+            return (Map<String, Object>) manifestMap;
+        }
+        return raw;
+    }
+
     @SuppressWarnings("unchecked")
     Map<String, Object> read(org.springframework.core.io.Resource resource) {
         try (InputStream stream = resource.getInputStream()) {

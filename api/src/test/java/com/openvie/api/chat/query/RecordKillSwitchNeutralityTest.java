@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.ai.api.AiInferenceApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
+import com.openvie.api.chat.service.BizAppSlotAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +48,8 @@ class RecordKillSwitchNeutralityTest {
     void setUp() {
         runtimeApi = mock(BizAppRuntimeApi.class);
         aiInferenceApi = mock(AiInferenceApi.class);
-        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper());
+        router = new BizAppIntentRouter(runtimeApi, aiInferenceApi, new ObjectMapper(),
+                new BizAppSlotAgent(aiInferenceApi, new ObjectMapper()));
     }
 
     @Test

@@ -207,4 +207,43 @@ class ChatControlPlaneShortCircuitTest {
         verify(catalogAnswerComposer).composeListApps(eq(tenantId), eq("vi-VN"));
         assertEquals("### Danh sách ứng dụng đã cài đặt: CRM, Booking", response.content());
     }
+
+    @Test
+    void createAppIntentShortCircuitsInferenceAndProducesDraftCard() {
+        Map<String, Object> card = Map.of(
+                "type", "bizapp_action",
+                "actionId", UUID.randomUUID().toString(),
+                "kind", "bizapp.draft",
+                "status", "PROPOSED",
+                "requiresRole", "ORG_OWNER"
+        );
+        BizAppIntentRouter.RoutingResult routing = new BizAppIntentRouter.RoutingResult(
+                BizAppIntentRouter.Intent.CREATE_APP,
+                "leave-management",
+                null,
+                BigDecimal.valueOf(0.95),
+                "Tôi có thể giúp bạn tạo ứng dụng Quản lý nghỉ phép",
+                "Matched create app",
+                null,
+                card
+        );
+
+        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), contains("Quản lý nghỉ phép"), any(), eq(sessionId), any()))
+                .thenReturn(routing);
+
+        AssistantMessageResponse response = controlPlaneService.submitEmployeeMessage(
+                tenantId, userId, sessionId, "Tạo cho tôi ứng dụng Quản lý nghỉ phép", Map.of(), null, "key-create-1", "req-create-1",
+                new ChatControlPlaneService.AnswerStreamListener() {
+                    @Override public void onContent(String c) {}
+                    @Override public void onReset() {}
+                }
+        );
+
+        verifyNoInteractions(inferenceClient);
+        assertNotNull(response);
+        assertEquals("Tôi có thể giúp bạn tạo ứng dụng Quản lý nghỉ phép", response.content());
+        assertNotNull(response.action());
+        assertEquals("bizapp.draft", response.action().get("kind"));
+        assertEquals("PROPOSED", response.action().get("status"));
+    }
 }

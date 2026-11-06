@@ -56,13 +56,19 @@ class OllamaChatModel:
         *,
         max_output_tokens: int,
         temperature: float | None = None,
+        format: dict[str, Any] | None = None,
     ) -> str:
-        """Generate with a bounded output budget for auxiliary, non-answer calls."""
+        """Generate with a bounded output budget for auxiliary, non-answer calls.
+
+        `format` accepts a JSON Schema dict and is forwarded to the provider as
+        a structured-output constraint (Ollama native /api/chat "format").
+        """
         return (
             await self._complete_with_limits(
                 messages,
                 max_output_tokens=max_output_tokens,
                 temperature=temperature,
+                provider_format=format,
             )
         ).content
 
@@ -80,6 +86,7 @@ class OllamaChatModel:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         allow_truncated: bool = False,
+        provider_format: dict[str, Any] | None = None,
     ) -> ModelCompletion:
         started_at = time.perf_counter()
         outcome = "success"
@@ -90,6 +97,7 @@ class OllamaChatModel:
                     max_output_tokens=max_output_tokens,
                     temperature=temperature,
                     allow_truncated=allow_truncated,
+                    provider_format=provider_format,
                 ),
                 timeout=self._timeout_seconds,
             )
@@ -127,6 +135,7 @@ class OllamaChatModel:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         allow_truncated: bool = False,
+        provider_format: dict[str, Any] | None = None,
     ) -> ModelCompletion:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -146,6 +155,9 @@ class OllamaChatModel:
                 ),
             },
         }
+        if provider_format is not None:
+            # Structured outputs (Ollama native contract; JSON Schema dict).
+            payload["format"] = provider_format
         if self._settings.LLM_DISABLE_THINKING:
             payload["think"] = False
 

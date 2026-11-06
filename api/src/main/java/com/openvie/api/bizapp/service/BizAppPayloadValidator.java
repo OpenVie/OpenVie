@@ -21,6 +21,7 @@ import com.openvie.api.common.exception.custom.BadRequestException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -119,12 +120,41 @@ public class BizAppPayloadValidator {
         String str = String.valueOf(value).trim();
         LocalDate resolved = resolveNaturalDate(str);
         if (resolved != null) {
-            return resolved.toString();
+            return appendTime(resolved, str, resolved.toString());
+        }
+        int tIndex = str.indexOf('T');
+        if (tIndex > 0) {
+            try {
+                LocalDate date = LocalDate.parse(str.substring(0, tIndex));
+                String timePart = str.substring(tIndex + 1);
+                LocalTime.parse(timePart); // validates HH:mm[:ss]
+                String normalizedTime = timePart.length() > 5
+                        ? timePart
+                        : String.format("%02d:%02d",
+                                java.time.LocalTime.parse(timePart).getHour(),
+                                java.time.LocalTime.parse(timePart).getMinute());
+                return date + "T" + normalizedTime;
+            } catch (DateTimeParseException exception) {
+                throw new BadRequestException(entityMessage(entity, field,
+                        "must be an ISO date (yyyy-MM-dd) with optional time (yyyy-MM-ddTHH:mm)"));
+            }
         }
         try {
             return LocalDate.parse(str).toString();
         } catch (DateTimeParseException exception) {
             throw new BadRequestException(entityMessage(entity, field, "must be an ISO date (yyyy-MM-dd)"));
+        }
+    }
+
+    private String appendTime(LocalDate date, String raw, String fallback) {
+        // natural-language dates like "hôm nay" followed by an explicit time part
+        int tIndex = raw.indexOf('T');
+        if (tIndex <= 0) return fallback;
+        try {
+            LocalTime time = LocalTime.parse(raw.substring(tIndex + 1));
+            return date + "T" + String.format("%02d:%02d", time.getHour(), time.getMinute());
+        } catch (DateTimeParseException ignored) {
+            return fallback;
         }
     }
 

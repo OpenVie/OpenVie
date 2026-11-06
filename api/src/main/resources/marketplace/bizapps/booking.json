@@ -156,7 +156,8 @@
         "type": "notify",
         "params": {
           "to": [
-            "creator"
+            "creator",
+            "record.customerEmail"
           ],
           "title": "\u0110\u1eb7t l\u1ecbch h\u1eb9n \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn",
           "subject": "OpenVie Booking \u2014 x\u00e1c nh\u1eadn \u0111\u1eb7t l\u1ecbch"

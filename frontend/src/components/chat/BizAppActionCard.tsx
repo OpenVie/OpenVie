@@ -16,7 +16,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import {
   AlertCircle,
   AlertTriangle,
@@ -75,12 +75,15 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
   const { request } = useApiClient();
   const user = useAuthStore((s) => s.user);
   const isOwner = user?.orgRole === "ORG_OWNER";
-
+  const router = useRouter();
   const raw = initialAction as unknown as BizAppActionData;
   const [status, setStatus] = useState<BizAppActionData["status"]>(raw.status || "PROPOSED");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(
     raw.result && typeof raw.result.message === "string" ? raw.result.message : null
+  );
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(
+    (raw.result as Record<string, unknown>) || null
   );
 
   const actionId = raw.actionId;
@@ -93,15 +96,25 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
   async function handleExecute() {
     if (!actionId) return;
     setErrorMessage(null);
+    setStatus("EXECUTING");
     try {
       const resp = await executeChatActionApi(request, messageId, actionId);
       setStatus("EXECUTED");
-      const resultMsg = resp.action && typeof resp.action.result === "object" && resp.action.result !== null && "message" in resp.action.result
-        ? String((resp.action.result as Record<string, unknown>).message)
+      const resObj = resp.action && typeof resp.action.result === "object" && resp.action.result !== null
+        ? (resp.action.result as Record<string, unknown>)
+        : null;
+      setActionResult(resObj);
+      const resultMsg = resObj && "message" in resObj
+        ? String(resObj.message)
         : t("executed");
       setSuccessMessage(resultMsg);
       if (onActionExecuted) {
         onActionExecuted(resp);
+      }
+
+      const draftId = resObj?.draftId || (resp.action?.payload as Record<string, unknown> | undefined)?.draftId;
+      if (draftId) {
+        router.push(`/admin/apps/compose/${String(draftId)}`);
       }
     } catch (err: unknown) {
       setStatus("FAILED");
@@ -121,15 +134,16 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
     ? `${appName} — ${entityTitle}`
     : appName
     ? `${appName} (v${version})`
+    : kind === "bizapp.draft"
+    ? t("draftTitle")
     : t("catalogTitle");
-
   return (
     <Card
       role="region"
       aria-label={t("installTitle")}
-      className="my-3 border-border/80 bg-card/90 shadow-sm transition-all hover:border-border"
+      className="my-3 border-border/80 bg-card/90 shadow-sm transition-all hover:border-border gap-0"
     >
-      <CardHeader className="p-4 pb-2">
+      <CardHeader className="p-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {kind === "bizapp.install" && <AppWindow className="size-4 text-primary" />}
@@ -190,8 +204,17 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-        {description && <p className="mb-2 leading-relaxed">{description}</p>}
+      {Boolean(
+        description ||
+        (kind === "bizapp.uninstall" && status === "PROPOSED") ||
+        (kind === "bizapp.record.archive" && status === "PROPOSED") ||
+        (raw.fields && Object.keys(raw.fields).length > 0) ||
+        (raw.invalid && raw.invalid.length > 0) ||
+        (successMessage && isExecuted) ||
+        (errorMessage && isFailed)
+      ) && (
+        <CardContent className="px-4 pb-3 pt-0 text-xs text-muted-foreground">
+          {description && <p className="mb-2 leading-relaxed">{description}</p>}
         {kind === "bizapp.uninstall" && status === "PROPOSED" && (
           <p className="text-xs text-destructive/90">{t("uninstallWarning")}</p>
         )}
@@ -233,9 +256,10 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
             <p className="text-destructive">{errorMessage}</p>
           )}
         </div>
-      </CardContent>
+        </CardContent>
+      )}
 
-      <CardFooter className="flex flex-wrap items-center justify-end gap-2 p-4 pt-0">
+      <CardFooter className="flex flex-wrap items-center justify-end gap-2 px-4 py-3 bg-muted/30 border-t border-border/40 rounded-b-xl">
         {kind === "bizapp.install" && !isExecuted && (
           <Button
             size="sm"
@@ -270,9 +294,12 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
           </Link>
         )}
         {kind === "bizapp.draft" && (
-          <div className="flex gap-2">
-            {Boolean(raw.payload?.draftId) && (
-              <Link href={`/admin/apps/compose/${String(raw.payload?.draftId)}`} className={cn(buttonVariants({ size: "sm", variant: "outline" }), "text-xs")}>
+          <div className="flex items-center gap-2">
+            {Boolean(actionResult?.draftId || raw.payload?.draftId || (raw.result as Record<string, unknown> | undefined)?.draftId) && (
+              <Link
+                href={`/admin/apps/compose/${String(actionResult?.draftId || raw.payload?.draftId || (raw.result as Record<string, unknown> | undefined)?.draftId)}`}
+                className={cn(buttonVariants({ size: "sm" }), "text-xs font-semibold")}
+              >
                 {t("openComposer")}
                 <ExternalLink className="ml-1.5 size-3.5" />
               </Link>
@@ -283,10 +310,10 @@ export function BizAppActionCard({ action: initialAction, messageId, onActionExe
                 disabled={!isOwner || isExecuting}
                 onClick={() => void handleExecute()}
                 title={!isOwner ? t("onlyOwnerCanExecute") : undefined}
-                className="text-xs"
+                className="text-xs font-semibold"
               >
                 {isExecuting && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-                {isExecuting ? t("executing") : t("installToWorkspace")}
+                {isExecuting ? t("executing") : t("createAppConfirm")}
               </Button>
             )}
           </div>

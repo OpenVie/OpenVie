@@ -29,9 +29,15 @@ import java.util.UUID;
 public class NotificationRuntimeBridge implements NotificationRuntimeApi {
 
     private final EmailService emailService;
+    private final NotificationService notificationService;
 
     @Override
     public boolean sendRawEmail(UUID orgId, String toEmail, String subject, String htmlBody) {
         return emailService.sendRawEmail(orgId, toEmail, subject, htmlBody);
+    }
+
+    @Override
+    public void createInAppNotification(UUID tenantId, UUID userId, String type, String title, String message, String link) {
+        notificationService.createInAppNotification(tenantId, userId, type, title, message, link);
     }
 }
