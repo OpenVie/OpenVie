@@ -65,6 +65,7 @@ import {
   listPlaygroundSessionsApi,
 } from "@/lib/chat-api"
 import { getTenantWorkspaceApi } from "@/lib/workspace-api"
+import { hasAnyInstalledBizAppApi } from "@/lib/bizapp-api"
 import type { ChatCitation, Document, DocumentStatus, TenantWorkspace } from "@/types"
 import {
   consumeNewChatRequest,
@@ -178,6 +179,9 @@ function Playground() {
   // a turn completes and `sending` flips back to false.
   const historyLoadedForRef = useRef<string | null>(null)
   const [sources, setSources] = useState<SourceDocument[]>([])
+  // Apps are installed into one workspace, but the composer must not become a
+  // dead end in a sibling workspace when the organization already runs apps.
+  const [hasInstalledApp, setHasInstalledApp] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [heroAnimationKey, setHeroAnimationKey] = useState(0)
@@ -205,6 +209,10 @@ function Playground() {
       source.status === "PENDING" ||
       source.status === "PROCESSING",
   )
+  // Questions are answerable from indexed documents in this workspace or from
+  // apps already installed anywhere in the organization. Only that combination
+  // being absent is a dead end for the composer.
+  const canAskQuestion = hasCompletedSource || hasInstalledApp
   const recentUploads = sources.filter((source) => recentUploadIds.includes(source.localId))
   const sourceProcessList = recentUploads.length > 0 ? (
     <div className="ov-source-process-list" aria-live="polite">
@@ -272,6 +280,26 @@ function Playground() {
       cancelled = true
     }
   }, [request, t])
+
+  useEffect(() => {
+    if (!workspace) return
+
+    let cancelled = false
+    // Any active app in the organization unlocks the composer even when this
+    // workspace has no indexed document yet. A failed lookup must never block
+    // chatting, hence the silent fallback to document-only gating.
+    hasAnyInstalledBizAppApi(request)
+      .then((installed) => {
+        if (!cancelled) setHasInstalledApp(installed)
+      })
+      .catch(() => {
+        // The BizApps surface may be disabled on this installation.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [request, workspace])
 
   useEffect(() => {
     if (!workspace) return
@@ -524,7 +552,7 @@ function Playground() {
 
   async function sendUserMessage(content: string, isRetry: boolean = false) {
     if (!content || sending || activeChatAbortRef.current) return
-    if (!hasCompletedSource) {
+    if (!canAskQuestion) {
       toast.error(
         hasIndexingSource
           ? t("waitForIndexing")
@@ -732,7 +760,7 @@ function Playground() {
     event.target.value = ""
   }
 
-  const sendDisabled = !workspace || !message.trim() || !hasCompletedSource || sending
+  const sendDisabled = !workspace || !message.trim() || !canAskQuestion || sending
 
   const playgroundContent = (
     <div
@@ -883,7 +911,7 @@ function Playground() {
               rows={1}
               wrap="soft"
               placeholder={
-                hasCompletedSource
+                canAskQuestion
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }

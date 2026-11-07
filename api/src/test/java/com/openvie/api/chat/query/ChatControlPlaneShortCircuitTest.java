@@ -29,7 +29,10 @@ import com.openvie.api.chat.repository.ChatSessionRepository;
 import com.openvie.api.chat.repository.ChatTurnRepository;
 import com.openvie.api.chat.service.CatalogAnswerComposer;
 import com.openvie.api.document.api.DocumentApi;
+import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
+import com.openvie.api.tenant.api.WorkspaceRole;
 import com.openvie.api.tenant.api.TenantWorkspaceApi.WorkspaceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +61,7 @@ class ChatControlPlaneShortCircuitTest {
     private BizAppRuntimeApi bizAppRuntimeApi;
     private ChatControlPlaneService controlPlaneService;
 
+    private final TenantIdentityApi tenantIdentityApi = mock(TenantIdentityApi.class);
     private final UUID tenantId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
     private final UUID sessionId = UUID.randomUUID();
@@ -92,8 +96,12 @@ class ChatControlPlaneShortCircuitTest {
                 documentApi,
                 inferenceClient,
                 objectMapper,
-                transactions
+                transactions,
+                tenantIdentityApi
         );
+        when(tenantIdentityApi.requireMembership(userId, tenantId)).thenReturn(
+                new TenantIdentityApi.MembershipSnapshot(userId, UUID.randomUUID(), tenantId,
+                        OrgRole.MEMBER, WorkspaceRole.MEMBER, "ACTIVE"));
 
         controlPlaneService.setIntentRouter(intentRouter);
         controlPlaneService.setCatalogAnswerComposer(catalogAnswerComposer);

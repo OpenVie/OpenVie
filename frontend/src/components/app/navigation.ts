@@ -77,3 +77,23 @@ export function isAdminPath(pathname: string | undefined): boolean {
     (adminPath) => pathname === adminPath || pathname.endsWith(adminPath),
   )
 }
+
+/**
+ * The single navigation entry that owns the current path. Nested destinations
+ * (`/admin/organization/api-keys` under `/admin/organization`) must not light
+ * up their parent as well, so the longest matching href wins.
+ */
+export function activeNavigationHref(
+  pathname: string | undefined,
+  items: AppNavigationItem[],
+): string | null {
+  if (!pathname) return null
+  let active: string | null = null
+  for (const { href } of items) {
+    const matches = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
+    if (matches && (active === null || href.length > active.length)) {
+      active = href
+    }
+  }
+  return active
+}

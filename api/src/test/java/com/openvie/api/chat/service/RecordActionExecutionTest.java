@@ -81,7 +81,8 @@ class RecordActionExecutionTest {
 
         String hash = BizAppIntentRouter.computePayloadHash(fields);
         Map<String, Object> card = BizAppIntentRouter.buildRecordActionCard(
-                kind, appKind, appKind, entity, entity, null, fields, Map.of(), "PROPOSED", List.of(), sessionId, hash
+                kind, appKind, appKind, entity, entity, null, fields, Map.of(), "PROPOSED", List.of(),
+                sessionId, hash, "ORG_OWNER"
         );
         card.put("actionId", actionId.toString());
         msg.setAction(card);

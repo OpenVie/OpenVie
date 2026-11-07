@@ -436,6 +436,10 @@ export interface BizAppManifest {
   rbac?: Record<string, string[]>;
   entities: BizAppEntity[];
   blocks?: BizAppBlock[];
+  conversational?: {
+    triggers?: string[];
+    description?: string;
+  };
   ui?: {
     views: string[];
     layout?: Record<string, { x: number; y: number }>;

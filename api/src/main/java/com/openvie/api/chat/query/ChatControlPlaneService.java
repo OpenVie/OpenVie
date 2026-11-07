@@ -33,6 +33,8 @@ import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.chat.api.ChatRuntimeApi;
 import com.openvie.api.chat.service.CatalogAnswerComposer;
 import com.openvie.api.document.api.DocumentApi;
+import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,6 +82,7 @@ public class ChatControlPlaneService {
     private final AiInferenceApi inferenceClient;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactions;
+    private final TenantIdentityApi tenantIdentityApi;
     @Autowired(required = false)
     private NamedParameterJdbcTemplate namedJdbc;
     @Autowired(required = false)
@@ -220,6 +223,18 @@ public class ChatControlPlaneService {
         throw new CancellationException("The answer stream was cancelled.");
     }
 
+    /** The caller's manifest RBAC role: owners act as ORG_OWNER, everyone else as their workspace role. */
+    private String manifestRole(UUID userId, UUID tenantId) {
+        TenantIdentityApi.MembershipSnapshot membership = tenantIdentityApi.requireMembership(userId, tenantId);
+        if (membership == null) {
+            return "MEMBER";
+        }
+        if (membership.orgRole() == OrgRole.ORG_OWNER) {
+            return "ORG_OWNER";
+        }
+        return membership.workspaceRole() == null ? "MEMBER" : membership.workspaceRole().name();
+    }
+
     private PreparedTurn prepareTurn(
             UUID tenantId, UUID userId, UUID sessionId, String content,
             Map<String, Object> metadata, List<UUID> documentIds,
@@ -293,7 +308,8 @@ public class ChatControlPlaneService {
         turn = turnRepository.save(turn);
 
         BizAppIntentRouter.RoutingResult routing = (intentRouter != null)
-                ? intentRouter.route(tenantId, session.getTenantId(), userId, session.getChannel().name(), content, session.getLocale(), sessionId, prior)
+                ? intentRouter.route(tenantId, session.getTenantId(), userId,
+                        manifestRole(userId, session.getTenantId()), content, session.getLocale(), sessionId, prior)
                 : BizAppIntentRouter.RoutingResult.none();
         if (routing == null) {
             routing = BizAppIntentRouter.RoutingResult.none();

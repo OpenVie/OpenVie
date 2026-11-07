@@ -104,7 +104,7 @@ class TriggerFastPathRoutingTest {
 
         assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
         assertEquals("booking", result.appKind());
-        assertTrue(result.reply().contains("tạo lịch hẹn trong Booking"),
+        assertTrue(result.reply().contains("Booking") && result.reply().contains("thông tin chi tiết"),
                 "falls back to the prompt-for-details reply, same as explicit write requests");
         verify(aiInferenceApi, never()).completeJson(any());
     }
@@ -146,9 +146,10 @@ class TriggerFastPathRoutingTest {
         assertTrue(systemPrompt.contains("'booking'"));
         assertTrue(systemPrompt.contains(
                 "NEVER return INSTALL for an app already listed under Installed Apps"));
-        assertTrue(systemPrompt.contains("Gỡ ứng dụng đặt lịch giúp tôi"),
-                "classifier must carry the app-lifecycle uninstall few-shot");
-        assertTrue(systemPrompt.contains("Bạn có thể đặt lịch cho tôi không?\" (scheduling app installed)"));
+        assertTrue(systemPrompt.contains("Gỡ ứng dụng Booking"),
+                "classifier must carry the manifest-generated uninstall few-shot");
+        assertTrue(systemPrompt.contains("Thêm Lịch hẹn mới"),
+                "classifier must carry the manifest-generated record few-shot");
     }
 
     @Test

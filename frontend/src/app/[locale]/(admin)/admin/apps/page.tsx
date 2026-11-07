@@ -33,6 +33,7 @@ import type {
   BizAppCredentialView,
   BizAppDraftView,
   BizAppInstalledAppView,
+  BizAppManifest,
   BizAppTemplateView,
 } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
@@ -43,6 +44,7 @@ import {
   deleteBizAppTemplateApi,
   exportBizAppTemplateApi,
   generateBizAppDraftApi,
+  getBizAppTemplateApi,
   importBizAppTemplateApi,
   installBizAppApi,
   listBizAppCredentialsApi,
@@ -51,6 +53,7 @@ import {
   listBizAppTemplatesApi,
   remixBizAppTemplateApi,
   uninstallBizAppApi,
+  upgradeBizAppApi,
 } from "@/lib/bizapp-api";
 import { useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -215,7 +218,14 @@ export default function AdminAppsPage() {
     if (!draftValid(draft)) return;
     setBusy(`installDraft:${draft.id}`);
     try {
-      const result = await installBizAppApi(request, { draftId: draft.id });
+      // A draft for an already-active kind is an upgrade, not a dead end.
+      const draftManifest = draft.manifest as unknown as BizAppManifest | null;
+      const draftKind = typeof draft.manifest?.kind === "string" ? draft.manifest.kind : null;
+      const active = draftKind != null
+        && installed.some((app) => app.kind === draftKind && app.status === "ACTIVE");
+      const result = active && draftManifest
+        ? await upgradeBizAppApi(request, draftKind, draftManifest)
+        : await installBizAppApi(request, { draftId: draft.id });
       toast.success(t("admin.installSuccess", { kind: result.kind }));
       await load();
     } catch (cause) {
@@ -246,9 +256,14 @@ export default function AdminAppsPage() {
   };
 
   const onInstall = async (template: BizAppTemplateView) => {
-    setBusy(`install:${templateRef(template)}`);
+    const ref = templateRef(template);
+    setBusy(`install:${ref}`);
     try {
-      const result = await installBizAppApi(request, templateRef(template));
+      const active = installed.some((app) => app.kind === template.kind && app.status === "ACTIVE");
+      const result = active
+        ? await upgradeBizAppApi(request, template.kind,
+            (await getBizAppTemplateApi(request, ref)) as unknown as BizAppManifest)
+        : await installBizAppApi(request, ref);
       toast.success(t("admin.installSuccess", { kind: result.kind }));
       await load();
     } catch (cause) {

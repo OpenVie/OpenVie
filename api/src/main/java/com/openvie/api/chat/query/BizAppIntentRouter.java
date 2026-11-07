@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.ai.api.AiInferenceApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi;
+import com.openvie.api.bizapp.api.BizAppRuntimeApi.ActionCapabilities;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.AppActionOffer;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.MarketplaceTemplateSummary;
@@ -34,6 +35,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.EntityDetail;
@@ -108,6 +110,9 @@ public class BizAppIntentRouter {
         }
     }
 
+    /** An installed app chosen semantically from the manifest catalog. */
+    private record AppSelection(String kind, String entity) {}
+
     private static final Pattern ADMIN_VERBS = Pattern.compile(
             "\\b(cai|cai dat|install|go|go cai dat|uninstall|xoa app|remove app|danh sach app|list apps?|show apps?|xem app|tao app|lap app|them app|create app|build app|compose app|goi y app|suggest apps?|ung dung|marketplace)\\b",
             Pattern.CASE_INSENSITIVE
@@ -116,16 +121,63 @@ public class BizAppIntentRouter {
     private static final Pattern WRITE_VERBS = Pattern.compile(
             "\\b(them|tao|lap|nhap|ghi|ghi nhan|luu|luu tru|cap nhat|sua|doi|xoa|go bo|gui duyet|trinh duyet|"
             + "add|create|insert|log|save|update|edit|change|delete|remove|archive|submit|send for approval|"
-            + "schedule|book|reserve|set up|set)\\b",
+            + "set up|set)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern CREATE_VERBS = Pattern.compile(
+            "\\b(them|tao|lap|nhap|ghi|ghi nhan|luu|luu tru|dang ky|xin|gui|"
+            + "add|create|insert|log|save|register|request|report|notify)\\b",
             Pattern.CASE_INSENSITIVE
     );
 
     private static final Pattern GENERIC_APP_VOCAB = Pattern.compile(
-            "\\b(app|apps|ung dung|phan mem|ban ghi|record|records|lead|leads|item|items|du lieu|data|thuc the|entity|entities|truong|fields?|cai dat|install|go cai dat|uninstall|marketplace|catalog|danh muc)\\b",
+            "\\b(app|apps|ung dung|phan mem|ban ghi|record|records|item|items|du lieu|data|thuc the|entity|entities|truong|fields?|cai dat|install|go cai dat|uninstall|marketplace|catalog|danh muc)\\b",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern MANAGEMENT_NEED = Pattern.compile(
             "\\b(quan ly|theo doi|kiem soat|giam sat|quan tri|luu tru thong tin|manage|track|monitor)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /** Desire/politeness phrases that introduce an operational request in any domain. */
+    private static final Pattern REQUEST_VERBS = Pattern.compile(
+            "\\b(muon|can|giup|co the|please|want|need|would like|can you|could you)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /** Greetings, thanks, acknowledgements and identity turns need no app LLM. */
+    private static final Pattern CHIT_CHAT = Pattern.compile(
+            "^\\s*(?:hi+|hello+|hey+|yo|alo+|chao|xin chao|"
+            + "good (?:morning|afternoon|evening)|bye+|tam biet|hen gap lai|"
+            + "cam on|thanks?|thank you|ok(?:ay)?|oke|vang|da|uhm*|u+|"
+            + "who are you|ban la ai|may la ai|how are you|(?:ban\\s+)?khoe\\s+khong)"
+            + "\\s*[.?!…~]*\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern READ_VERBS = Pattern.compile(
+            "\\b(xem|liet ke|danh sach|tim|tra cuu|show|list|view|find|search)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /** Questions that ask for knowledge rather than an operational action. */
+    private static final Pattern INFO_REQUEST = Pattern.compile(
+            "\\b(biet|hoi|cho biet|thong tin|giai thich|tell me|explain|what|how|why|when|where|which|bao nhieu)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern UPDATE_VERBS = Pattern.compile(
+            "\\b(cap nhat|sua|doi|update|edit|change)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern ARCHIVE_VERBS = Pattern.compile(
+            "\\b(xoa|go bo|xoa bo|archive|delete|remove)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern SUBMIT_VERBS = Pattern.compile(
+            "\\b(gui duyet|trinh duyet|submit|send for approval)\\b",
             Pattern.CASE_INSENSITIVE
     );
 
@@ -145,10 +197,40 @@ public class BizAppIntentRouter {
             Pattern.CASE_INSENSITIVE
     );
 
+    /** Follow-up asking which data is required to create a record in the active app. */
+    private static final Pattern FIELD_INFO_REQUEST = Pattern.compile(
+            "\\b(thong tin nao|thong tin gi|can cung cap|cung cap (?:nhung )?thong tin|"
+            + "nhung thong tin nao|truong nao|field nao|can nhap|nhap gi|"
+            + "what information|which (?:information|fields?)|"
+            + "what (?:do i|should i) (?:need|provide)|what details|details do you need|what fields)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    /** Structured-output contract for semantic app selection. */
+    private static final String APP_SELECTOR_JSON_SCHEMA = """
+            {
+              "type": "object",
+              "required": ["appKind", "confidence"],
+              "properties": {
+                "appKind": { "type": ["string", "null"] },
+                "entity": { "type": ["string", "null"] },
+                "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+              }
+            }
+            """;
+
+    private static final int SELECTOR_MAX_APPS = 20;
+    private static final int SELECTOR_MAX_ENTITIES_PER_APP = 10;
+    private static final int SELECTOR_MAX_FIELDS_PER_ENTITY = 40;
+    private static final double SELECTOR_CONFIDENCE_THRESHOLD = 0.6;
+
     private static final Pattern FILLER_KEYWORDS = Pattern.compile(
             "\\b(cho\\s+(?:toi\\s+)?(?:ty|ti|chut|da)|doi\\s+(?:toi\\s+)?(?:ty|ti|chut|da)|khoan\\s+da|wait|hold\\s+on|one\\s+moment)\\b",
             Pattern.CASE_INSENSITIVE
     );
+
+    private static final Pattern RECORD_ID_PATTERN = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     public static boolean isFillerTurn(String normalized) {
         if (normalized == null) return false;
@@ -260,10 +342,14 @@ public class BizAppIntentRouter {
 
         List<InstalledAppSummary> installed = bizAppRuntimeApi.listInstalledSummary(tenantId);
         List<MarketplaceTemplateSummary> catalog = bizAppRuntimeApi.listMarketplaceSummary(tenantId);
-        Map<String, String> aliasToKind = buildAliasToKindMap(installed, catalog);
+        Map<String, ActionCapabilities> capabilities = bizAppRuntimeApi.listActionCapabilities(tenantId, role);
+        // Apps the caller cannot read stay out of selection, prompts and cards;
+        // the raw list is still used for existence checks (install/uninstall).
+        List<InstalledAppSummary> visibleInstalled = visibleInstalled(installed, capabilities);
+        Map<String, String> aliasToKind = buildAliasToKindMap(visibleInstalled, catalog);
 
         Set<String> knownKinds = new HashSet<>();
-        installed.forEach(i -> knownKinds.add(i.kind().toLowerCase(Locale.ROOT)));
+        visibleInstalled.forEach(i -> knownKinds.add(i.kind().toLowerCase(Locale.ROOT)));
         catalog.forEach(c -> knownKinds.add(c.kind().toLowerCase(Locale.ROOT)));
         String normalized = removeDiacritics(content.toLowerCase(Locale.ROOT));
 
@@ -288,10 +374,36 @@ public class BizAppIntentRouter {
             return RoutingResult.none();
         }
 
+        // Greetings/thanks/identity turns have no app intent. Returning before
+        // the selector/classifier keeps chit-chat on the RAG side's fixed
+        // template with zero LLM calls, even when classify-all-turns is on.
+        if (directKind == null && isChitChat(normalized)) {
+            return RoutingResult.none();
+        }
+
+        // 3. Manifest-driven semantic app selection. Alias/trigger matching is
+        // fast but only reaches apps whose kind, name, trigger or entity happens
+        // to appear verbatim in the message. When that fails, ask a small
+        // structured-output model to match the request against every installed
+        // app's name/description/triggers/entities/fields, so any app can be
+        // reached by meaning without hardcoding its domain.
+        AppSelection semantic = null;
+        if (directKind == null
+                && !visibleInstalled.isEmpty()
+                && (looksOperational(normalized) || !isInformationalQuestion(normalized))) {
+            semantic = selectInstalledApp(content, visibleInstalled, aliasToKind, locale);
+            if (semantic != null) {
+                directKind = semantic.kind();
+            }
+        }
+        boolean semanticMatch = semantic != null;
+        String preferredEntity = semantic != null ? semantic.entity() : null;
+
         boolean inActiveContext = (directKind != null);
 
         if (!classifyAllTurns && !matchesDeterministicGate(content, aliasToKind.keySet()) && !inActiveContext) {
-            return RoutingResult.none();
+            return offerCreateAppForUncoveredAction(
+                    content, normalized, locale, sessionId, "Uncovered operational request");
         }
         // Handle filler/pause turn when in active app context (e.g. "Chờ tôi tý tôi đi lấy thông tin đã")
         if (inActiveContext && isFillerTurn(normalized)) {
@@ -324,13 +436,29 @@ public class BizAppIntentRouter {
             );
         }
 
-        // Manifest triggers carry action semantics ("đặt lịch", "lên lịch", ...):
-        // a message that names an app through one of its triggers is an action
-        // request, unless it is phrased as an information question ("X là gì?",
-        // "ở đâu?", "khi nào?"...), which still flows through the LLM classifier.
+        // Manifest triggers carry action semantics: a message that names an app
+        // through one of its triggers is an action request, unless it is phrased
+        // as an information question ("X là gì?", "ở đâu?", "khi nào?"...),
+        // which still flows through the LLM classifier.
         boolean triggerInContent = directFromContent
                 && containsAppActionTrigger(normalized, directKind, aliasToKind)
                 && !isInformationalQuestion(normalized);
+
+        // A semantic selection is only allowed to take the fast create path
+        // when the turn is an action/desire rather than a read or an
+        // update/archive/submit request (those keep their intent semantics and
+        // flow through the classifier with the selected app as a hint).
+        boolean readRequest = READ_VERBS.matcher(normalized).find();
+        boolean nonCreateVerb = UPDATE_VERBS.matcher(normalized).find()
+                || ARCHIVE_VERBS.matcher(normalized).find()
+                || SUBMIT_VERBS.matcher(normalized).find();
+        boolean semanticCreate = semanticMatch
+                && !readRequest
+                && !nonCreateVerb
+                && (REQUEST_VERBS.matcher(normalized).find()
+                    || CREATE_VERBS.matcher(normalized).find()
+                    || triggerInContent);
+        boolean semanticNonCreate = semanticMatch && !semanticCreate;
 
         // Fast deterministic record create match or prompt to install, unless
         // the turn is an app-lifecycle request: uninstall phrasing must reach
@@ -343,23 +471,44 @@ public class BizAppIntentRouter {
         boolean appLifecycleTurn = isUninstallAppRequest(normalized)
                 || (isInstallAppRequest(normalized) && targetInstalled);
         if (directKind != null
-                && (WRITE_VERBS.matcher(normalized).find() || fromContext || triggerInContent)
+                && !semanticNonCreate
+                && (WRITE_VERBS.matcher(normalized).find() || fromContext || triggerInContent || semanticCreate)
                 && !appLifecycleTurn) {
             final String targetAppKind = directKind;
-            var instOpt = installed.stream().filter(i -> i.kind().equalsIgnoreCase(targetAppKind)).findFirst();
+            var instOpt = visibleInstalled.stream().filter(i -> i.kind().equalsIgnoreCase(targetAppKind)).findFirst();
             if (instOpt.isPresent()) {
                 InstalledAppSummary app = instOpt.get();
+                if (!capabilityAllows(capabilities, app.kind(), Intent.APP_RECORD_CREATE)) {
+                    return capabilityDenied(Intent.APP_RECORD_CREATE, app.kind(), role, locale);
+                }
                 String accumulatedText = buildAccumulatedUserText(priorMessages, content);
-                EntityDetail targetEntity = resolveEntity(accumulatedText, app.entityDetails());
+                EntityDetail targetEntity = preferredEntity != null
+                        ? findEntity(preferredEntity, app.entityDetails())
+                        : null;
+                if (targetEntity == null) {
+                    targetEntity = resolveEntity(accumulatedText, app.entityDetails());
+                }
                 if (targetEntity != null) {
+                    if (fromContext && FIELD_INFO_REQUEST.matcher(normalized).find()) {
+                        return new RoutingResult(
+                                Intent.APP_RECORD_CREATE,
+                                app.kind(),
+                                targetEntity.name(),
+                                BigDecimal.valueOf(0.98),
+                                buildFieldInfoReply(app, targetEntity, locale),
+                                "Field information request in active app context",
+                                null,
+                                null
+                        );
+                    }
                     Map<String, Object> fields = resolveRecordFields(priorMessages, content, targetEntity, app.name(), locale);
 
                     // If user is asking generally without any fields, prompt for details instead of failing or going to RAG
                     if (fields.isEmpty()) {
-                        String entityName = targetEntity.label() != null ? targetEntity.label().toLowerCase(Locale.ROOT) : targetEntity.name();
+                        String appName = localizedAppName(app, locale);
                         String reply = (locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi"))
-                                ? "Tôi có thể giúp bạn tạo " + entityName + " trong " + app.name() + ". Vui lòng cho tôi biết thông tin chi tiết (ví dụ: ngày giờ, tên khách hàng hoặc nội dung) để tôi chuẩn bị nhé!"
-                                : "I can help you create " + entityName + " in " + app.name() + ". Please provide the details (e.g. date/time, customer name, or description) to proceed!";
+                                ? "Tôi có thể giúp bạn tạo một mục mới trong " + appName + ". Vui lòng cho tôi biết thông tin chi tiết để tôi chuẩn bị nhé!"
+                                : "I can help you create a new entry in " + appName + ". Please provide the details so I can prepare it!";
                         return new RoutingResult(
                                 Intent.APP_RECORD_CREATE,
                                 app.kind(),
@@ -387,7 +536,8 @@ public class BizAppIntentRouter {
                                 "INVALID",
                                 invalidList,
                                 sessionId,
-                                null
+                                null,
+                                role
                         );
                         return new RoutingResult(
                                 Intent.APP_RECORD_CREATE,
@@ -416,7 +566,8 @@ public class BizAppIntentRouter {
                             "PROPOSED",
                             List.of(),
                             sessionId,
-                            payloadHash
+                            payloadHash,
+                            role
                     );
 
                     return new RoutingResult(
@@ -431,6 +582,14 @@ public class BizAppIntentRouter {
                     );
                 }
             } else {
+                // Installed but invisible to this role: never offer it as an
+                // install, and never fall through to the classifier as if the
+                // app did not exist.
+                boolean installedButHidden = installed.stream()
+                        .anyMatch(i -> i.kind().equalsIgnoreCase(targetAppKind));
+                if (installedButHidden) {
+                    return capabilityDenied(Intent.APP_RECORD_CREATE, targetAppKind, role, locale);
+                }
                 // App is not installed yet: if available in catalog, prompt to install!
                 var catOpt = catalog.stream().filter(c -> c.kind().equalsIgnoreCase(targetAppKind)).findFirst();
                 if (catOpt.isPresent()) {
@@ -456,7 +615,8 @@ public class BizAppIntentRouter {
             }
         }
 
-        String systemPrompt = buildSystemPrompt(installed, catalog, role, locale, content, directKind, aliasToKind);
+        String systemPrompt = buildSystemPrompt(visibleInstalled, catalog, role, locale, content,
+                directKind, aliasToKind, capabilities);
         String prompt = "User statement: " + content;
 
         try {
@@ -471,7 +631,10 @@ public class BizAppIntentRouter {
 
             String json = structuredResponse.jsonOutput();
             if (json == null || json.isBlank() || "{}".equals(json)) {
-                return RoutingResult.none();
+                return directKind == null
+                        ? offerCreateAppForUncoveredAction(
+                                content, normalized, locale, sessionId, "Uncovered operational request")
+                        : RoutingResult.none();
             }
 
             JsonNode root = objectMapper.readTree(json);
@@ -488,12 +651,21 @@ public class BizAppIntentRouter {
                     .setScale(3, java.math.RoundingMode.HALF_UP);
 
             if (conf < confidenceThreshold || intent == Intent.NONE) {
-                return RoutingResult.none();
+                return directKind == null
+                        ? offerCreateAppForUncoveredAction(
+                                content, normalized, locale, sessionId, "Uncovered operational request")
+                        : RoutingResult.none();
             }
 
             String rawKind = root.path("appKind").asText(null);
             String appKind = resolveAppKind(rawKind != null ? rawKind : content, knownKinds, aliasToKind);
-            if (appKind == null && (intent == Intent.INSTALL || intent == Intent.UNINSTALL || intent == Intent.APP_DETAIL || intent == Intent.APP_DATA || intent == Intent.APP_RECORD_CREATE || intent == Intent.APP_RECORD_UPDATE || intent == Intent.APP_RECORD_ARCHIVE || intent == Intent.APP_RECORD_SUBMIT)) {
+            if (appKind == null && directKind != null && isAppBoundIntent(intent)) {
+                // The manifest selector already proved the app; let the
+                // classifier decide the operation (update/read/data) without
+                // requiring it to repeat the kind.
+                appKind = directKind;
+            }
+            if (appKind == null && isAppBoundIntent(intent)) {
                 return RoutingResult.none();
             }
 
@@ -534,14 +706,22 @@ public class BizAppIntentRouter {
                 card.put("appName", rawKind != null && !rawKind.isBlank() ? rawKind : "Ứng dụng mới");
                 card.put("status", "PROPOSED");
                 card.put("requiresRole", "ORG_OWNER");
-                card.put("payload", sessionId != null ? Map.of("sessionId", sessionId.toString()) : Map.of());
+                Map<String, Object> payload = new LinkedHashMap<>();
+                if (sessionId != null) {
+                    payload.put("sessionId", sessionId.toString());
+                }
+                payload.put("hint", content);
+                card.put("payload", payload);
                 actionCard = card;
             } else if (intent == Intent.APP_RECORD_CREATE || intent == Intent.APP_RECORD_UPDATE
                     || intent == Intent.APP_RECORD_ARCHIVE || intent == Intent.APP_RECORD_SUBMIT) {
                 if (!recordActionsEnabled) {
                     return RoutingResult.none();
                 }
-                var instOpt = installed.stream().filter(i -> i.kind().equalsIgnoreCase(targetKind)).findFirst();
+                if (!capabilityAllows(capabilities, targetKind, intent)) {
+                    return capabilityDenied(intent, targetKind, role, locale);
+                }
+                var instOpt = visibleInstalled.stream().filter(i -> i.kind().equalsIgnoreCase(targetKind)).findFirst();
                 if (instOpt.isEmpty()) {
                     return RoutingResult.none();
                 }
@@ -574,6 +754,17 @@ public class BizAppIntentRouter {
                     String status = invalidList.isEmpty() ? "PROPOSED" : "INVALID";
                     String payloadHash = invalidList.isEmpty() ? computePayloadHash(fields) : null;
 
+                    UUID recordId = null;
+                    if (intent != Intent.APP_RECORD_CREATE) {
+                        recordId = resolveRecordId(content, priorMessages, app.kind(), targetEntity.name());
+                        if (recordId == null) {
+                            return missingRecordResult(intent, app.kind(), targetEntity.name(), locale);
+                        }
+                        if (intent == Intent.APP_RECORD_UPDATE && fields.isEmpty()) {
+                            return askWhatToChangeResult(intent, app.kind(), targetEntity.name(), locale);
+                        }
+                    }
+
                     String cardKind = switch (intent) {
                         case APP_RECORD_UPDATE -> "bizapp.record.update";
                         case APP_RECORD_ARCHIVE -> "bizapp.record.archive";
@@ -587,13 +778,14 @@ public class BizAppIntentRouter {
                             app.name(),
                             targetEntity.name(),
                             targetEntity.label() != null ? targetEntity.label() : targetEntity.name(),
-                            null,
+                            recordId,
                             fields,
                             buildFieldLabels(targetEntity.fields()),
                             status,
                             invalidList,
                             sessionId,
-                            payloadHash
+                            payloadHash,
+                            role
                     );
                 }
             }
@@ -602,8 +794,144 @@ public class BizAppIntentRouter {
 
         } catch (Exception ex) {
             log.warn("Intent classification failed: {}", ex.getMessage());
-            return RoutingResult.none();
+            return directKind == null
+                    ? offerCreateAppForUncoveredAction(
+                            content, normalized, locale, sessionId, "Uncovered operational request")
+                    : RoutingResult.none();
         }
+    }
+
+    /** Apps the caller's role may read; null capabilities keep the legacy unfiltered view. */
+    private static List<InstalledAppSummary> visibleInstalled(
+            List<InstalledAppSummary> installed,
+            Map<String, ActionCapabilities> capabilities
+    ) {
+        if (capabilities == null || installed == null) {
+            return installed;
+        }
+        return installed.stream()
+                .filter(app -> {
+                    ActionCapabilities caps = capabilities.get(app.kind());
+                    return caps == null || caps.read();
+                })
+                .toList();
+    }
+
+    /** True when the caller's role may execute this record intent; unknown apps stay allowed. */
+    private static boolean capabilityAllows(
+            Map<String, ActionCapabilities> capabilities,
+            String appKind,
+            Intent intent
+    ) {
+        if (capabilities == null || appKind == null) {
+            return true;
+        }
+        ActionCapabilities caps = capabilities.get(appKind);
+        if (caps == null) {
+            return true;
+        }
+        return switch (intent) {
+            case APP_RECORD_CREATE -> caps.create();
+            case APP_RECORD_UPDATE -> caps.update();
+            case APP_RECORD_ARCHIVE -> caps.archive();
+            case APP_RECORD_SUBMIT -> caps.submit();
+            default -> true;
+        };
+    }
+
+    private static RoutingResult capabilityDenied(Intent intent, String appKind, String role, String locale) {
+        String reply = isVietnamese(locale)
+                ? "Vai trò của bạn không được phép thực hiện hành động này trong ứng dụng này."
+                : "Your role is not allowed to perform this action in this app.";
+        return new RoutingResult(intent, appKind, null, BigDecimal.ONE, reply,
+                "Manifest capability denied for role " + role, null, null);
+    }
+
+    private static RoutingResult missingRecordResult(Intent intent, String appKind, String entity, String locale) {
+        String reply = isVietnamese(locale)
+                ? "Mình cần biết bản ghi cụ thể. Hãy mở ứng dụng và chọn bản ghi, hoặc cho mình biết bản ghi vừa tạo."
+                : "I need the specific record. Open the app and choose it, or tell me which record you just created.";
+        return new RoutingResult(intent, appKind, entity, BigDecimal.ONE, reply,
+                "No record id in this conversation", null, null);
+    }
+
+    private static RoutingResult askWhatToChangeResult(Intent intent, String appKind, String entity, String locale) {
+        String reply = isVietnamese(locale)
+                ? "Bạn muốn cập nhật trường nào của bản ghi này?"
+                : "Which field of this record would you like to update?";
+        return new RoutingResult(intent, appKind, entity, BigDecimal.ONE, reply,
+                "No fields to update were provided", null, null);
+    }
+
+    private static boolean isVietnamese(String locale) {
+        return locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
+    }
+
+    /**
+     * Resolves the record a chat action targets: an explicit UUID in the
+     * current message wins, otherwise the most recent matching record action
+     * card in the conversation (its executed result or its proposal).
+     */
+    static UUID resolveRecordId(
+            String content,
+            List<ChatMessage> priorMessages,
+            String appKind,
+            String entity
+    ) {
+        if (content != null) {
+            Matcher explicit = RECORD_ID_PATTERN.matcher(content);
+            if (explicit.find()) {
+                UUID parsed = asUuid(explicit.group());
+                if (parsed != null) {
+                    return parsed;
+                }
+            }
+        }
+        if (priorMessages == null || priorMessages.isEmpty()) {
+            return null;
+        }
+        for (int i = priorMessages.size() - 1; i >= 0; i--) {
+            ChatMessage message = priorMessages.get(i);
+            if (message == null || message.getAction() == null
+                    || !"assistant".equalsIgnoreCase(message.getRole())) {
+                continue;
+            }
+            Map<String, Object> action = message.getAction();
+            Object kind = action.get("kind");
+            if (!(kind instanceof String actionKind) || !actionKind.startsWith("bizapp.record.")) {
+                continue;
+            }
+            if (appKind != null && action.get("appKind") instanceof String cardKind
+                    && !appKind.equalsIgnoreCase(cardKind)) {
+                continue;
+            }
+            if (entity != null && action.get("entity") instanceof String cardEntity
+                    && !entity.equalsIgnoreCase(cardEntity)) {
+                continue;
+            }
+            UUID fromCard = asUuid(action.get("recordId"));
+            if (fromCard == null && action.get("result") instanceof Map<?, ?> result) {
+                fromCard = asUuid(result.get("recordId"));
+            }
+            if (fromCard != null) {
+                return fromCard;
+            }
+        }
+        return null;
+    }
+
+    private static UUID asUuid(Object value) {
+        if (value instanceof UUID uuid) {
+            return uuid;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return UUID.fromString(text.trim());
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -622,9 +950,9 @@ public class BizAppIntentRouter {
     ) {
         String accumulatedText = buildAccumulatedUserText(priorMessages, content);
         Map<String, Object> fields = new LinkedHashMap<>(extractFieldsFromPrompt(accumulatedText, targetEntity));
-        // General asks with zero deterministic signal ("đặt lịch cho tôi?") keep
-        // the zero-LLM prompt-for-details path; the agent only runs when there
-        // is at least one anchor key to complete.
+        // General asks with zero deterministic signal keep the zero-LLM
+        // prompt-for-details path; the agent only runs when there is at least
+        // one anchor key to complete.
         if (slotAgent != null && slotAgent.llmEnabled() && !fields.isEmpty()) {
             Map<String, Object> llmSlots = slotAgent.extractSlots(targetEntity, appName, locale, priorMessages, content);
             llmSlots.forEach(fields::put);
@@ -646,7 +974,8 @@ public class BizAppIntentRouter {
         boolean hasVocab = GENERIC_APP_VOCAB.matcher(normalized).find();
         boolean hasDetail = DETAIL_KEYWORDS.matcher(normalized).find();
         boolean hasManagement = MANAGEMENT_NEED.matcher(normalized).find();
-        if (hasAdmin || hasWrite || hasVocab || hasDetail || hasManagement) {
+        boolean hasRequest = REQUEST_VERBS.matcher(normalized).find();
+        if (hasAdmin || hasWrite || hasVocab || hasDetail || hasManagement || hasRequest) {
             return true;
         }
         if (dynamicAliases != null) {
@@ -668,6 +997,337 @@ public class BizAppIntentRouter {
         return withoutMarks.replace('đ', 'd').replace('Đ', 'D');
     }
 
+    /**
+     * Chooses an installed app whose manifest covers the user's request by
+     * meaning rather than by verbatim alias. Returns null on failure or when no
+     * app fits, so callers always fall back to the normal classifier/RAG path.
+     */
+    private AppSelection selectInstalledApp(
+            String content,
+            List<InstalledAppSummary> installed,
+            Map<String, String> aliasToKind,
+            String locale
+    ) {
+        if (installed == null || installed.isEmpty()) {
+            return null;
+        }
+        try {
+            var structuredResponse = aiInferenceApi.completeJson(new AiInferenceApi.StructuredJsonRequest(
+                    "User request: " + content,
+                    buildAppSelectorPrompt(installed, locale),
+                    APP_SELECTOR_JSON_SCHEMA,
+                    "vylinh",
+                    0.0f,
+                    256
+            ));
+            String json = structuredResponse.jsonOutput();
+            if (json == null || json.isBlank() || "{}".equals(json)) {
+                return null;
+            }
+            JsonNode root = objectMapper.readTree(json);
+            String rawKind = root.path("appKind").asText("");
+            if (rawKind == null || rawKind.isBlank() || "null".equalsIgnoreCase(rawKind.trim())) {
+                return null;
+            }
+            double confidence = root.path("confidence").asDouble(0.0);
+            if (confidence < SELECTOR_CONFIDENCE_THRESHOLD) {
+                return null;
+            }
+            String kind = normalizeSelectedKind(rawKind, installed, aliasToKind);
+            if (kind == null) {
+                return null;
+            }
+            String rawEntity = root.path("entity").asText("");
+            String entity = rawEntity == null || rawEntity.isBlank() || "null".equalsIgnoreCase(rawEntity.trim())
+                    ? null
+                    : rawEntity.trim();
+            return new AppSelection(kind, entity);
+        } catch (Exception ex) {
+            log.warn("Semantic app selection failed: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private String normalizeSelectedKind(
+            String rawKind,
+            List<InstalledAppSummary> installed,
+            Map<String, String> aliasToKind
+    ) {
+        String cleaned = rawKind.trim();
+        int separator = cleaned.indexOf(':');
+        if (separator >= 0) {
+            cleaned = cleaned.substring(separator + 1).trim();
+        }
+        if (cleaned.isBlank()) {
+            return null;
+        }
+        Set<String> installedKinds = installed.stream()
+                .map(InstalledAppSummary::kind)
+                .filter(Objects::nonNull)
+                .map(kind -> kind.toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+        String resolved = resolveAppKind(cleaned, installedKinds, aliasToKind);
+        if (resolved == null) {
+            String normalized = removeDiacritics(cleaned.toLowerCase(Locale.ROOT));
+            resolved = installed.stream()
+                    .map(InstalledAppSummary::kind)
+                    .filter(Objects::nonNull)
+                    .filter(kind -> removeDiacritics(kind.toLowerCase(Locale.ROOT)).equals(normalized))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (resolved == null) {
+            return null;
+        }
+        final String wanted = resolved;
+        return installed.stream()
+                .map(InstalledAppSummary::kind)
+                .filter(kind -> kind != null && kind.equalsIgnoreCase(wanted))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String buildAppSelectorPrompt(List<InstalledAppSummary> installed, String locale) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are OpenVie's app router for one workspace.\n");
+        sb.append("Choose the installed app that handles the user's request, or null when none does.\n\n");
+        sb.append("Installed apps:\n");
+        int appCount = 0;
+        for (InstalledAppSummary app : installed) {
+            if (app == null || app.kind() == null || app.kind().isBlank()) continue;
+            if (appCount++ >= SELECTOR_MAX_APPS) break;
+            sb.append("- kind: ").append(app.kind()).append("\n");
+            String appName = app.name() != null && !app.name().isBlank() ? app.name() : app.kind();
+            sb.append("  name: ").append(appName);
+            if (app.nameVi() != null && !app.nameVi().isBlank() && !app.nameVi().equalsIgnoreCase(appName)) {
+                sb.append(" / ").append(app.nameVi());
+            }
+            sb.append("\n");
+            if (app.description() != null && !app.description().isBlank()) {
+                sb.append("  description: ").append(app.description()).append("\n");
+            }
+            if (app.triggers() != null && !app.triggers().isEmpty()) {
+                sb.append("  triggers: ").append(String.join(", ", app.triggers())).append("\n");
+            }
+            if (app.entityDetails() != null && !app.entityDetails().isEmpty()) {
+                sb.append("  entities:\n");
+                int entityCount = 0;
+                for (EntityDetail entity : app.entityDetails()) {
+                    if (entity == null || entity.name() == null || entity.name().isBlank()) continue;
+                    if (entityCount++ >= SELECTOR_MAX_ENTITIES_PER_APP) break;
+                    sb.append("    - ").append(entity.name());
+                    if (entity.label() != null
+                            && !entity.label().isBlank()
+                            && !entity.label().equalsIgnoreCase(entity.name())) {
+                        sb.append(" (").append(entity.label()).append(")");
+                    }
+                    if (entity.fields() != null && !entity.fields().isEmpty()) {
+                        List<String> fieldNames = entity.fields().stream()
+                                .filter(Objects::nonNull)
+                                .map(FieldDetail::name)
+                                .filter(name -> name != null && !name.isBlank())
+                                .limit(SELECTOR_MAX_FIELDS_PER_ENTITY)
+                                .toList();
+                        if (!fieldNames.isEmpty()) {
+                            sb.append(": ").append(String.join(", ", fieldNames));
+                        }
+                    }
+                    sb.append("\n");
+                }
+            }
+        }
+        sb.append("\nRules:\n");
+        sb.append("- Match by meaning, not only exact words. Use app name, description, triggers, entities and fields.\n");
+        sb.append("- Choose an app only when the user wants to perform an action or read data in that app's business domain.\n");
+        sb.append("- Return appKind=null for document questions, policy/procedure questions, chit-chat, or when no listed app covers the request.\n");
+        sb.append("- Never invent a kind. Use one of the exact kind strings above.\n");
+        sb.append("- Return the most specific entity name when the request clearly targets one; otherwise null.\n");
+        sb.append("- Do not include a 'kind:' prefix in appKind.\n");
+        sb.append("Locale: ").append(locale != null ? locale : "vi").append("\n\n");
+        sb.append("Output JSON only: {\"appKind\":\"kind or null\",\"entity\":\"entity or null\",\"confidence\":0.0-1.0}\n");
+        return sb.toString();
+    }
+
+    private static boolean looksOperational(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        return REQUEST_VERBS.matcher(normalized).find()
+                || READ_VERBS.matcher(normalized).find()
+                || WRITE_VERBS.matcher(normalized).find()
+                || MANAGEMENT_NEED.matcher(normalized).find();
+    }
+
+    private static boolean isChitChat(String normalized) {
+        return normalized != null && !normalized.isBlank() && CHIT_CHAT.matcher(normalized).matches();
+    }
+
+    private static String localizedAppName(InstalledAppSummary app, String locale) {
+        if (app == null) {
+            return "";
+        }
+        boolean vietnamese = locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
+        if (vietnamese && app.nameVi() != null && !app.nameVi().isBlank()) {
+            return app.nameVi();
+        }
+        if (app.name() != null && !app.name().isBlank()) {
+            return app.name();
+        }
+        return app.kind();
+    }
+
+    /**
+     * Lists the entity's declared fields for a "what should I provide?" follow-up.
+     * The reply is built from the live manifest; it never falls through to RAG.
+     */
+    private static String buildFieldInfoReply(InstalledAppSummary app, EntityDetail entity, String locale) {
+        boolean vietnamese = locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
+        String appName = localizedAppName(app, locale);
+        List<FieldDetail> fields = entity == null || entity.fields() == null ? List.of() : entity.fields();
+        if (fields.isEmpty()) {
+            return vietnamese
+                    ? "Ứng dụng " + appName + " chưa khai báo trường dữ liệu nào."
+                    : "App " + appName + " declares no data fields yet.";
+        }
+        List<FieldDetail> required = fields.stream().filter(f -> f != null && f.required()).toList();
+        List<FieldDetail> optional = fields.stream().filter(f -> f != null && !f.required()).toList();
+        StringBuilder sb = new StringBuilder();
+        if (vietnamese) {
+            sb.append("Để tạo một mục mới trong ").append(appName).append(", bạn cần cung cấp:\n");
+            appendFieldLines(sb, required.isEmpty() ? fields : required);
+            if (!required.isEmpty() && !optional.isEmpty()) {
+                sb.append("\nTùy chọn:\n");
+                appendFieldLines(sb, optional);
+            }
+            sb.append("\nBạn có thể gửi tất cả trong một tin nhắn.");
+        } else {
+            sb.append("To create a new entry in ").append(appName).append(", provide:\n");
+            appendFieldLines(sb, required.isEmpty() ? fields : required);
+            if (!required.isEmpty() && !optional.isEmpty()) {
+                sb.append("\nOptional:\n");
+                appendFieldLines(sb, optional);
+            }
+            sb.append("\nYou can send everything in one message.");
+        }
+        return sb.toString();
+    }
+
+    private static void appendFieldLines(StringBuilder sb, List<FieldDetail> fields) {
+        for (FieldDetail field : fields) {
+            if (field == null) continue;
+            String label = field.label() != null && !field.label().isBlank() ? field.label() : field.name();
+            sb.append("- ").append(label);
+            if (field.options() != null && !field.options().isEmpty()
+                    && !(field.options().size() == 1 && "default".equalsIgnoreCase(field.options().get(0)))) {
+                sb.append(" (").append(String.join(", ", field.options())).append(")");
+            }
+            sb.append("\n");
+        }
+    }
+
+    /**
+     * True when the turn asks to do something in a business process. This is
+     * deliberately domain-agnostic: it only looks at operational verbs, and
+     * excludes turns that ask for knowledge. No app or domain names are
+     * mentioned here, so new manifests keep working without code changes.
+     */
+    private static boolean looksLikeOperationalAction(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        if (PROCEDURE_KEYWORDS.matcher(normalized).find()
+                && !MANAGEMENT_NEED.matcher(normalized).find()) {
+            return false;
+        }
+        boolean create = CREATE_VERBS.matcher(normalized).find()
+                || WRITE_VERBS.matcher(normalized).find()
+                || SUBMIT_VERBS.matcher(normalized).find();
+        boolean management = MANAGEMENT_NEED.matcher(normalized).find();
+        if (!create && !management) {
+            return false;
+        }
+        if (INFO_REQUEST.matcher(normalized).find() && !create) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Last-resort route for an operational request that no installed app can
+     * serve. It offers a generic draft app instead of pretending the request
+     * was a document question. The user's own message is carried as the draft
+     * hint, so the generated app comes from the conversation, not from any
+     * hardcoded domain in the router.
+     */
+    private RoutingResult offerCreateAppForUncoveredAction(
+            String content,
+            String normalized,
+            String locale,
+            UUID sessionId,
+            String reason
+    ) {
+        if (!actionsEnabled || !looksLikeOperationalAction(normalized)) {
+            return RoutingResult.none();
+        }
+        boolean vietnamese = locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
+        String reply = vietnamese
+                ? "Hiện chưa có ứng dụng nào phù hợp với yêu cầu này. Mình có thể tạo một ứng dụng mới để xử lý quy trình bạn vừa nêu. Bạn có muốn tạo ứng dụng này không?"
+                : "No installed app covers this request yet. I can create a new app for the workflow you described. Would you like to create it?";
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("type", "bizapp_action");
+        card.put("actionId", UUID.randomUUID().toString());
+        card.put("kind", "bizapp.draft");
+        card.put("appName", vietnamese ? "Ứng dụng mới" : "New app");
+        card.put("status", "PROPOSED");
+        card.put("requiresRole", "ORG_OWNER");
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (sessionId != null) {
+            payload.put("sessionId", sessionId.toString());
+        }
+        payload.put("hint", content);
+        card.put("payload", payload);
+        return new RoutingResult(
+                Intent.CREATE_APP,
+                null,
+                null,
+                BigDecimal.valueOf(0.8),
+                reply,
+                reason,
+                null,
+                card
+        );
+    }
+
+    private static boolean isAppBoundIntent(Intent intent) {
+        return intent == Intent.INSTALL
+                || intent == Intent.UNINSTALL
+                || intent == Intent.APP_DETAIL
+                || intent == Intent.APP_DATA
+                || intent == Intent.APP_RECORD_CREATE
+                || intent == Intent.APP_RECORD_UPDATE
+                || intent == Intent.APP_RECORD_ARCHIVE
+                || intent == Intent.APP_RECORD_SUBMIT;
+    }
+
+    private static EntityDetail findEntity(String nameOrLabel, List<EntityDetail> entities) {
+        if (nameOrLabel == null || nameOrLabel.isBlank() || entities == null) {
+            return null;
+        }
+        String normalized = removeDiacritics(nameOrLabel.trim().toLowerCase(Locale.ROOT));
+        for (EntityDetail entity : entities) {
+            if (entity == null) continue;
+            if (entity.name() != null
+                    && removeDiacritics(entity.name().trim().toLowerCase(Locale.ROOT)).equals(normalized)) {
+                return entity;
+            }
+            if (entity.label() != null
+                    && removeDiacritics(entity.label().trim().toLowerCase(Locale.ROOT)).equals(normalized)) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
     private String buildSystemPrompt(
             List<InstalledAppSummary> installed,
             List<MarketplaceTemplateSummary> catalog,
@@ -675,7 +1335,8 @@ public class BizAppIntentRouter {
             String locale,
             String content,
             String directKind,
-            Map<String, String> aliasToKind
+            Map<String, String> aliasToKind,
+            Map<String, ActionCapabilities> capabilities
     ) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are OpenVie's Conversational BizApp intent classifier.\n");
@@ -686,12 +1347,12 @@ public class BizAppIntentRouter {
         sb.append("- INSTALL: user wants to install an app from the catalog\n");
         sb.append("- UNINSTALL: user wants to uninstall/remove an installed app\n");
         sb.append("- SUGGEST: user asks for app suggestions/recommendations\n");
-        sb.append("- CREATE_APP: user wants to build or create a new app, OR asks how to manage/track/organize a domain or workflow that no installed or marketplace app covers (e.g. \"có cách nào quản lý thiết bị IT không?\", \"tôi muốn quản lý kho\", \"làm sao theo dõi tài sản?\"). In the reply, explain that no app is currently installed for this, propose relevant entities and key fields, and suggest generating the app.\n");
+        sb.append("- CREATE_APP: user explicitly wants to build a new app, or asks how to manage/track a new domain that no installed or marketplace app covers. Propose the app and its key entities/fields in the reply and ask whether to create it.\n");
         sb.append("- APP_RECORD_CREATE: user wants to create/add/insert a new record/data into an app\n");
         sb.append("- APP_RECORD_UPDATE: user wants to update/edit an existing record in an app\n");
         sb.append("- APP_RECORD_ARCHIVE: user wants to delete/archive a record in an app\n");
         sb.append("- APP_RECORD_SUBMIT: user wants to submit a record for approval\n");
-        sb.append("- NONE: regular document questions, general conversation, or guidelines/policy questions\n\n");
+        sb.append("- NONE: document questions, guidelines/policy questions, or chit-chat unrelated to any business operation\n\n");
 
         sb.append("Installed Apps: ");
         sb.append(installed.stream().map(InstalledAppSummary::kind).toList()).append("\n");
@@ -699,13 +1360,15 @@ public class BizAppIntentRouter {
         sb.append(catalog.stream().map(MarketplaceTemplateSummary::kind).toList()).append("\n");
         sb.append("Caller Role: ").append(role != null ? role : "MEMBER").append("\n");
         sb.append("Locale: ").append(locale != null ? locale : "vi").append("\n");
+        appendAllowedActions(sb, installed, role, capabilities);
 
         buildAppHint(sb, content, directKind, installed, catalog, aliasToKind);
 
         sb.append("\nGuardrails:\n");
         sb.append("- NEVER return INSTALL for an app already listed under Installed Apps, and NEVER return UNINSTALL for an app that is NOT in Installed Apps. For an installed app, use the matching app/record intent for its data operations.\n");
-        sb.append("- Polite capability requests mapping to an app's domain action (e.g. \"Bạn có thể đặt lịch/lên lịch/đặt xe... cho tôi không?\") ARE that app's record/data intent, not general conversation.\n");
-        sb.append("- Return NONE only for document questions, procedures/policies (\"cách\", \"quy trình\", \"làm sao\"...), or chit-chat unrelated to every known app.\n");
+        sb.append("- Polite capability requests that match an installed app's domain ARE that app's record/data intent, not general conversation.\n");
+        sb.append("- If an installed app covers the user's operational request, use its record/data intent; never answer an operational request as a general document question.\n");
+        sb.append("- Return NONE only for document questions, procedures/policies (\"cách\", \"quy trình\", \"làm sao\"...), or chit-chat unrelated to every business operation.\n");
         sb.append("- An app reachable only through its trigger phrase still counts as the app's kind when two kind names collide.\n\n");
         sb.append("Output JSON schema:\n");
         sb.append("{\"intent\":\"NONE|LIST_APPS|APP_DETAIL|APP_DATA|INSTALL|UNINSTALL|SUGGEST|CREATE_APP|APP_RECORD_CREATE|APP_RECORD_UPDATE|APP_RECORD_ARCHIVE|APP_RECORD_SUBMIT\",");
@@ -716,16 +1379,79 @@ public class BizAppIntentRouter {
         sb.append("\"reply\":\"conversational explanation for user in the given locale\",");
         sb.append("\"reason\":\"brief reason\"}\n\n");
         sb.append("Few-shot Examples:\n");
-        sb.append("- \"Gỡ ứng dụng đặt lịch giúp tôi.\" (Booking installed) -> {\"intent\":\"UNINSTALL\",\"appKind\":\"booking\",\"confidence\":0.95,\"reply\":\"Gỡ ứng dụng Booking\"}\n");
-        sb.append("- \"Ứng dụng kho bao gồm những trường nào?\" -> {\"intent\":\"APP_DETAIL\",\"appKind\":\"inventory\",\"confidence\":0.98,\"reply\":\"Chi tiết các trường của ứng dụng\"}\n");
         sb.append("- \"Hiện tại đang có bao nhiêu ứng dụng đang được cài đặt?\" -> {\"intent\":\"LIST_APPS\",\"appKind\":null,\"confidence\":0.98,\"reply\":\"Danh sách ứng dụng\"}\n");
-        sb.append("- \"Cài đặt ứng dụng quản lý tài sản\" -> {\"intent\":\"INSTALL\",\"appKind\":\"asset-mgmt\",\"confidence\":0.98,\"reply\":\"Cài đặt ứng dụng\"}\n");
-        sb.append("- \"Thêm tài sản mới tên Máy in HP vào sổ tài sản\" -> {\"intent\":\"APP_RECORD_CREATE\",\"appKind\":\"asset-registry\",\"entity\":\"assets\",\"fields\":{\"name\":\"Máy in HP\"},\"confidence\":0.95,\"reply\":\"Chuẩn bị thêm tài sản\"}\n");
-        sb.append("- \"Quy trình thêm khách hàng gồm mấy bước?\" -> {\"intent\":\"NONE\",\"appKind\":null,\"confidence\":0.98,\"reply\":\"\"}\n");
-        sb.append("- \"Bạn có thể đặt lịch cho tôi không?\" (scheduling app installed) -> {\"intent\":\"APP_RECORD_CREATE\",\"appKind\":\"booking\",\"confidence\":0.97,\"reply\":\"Chuẩn bị tạo lịch hẹn trong Booking\"}\n");
-        sb.append("- \"Bạn có thể lên lịch giúp tôi không?\" (no scheduling app installed yet) -> {\"intent\":\"INSTALL\",\"appKind\":\"booking\",\"confidence\":0.9,\"reply\":\"Cần cài đặt ứng dụng đặt lịch trước\"}\n");
-        sb.append("- \"Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?\" -> {\"intent\":\"CREATE_APP\",\"appKind\":\"it-equipment\",\"confidence\":0.95,\"reply\":\"Hiện tại chưa có ứng dụng quản lý thiết bị IT trong không gian làm việc. Tôi có thể tạo ứng dụng giúp bạn theo dõi: Mã máy, Tên thiết bị, Loại máy, Người đang giữ và Tình trạng. Bạn có muốn tôi tạo ứng dụng này không?\",\"reason\":\"User expresses management need for uninstalled domain\"}\n");
+        sb.append("- \"Quy trình xử lý hồ sơ gồm mấy bước?\" -> {\"intent\":\"NONE\",\"appKind\":null,\"confidence\":0.98,\"reply\":\"\"}\n");
+        appendDynamicAppExamples(sb, installed, catalog);
         return sb.toString();
+    }
+
+    /**
+     * Builds few-shot examples from the live manifests instead of naming any
+     * app or business domain in code. This keeps the router plug-and-play: a
+     * newly installed app becomes an example immediately, without a code change.
+     */
+    private void appendDynamicAppExamples(
+            StringBuilder sb,
+            List<InstalledAppSummary> installed,
+            List<MarketplaceTemplateSummary> catalog
+    ) {
+        if (installed != null && !installed.isEmpty()) {
+            InstalledAppSummary app = installed.get(0);
+            String appName = app.name() != null && !app.name().isBlank() ? app.name() : app.kind();
+            sb.append("- \"Gỡ ứng dụng ").append(appName).append(" giúp tôi.\" -> {\"intent\":\"UNINSTALL\",\"appKind\":\"")
+                    .append(app.kind()).append("\",\"confidence\":0.95,\"reply\":\"Gỡ ứng dụng ").append(appName).append("\"}\n");
+            EntityDetail entity = app.entityDetails() != null
+                    ? app.entityDetails().stream().filter(Objects::nonNull).findFirst().orElse(null)
+                    : null;
+            if (entity != null) {
+                String entityLabel = entity.label() != null && !entity.label().isBlank()
+                        ? entity.label()
+                        : entity.name();
+                sb.append("- \"Thêm ").append(entityLabel).append(" mới\" (installed app \"").append(appName)
+                        .append("\") -> {\"intent\":\"APP_RECORD_CREATE\",\"appKind\":\"").append(app.kind())
+                        .append("\",\"entity\":\"").append(entity.name())
+                        .append("\",\"confidence\":0.95,\"reply\":\"Chuẩn bị thêm ").append(entityLabel).append("\"}\n");
+            }
+        }
+        if (catalog != null && !catalog.isEmpty()) {
+            MarketplaceTemplateSummary app = catalog.get(0);
+            String appName = app.name() != null && !app.name().isBlank() ? app.name() : app.kind();
+            sb.append("- \"Cài đặt ứng dụng ").append(appName).append("\" -> {\"intent\":\"INSTALL\",\"appKind\":\"")
+                    .append(app.kind()).append("\",\"confidence\":0.98,\"reply\":\"Cài đặt ứng dụng\"}\n");
+        }
+    }
+
+    /**
+     * Per-app action menu for the caller's role. The model must only propose
+     * actions listed here; asking for anything else is a role restriction, not
+     * a missing feature.
+     */
+    private void appendAllowedActions(
+            StringBuilder sb,
+            List<InstalledAppSummary> installed,
+            String role,
+            Map<String, ActionCapabilities> capabilities
+    ) {
+        if (capabilities == null || installed == null || installed.isEmpty()) {
+            return;
+        }
+        sb.append("Role permissions:\n");
+        for (InstalledAppSummary app : installed) {
+            ActionCapabilities caps = capabilities.get(app.kind());
+            List<String> allowed = new ArrayList<>();
+            if (caps != null) {
+                if (caps.create()) allowed.add("create");
+                if (caps.read()) allowed.add("read");
+                if (caps.update()) allowed.add("update");
+                if (caps.archive()) allowed.add("archive");
+                if (caps.submit()) allowed.add("submit");
+                if (caps.approve()) allowed.add("approve");
+            }
+            sb.append("- ").append(app.kind()).append(" — Allowed actions for caller ")
+                    .append(role != null ? role : "MEMBER").append(": ")
+                    .append(allowed.isEmpty() ? "none" : String.join(", ", allowed)).append("\n");
+        }
+        sb.append("- Never propose an action that is not listed for that app. If the user asks for one, explain that their role is not allowed to do it in this app.\n");
     }
 
     /**
@@ -874,6 +1600,9 @@ public class BizAppIntentRouter {
         if (installed != null) {
             for (InstalledAppSummary i : installed) {
                 registerAliases(map, i.kind(), i.name(), i.entityDetails(), i.triggers());
+                if (i.nameVi() != null && !i.nameVi().isBlank() && !i.nameVi().equalsIgnoreCase(i.name())) {
+                    registerAliases(map, i.kind(), i.nameVi(), i.entityDetails(), i.triggers());
+                }
             }
         }
         if (catalog != null) {
@@ -1215,13 +1944,149 @@ public class BizAppIntentRouter {
         return null;
     }
 
+    /**
+     * Field-role detection is manifest-driven: it looks at the declared name,
+     * label, type and format, never at a specific app's field names. Any app
+     * can therefore plug in a "Tên người gửi", "Email liên hệ" or
+     * "Ngày bắt đầu" field without router changes.
+     */
+    private static boolean fieldNameOrLabelContains(FieldDetail field, String... needles) {
+        if (field == null) {
+            return false;
+        }
+        String rawName = field.name() == null ? "" : field.name()
+                .replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+                .replaceAll("[_-]+", " ");
+        String haystack = removeDiacritics((rawName + " " + (field.label() == null ? "" : field.label())).toLowerCase(Locale.ROOT));
+        for (String needle : needles) {
+            if (needle == null || needle.isBlank()) continue;
+            String normalizedNeedle = removeDiacritics(needle.toLowerCase(Locale.ROOT)).trim();
+            if (normalizedNeedle.isEmpty()) continue;
+            if (Pattern.compile("\\b" + Pattern.quote(normalizedNeedle) + "\\b").matcher(haystack).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean looksLikeNameField(FieldDetail field) {
+        return field != null && ("name".equalsIgnoreCase(field.name()) || fieldNameOrLabelContains(field, "name", "ten"));
+    }
+
+    private static boolean looksLikeEmailField(FieldDetail field) {
+        return field != null && ("email".equalsIgnoreCase(field.format()) || fieldNameOrLabelContains(field, "email", "mail"));
+    }
+
+    private static boolean looksLikePhoneField(FieldDetail field) {
+        return field != null && ("phone".equalsIgnoreCase(field.format())
+                || fieldNameOrLabelContains(field, "phone", "sdt", "dien thoai", "mobile"));
+    }
+
+    private static boolean looksLikeDateField(FieldDetail field) {
+        return field != null && ("date".equalsIgnoreCase(field.type())
+                || fieldNameOrLabelContains(field, "date", "ngay", "thoi gian"));
+    }
+
+    private static boolean looksLikeTimeField(FieldDetail field) {
+        return field != null && ("time".equalsIgnoreCase(field.type())
+                || fieldNameOrLabelContains(field, "time", "gio"));
+    }
+
+    private static boolean looksLikeNotesField(FieldDetail field) {
+        return field != null && fieldNameOrLabelContains(field, "note", "ghi chu", "mo ta");
+    }
+
+    private static boolean hasValueForFieldRole(
+            Map<String, Object> extracted,
+            EntityDetail entity,
+            Predicate<FieldDetail> predicate
+    ) {
+        if (extracted == null || entity == null || entity.fields() == null) {
+            return false;
+        }
+        return entity.fields().stream()
+                .filter(Objects::nonNull)
+                .filter(predicate)
+                .anyMatch(field -> extracted.containsKey(field.name()));
+    }
+
+    private static void putFirstMatchingField(
+            Map<String, Object> extracted,
+            EntityDetail entity,
+            Object value,
+            Predicate<FieldDetail> predicate
+    ) {
+        if (extracted == null || entity == null || entity.fields() == null) {
+            return;
+        }
+        entity.fields().stream()
+                .filter(Objects::nonNull)
+                .filter(predicate)
+                .findFirst()
+                .ifPresent(field -> extracted.putIfAbsent(field.name(), value));
+    }
+
+    private static boolean isUsableName(String name) {
+        return name != null
+                && !name.isBlank()
+                && !name.equalsIgnoreCase("moi")
+                && !name.equalsIgnoreCase("mới");
+    }
+
+    /**
+     * Builds a name-capture pattern from the entity's own name-field labels
+     * instead of hardcoding role words. A manifest declaring
+     * "Tên nhân viên" gets a "nhân viên" trigger automatically.
+     */
+    private static Pattern buildEntityNamePattern(EntityDetail entity) {
+        if (entity == null || entity.fields() == null) {
+            return null;
+        }
+        Set<String> triggers = new LinkedHashSet<>();
+        for (FieldDetail field : entity.fields()) {
+            if (!looksLikeNameField(field)) continue;
+            String label = field.label() == null ? "" : field.label().trim();
+            if (!label.isBlank()) {
+                triggers.add(label);
+                String stripped = label.replaceAll("(?i)^(họ\\s+tên|ho\\s+ten|tên|ten|full\\s+name|name)\\s+", "").trim();
+                if (!stripped.isBlank() && !stripped.equalsIgnoreCase(label)) {
+                    triggers.add(stripped);
+                }
+            }
+            String rawName = field.name() == null ? "" : field.name()
+                    .replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+                    .replaceAll("[_-]+", " ")
+                    .trim();
+            if (!rawName.isBlank() && !rawName.equalsIgnoreCase("name")) {
+                triggers.add(rawName);
+                String withoutNameSuffix = rawName.replaceAll("(?i)\\s+(full\\s+)?name$", "").trim();
+                if (!withoutNameSuffix.isBlank() && !withoutNameSuffix.equalsIgnoreCase(rawName)) {
+                    triggers.add(withoutNameSuffix);
+                }
+            }
+        }
+        if (triggers.isEmpty()) {
+            return null;
+        }
+        String alternation = triggers.stream()
+                .map(Pattern::quote)
+                .collect(java.util.stream.Collectors.joining("|"));
+        return Pattern.compile(
+                "(?i)\\b(?:" + alternation + ")\\s+"
+                        + "(?:l[aà]\\s+|t[eê]n\\s+|name\\s+|is\\s+)?"
+                        + "(?-i:\\p{Ll}+\\s+)?"
+                        + "([\\p{Lu}][^\\d,;:/\\n]*?)(?=[,.;\\n]|$)",
+                Pattern.UNICODE_CHARACTER_CLASS
+        );
+    }
+
     public static Map<String, Object> extractFieldsFromPrompt(String prompt, EntityDetail entity) {
         Map<String, Object> extracted = new LinkedHashMap<>();
         if (prompt == null || prompt.isBlank() || entity == null || entity.fields() == null) {
             return extracted;
         }
 
-        // 1. Generic key-value extraction: e.g. "Service là xây dựng", "Dịch vụ là tư vấn", "Tên khách: Nguyễn Văn An"
+        // 1. Generic key-value extraction: e.g. "Field là value", "Trường: giá trị"
         Matcher kvMatcher = Pattern.compile("(?i)\\b([a-zA-Z0-9_]+|[\\p{L}\\s]{2,20}?)\\s*(?:l[aà]|:|=)\\s*([^,;\\n]+)", Pattern.UNICODE_CHARACTER_CLASS).matcher(prompt);
         while (kvMatcher.find()) {
             String rawKey = kvMatcher.group(1).trim().toLowerCase(Locale.ROOT);
@@ -1240,7 +2105,7 @@ public class BizAppIntentRouter {
                     if (f.options() != null && !f.options().isEmpty()) {
                         String mapped = mapEnumOption(rawVal, f);
                         extracted.put(f.name(), mapped != null ? mapped : rawVal);
-                    } else if ("name".equalsIgnoreCase(f.name()) || "customerName".equalsIgnoreCase(f.name())) {
+                    } else if (looksLikeNameField(f)) {
                         extracted.put(f.name(), cleanNameValue(rawVal));
                     } else {
                         extracted.put(f.name(), rawVal);
@@ -1251,14 +2116,18 @@ public class BizAppIntentRouter {
 
         // 2. Email extraction
         Matcher emailMatcher = Pattern.compile("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}").matcher(prompt);
-        if (emailMatcher.find()) {
-            extracted.put("email", emailMatcher.group());
+        if (emailMatcher.find() && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeEmailField)) {
+            String email = emailMatcher.group();
+            putFirstMatchingField(extracted, entity, email, BizAppIntentRouter::looksLikeEmailField);
+            extracted.putIfAbsent("email", email);
         }
 
         // 3. Phone extraction
         Matcher phoneMatcher = Pattern.compile("(?<!\\d)(0\\d{8,10})(?!\\d)").matcher(prompt);
-        if (phoneMatcher.find()) {
-            extracted.put("phone", phoneMatcher.group(1));
+        if (phoneMatcher.find() && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikePhoneField)) {
+            String phone = phoneMatcher.group(1);
+            putFirstMatchingField(extracted, entity, phone, BizAppIntentRouter::looksLikePhoneField);
+            extracted.putIfAbsent("phone", phone);
         }
 
         // 4. Date and time extraction
@@ -1278,57 +2147,57 @@ public class BizAppIntentRouter {
             foundFormattedTime = resolveTimeString(timeMatcher.group(1).trim());
         }
 
-        if (foundIsoDate != null) {
-            extracted.put("bookingDate", foundIsoDate);
-            extracted.put("date", foundIsoDate);
-            for (FieldDetail f : entity.fields()) {
-                String fn = f.name().toLowerCase(Locale.ROOT);
-                if ("date".equalsIgnoreCase(f.type()) || fn.contains("date")) {
-                    extracted.putIfAbsent(f.name(), foundIsoDate);
-                }
-            }
+        if (foundIsoDate != null && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeDateField)) {
+            String dateValue = foundIsoDate;
+            putFirstMatchingField(extracted, entity, dateValue, BizAppIntentRouter::looksLikeDateField);
+            extracted.putIfAbsent("date", dateValue);
         }
 
-        if (foundFormattedTime != null) {
-            extracted.put("time", foundFormattedTime);
-            for (FieldDetail f : entity.fields()) {
-                String fn = f.name().toLowerCase(Locale.ROOT);
-                if (fn.contains("time")) {
-                    extracted.putIfAbsent(f.name(), foundFormattedTime);
-                }
-            }
+        if (foundFormattedTime != null && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeTimeField)) {
+            String timeValue = foundFormattedTime;
+            putFirstMatchingField(extracted, entity, timeValue, BizAppIntentRouter::looksLikeTimeField);
+            extracted.putIfAbsent("time", timeValue);
         }
 
         Matcher notesMatcher = Pattern.compile("(?i)\\b(?:ghi\\s*ch[uú]|notes?|m[oô]\\s*t[aả])\\s*[:\\-\\s]?\\s*([^,;\\n]+)").matcher(prompt);
-        if (notesMatcher.find()) {
-            extracted.put("notes", notesMatcher.group(1).trim());
+        if (notesMatcher.find() && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeNotesField)) {
+            String notes = notesMatcher.group(1).trim();
+            putFirstMatchingField(extracted, entity, notes, BizAppIntentRouter::looksLikeNotesField);
+            extracted.putIfAbsent("notes", notes);
         }
         // 5. Name extraction
-        Matcher nameMatcher = Pattern.compile("(?i)\\b(?:t[eê]n(?:\\s+l[aà]|\\s+kh[aá]ch(?:\\s+l[aà])?|\\s*:)?|\\bname\\s*:|\\bname)\\s+([^\\d,;:/\n]+?)(?=[,.;\\n]|\\s+(?:s[oố]|sdt|phone|email|ghi|note|v[aà]o|cho|service|dich\\s+vu)|$)", Pattern.UNICODE_CHARACTER_CLASS).matcher(prompt);
-        if (nameMatcher.find()) {
+        Matcher nameMatcher = Pattern.compile("(?i)\\b(?:t[eê]n|\\bname)\\s*(?:l[aà]|:|=)?\\s*([^\\d,;:/\\n]+?)(?=[,.;\\n]|$)", Pattern.UNICODE_CHARACTER_CLASS).matcher(prompt);
+        if (nameMatcher.find() && !hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeNameField)) {
             String name = cleanNameValue(nameMatcher.group(1));
-            if (!name.isBlank() && !name.equalsIgnoreCase("moi") && !name.equalsIgnoreCase("mới")) {
-                extracted.put("name", name);
+            if (isUsableName(name)) {
+                putFirstMatchingField(extracted, entity, name, BizAppIntentRouter::looksLikeNameField);
+                extracted.putIfAbsent("name", name);
             }
         }
-        if (!extracted.containsKey("name") && !extracted.containsKey("customerName")) {
-            Matcher personMatcher = Pattern.compile("(?i)\\b(?:kh[aá]ch(?:\\s+h[aà]ng)?|ng[uư][oờ]i|lead|customer|client)\\s+(?:l[aà]\\s+|t[eê]n\\s+|name\\s+|is\\s+)?([^\\d,;:/\n]+?)(?=[,.;\\n]|\\s+(?:s[oố]|sdt|phone|email|ghi|note|v[aà]o|cho|service|dich\\s+vu|at|on)|$)", Pattern.UNICODE_CHARACTER_CLASS).matcher(prompt);
-            if (personMatcher.find()) {
-                String name = cleanNameValue(personMatcher.group(1));
-                if (!name.isBlank() && !name.equalsIgnoreCase("moi") && !name.equalsIgnoreCase("mới")) {
-                    extracted.put("name", name);
+        if (!hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeNameField)) {
+            Pattern personPattern = buildEntityNamePattern(entity);
+            if (personPattern != null) {
+                Matcher personMatcher = personPattern.matcher(prompt);
+                if (personMatcher.find()) {
+                    String name = cleanNameValue(personMatcher.group(1));
+                    if (isUsableName(name)) {
+                        putFirstMatchingField(extracted, entity, name, BizAppIntentRouter::looksLikeNameField);
+                        extracted.putIfAbsent("name", name);
+                    }
                 }
             }
         }
 
         // 6. Comma name extraction fallback (e.g. "Hôm nay 13h45, Nguyễn Văn A")
-        if (!extracted.containsKey("name") && !extracted.containsKey("customerName") && !extracted.containsKey("title")) {
+        if (!hasValueForFieldRole(extracted, entity, BizAppIntentRouter::looksLikeNameField)
+                && !extracted.containsKey("title")) {
             Matcher commaNameMatcher = Pattern.compile("(?:,|–|-)\\s*([\\p{Lu}][\\p{L}\\s]{1,30}?)(?=[,.;\\n]|$)", Pattern.UNICODE_CHARACTER_CLASS).matcher(prompt);
             while (commaNameMatcher.find()) {
                 String val = cleanNameValue(commaNameMatcher.group(1));
                 String valLower = val.toLowerCase(Locale.ROOT);
-                if (!val.isBlank() && val.length() >= 2 && !valLower.contains("service") && !valLower.contains("dich vu") && !valLower.contains("la ") && !valLower.contains("là ")) {
-                    extracted.put("name", val);
+                if (!val.isBlank() && val.length() >= 2 && !valLower.contains("la ") && !valLower.contains("là ")) {
+                    putFirstMatchingField(extracted, entity, val, BizAppIntentRouter::looksLikeNameField);
+                    extracted.putIfAbsent("name", val);
                     break;
                 }
             }
@@ -1343,43 +2212,16 @@ public class BizAppIntentRouter {
                 }
             }
         }
-
-        // 8. Map aliases and strictly whitelist against entity fields
-        boolean hasName = entity.fields().stream().anyMatch(f -> "name".equalsIgnoreCase(f.name()));
-        boolean hasCustomerName = entity.fields().stream().anyMatch(f -> "customerName".equalsIgnoreCase(f.name()));
-        if (hasCustomerName && !hasName && extracted.containsKey("name")) {
-            extracted.put("customerName", extracted.remove("name"));
-        }
-        if (hasName && !hasCustomerName && extracted.containsKey("customerName")) {
-            extracted.put("name", extracted.remove("customerName"));
-        }
-
-        boolean hasEmail = entity.fields().stream().anyMatch(f -> "email".equalsIgnoreCase(f.name()));
-        boolean hasCustomerEmail = entity.fields().stream().anyMatch(f -> "customerEmail".equalsIgnoreCase(f.name()));
-        if (hasCustomerEmail && !hasEmail && extracted.containsKey("email")) {
-            extracted.put("customerEmail", extracted.remove("email"));
-        }
-        if (hasEmail && !hasCustomerEmail && extracted.containsKey("customerEmail")) {
-            extracted.put("email", extracted.remove("customerEmail"));
-        }
-
-        boolean hasBookingDate = entity.fields().stream().anyMatch(f -> "bookingDate".equalsIgnoreCase(f.name()));
-        if (hasBookingDate && extracted.containsKey("date") && !extracted.containsKey("bookingDate")) {
-            extracted.put("bookingDate", extracted.get("date"));
-        }
-
-        // STRICT WHITELIST: remove any key not declared in entity fields
         Set<String> declared = new HashSet<>();
         for (FieldDetail f : entity.fields()) {
             declared.add(f.name());
         }
         extracted.keySet().removeIf(k -> !declared.contains(k));
 
-        if (extracted.containsKey("name")) {
-            extracted.put("name", cleanNameValue(String.valueOf(extracted.get("name"))));
-        }
-        if (extracted.containsKey("customerName")) {
-            extracted.put("customerName", cleanNameValue(String.valueOf(extracted.get("customerName"))));
+        for (FieldDetail f : entity.fields()) {
+            if (looksLikeNameField(f) && extracted.containsKey(f.name())) {
+                extracted.put(f.name(), cleanNameValue(String.valueOf(extracted.get(f.name()))));
+            }
         }
 
         return extracted;
@@ -1417,7 +2259,8 @@ public class BizAppIntentRouter {
             String status,
             List<Map<String, String>> invalidList,
             UUID sessionId,
-            String payloadHash
+            String payloadHash,
+            String requiresRole
     ) {
         Map<String, Object> card = new LinkedHashMap<>();
         card.put("type", "bizapp_action");
@@ -1439,7 +2282,7 @@ public class BizAppIntentRouter {
         if (payloadHash != null) {
             card.put("payloadHash", payloadHash);
         }
-        card.put("requiresRole", "ORG_OWNER");
+        card.put("requiresRole", requiresRole == null || requiresRole.isBlank() ? "MEMBER" : requiresRole);
         card.put("executedBy", null);
         card.put("executedAt", null);
         card.put("result", null);
@@ -1554,7 +2397,7 @@ public class BizAppIntentRouter {
                 }
                 sb.append(String.join(", ", recorded)).append(". ");
             }
-            sb.append("Để hoàn tất đặt lịch trong ").append(appName != null ? appName : "ứng dụng");
+            sb.append("Để hoàn tất yêu cầu trong ").append(appName != null ? appName : "ứng dụng");
             sb.append(", vui lòng bổ sung các thông tin sau:\n");
 
             for (Map<String, String> inv : invalidList) {
@@ -1569,9 +2412,9 @@ public class BizAppIntentRouter {
                     sb.append("- **").append(label).append("**: ");
                     if (f != null && f.options() != null && !f.options().isEmpty()) {
                         sb.append("chọn một trong các mục: ").append(String.join(", ", f.options()));
-                    } else if ("bookingDate".equalsIgnoreCase(fName) || "date".equalsIgnoreCase(fName) || (f != null && "date".equalsIgnoreCase(f.type()))) {
+                    } else if (looksLikeDateField(f) || "date".equalsIgnoreCase(fName)) {
                         sb.append("ví dụ: Hôm nay 14h, hoặc ngày mai lúc 9h");
-                    } else if ("customerEmail".equalsIgnoreCase(fName) || "email".equalsIgnoreCase(fName) || (f != null && "email".equalsIgnoreCase(f.format()))) {
+                    } else if (looksLikeEmailField(f) || "email".equalsIgnoreCase(fName)) {
                         sb.append("ví dụ: email@example.com");
                     } else {
                         sb.append("thông tin ").append(label.toLowerCase(Locale.ROOT));

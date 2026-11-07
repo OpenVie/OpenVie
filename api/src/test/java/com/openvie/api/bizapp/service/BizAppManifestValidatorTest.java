@@ -196,4 +196,89 @@ class BizAppManifestValidatorTest {
         assertEquals(null, manifest.entityField("leads", "ghost"));
         assertFalse(manifest.block("notifyOwner").isPresent());
     }
+
+    @Test
+    void submitIsAValidRbacCapability() {
+        Map<String, List<String>> rbac = new HashMap<>(RBAC);
+        rbac.put("submit", List.of("MEMBER"));
+        Manifest manifest = new Manifest("bizapp.v1", "crm", new Localized("CRM Lite", "CRM Lite"),
+                1, "briefcase", rbac, List.of(leads()), List.of(), null);
+        assertDoesNotThrow(() -> validator.validate(manifest));
+    }
+
+    @Test
+    void onlyOneApprovalBlockIsSupported() {
+        Block first = new Block("approval1", "approval_workitem", Map.of(
+                "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
+                "candidateRole", "WORKSPACE_ADMIN"));
+        Block second = new Block("approval2", "approval_workitem", Map.of(
+                "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
+                "candidateRole", "WORKSPACE_ADMIN"));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(first, second), null)));
+        assertTrue(exception.getMessage().contains("only one approval_workitem"), exception.getMessage());
+    }
+
+    @Test
+    void duplicateBlockIdsAreRejected() {
+        Block duplicate = new Block("notifyOwner", "notify", Map.of("to", List.of("creator")));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(notifyBlock(), duplicate), null)));
+        assertTrue(exception.getMessage().contains("duplicate block id"), exception.getMessage());
+    }
+
+    @Test
+    void hookTargetsMustBeExecutableBlockTypes() {
+        Entity hooked = new Entity("leads", leads().label(), leads().fields(),
+                Map.of("onCreate", List.of("leadPipeline")));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(hooked, List.of(reportBlock(), notifyBlock()), null)));
+        assertTrue(exception.getMessage().contains("cannot run as a lifecycle hook"), exception.getMessage());
+    }
+
+    @Test
+    void approvalBlockCannotRunOnDecide() {
+        Block approval = new Block("approval1", "approval_workitem", Map.of(
+                "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
+                "candidateRole", "WORKSPACE_ADMIN"));
+        Entity hooked = new Entity("leads", null,
+                List.of(new Field("name", "string", true, 100, null, null)),
+                Map.of("onDecide", List.of("approval1")));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(hooked, List.of(approval), null)));
+        assertTrue(exception.getMessage().contains("cannot run onDecide"), exception.getMessage());
+    }
+
+    @Test
+    void notifyRecipientsAreValidatedAgainstTheManifest() {
+        Block accepted = new Block("notifyOwner", "notify", Map.of(
+                "to", List.of("creator", "record.email", "config.notifyEmail", "ops@example.com")));
+        assertDoesNotThrow(() -> validator.validate(crm(leads(), List.of(accepted), null)));
+
+        Block rejected = new Block("notifyOwner", "notify", Map.of("to", List.of("somebody")));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(rejected), null)));
+        assertTrue(exception.getMessage().contains("unsupported notify recipient"), exception.getMessage());
+    }
+
+    @Test
+    void approvalCandidateRoleMustBeGrantedByRbacApprove() {
+        Map<String, List<String>> rbac = new HashMap<>(RBAC);
+        rbac.put("approve", List.of("ORG_OWNER"));
+        Block approval = new Block("approval1", "approval_workitem", Map.of(
+                "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
+                "candidateRole", "WORKSPACE_ADMIN"));
+        Manifest manifest = new Manifest("bizapp.v1", "crm", new Localized("CRM Lite", "CRM Lite"),
+                1, "briefcase", rbac, List.of(leads()), List.of(approval), null);
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(manifest));
+        assertTrue(exception.getMessage().contains("is not granted by rbac.approve"), exception.getMessage());
+
+        Block defaultCandidate = new Block("approval1", "approval_workitem", Map.of(
+                "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml"));
+        Manifest defaulted = new Manifest("bizapp.v1", "crm", new Localized("CRM Lite", "CRM Lite"),
+                1, "briefcase", rbac, List.of(leads()), List.of(defaultCandidate), null);
+        assertThrows(BadRequestException.class, () -> validator.validate(defaulted),
+                "candidateRole defaults to WORKSPACE_ADMIN, which this approve list does not grant");
+    }
 }

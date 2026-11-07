@@ -14,9 +14,11 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { BizAppManifest } from "@/types";
 import {
   archiveBizAppRecordApi,
   bizAppLabel,
+  canSubmitRecord,
   createBizAppRecordApi,
   deleteBizAppDraftApi,
   exportBizAppTemplateApi,
@@ -25,11 +27,13 @@ import {
   installBizAppApi,
   listBizAppDraftsApi,
   listBizAppTemplatesApi,
+  manifestAllows,
   remixBizAppTemplateApi,
   runBizAppReportApi,
   saveBizAppDraftApi,
   submitBizAppRecordApi,
   uninstallBizAppApi,
+  upgradeBizAppApi,
   validateBizAppManifestApi,
 } from "@/lib/bizapp-api";
 
@@ -92,6 +96,9 @@ const request = vi.fn(async (input: string, init?: RequestInit) => {
     );
   }
   if (init?.method === "POST") {
+    if (path.endsWith("/apps/crm/upgrade")) {
+      return Response.json({ installationId: "i1", kind: "crm", version: 2, processKey: "bizapp-crm" }, { status: 200 });
+    }
     if (path.endsWith("/apps/install")) {
       return Response.json({ installationId: "i1", kind: "crm", version: 1, processKey: null }, { status: 201 });
     }
@@ -159,6 +166,44 @@ describe("bizapp api client", () => {
     await uninstallBizAppApi(request, "crm");
     expect(seen[1].init?.method).toBe("DELETE");
     expect(seen[1].url).toContain("/apps/crm");
+  });
+
+  it("upgrades an installed app in place with the manifest body", async () => {
+    const manifest = {
+      schema: "bizapp.v1",
+      kind: "crm",
+      name: { en: "CRM", vi: "CRM" },
+      version: 2,
+      entities: [],
+    } as unknown as BizAppManifest;
+
+    const result = await upgradeBizAppApi(request, "crm", manifest);
+
+    expect(seen[0].url).toContain("/apps/crm/upgrade");
+    expect(seen[0].init?.method).toBe("POST");
+    expect(JSON.parse(seen[0].init?.body as string)).toEqual({ manifest });
+    expect(result).toMatchObject({ kind: "crm", version: 2 });
+  });
+
+  it("resolves manifest capabilities the same way the server does", () => {
+    const manifest = {
+      rbac: { write: ["ORG_OWNER", "WORKSPACE_ADMIN"], submit: ["MEMBER"] },
+    };
+
+    expect(manifestAllows(manifest, "write", "ORG_OWNER", [])).toBe(true);
+    expect(manifestAllows(manifest, "write", "WORKSPACE_ADMIN", [])).toBe(true);
+    expect(manifestAllows(manifest, "write", "MEMBER", [])).toBe(false);
+    expect(manifestAllows({ rbac: undefined }, "read", "MEMBER", ["MEMBER"])).toBe(true);
+    expect(manifestAllows({ rbac: { read: ["ORG_OWNER"] } }, "read", "MEMBER", ["MEMBER"])).toBe(false);
+    expect(manifestAllows(manifest, "write", null, ["ORG_OWNER"])).toBe(false);
+  });
+
+  it("lets submit fall back to write and honors explicit submit lists", () => {
+    expect(canSubmitRecord({ rbac: { write: ["MEMBER"] } }, "MEMBER")).toBe(true);
+    expect(canSubmitRecord({ rbac: { submit: ["MEMBER"], write: ["ORG_OWNER"] } }, "MEMBER")).toBe(true);
+    expect(canSubmitRecord({ rbac: { submit: ["MEMBER"] } }, "ORG_OWNER")).toBe(true);
+    expect(canSubmitRecord({ rbac: { write: ["ORG_OWNER"] } }, "MEMBER")).toBe(false);
+    expect(canSubmitRecord({ rbac: undefined }, "WORKSPACE_ADMIN")).toBe(true);
   });
 
   it("lists, saves and deletes drafts through the drafts routes", async () => {

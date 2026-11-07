@@ -74,9 +74,49 @@ class RecordActionRbacTest {
         assertTrue(recordService.canDelete(memberWritableManifest, "WORKSPACE_ADMIN"));
         assertTrue(recordService.canDelete(memberWritableManifest, "ORG_OWNER"));
 
-        // Member cannot approve
+        // An explicit list is authoritative: only ORG_OWNER may approve here
         assertFalse(recordService.canApprove(memberWritableManifest, "MEMBER"));
-        assertTrue(recordService.canApprove(memberWritableManifest, "WORKSPACE_ADMIN"));
+        assertFalse(recordService.canApprove(memberWritableManifest, "WORKSPACE_ADMIN"));
         assertTrue(recordService.canApprove(memberWritableManifest, "ORG_OWNER"));
+    }
+
+    @Test
+    void readDefaultsToEveryRoleAndSubmitToWrite() {
+        Manifest defaultManifest = new Manifest(
+                "bizapp.v1", "app", new BizAppManifest.Localized("App", "App"),
+                1, "icon", Map.of(), List.of(), List.of(), null
+        );
+
+        assertTrue(recordService.canRead(defaultManifest, "ORG_OWNER"));
+        assertTrue(recordService.canRead(defaultManifest, "WORKSPACE_ADMIN"));
+        assertTrue(recordService.canRead(defaultManifest, "MEMBER"));
+
+        assertTrue(recordService.canSubmit(defaultManifest, "ORG_OWNER"));
+        assertTrue(recordService.canSubmit(defaultManifest, "WORKSPACE_ADMIN"));
+        assertFalse(recordService.canSubmit(defaultManifest, "MEMBER"),
+                "submit defaults to write, which defaults to admins only");
+    }
+
+    @Test
+    void explicitReadAndSubmitListsOverrideTheDefaults() {
+        Manifest manifest = new Manifest(
+                "bizapp.v1", "app", new BizAppManifest.Localized("App", "App"),
+                1, "icon",
+                Map.of(
+                        "read", List.of("ORG_OWNER", "MEMBER"),
+                        "write", List.of("ORG_OWNER", "WORKSPACE_ADMIN"),
+                        "submit", List.of("MEMBER")
+                ),
+                List.of(), List.of(), null
+        );
+
+        assertTrue(recordService.canRead(manifest, "MEMBER"));
+        assertFalse(recordService.canRead(manifest, "WORKSPACE_ADMIN"),
+                "an explicit read list wins over the all-roles default");
+
+        assertTrue(recordService.canSubmit(manifest, "MEMBER"),
+                "a submit-only member may submit even without write");
+        assertFalse(recordService.canWrite(manifest, "MEMBER"));
+        assertTrue(recordService.canSubmit(manifest, "ORG_OWNER"));
     }
 }

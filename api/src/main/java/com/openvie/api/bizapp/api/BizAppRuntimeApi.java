@@ -21,6 +21,9 @@ import java.util.UUID;
 public interface BizAppRuntimeApi {
     List<InstalledAppSummary> listInstalledSummary(UUID tenantId);
 
+    /** True when the organization has at least one ACTIVE app installed in any workspace. */
+    boolean hasAnyInstalledApp(UUID orgId);
+
     List<MarketplaceTemplateSummary> listMarketplaceSummary(UUID tenantId);
 
     AppActionOffer offerInstall(UUID tenantId, UUID orgId, String appKind, UUID actorId);
@@ -61,6 +64,22 @@ public interface BizAppRuntimeApi {
     List<AppSchemaSummary> listAppSchemas(UUID tenantId);
 
     RecordCommandOutcome executeRecordCommand(UUID tenantId, UUID orgId, UUID actorId, String callerRole, RecordCommand command);
+
+    /**
+     * Per-installed-app action menu for one caller role: the router only
+     * proposes actions the manifest's RBAC lets this role execute.
+     */
+    Map<String, ActionCapabilities> listActionCapabilities(UUID tenantId, String callerRole);
+
+    record ActionCapabilities(
+            boolean create,
+            boolean read,
+            boolean update,
+            boolean archive,
+            boolean submit,
+            boolean approve
+    ) {}
+
     record RecordCommand(
             String kind,
             String appKind,
@@ -138,13 +157,30 @@ public interface BizAppRuntimeApi {
             List<String> views,
             String status,
             List<EntityDetail> entityDetails,
-            List<String> triggers
+            List<String> triggers,
+            String nameVi
     ) {
         public InstalledAppSummary {
             entities = entities == null ? List.of() : List.copyOf(entities);
             views = views == null ? List.of() : List.copyOf(views);
             entityDetails = entityDetails == null ? List.of() : List.copyOf(entityDetails);
             triggers = triggers == null ? List.of() : List.copyOf(triggers);
+            nameVi = nameVi == null || nameVi.isBlank() ? name : nameVi;
+        }
+
+        public InstalledAppSummary(
+                UUID id,
+                String kind,
+                String name,
+                int version,
+                String description,
+                List<String> entities,
+                List<String> views,
+                String status,
+                List<EntityDetail> entityDetails,
+                List<String> triggers
+        ) {
+            this(id, kind, name, version, description, entities, views, status, entityDetails, triggers, name);
         }
 
         public InstalledAppSummary(
@@ -158,7 +194,7 @@ public interface BizAppRuntimeApi {
                 String status,
                 List<EntityDetail> entityDetails
         ) {
-            this(id, kind, name, version, description, entities, views, status, entityDetails, List.of());
+            this(id, kind, name, version, description, entities, views, status, entityDetails, List.of(), name);
         }
 
         public InstalledAppSummary(
@@ -171,7 +207,7 @@ public interface BizAppRuntimeApi {
                 List<String> views,
                 String status
         ) {
-            this(id, kind, name, version, description, entities, views, status, List.of(), List.of());
+            this(id, kind, name, version, description, entities, views, status, List.of(), List.of(), name);
         }
     }
 

@@ -17,11 +17,14 @@ package com.openvie.api.bizapp.service;
 import com.openvie.api.bizapp.BizAppProperties;
 import com.openvie.api.bizapp.dto.BizAppDtos.InstallResult;
 import com.openvie.api.bizapp.dto.BizAppDtos.InstalledAppView;
+import com.openvie.api.bizapp.dto.BizAppManifest.Entity;
+import com.openvie.api.bizapp.dto.BizAppManifest.Field;
 import com.openvie.api.bizapp.dto.BizAppManifest.Manifest;
 import com.openvie.api.bizapp.model.BizAppInstallation;
 import com.openvie.api.bizapp.repository.BizAppInstallationRepository;
 import com.openvie.api.bizapp.service.block.ApprovalWorkItemBlock;
 import com.openvie.api.common.enums.LogAction;
+import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.workflow.api.WorkflowRuntimeApi;
@@ -33,9 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -91,6 +94,85 @@ public class BizAppInstallService {
                 installation.getId(), Map.of("app", parsed.kind()));
         log.info("BizApp {} installed workspace={} processKey={}", parsed.kind(), tenantId, processKey);
         return new InstallResult(installation.getId(), parsed.kind(), installation.getVersion(), processKey);
+    }
+
+    /**
+     * Installs a newer manifest over an active installation. Records are never
+     * touched: the upgrade is rejected when it would remove or retype what
+     * existing rows already contain.
+     */
+    @Transactional
+    public InstallResult upgrade(UUID tenantId, UUID orgId, UUID actorId,
+                                 String kind, Map<String, Object> rawManifest) {
+        requireEnabled();
+        BizAppInstallation installation = installationRepository
+                .findByTenantIdAndKindAndStatus(tenantId, kind, "ACTIVE")
+                .orElseThrow(() -> new ResourceNotFoundException("App " + kind + " is not installed"));
+        Manifest next = parser.parse(rawManifest);
+        validator.validate(next, isPlatformBundledTemplate(next.kind()));
+        if (!kind.equals(next.kind())) {
+            throw new BadRequestException("Upgrade manifest kind " + next.kind()
+                    + " does not match the installed app " + kind);
+        }
+        int currentVersion = installation.getVersion();
+        int nextVersion = next.version() == null ? currentVersion + 1 : next.version();
+        if (nextVersion <= currentVersion) {
+            throw new ConflictException("Upgrade version must be greater than the installed version");
+        }
+        requireCompatible(parser.parse(installation.getManifest()), next);
+
+        String processKey = deployApprovalDefinition(next, tenantId, actorId);
+        installation.setOrgId(orgId);
+        installation.setVersion(nextVersion);
+        installation.setManifest(rawManifest);
+        installation.setProcessKey(processKey);
+        installation.setStatus("ACTIVE");
+        BizAppInstallation saved = installationRepository.save(installation);
+        runtime.audit(tenantId, actorId, LogAction.BIZAPP_APP_UPGRADED, "bizapp_installation",
+                saved.getId(), Map.of("app", kind, "from", currentVersion, "to", nextVersion));
+        log.info("BizApp {} upgraded workspace={} {} -> {} processKey={}",
+                kind, tenantId, currentVersion, nextVersion, processKey);
+        return new InstallResult(saved.getId(), kind, nextVersion, processKey);
+    }
+
+    /** Same storage, no entity removal, no field removal or type change. */
+    private void requireCompatible(Manifest current, Manifest next) {
+        String currentStorage = effectiveStorage(current);
+        String nextStorage = effectiveStorage(next);
+        if (!currentStorage.equalsIgnoreCase(nextStorage)) {
+            throw new BadRequestException("Upgrade cannot change storage from "
+                    + currentStorage + " to " + nextStorage);
+        }
+        Map<String, Map<String, String>> nextFields = new HashMap<>();
+        for (Entity entity : next.entities() == null ? List.<Entity>of() : next.entities()) {
+            Map<String, String> fields = new HashMap<>();
+            for (Field field : entity.fields() == null ? List.<Field>of() : entity.fields()) {
+                fields.put(field.name(), field.type());
+            }
+            nextFields.put(entity.name(), fields);
+        }
+        for (Entity entity : current.entities() == null ? List.<Entity>of() : current.entities()) {
+            Map<String, String> fields = nextFields.get(entity.name());
+            if (fields == null) {
+                throw new BadRequestException("Upgrade removes entity " + entity.name());
+            }
+            for (Field field : entity.fields() == null ? List.<Field>of() : entity.fields()) {
+                String nextType = fields.get(field.name());
+                if (nextType == null) {
+                    throw new BadRequestException("Upgrade removes field "
+                            + entity.name() + "." + field.name());
+                }
+                if (!nextType.equals(field.type())) {
+                    throw new BadRequestException("Upgrade changes the type of "
+                            + entity.name() + "." + field.name() + " from " + field.type()
+                            + " to " + nextType);
+                }
+            }
+        }
+    }
+
+    private String effectiveStorage(Manifest manifest) {
+        return manifest.storage() == null || manifest.storage().isBlank() ? "jsonb" : manifest.storage();
     }
 
     @Transactional

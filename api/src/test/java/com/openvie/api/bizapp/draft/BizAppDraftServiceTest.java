@@ -30,7 +30,9 @@ import com.openvie.api.bizapp.BizAppProperties;
 import com.openvie.api.bizapp.dto.BizAppDtos.GenerateDraftRequest;
 import com.openvie.api.bizapp.dto.BizAppDtos.SaveDraftRequest;
 import com.openvie.api.bizapp.model.BizAppDraft;
+import com.openvie.api.bizapp.model.BizAppInstallation;
 import com.openvie.api.bizapp.repository.BizAppDraftRepository;
+import com.openvie.api.bizapp.repository.BizAppInstallationRepository;
 import com.openvie.api.bizapp.service.BizAppDraftService;
 import com.openvie.api.bizapp.service.BizAppManifestParser;
 import com.openvie.api.bizapp.service.BizAppManifestValidator;
@@ -47,6 +49,7 @@ import java.util.UUID;
 class BizAppDraftServiceTest {
 
     private BizAppDraftRepository draftRepository;
+    private BizAppInstallationRepository installationRepository;
     private BizAppManifestValidator validator;
     private BizAppManifestParser parser;
     private AiInferenceApi aiInferenceApi;
@@ -60,6 +63,8 @@ class BizAppDraftServiceTest {
     @BeforeEach
     void setUp() {
         draftRepository = mock(BizAppDraftRepository.class);
+        installationRepository = mock(BizAppInstallationRepository.class);
+        when(installationRepository.findByOrgIdOrderByCreatedAtDesc(any())).thenReturn(List.of());
         validator = new BizAppManifestValidator();
         objectMapper = new ObjectMapper();
         parser = new BizAppManifestParser(objectMapper);
@@ -70,7 +75,7 @@ class BizAppDraftServiceTest {
     @Test
     void statelessValidationReportsErrorsOnInvalidManifest() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, false, false, ""),
                 runtime, objectMapper
         );
@@ -83,7 +88,7 @@ class BizAppDraftServiceTest {
     @Test
     void statelessValidationSucceedsOnValidManifest() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, false, false, ""),
                 runtime, objectMapper
         );
@@ -112,7 +117,7 @@ class BizAppDraftServiceTest {
     @Test
     void generateDraftThrowsWhenAiDraftingDisabled() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, false, false, ""), // disabled
                 runtime, objectMapper
         );
@@ -124,7 +129,7 @@ class BizAppDraftServiceTest {
     @Test
     void generateDraftInvokesAiAndStoresDraft() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, true, false, ""), // enabled
                 runtime, objectMapper
         );
@@ -168,7 +173,7 @@ class BizAppDraftServiceTest {
     @Test
     void generateDraftToleratesMarkdownAndPreambleAndWrappedManifest() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, true, false, ""),
                 runtime, objectMapper
         );
@@ -216,7 +221,7 @@ class BizAppDraftServiceTest {
     @Test
     void saveAndGetDraftLifecycle() {
         var service = new BizAppDraftService(
-                draftRepository, validator, parser, aiInferenceApi,
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
                 new BizAppProperties(true, false, false, false, ""),
                 runtime, objectMapper
         );
@@ -235,5 +240,54 @@ class BizAppDraftServiceTest {
         assertNotNull(saved.id());
         assertEquals("Canvas Draft", saved.title());
         assertEquals("canvas", saved.source());
+    }
+
+    @Test
+    void saveDraftPropagatesDisplayNameToInstalledApp() {
+        var service = new BizAppDraftService(
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
+                new BizAppProperties(true, false, false, false, ""),
+                runtime, objectMapper
+        );
+
+        UUID draftId = UUID.randomUUID();
+        when(draftRepository.save(any())).thenAnswer(inv -> {
+            BizAppDraft d = inv.getArgument(0);
+            if (d.getId() == null) d.setId(draftId);
+            return d;
+        });
+
+        BizAppInstallation installation = new BizAppInstallation();
+        installation.setId(UUID.randomUUID());
+        installation.setOrgId(orgId);
+        installation.setTenantId(tenantId);
+        installation.setKind("recent-conversation-turns");
+        installation.setStatus("ACTIVE");
+        installation.setManifest(Map.of(
+                "schema", "bizapp.v1",
+                "kind", "recent-conversation-turns",
+                "name", Map.of("vi", "Hỏi đáp gần đây", "en", "Recent Conversation Turns"),
+                "entities", List.of()
+        ));
+        when(installationRepository.findByOrgIdOrderByCreatedAtDesc(orgId)).thenReturn(List.of(installation));
+
+        service.saveDraft(orgId, tenantId, actorId, new SaveDraftRequest(
+                draftId,
+                "On leave",
+                "canvas",
+                Map.of(
+                        "schema", "bizapp.v1",
+                        "kind", "recent-conversation-turns",
+                        "name", Map.of("vi", "Nghỉ phép", "en", "On leave"),
+                        "entities", List.of()
+                ),
+                null
+        ));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> installedName = (Map<String, Object>) installation.getManifest().get("name");
+        assertEquals("Nghỉ phép", installedName.get("vi"));
+        assertEquals("On leave", installedName.get("en"));
+        verify(installationRepository).save(installation);
     }
 }

@@ -23,11 +23,13 @@ import type { BizAppField, BizAppInstalledAppView, BizAppRecordPage, BizAppRecor
 import {
   archiveBizAppRecordApi,
   bizAppApprovalBlock,
+  canSubmitRecord,
   listBizAppRecordsApi,
-  memberCanWrite,
+  manifestAllows,
   submitBizAppRecordApi,
 } from "@/lib/bizapp-api";
 import { useApiClient } from "@/hooks/useApiClient";
+import { useAuthStore } from "@/components/providers/StoreProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,8 +52,12 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
   const locale = useLocale();
   const format = useFormatter();
   const { request } = useApiClient();
+  const user = useAuthStore((state) => state.user);
   const entity = app.manifest.entities.find((candidate) => candidate.name === entityName);
-  const canWrite = memberCanWrite(app.manifest);
+  const role = user?.orgRole === "ORG_OWNER" ? "ORG_OWNER" : user?.workspaceRole;
+  const canWrite = manifestAllows(app.manifest, "write", role, ["ORG_OWNER", "WORKSPACE_ADMIN"]);
+  const canDelete = manifestAllows(app.manifest, "delete", role, ["ORG_OWNER", "WORKSPACE_ADMIN"]);
+  const canSubmit = canSubmitRecord(app.manifest, role);
   const hasApproval = Boolean(bizAppApprovalBlock(app.manifest));
 
   const [page, setPage] = useState(0);
@@ -213,7 +219,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             <Pencil className="size-4" />
                           </Button>
                         )}
-                        {canWrite && hasApproval && status !== "APPROVED" && (
+                        {canSubmit && hasApproval && status !== "APPROVED" && (
                           <Button
                             size="icon" variant="ghost" className="size-8"
                             aria-label={t("record.submit")}
@@ -223,7 +229,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             <Send className="size-4" />
                           </Button>
                         )}
-                        {canWrite && (
+                        {canDelete && (
                           <Button
                             size="icon" variant="ghost" className="size-8"
                             aria-label={t("record.archive")}

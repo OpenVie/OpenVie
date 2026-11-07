@@ -51,12 +51,21 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
 
     @Override
     @Transactional(readOnly = true)
+    public boolean hasAnyInstalledApp(UUID orgId) {
+        return installationRepository.findByOrgIdOrderByCreatedAtDesc(orgId).stream()
+                .anyMatch(installation -> "ACTIVE".equalsIgnoreCase(installation.getStatus()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<InstalledAppSummary> listInstalledSummary(UUID tenantId) {
         List<BizAppInstallation> installed = installationRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, "ACTIVE");
         return installed.stream().map(inst -> {
             Manifest manifest = parser.parse(inst.getManifest());
             String name = manifest.name() == null ? inst.getKind() : manifest.name().en();
-            String desc = "";
+            String nameVi = manifest.name() == null ? inst.getKind() : manifest.name().vi();
+            String desc = manifest.conversational() != null && manifest.conversational().description() != null
+                    ? manifest.conversational().description() : "";
             List<String> entities = manifest.entities() == null ? List.of() : manifest.entities().stream().map(Entity::name).toList();
             List<String> views = manifest.ui() != null && manifest.ui().views() != null ? manifest.ui().views() : List.of();
             List<EntityDetail> entityDetails = extractEntityDetails(manifest);
@@ -80,7 +89,7 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
                     }
                 }
             }
-            return new InstalledAppSummary(inst.getId(), inst.getKind(), name, inst.getVersion(), desc, entities, views, inst.getStatus(), entityDetails, triggers);
+            return new InstalledAppSummary(inst.getId(), inst.getKind(), name, inst.getVersion(), desc, entities, views, inst.getStatus(), entityDetails, triggers, nameVi);
         }).toList();
     }
 
@@ -246,6 +255,26 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Map<String, ActionCapabilities> listActionCapabilities(UUID tenantId, String callerRole) {
+        List<BizAppInstallation> installed = installationRepository
+                .findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, "ACTIVE");
+        Map<String, ActionCapabilities> capabilities = new LinkedHashMap<>();
+        for (BizAppInstallation inst : installed) {
+            Manifest manifest = parser.parse(inst.getManifest());
+            boolean write = recordService.canWrite(manifest, callerRole);
+            capabilities.put(inst.getKind(), new ActionCapabilities(
+                    write,
+                    recordService.canRead(manifest, callerRole),
+                    write,
+                    recordService.canDelete(manifest, callerRole),
+                    recordService.canSubmit(manifest, callerRole),
+                    recordService.canApprove(manifest, callerRole)));
+        }
+        return capabilities;
+    }
+
+    @Override
     @Transactional
     public RecordCommandOutcome executeRecordCommand(
             UUID tenantId,
@@ -260,17 +289,19 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
         var installation = installationRepository.findByTenantIdAndKindAndStatus(tenantId, command.appKind(), "ACTIVE")
                 .orElseThrow(() -> new com.openvie.api.common.exception.custom.ResourceNotFoundException("App " + command.appKind() + " is not active"));
         Manifest manifest = parser.parse(installation.getManifest());
-        boolean isAdmin = "ORG_OWNER".equalsIgnoreCase(callerRole) || "WORKSPACE_ADMIN".equalsIgnoreCase(callerRole);
 
         switch (command.kind()) {
             case "bizapp.record.create" -> {
                 if (!recordService.canWrite(manifest, callerRole)) {
                     throw new org.springframework.security.access.AccessDeniedException("Manifest does not grant write permission to role " + callerRole);
                 }
-                var view = recordService.create(tenantId, actorId, isAdmin, command.appKind(), command.entity(), command.payload());
+                var view = recordService.create(tenantId, actorId, callerRole, command.appKind(), command.entity(), command.payload());
                 String msg = "Successfully created record in " + command.entity();
                 if (command.payload() != null && command.payload().get("name") != null) {
                     msg = "Successfully created " + command.payload().get("name") + " in " + command.entity();
+                }
+                if (view.runtime() != null && "PENDING".equals(view.runtime().get("approvalStatus"))) {
+                    msg += " and submitted for approval";
                 }
                 return new RecordCommandOutcome(true, view.id(), msg);
             }
@@ -281,7 +312,7 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
                 if (command.recordId() == null) {
                     throw new com.openvie.api.common.exception.custom.BadRequestException("recordId is required for record update");
                 }
-                var view = recordService.update(tenantId, actorId, isAdmin, command.appKind(), command.entity(), command.recordId(), command.payload());
+                var view = recordService.update(tenantId, actorId, callerRole, command.appKind(), command.entity(), command.recordId(), command.payload());
                 return new RecordCommandOutcome(true, view.id(), "Successfully updated record " + view.id());
             }
             case "bizapp.record.archive" -> {
@@ -291,17 +322,17 @@ public class BizAppRuntimeApiImpl implements BizAppRuntimeApi {
                 if (command.recordId() == null) {
                     throw new com.openvie.api.common.exception.custom.BadRequestException("recordId is required for record archive");
                 }
-                var view = recordService.archive(tenantId, actorId, isAdmin, command.appKind(), command.entity(), command.recordId());
+                var view = recordService.archive(tenantId, actorId, callerRole, command.appKind(), command.entity(), command.recordId());
                 return new RecordCommandOutcome(true, view.id(), "Successfully archived record " + view.id());
             }
             case "bizapp.record.submit" -> {
-                if (!recordService.canApprove(manifest, callerRole)) {
-                    throw new org.springframework.security.access.AccessDeniedException("Manifest does not grant approve/submit permission to role " + callerRole);
+                if (!recordService.canSubmit(manifest, callerRole)) {
+                    throw new org.springframework.security.access.AccessDeniedException("Manifest does not grant submit permission to role " + callerRole);
                 }
                 if (command.recordId() == null) {
                     throw new com.openvie.api.common.exception.custom.BadRequestException("recordId is required for record submission");
                 }
-                var view = recordService.submit(tenantId, actorId, isAdmin, command.appKind(), command.entity(), command.recordId());
+                var view = recordService.submit(tenantId, actorId, callerRole, command.appKind(), command.entity(), command.recordId());
                 return new RecordCommandOutcome(true, view.id(), "Successfully submitted record for approval");
             }
             default -> throw new com.openvie.api.common.exception.custom.ConflictException("Unsupported record command kind: " + command.kind());

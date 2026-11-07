@@ -342,23 +342,23 @@ public class ChatController extends BaseController {
         chatService.hidePlayground(getTenantId(request), getUserId(request), sessionId);
     }
 
-    @Operation(summary = "Execute a proposed app action card (ORG_OWNER only)",
-            description = "Executes an install or uninstall action card proposed in chat history.")
+    @Operation(summary = "Execute a proposed app action card",
+            description = "App lifecycle actions are organization-owner only; record actions follow the app manifest RBAC. "
+                    + "The server re-resolves the caller's effective workspace role and the frozen app manifest.")
     @PostMapping("/actions/execute")
     public ResponseEntity<ChatDtos.AssistantMessageResponse> executeAction(
             @Valid @RequestBody ChatDtos.ExecuteActionRequest body,
             HttpServletRequest request
     ) {
-        if (!"ORG_OWNER".equals(getOrgRole(request))) {
-            throw new AccessDeniedException("Only organization owners may execute chat app actions");
-        }
         if (chatActionService == null) {
             throw new ResourceNotFoundException("Chat action execution is unavailable");
         }
         UUID tenantId = getTenantId(request);
         UUID orgId = getOrgId(request);
         UUID actorId = getUserId(request);
-        String role = getOrgRole(request);
+        // Owners act with admin authority inside their workspaces; otherwise the
+        // effective workspace role (WORKSPACE_ADMIN/MEMBER) is used for manifest RBAC.
+        String role = getManifestRole(request);
         var response = chatActionService.executeAction(tenantId, orgId, actorId, role, body.messageId(), body.actionId());
         return ResponseEntity.ok(response);
     }

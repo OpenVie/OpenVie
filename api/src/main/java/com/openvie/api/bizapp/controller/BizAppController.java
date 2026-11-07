@@ -75,6 +75,13 @@ public class BizAppController extends BaseController {
         return runtimeApi.listInstalledSummary(getTenantId(request));
     }
 
+    @Operation(summary = "Whether the organization has an active app installed in any workspace")
+    @ApiResponses(@ApiResponse(responseCode = "200", description = "Organization-wide app availability"))
+    @GetMapping("/bizapps/installed-anywhere")
+    public Map<String, Boolean> installedAnywhere(HttpServletRequest request) {
+        return Map.of("installed", runtimeApi.hasAnyInstalledApp(getOrgId(request)));
+    }
+
     @Operation(summary = "One installed app with its frozen manifest")
     @GetMapping("/bizapps/{kind}")
     public BizAppDtos.InstalledAppView installedApp(@PathVariable String kind, HttpServletRequest request) {
@@ -121,7 +128,8 @@ public class BizAppController extends BaseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             HttpServletRequest request) {
-        return recordService.list(getTenantId(request), kind, entity, includeArchived, page, size);
+        return recordService.list(getTenantId(request), kind, entity, includeArchived, page, size,
+                getManifestRole(request));
     }
 
     @Operation(summary = "Create one listing")
@@ -131,7 +139,7 @@ public class BizAppController extends BaseController {
             @Valid @RequestBody BizAppDtos.CreateRecordRequest body,
             HttpServletRequest request) {
         RecordView view = recordService.create(getTenantId(request), getUserId(request),
-                isWorkspaceAdmin(request), kind, entity, body.payload());
+                getManifestRole(request), kind, entity, body.payload());
         return ResponseEntity.status(201).body(view);
     }
 
@@ -140,7 +148,7 @@ public class BizAppController extends BaseController {
     public RecordView getRecord(
             @PathVariable String kind, @PathVariable String entity,
             @PathVariable UUID recordId, HttpServletRequest request) {
-        return recordService.get(getTenantId(request), kind, recordId);
+        return recordService.get(getTenantId(request), kind, entity, recordId, getManifestRole(request));
     }
 
     @Operation(summary = "Patch one record (unknown fields rejected)")
@@ -148,7 +156,7 @@ public class BizAppController extends BaseController {
     public RecordView patchRecord(
             @PathVariable String kind, @PathVariable String entity, @PathVariable UUID recordId,
             @Valid @RequestBody BizAppDtos.UpdateRecordRequest body, HttpServletRequest request) {
-        return recordService.update(getTenantId(request), getUserId(request), isWorkspaceAdmin(request),
+        return recordService.update(getTenantId(request), getUserId(request), getManifestRole(request),
                 kind, entity, recordId, body.payload());
     }
 
@@ -157,7 +165,7 @@ public class BizAppController extends BaseController {
     public ResponseEntity<Void> archiveRecord(
             @PathVariable String kind, @PathVariable String entity, @PathVariable UUID recordId,
             HttpServletRequest request) {
-        recordService.archive(getTenantId(request), getUserId(request), isWorkspaceAdmin(request),
+        recordService.archive(getTenantId(request), getUserId(request), getManifestRole(request),
                 kind, entity, recordId);
         return ResponseEntity.noContent().build();
     }
@@ -168,7 +176,7 @@ public class BizAppController extends BaseController {
     public RecordView submitRecord(
             @PathVariable String kind, @PathVariable String entity, @PathVariable UUID recordId,
             HttpServletRequest request) {
-        return recordService.submit(getTenantId(request), getUserId(request), isWorkspaceAdmin(request),
+        return recordService.submit(getTenantId(request), getUserId(request), getManifestRole(request),
                 kind, entity, recordId);
     }
 

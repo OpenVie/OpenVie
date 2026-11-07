@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_PATHS,
+  activeNavigationHref,
   adminNavigation,
   appNavigation,
   isAdminPath,
@@ -68,6 +69,18 @@ describe("application navigation", () => {
     for (const removed of REMOVED_HREFS) {
       expect(hrefs).not.toContain(removed);
     }
+  });
+
+  it("highlights only the most specific destination", () => {
+    expect(activeNavigationHref("/admin/organization/api-keys", appNavigation))
+      .toBe("/admin/organization/api-keys");
+    expect(activeNavigationHref("/admin/organization", appNavigation))
+      .toBe("/admin/organization");
+    expect(activeNavigationHref("/apps/some-app", appNavigation)).toBe("/apps");
+    expect(activeNavigationHref("/documentation/api-keys", appNavigation)).toBe("/documentation");
+    expect(activeNavigationHref("/", appNavigation)).toBe("/");
+    expect(activeNavigationHref("/unknown", appNavigation)).toBeNull();
+    expect(activeNavigationHref(undefined, appNavigation)).toBeNull();
   });
 
   it("keeps the admin boundary in sync with owner-only destinations", () => {

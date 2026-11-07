@@ -48,8 +48,11 @@ public class BizAppManifestValidator {
 
     /** Roles that may approve/author content in a workspace (validator authority). */
     public static final Set<String> APPROVABLE_ROLES = Set.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER");
-    private static final Set<String> RBAC_KEYS = Set.of("read", "write", "delete", "approve");
+    private static final Set<String> RBAC_KEYS = Set.of("read", "write", "delete", "approve", "submit");
     private static final Set<String> HOOK_KEYS = Set.of("onCreate", "onUpdate", "onDecide");
+    /** Block types a lifecycle hook may execute; presentation blocks are inert. */
+    public static final Set<String> HOOKABLE_BLOCK_TYPES =
+            Set.of("approval_workitem", "notify", "webhook_out", "external_call");
     private static final Set<String> VIEW_PREFIXES = Set.of("registry:", "form:", "assistant:", "report:", "timeline:");
 
     private static final Set<String> ALLOWED_METRIC_FNS = Set.of("count", "sum", "avg", "min", "max");
@@ -62,6 +65,8 @@ public class BizAppManifestValidator {
     private static final Pattern EVENT_SUFFIX = Pattern.compile("^[a-z0-9][a-z0-9._-]{1,62}$");
     private static final Pattern BPMN_TEMPLATE = Pattern.compile("^processes/[a-z0-9][a-z0-9-]*\\.bpmn20\\.xml$");
     private static final Pattern PRINTABLE = Pattern.compile("^[\\p{L}\\p{N} .,:;()@#%&_+\\-/']{1,200}$");
+    private static final Pattern CONFIG_KEY = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{0,63}$");
+    private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     public static final int MAX_ENTITIES = 20;
     public static final int MAX_FIELDS_PER_ENTITY = 40;
@@ -114,8 +119,28 @@ public class BizAppManifestValidator {
         for (Block block : blocks) {
             validateBlock(block, entityMap);
         }
+        List<Block> approvalBlocks = blocks.stream()
+                .filter(block -> "approval_workitem".equals(block.type()))
+                .toList();
+        require(approvalBlocks.size() <= 1, "only one approval_workitem block is supported");
+        validateApprovalCandidate(manifest.rbac(), approvalBlocks);
         validateHooks(entities, blocks);
         validateUi(manifest.ui(), entities, blocks);
+    }
+
+    /** The approval block's candidate group must be a role the manifest grants approve. */
+    private void validateApprovalCandidate(Map<String, List<String>> rbac, List<Block> approvalBlocks) {
+        if (approvalBlocks.isEmpty()) {
+            return;
+        }
+        List<String> approve = rbac == null ? null : rbac.get("approve");
+        if (approve == null || approve.isEmpty()) {
+            return;
+        }
+        String role = text(approvalBlocks.get(0).params(), "candidateRole");
+        String candidate = role == null ? "WORKSPACE_ADMIN" : role;
+        require(approve.contains(candidate),
+                "approval_workitem candidateRole " + candidate + " is not granted by rbac.approve");
     }
 
     private void validateKnowledgeProjection(Manifest manifest, Entity entity) {
@@ -222,6 +247,7 @@ public class BizAppManifestValidator {
         if ("notify".equals(block.type())) {
             require(paramsHasList(block.params(), "to") && !listOf(block.params().get("to")).isEmpty(),
                     "notify block requires a `to` list (creator or explicit email)");
+            validateNotifyRecipients(block, entityMap);
         }
         if ("webhook_out".equals(block.type())) {
             require(paramsHasList(block.params(), "events") && !listOf(block.params().get("events")).isEmpty(),
@@ -348,11 +374,42 @@ public class BizAppManifestValidator {
         }
     }
 
+    private void validateNotifyRecipients(Block block, Map<String, Entity> entityMap) {
+        for (Object recipient : listOf(block.params().get("to"))) {
+            require(isValidNotifyRecipient(recipient, entityMap),
+                    "unsupported notify recipient " + recipient
+                            + " (use creator, record.<stringField>, config.<key> or a literal email)");
+        }
+    }
+
+    private boolean isValidNotifyRecipient(Object value, Map<String, Entity> entityMap) {
+        if (!(value instanceof String token) || token.isBlank()) {
+            return false;
+        }
+        if ("creator".equalsIgnoreCase(token)) {
+            return true;
+        }
+        if (token.startsWith("record.")) {
+            String field = token.substring("record.".length());
+            return entityMap.values().stream()
+                    .filter(entity -> entity.fields() != null)
+                    .anyMatch(entity -> entity.fields().stream()
+                            .anyMatch(candidate -> field.equals(candidate.name())
+                                    && "string".equals(candidate.type())));
+        }
+        if (token.startsWith("config.")) {
+            return CONFIG_KEY.matcher(token.substring("config.".length())).matches();
+        }
+        return EMAIL.matcher(token).matches();
+    }
+
     private void validateHooks(List<Entity> entities, List<Block> blocks) {
         Set<String> blockIds = new HashSet<>();
+        Map<String, String> blockTypes = new HashMap<>();
         Set<String> webhookEvents = new HashSet<>();
         for (Block block : blocks) {
-            blockIds.add(block.id());
+            require(blockIds.add(block.id()), "duplicate block id " + block.id());
+            blockTypes.put(block.id(), block.type());
             if ("webhook_out".equals(block.type()) && paramsHasList(block.params(), "events")) {
                 listOf(block.params().get("events")).forEach(event -> webhookEvents.add((String) event));
             }
@@ -372,6 +429,13 @@ public class BizAppManifestValidator {
                             } else {
                                 require(blockIds.contains(target),
                                         "hook target block missing: " + target);
+                                String type = blockTypes.get(target);
+                                require(HOOKABLE_BLOCK_TYPES.contains(type),
+                                        "hook target " + target + " of type " + type
+                                                + " cannot run as a lifecycle hook");
+                                require(!("onDecide".equals(hook.getKey())
+                                                && "approval_workitem".equals(type)),
+                                        "approval_workitem cannot run onDecide");
                             }
                         });
             }

@@ -26,6 +26,7 @@ import com.openvie.api.chat.repository.ChatMessageRepository;
 import com.openvie.api.chat.repository.ChatSessionRepository;
 import com.openvie.api.chat.repository.ChatTurnRepository;
 import com.openvie.api.document.api.DocumentApi;
+import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.grpc.Context;
@@ -57,6 +58,7 @@ class ChatStreamingServiceTest {
     private final TenantWorkspaceApi workspace = mock(TenantWorkspaceApi.class);
     private final DocumentApi documents = mock(DocumentApi.class);
     private final AiInferenceApi inference = mock(AiInferenceApi.class);
+    private final TenantIdentityApi tenantIdentityApi = mock(TenantIdentityApi.class);
     private final ChatSession session = new ChatSession();
     private final Map<UUID, ChatMessage> storedMessages = new LinkedHashMap<>();
     private final List<String> events = new ArrayList<>();
@@ -116,7 +118,8 @@ class ChatStreamingServiceTest {
             @Override protected void doRollback(DefaultTransactionStatus status) { }
         };
         service = new ChatControlPlaneService(sessions, messages, turns, workspace, documents,
-                inference, new ObjectMapper(), new TransactionTemplate(transactionManager));
+                inference, new ObjectMapper(), new TransactionTemplate(transactionManager),
+                tenantIdentityApi);
     }
 
     @Test
