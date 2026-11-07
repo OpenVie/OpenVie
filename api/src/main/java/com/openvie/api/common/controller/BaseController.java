@@ -51,4 +51,12 @@ public abstract class BaseController {
     return (String) request.getAttribute("orgRole");
   }
 
+  /**
+   * The role a manifest RBAC fence sees: owners act as {@code ORG_OWNER},
+   * everyone else with their workspace role.
+   */
+  protected String getManifestRole(HttpServletRequest request) {
+    return "ORG_OWNER".equals(getOrgRole(request)) ? "ORG_OWNER" : getRole(request);
+  }
+
 }

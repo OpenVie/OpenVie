@@ -20,14 +20,18 @@ import com.openvie.api.ai.api.AiInferenceApi.StructuredJsonRequest;
 import com.openvie.api.ai.api.AiInferenceApi.StructuredJsonResponse;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.AppActionOffer;
+import com.openvie.api.bizapp.api.BizAppRuntimeApi.EntityDetail;
+import com.openvie.api.bizapp.api.BizAppRuntimeApi.FieldDetail;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.InstalledAppSummary;
 import com.openvie.api.bizapp.api.BizAppRuntimeApi.MarketplaceTemplateSummary;
+import com.openvie.api.chat.model.ChatMessage;
 import com.openvie.api.chat.service.BizAppSlotAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -73,14 +77,163 @@ class BizAppIntentRouterTest {
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("danh sach app"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("list apps"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("gỡ cài đặt crm"));
-        assertTrue(BizAppIntentRouter.matchesDeterministicGate("xem cac lead trong crm"));
+        assertTrue(BizAppIntentRouter.matchesDeterministicGate("xem cac ban ghi trong ung dung"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?"));
         assertTrue(BizAppIntentRouter.matchesDeterministicGate("Làm sao để theo dõi tài sản công ty?"));
+        assertTrue(BizAppIntentRouter.matchesDeterministicGate("Tôi muốn gửi yêu cầu."));
 
         // General documents / conversation without admin verbs or app vocab
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("xin chào, bạn là ai?"));
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("hợp đồng lao động mẫu năm 2026"));
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("chính sách nghỉ phép của công ty"));
+    }
+
+    @Test
+    void semanticSelectorRoutesAnyInstalledAppWithoutAnExplicitAlias() {
+        InstalledAppSummary ticketing = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "ticketing",
+                "Ticketing",
+                1,
+                "Gửi và theo dõi phiếu yêu cầu nội bộ",
+                List.of("tickets"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "tickets",
+                        "Phiếu yêu cầu",
+                        List.of(new FieldDetail("requester", "string", true, "Người gửi"))
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(ticketing));
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenAnswer(invocation -> {
+            StructuredJsonRequest request = invocation.getArgument(0);
+            if (request.systemPrompt().contains("OpenVie's app router")) {
+                return new StructuredJsonResponse(
+                        "{\"appKind\":\"ticketing\",\"entity\":\"tickets\",\"confidence\":0.9}",
+                        "vylinh", 80, 20);
+            }
+            throw new AssertionError("Classifier should not run for a semantically matched create request");
+        });
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi muốn gửi một yêu cầu nội bộ.", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("ticketing", result.appKind());
+        assertEquals("tickets", result.entity());
+    }
+
+    @Test
+    void fieldInfoFollowUpStaysInActiveAppContext() {
+        InstalledAppSummary leave = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "recent-conversation-turns",
+                "On leave",
+                1,
+                "",
+                List.of("conversation_turns"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "conversation_turns",
+                        "Lần trò chuyện gần đây",
+                        List.of(
+                                new FieldDetail("employee_name", "string", true, "Tên nhân viên"),
+                                new FieldDetail("leave_type", "enum", true, "Loại nghỉ"),
+                                new FieldDetail("start_date", "date", true, "Ngày bắt đầu")
+                        )
+                )),
+                List.of(),
+                "Nghỉ phép"
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(leave));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+
+        List<ChatMessage> prior = List.of(
+                message("user", "Tôi muốn xin nghỉ."),
+                message("assistant", "Tôi có thể giúp bạn tạo một mục mới trong Nghỉ phép. Vui lòng cho tôi biết thông tin chi tiết để tôi chuẩn bị nhé!")
+        );
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi cần cung cấp những thông tin nào nhỉ?", "vi-VN", sessionId, prior);
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("recent-conversation-turns", result.appKind());
+        assertTrue(result.reply().contains("Nghỉ phép"));
+        assertTrue(result.reply().contains("Tên nhân viên"));
+        assertTrue(result.reply().contains("Ngày bắt đầu"));
+        verifyNoInteractions(aiInferenceApi);
+    }
+
+    private static ChatMessage message(String role, String content) {
+        ChatMessage message = new ChatMessage();
+        message.setRole(role);
+        message.setContent(content);
+        return message;
+    }
+
+    @Test
+    void chitChatReturnsBeforeAnyAppLlm() {
+        router.setClassifyAllTurns(true);
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Xin chào", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.NONE, result.intent());
+        verifyNoInteractions(aiInferenceApi);
+    }
+
+    @Test
+    void operationalRequestWithoutAppsProposesCreatingAnApp() {
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of());
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+        router.setClassifyAllTurns(true);
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse(
+                        "{\"intent\":\"NONE\",\"confidence\":0.99,\"reply\":\"\",\"reason\":\"no app\"}",
+                        "vylinh", 80, 20)
+        );
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi muốn gửi một yêu cầu mới.", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.CREATE_APP, result.intent());
+        assertNotNull(result.actionCard());
+        assertEquals("bizapp.draft", result.actionCard().get("kind"));
+        assertEquals("Ứng dụng mới", result.actionCard().get("appName"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) result.actionCard().get("payload");
+        assertEquals("Tôi muốn gửi một yêu cầu mới.", payload.get("hint"));
+    }
+
+    @Test
+    void policyQuestionsStayOnRagEvenWhenAppsAreInstalled() {
+        InstalledAppSummary ticketing = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "ticketing",
+                "Ticketing",
+                1,
+                "Gửi và theo dõi phiếu yêu cầu nội bộ",
+                List.of("tickets"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "tickets",
+                        "Phiếu yêu cầu",
+                        List.of(new FieldDetail("requester", "string", true, "Người gửi"))
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(ticketing));
+        router.setClassifyAllTurns(true);
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Chính sách xử lý yêu cầu của công ty thế nào?", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.NONE, result.intent());
+        verifyNoInteractions(aiInferenceApi);
     }
 
     @Test

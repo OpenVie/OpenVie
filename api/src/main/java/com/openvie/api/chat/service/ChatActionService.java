@@ -156,8 +156,14 @@ public class ChatActionService {
                 throw new ConflictException("Action is not in PROPOSED or FAILED state (current: " + currentStatus + ")");
             }
 
-            // Server-authoritative permission check: require ORG_OWNER
-            if (!"ORG_OWNER".equals(callerRole)) {
+            String kind = String.valueOf(action.get("kind")).toLowerCase(Locale.ROOT);
+            boolean recordAction = kind.startsWith("bizapp.record.");
+
+            // Server-authoritative permission check: lifecycle/configuration
+            // actions stay owner-only. Record actions are delegated to the
+            // app manifest RBAC inside executeRecordCommand, so members can
+            // create records in apps that explicitly grant them write access.
+            if (!recordAction && !"ORG_OWNER".equals(callerRole)) {
                 action.put("status", "DENIED");
                 message.setAction(action);
                 messageRepository.save(message);
@@ -172,23 +178,22 @@ public class ChatActionService {
                         .build());
 
                 if (meterRegistry != null) {
-                    meterRegistry.counter("chat_action_execute_total", "action", String.valueOf(action.get("kind")), "outcome", "denied").increment();
+                    meterRegistry.counter("chat_action_execute_total", "action", kind, "outcome", "denied").increment();
                 }
 
-                throw new AccessDeniedException("Only organization owners may execute app actions");
+                throw new AccessDeniedException("Only organization owners may execute this app action");
             }
 
-            String kind = String.valueOf(action.get("kind"));
             String appKind = String.valueOf(action.get("appKind"));
             String appName = String.valueOf(action.getOrDefault("appName", appKind));
             int version = action.get("version") instanceof Number n ? n.intValue() : 1;
             String description = String.valueOf(action.getOrDefault("description", ""));
 
-            if (!SUPPORTED_ACTION_KINDS.contains(kind.toLowerCase(Locale.ROOT))) {
+            if (!SUPPORTED_ACTION_KINDS.contains(kind)) {
                 throw new ConflictException("Unsupported executable action kind: " + kind);
             }
 
-            if (kind.startsWith("bizapp.record.") && !recordActionsEnabled) {
+            if (recordAction && !recordActionsEnabled) {
                 throw new ResourceNotFoundException("BizApp record actions are disabled on this installation");
             }
 
@@ -307,7 +312,8 @@ public class ChatActionService {
                     outcome = bizAppRuntimeApi.executeRecordCommand(tenantId, orgId, actorId, callerRole, command);
                 } catch (Exception ex) {
                     log.warn("Record action execution failed: {}", ex.getMessage());
-                    action.put("status", "FAILED");
+                    // A manifest RBAC denial is a distinct outcome from a broken action.
+                    action.put("status", isAccessDenied(ex) ? "DENIED" : "FAILED");
                     action.put("executedBy", actorId.toString());
                     action.put("executedAt", Instant.now().toString());
                     action.put("result", Map.of("error", ex.getMessage()));
@@ -370,4 +376,16 @@ public class ChatActionService {
             return new AssistantMessageResponse("assistant", confirmation.getContent(), List.of(), confirmation.getAction(), List.of());
         }
     }
+    private boolean isAccessDenied(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof AccessDeniedException) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+        }
+        return false;
+    }
+
 }

@@ -36,6 +36,7 @@ import {
   List as ListIcon,
   Loader2,
   Moon,
+  Pencil,
   Play,
   Save,
   Share2,
@@ -52,6 +53,16 @@ import { transitionTheme } from "@/lib/theme-transition";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { NodeEntity } from "./NodeEntity";
 import { NodeBlock } from "./NodeBlock";
@@ -116,6 +127,29 @@ export function ComposerCanvas({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isValid, setIsValid] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameVi, setRenameVi] = useState("");
+  const [renameEn, setRenameEn] = useState("");
+
+  const displayNameVi = manifest.name?.vi || manifest.name?.en || manifest.kind;
+  const displayNameEn = manifest.name?.en || manifest.name?.vi || manifest.kind;
+
+  const openRename = () => {
+    setRenameVi(String(displayNameVi));
+    setRenameEn(String(displayNameEn));
+    setRenameOpen(true);
+  };
+
+  const applyRename = () => {
+    const nextVi = renameVi.trim();
+    const nextEn = renameEn.trim();
+    if (!nextVi || !nextEn) return;
+    setManifest((current) => ({
+      ...current,
+      name: { vi: nextVi, en: nextEn },
+    }));
+    setRenameOpen(false);
+  };
 
   const nodeTypes = useMemo(() => ({
     entityNode: NodeEntity,
@@ -286,30 +320,44 @@ export function ComposerCanvas({
   return (
     <div className="flex flex-col h-screen h-dvh w-full overflow-hidden bg-background">
       {/* Top Header / Toolbar */}
-      <header className="flex items-center justify-between px-3 sm:px-4 py-2 border-b bg-card gap-2 sm:gap-4 shrink-0 h-14">
+      <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b bg-card px-4 sm:px-6 lg:gap-4">
         {/* Left: Back button + Manifest Title */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBack}
             className="h-8 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0"
+            aria-label={t("back")}
             title={t("back")}
           >
             <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">{t("back")}</span>
+            <span className="hidden 2xl:inline">{t("back")}</span>
           </Button>
 
           <div className="h-4 w-px bg-border shrink-0" aria-hidden="true" />
 
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="p-1.5 bg-primary/10 rounded text-primary shrink-0">
               <Workflow className="size-4" />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-sm font-semibold truncate leading-tight">
-                {manifest.name?.vi || manifest.name?.en || manifest.kind || t("title")}
-              </h1>
+            <div className="min-w-0 pr-2">
+              <div className="flex min-w-0 items-center gap-1">
+                <h1 className="min-w-0 truncate text-sm font-semibold leading-tight">
+                  {manifest.name?.vi || manifest.name?.en || manifest.kind || t("title")}
+                </h1>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={openRename}
+                  aria-label={t("rename")}
+                  title={t("rename")}
+                >
+                  <Pencil className="size-3" />
+                </Button>
+              </div>
               <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
                 {manifest.schema} · {manifest.kind} · v{manifest.version || 1}
               </p>
@@ -318,48 +366,61 @@ export function ComposerCanvas({
         </div>
 
         {/* Center: View Switcher Tabs */}
-        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/40 shrink-0">
+        <div className="flex items-center gap-1 justify-self-center border rounded-lg p-0.5 bg-muted/40 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab("canvas")}
+            aria-label={t("canvasTab")}
+            title={t("canvasTab")}
             className={cn(
               "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "canvas" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <Workflow className="size-3.5" />
-            <span className="hidden sm:inline">{t("canvasTab")}</span>
+            <span className="hidden xl:inline">{t("canvasTab")}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("list")}
+            aria-label={t("listTab")}
+            title={t("listTab")}
             className={cn(
               "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "list" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <ListIcon className="size-3.5" />
-            <span className="hidden sm:inline">{t("listTab")}</span>
+            <span className="hidden xl:inline">{t("listTab")}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("json")}
+            aria-label={t("jsonTab")}
+            title={t("jsonTab")}
             className={cn(
               "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
               activeTab === "json" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <Code className="size-3.5" />
-            <span className="hidden sm:inline">{t("jsonTab")}</span>
+            <span className="hidden xl:inline">{t("jsonTab")}</span>
           </button>
         </div>
 
         {/* Right: Actions + Theme Toggle + Language Switcher */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center justify-self-end gap-1.5 sm:gap-2 shrink-0">
           {activeTab === "canvas" && (
-            <Button variant="outline" size="sm" onClick={handleAutoLayout} className="h-8 text-xs gap-1.5 px-2.5 hidden md:inline-flex">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAutoLayout}
+              aria-label={t("autoLayout")}
+              title={t("autoLayout")}
+              className="h-8 text-xs gap-1.5 px-2.5 hidden md:inline-flex"
+            >
               <LayoutTemplate className="size-3.5" />
-              <span>{t("autoLayout")}</span>
+              <span className="hidden 2xl:inline">{t("autoLayout")}</span>
             </Button>
           )}
 
@@ -376,10 +437,12 @@ export function ComposerCanvas({
                 }
               }}
               disabled={isSaving}
+              aria-label={t("saveDraft")}
+              title={t("saveDraft")}
               className="h-8 text-xs gap-1.5 px-2.5"
             >
               {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-              <span className="hidden sm:inline">{t("saveDraft")}</span>
+              <span className="hidden 2xl:inline">{t("saveDraft")}</span>
             </Button>
           )}
 
@@ -388,10 +451,12 @@ export function ComposerCanvas({
               variant="outline"
               size="sm"
               onClick={() => onSaveTemplate(manifest)}
+              aria-label={t("saveTemplate")}
+              title={t("saveTemplate")}
               className="h-8 text-xs gap-1.5 px-2.5 hidden sm:inline-flex"
             >
               <Share2 className="size-3.5" />
-              <span>{t("saveTemplate")}</span>
+              <span className="hidden xl:inline">{t("saveTemplate")}</span>
             </Button>
           )}
 
@@ -400,10 +465,12 @@ export function ComposerCanvas({
               size="sm"
               onClick={() => onInstall(manifest)}
               disabled={!isValid}
+              aria-label={t("install")}
+              title={t("install")}
               className="h-8 text-xs gap-1.5 font-semibold px-2.5"
             >
               <Play className="size-3.5" />
-              <span>{t("install")}</span>
+              <span className="hidden xl:inline">{t("install")}</span>
             </Button>
           )}
 
@@ -445,6 +512,7 @@ export function ComposerCanvas({
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
                 colorMode={theme}
+                proOptions={{ hideAttribution: true }}
                 fitView
               >
                 <Background />
@@ -496,6 +564,47 @@ export function ComposerCanvas({
 
       {/* Bottom Status / Validation Panel */}
       <ValidationPanel isValid={isValid} errors={validationErrors} isValidating={isValidating} />
+
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("renameTitle")}</DialogTitle>
+            <DialogDescription>{t("renameDescription")}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="bizapp-name-vi">{t("nameVi")}</Label>
+              <Input
+                id="bizapp-name-vi"
+                value={renameVi}
+                maxLength={200}
+                onChange={(event) => setRenameVi(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="bizapp-name-en">{t("nameEn")}</Label>
+              <Input
+                id="bizapp-name-en"
+                value={renameEn}
+                maxLength={200}
+                onChange={(event) => setRenameEn(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={applyRename}
+              disabled={!renameVi.trim() || !renameEn.trim()}
+            >
+              {t("renameSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

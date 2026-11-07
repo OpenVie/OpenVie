@@ -103,18 +103,40 @@ public class BizAppMarketplaceController extends BaseController {
             @RequestBody BizAppDtos.InstallRequest body,
             HttpServletRequest request) {
         requireOrgOwner(request);
-        Map<String, Object> manifest;
-        if (body.draftId() != null) {
-            var draft = draftService.getDraft(getOrgId(request), body.draftId());
-            manifest = draft.manifest();
-        } else if (body.manifest() != null && !body.manifest().isEmpty()) {
-            manifest = body.manifest();
-        } else {
-            manifest = marketplaceService.templateManifest(getOrgId(request), body.templateRef());
-        }
         BizAppDtos.InstallResult result = installService.install(
-                getTenantId(request), getOrgId(request), getUserId(request), manifest);
+                getTenantId(request), getOrgId(request), getUserId(request), resolveManifest(body, request));
         return ResponseEntity.status(201).body(result);
+    }
+
+    @Operation(summary = "Upgrade an installed BizApp's manifest in place (owner)",
+            description = "Same app kind, higher version, same storage; records are preserved and "
+                    + "entity/field removal or type changes are rejected.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Upgraded; returns the new version + process"),
+            @ApiResponse(responseCode = "403", description = "Only the organization owner may upgrade apps"),
+            @ApiResponse(responseCode = "409", description = "The version is not greater than the installed one")
+    })
+    @PostMapping("/apps/{kind}/upgrade")
+    public ResponseEntity<BizAppDtos.InstallResult> upgrade(
+            @PathVariable String kind,
+            @RequestBody BizAppDtos.InstallRequest body,
+            HttpServletRequest request) {
+        requireOrgOwner(request);
+        BizAppDtos.InstallResult result = installService.upgrade(
+                getTenantId(request), getOrgId(request), getUserId(request), kind,
+                resolveManifest(body, request));
+        return ResponseEntity.ok(result);
+    }
+
+    /** Draft, inline manifest, or templateRef — the same resolution for install and upgrade. */
+    private Map<String, Object> resolveManifest(BizAppDtos.InstallRequest body, HttpServletRequest request) {
+        if (body.draftId() != null) {
+            return draftService.getDraft(getOrgId(request), body.draftId()).manifest();
+        }
+        if (body.manifest() != null && !body.manifest().isEmpty()) {
+            return body.manifest();
+        }
+        return marketplaceService.templateManifest(getOrgId(request), body.templateRef());
     }
 
     @Operation(summary = "Uninstall an app from the active workspace (owner)",

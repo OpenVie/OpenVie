@@ -213,4 +213,112 @@ class BizAppInstallServiceTest {
         assertTrue(xmlCaptor.getValue().contains("bizappSingleApproval"),
                 "unbundled BPMN template paths must fall back to the bundled generic approval process");
     }
+
+    // ------------------------------------------------------------- upgrade
+
+    @Test
+    void upgradeAppliesANewerManifestAndKeepsTheRows() {
+        Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 1);
+        Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
+        when(parser.parse(currentRaw)).thenReturn(manifestWithField("booking", 1, "bookings", "name", "string"));
+        when(parser.parse(nextRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "name", "string"));
+
+        BizAppInstallation installation = activeInstallation("booking", 1);
+        installation.setManifest(currentRaw);
+        stubActiveInstallation(installation);
+        when(installationRepository.save(any(BizAppInstallation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.upgrade(tenantId, orgId, actorId, "booking", nextRaw);
+
+        assertEquals(2, result.version());
+        assertEquals(nextRaw, installation.getManifest());
+        assertEquals("ACTIVE", installation.getStatus());
+        verify(runtime).audit(eq(tenantId), eq(actorId), eq(com.openvie.api.common.enums.LogAction.BIZAPP_APP_UPGRADED),
+                eq("bizapp_installation"), any(), any());
+    }
+
+    @Test
+    void upgradeRejectsAVersionThatIsNotGreater() {
+        Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 2);
+        Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
+        when(parser.parse(currentRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "name", "string"));
+        when(parser.parse(nextRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "name", "string"));
+
+        BizAppInstallation installation = activeInstallation("booking", 2);
+        installation.setManifest(currentRaw);
+        stubActiveInstallation(installation);
+
+        assertThrows(ConflictException.class,
+                () -> service.upgrade(tenantId, orgId, actorId, "booking", nextRaw));
+        verify(installationRepository, never()).save(any());
+    }
+
+    @Test
+    void upgradeRejectsARemovedField() {
+        Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 1);
+        Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
+        when(parser.parse(currentRaw)).thenReturn(manifestWithField("booking", 1, "bookings", "name", "string"));
+        when(parser.parse(nextRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "phone", "string"));
+
+        BizAppInstallation installation = activeInstallation("booking", 1);
+        installation.setManifest(currentRaw);
+        stubActiveInstallation(installation);
+
+        var error = assertThrows(com.openvie.api.common.exception.custom.BadRequestException.class,
+                () -> service.upgrade(tenantId, orgId, actorId, "booking", nextRaw));
+        assertTrue(error.getMessage().contains("bookings.name"), error.getMessage());
+    }
+
+    @Test
+    void upgradeRejectsAFieldTypeChange() {
+        Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 1);
+        Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
+        when(parser.parse(currentRaw)).thenReturn(manifestWithField("booking", 1, "bookings", "name", "string"));
+        when(parser.parse(nextRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "name", "number"));
+
+        BizAppInstallation installation = activeInstallation("booking", 1);
+        installation.setManifest(currentRaw);
+        stubActiveInstallation(installation);
+
+        assertThrows(com.openvie.api.common.exception.custom.BadRequestException.class,
+                () -> service.upgrade(tenantId, orgId, actorId, "booking", nextRaw));
+    }
+
+    private BizAppInstallation activeInstallation(String kind, int version) {
+        BizAppInstallation installation = new BizAppInstallation();
+        installation.setId(UUID.randomUUID());
+        installation.setTenantId(tenantId);
+        installation.setOrgId(orgId);
+        installation.setKind(kind);
+        installation.setVersion(version);
+        installation.setStatus("ACTIVE");
+        installation.setInstalledBy(actorId);
+        return installation;
+    }
+
+    private void stubActiveInstallation(BizAppInstallation installation) {
+        when(installationRepository.findByTenantIdAndKindAndStatus(
+                tenantId, installation.getKind(), "ACTIVE")).thenReturn(Optional.of(installation));
+    }
+
+    private Manifest manifestWithField(String kind, int version, String entityName,
+                                       String fieldName, String fieldType) {
+        return new Manifest(
+                "bizapp.v1",
+                kind,
+                new com.openvie.api.bizapp.dto.BizAppManifest.Localized(kind, kind),
+                version,
+                "icon",
+                "jsonb",
+                Map.of(),
+                List.of(new com.openvie.api.bizapp.dto.BizAppManifest.Entity(
+                        entityName,
+                        new com.openvie.api.bizapp.dto.BizAppManifest.Localized(entityName, entityName),
+                        List.of(new com.openvie.api.bizapp.dto.BizAppManifest.Field(
+                                fieldName, fieldType, true, 200, null, null)),
+                        Map.of())),
+                List.of(),
+                null
+        );
+    }
 }

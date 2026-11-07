@@ -48,7 +48,28 @@ public interface BizAppBlockExecutor {
             Map<String, Object> payload,
             String processKey,
             Map<String, Object> config,
-            Integer version) {
+            Integer version,
+            UUID recordCreatedBy,
+            Map<String, String> fieldLabels) {
+        public BlockContext {
+            fieldLabels = fieldLabels == null ? Map.of() : Map.copyOf(fieldLabels);
+        }
+
+        public BlockContext(
+                UUID orgId,
+                UUID tenantId,
+                UUID actorId,
+                String appKind,
+                String entity,
+                UUID recordId,
+                Map<String, Object> payload,
+                String processKey,
+                Map<String, Object> config,
+                Integer version) {
+            this(orgId, tenantId, actorId, appKind, entity, recordId, payload, processKey,
+                    config, version, actorId, Map.of());
+        }
+
         public BlockContext(
                 UUID orgId,
                 UUID tenantId,
@@ -58,7 +79,8 @@ public interface BizAppBlockExecutor {
                 UUID recordId,
                 Map<String, Object> payload,
                 String processKey) {
-            this(orgId, tenantId, actorId, appKind, entity, recordId, payload, processKey, Map.of(), 1);
+            this(orgId, tenantId, actorId, appKind, entity, recordId, payload, processKey,
+                    Map.of(), 1, actorId, Map.of());
         }
     }
 

@@ -39,7 +39,8 @@
         "read": { "$ref": "#/$defs/roleList" },
         "write": { "$ref": "#/$defs/roleList" },
         "delete": { "$ref": "#/$defs/roleList" },
-        "approve": { "$ref": "#/$defs/roleList" }
+        "approve": { "$ref": "#/$defs/roleList" },
+        "submit": { "$ref": "#/$defs/roleList" }
       }
     },
     "entities": {
@@ -52,6 +53,18 @@
       "type": "array",
       "maxItems": 40,
       "items": { "$ref": "#/$defs/block" }
+    },
+    "conversational": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "triggers": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "type": "string", "maxLength": 200 }
+        },
+        "description": { "type": "string", "maxLength": 2000 }
+      }
     },
     "ui": {
       "type": "object",
@@ -118,6 +131,21 @@
         "options": {
           "type": "array",
           "items": { "type": "string", "maxLength": 100 }
+        },
+        "optionLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "maxLength": 100 },
+              "aliases": {
+                "type": "array",
+                "maxItems": 100,
+                "items": { "type": "string" }
+              }
+            }
+          }
         },
         "pii": { "type": "boolean", "default": false },
         "label": { "$ref": "#/$defs/localized" }
@@ -240,7 +268,10 @@
             "report",
             "notify",
             "webhook_out",
-            "external_call"
+            "external_call",
+            "registry",
+            "form",
+            "timeline"
           ]
         },
         "params": {

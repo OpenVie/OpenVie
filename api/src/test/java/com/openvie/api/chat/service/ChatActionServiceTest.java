@@ -106,6 +106,22 @@ class ChatActionServiceTest {
     }
 
     @Test
+    void memberCanExecuteManifestGatedRecordAction() {
+        service.setRecordActionsEnabled(true);
+        ChatMessage msg = createProposedMessage("bizapp.record.create", "leave", "PROPOSED");
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(msg));
+        UUID recordId = UUID.randomUUID();
+        when(bizAppRuntimeApi.executeRecordCommand(eq(tenantId), eq(orgId), eq(actorId), eq("MEMBER"), any()))
+                .thenReturn(new BizAppRuntimeApi.RecordCommandOutcome(true, recordId, "Record created"));
+
+        var response = service.executeAction(tenantId, orgId, actorId, "MEMBER", messageId, actionId);
+
+        assertEquals("Record created", response.content());
+        assertEquals("EXECUTED", msg.getAction().get("status"));
+        verify(bizAppRuntimeApi).executeRecordCommand(eq(tenantId), eq(orgId), eq(actorId), eq("MEMBER"), any());
+    }
+
+    @Test
     void nonExecutableStatusIsRejectedWithConflict() {
         // Statuses outside PROPOSED/FAILED (e.g. a DENIED card) are rejected.
         ChatMessage msg = createProposedMessage("bizapp.install", "booking", "DENIED");

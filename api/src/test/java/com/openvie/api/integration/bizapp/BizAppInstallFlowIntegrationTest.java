@@ -21,6 +21,7 @@ import com.openvie.api.bizapp.service.BizAppMarketplaceService;
 import com.openvie.api.bizapp.service.BizAppRecordService;
 import com.openvie.api.bizapp.service.BizAppReportResolver;
 import com.openvie.api.common.exception.custom.BadRequestException;
+import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.testsupport.PostgresTestContainer;
 import com.openvie.api.tenant.api.OrgRole;
@@ -43,6 +44,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -155,7 +157,7 @@ class BizAppInstallFlowIntegrationTest {
         lead.put("email", "bao@motor.example");
         lead.put("stage", "NEW");
         lead.put("dealValue", 1200.5);
-        RecordView created = recordService.create(workspaceId, ownerId, true, "crm", "leads", lead);
+        RecordView created = recordService.create(workspaceId, ownerId, "ORG_OWNER", "crm", "leads", lead);
         assertNotNull(created.id());
         assertEquals("crm", created.appKind());
         assertEquals("leads", created.entity());
@@ -167,20 +169,20 @@ class BizAppInstallFlowIntegrationTest {
         assertTrue(created.runtime().isEmpty());
 
         // Sales progress: stage flips while untouched fields stay in place.
-        RecordView updated = recordService.update(workspaceId, ownerId, true, "crm", "leads",
+        RecordView updated = recordService.update(workspaceId, ownerId, "ORG_OWNER", "crm", "leads",
                 created.id(), Map.of("stage", "WON"));
         assertEquals("WON", updated.payload().get("stage"));
         assertEquals("Bao Motorcycles", updated.payload().get("name"));
 
-        RecordView second = recordService.create(workspaceId, ownerId, true, "crm", "leads",
+        RecordView second = recordService.create(workspaceId, ownerId, "ORG_OWNER", "crm", "leads",
                 Map.of("name", "Delta Foods", "stage", "CONTACTED"));
-        recordService.archive(workspaceId, ownerId, true, "crm", "leads", second.id());
+        recordService.archive(workspaceId, ownerId, "ORG_OWNER", "crm", "leads", second.id());
 
-        var onlyActive = recordService.list(workspaceId, "crm", "leads", false, 0, 20);
+        var onlyActive = recordService.list(workspaceId, "crm", "leads", false, 0, 20, "ORG_OWNER");
         assertEquals(1, onlyActive.getTotalElements(), "archived rows stay out of the registry");
-        var withArchived = recordService.list(workspaceId, "crm", "leads", true, 0, 20);
+        var withArchived = recordService.list(workspaceId, "crm", "leads", true, 0, 20, "ORG_OWNER");
         assertEquals(2, withArchived.getTotalElements());
-        assertEquals("ARCHIVED", recordService.get(workspaceId, "crm", second.id()).status());
+        assertEquals("ARCHIVED", recordService.get(workspaceId, "crm", "leads", second.id(), "ORG_OWNER").status());
 
         var rows = reportResolver.run(workspaceId, "crm", "pipeline", Map.of());
         assertEquals(1, rows.size(), "report SQL hides archived rows exactly like the registry");
@@ -192,7 +194,7 @@ class BizAppInstallFlowIntegrationTest {
         assertThrows(ResourceNotFoundException.class, () -> installService.getInstalled(workspaceId, "crm"));
         // Records are kept but the runtime surface is closed.
         assertThrows(ResourceNotFoundException.class,
-                () -> recordService.update(workspaceId, ownerId, true, "crm", "leads",
+                () -> recordService.update(workspaceId, ownerId, "ORG_OWNER", "crm", "leads",
                         created.id(), Map.of("stage", "LOST")));
     }
 
@@ -205,18 +207,18 @@ class BizAppInstallFlowIntegrationTest {
         ghost.put("stage", "NEW");
         ghost.put("discountRatio", 0.3);
         assertThrows(BadRequestException.class,
-                () -> recordService.create(workspaceId, ownerId, true, "crm", "leads", ghost),
+                () -> recordService.create(workspaceId, ownerId, "ORG_OWNER", "crm", "leads", ghost),
                 "fields outside the manifest schema must not reach the store");
 
         Map<String, Object> badEnum = new HashMap<>();
         badEnum.put("name", "Broken Lead");
         badEnum.put("stage", "SQUEEZED");
         assertThrows(BadRequestException.class,
-                () -> recordService.create(workspaceId, ownerId, true, "crm", "leads", badEnum),
+                () -> recordService.create(workspaceId, ownerId, "ORG_OWNER", "crm", "leads", badEnum),
                 "enum fields accept only declared options");
 
         assertThrows(ResourceNotFoundException.class,
-                () -> recordService.create(workspaceId, ownerId, true, "booking", "bookings",
+                () -> recordService.create(workspaceId, ownerId, "ORG_OWNER", "booking", "bookings",
                         Map.of("title", "Ghost App")),
                 "kinds without an installation are unreachable");
 
@@ -234,6 +236,58 @@ class BizAppInstallFlowIntegrationTest {
         assertNotNull(reinstalled);
         assertEquals("crm", reinstalled.kind());
         assertEquals(1, installService.listInstalled(workspaceId).size());
+    }
+
+    @Test
+    void manifestUpgradeKeepsRecordsAndRejectsIncompatibleManifests() {
+        Map<String, Object> v1 = notesManifest(1, List.of(stringField("title")));
+        installService.install(workspaceId, orgId, ownerId, v1);
+        RecordView created = recordService.create(workspaceId, ownerId, "ORG_OWNER", "notes", "notes",
+                Map.of("title", "first note"));
+
+        // v2 adds a field: existing rows survive untouched.
+        Map<String, Object> v2 = notesManifest(2, List.of(stringField("title"), stringField("body")));
+        InstallResult upgraded = installService.upgrade(workspaceId, orgId, ownerId, "notes", v2);
+        assertEquals(2, upgraded.version());
+        assertEquals(2, installService.getInstalled(workspaceId, "notes").version());
+        assertEquals(1, recordService.list(workspaceId, "notes", "notes", false, 0, 20, "ORG_OWNER")
+                .getTotalElements(), "upgrade must not delete records");
+        assertEquals("first note", recordService.get(workspaceId, "notes", "notes", created.id(), "ORG_OWNER")
+                .payload().get("title"));
+
+        // Removing a field would orphan stored values.
+        Map<String, Object> removal = notesManifest(3, List.of(stringField("title")));
+        assertThrows(BadRequestException.class,
+                () -> installService.upgrade(workspaceId, orgId, ownerId, "notes", removal));
+        // Retyping a field would corrupt stored values.
+        Map<String, Object> retype = notesManifest(3, List.of(
+                Map.of("name", "title", "type", "number"),
+                stringField("body")));
+        assertThrows(BadRequestException.class,
+                () -> installService.upgrade(workspaceId, orgId, ownerId, "notes", retype));
+        // Versions must move forward.
+        assertThrows(ConflictException.class,
+                () -> installService.upgrade(workspaceId, orgId, ownerId, "notes", v2));
+    }
+
+    private Map<String, Object> notesManifest(int version, List<Map<String, Object>> fields) {
+        return Map.of(
+                "schema", "bizapp.v1",
+                "kind", "notes",
+                "name", Map.of("en", "Notes", "vi", "Ghi chú"),
+                "version", version,
+                "storage", "jsonb",
+                "rbac", Map.of(
+                        "read", List.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"),
+                        "write", List.of("ORG_OWNER", "MEMBER")),
+                "entities", List.of(Map.of(
+                        "name", "notes",
+                        "label", Map.of("en", "Notes", "vi", "Ghi chú"),
+                        "fields", fields)));
+    }
+
+    private Map<String, Object> stringField(String name) {
+        return Map.of("name", name, "type", "string");
     }
 
     private InstallResult installCrm() {

@@ -44,6 +44,20 @@ export async function listInstalledBizAppsApi(
   );
 }
 
+/**
+ * Whether the organization has at least one active app installed in any
+ * workspace. Used by surfaces that must not be dead ends when the current
+ * workspace has no documents but its organization already runs apps.
+ */
+export async function hasAnyInstalledBizAppApi(
+  request: ApiRequest,
+): Promise<boolean> {
+  const body = await readJsonOrThrow<{ installed?: boolean }>(
+    await request(`${getApiBase()}/bizapps/installed-anywhere`),
+  );
+  return body.installed === true;
+}
+
 export async function getInstalledBizAppApi(
   request: ApiRequest,
   kind: string,
@@ -214,6 +228,23 @@ export async function installBizAppApi(
     await request(`${getApiBase()}/apps/install`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  );
+}
+
+/**
+ * Upgrade an installed app in place: same kind, higher version, same storage.
+ * Records survive; the server rejects removals/type changes.
+ */
+export async function upgradeBizAppApi(
+  request: ApiRequest,
+  kind: string,
+  manifest: BizAppManifest,
+): Promise<BizAppInstallResult> {
+  return readJsonOrThrow<BizAppInstallResult>(
+    await request(`${getApiBase()}/apps/${encodeURIComponent(kind)}/upgrade`, {
+      method: "POST",
+      body: JSON.stringify({ manifest }),
     }),
   );
 }
@@ -404,9 +435,31 @@ export function bizAppLabel(manifest: Pick<BizAppTemplateView, "name" | "nameVi"
   return locale === "vi" && manifest.nameVi ? manifest.nameVi : manifest.name;
 }
 
-/** True when the manifest explicitly grants MEMBER write (registry/forms). */
-export function memberCanWrite(manifest: BizAppManifest): boolean {
-  return Boolean(manifest.rbac?.write?.includes("MEMBER"));
+/**
+ * Server-parity manifest RBAC check: owners always pass, an explicit list wins,
+ * and an absent list falls back to `defaultRoles`.
+ */
+export function manifestAllows(
+  manifest: Pick<BizAppManifest, "rbac">,
+  capability: string,
+  role: string | null | undefined,
+  defaultRoles: string[],
+): boolean {
+  if (role === "ORG_OWNER") return true;
+  const declared = manifest.rbac?.[capability];
+  const roles = declared && declared.length > 0 ? declared : defaultRoles;
+  return role != null && roles.includes(role);
+}
+
+/** Submit follows `rbac.submit`, falling back to `rbac.write` (server parity). */
+export function canSubmitRecord(
+  manifest: Pick<BizAppManifest, "rbac">,
+  role: string | null | undefined,
+): boolean {
+  if (role === "ORG_OWNER") return true;
+  const submit = manifest.rbac?.submit;
+  if (submit && submit.length > 0) return role != null && submit.includes(role);
+  return manifestAllows(manifest, "write", role, ["ORG_OWNER", "WORKSPACE_ADMIN"]);
 }
 
 /** The app's approval block, when it declares one. */

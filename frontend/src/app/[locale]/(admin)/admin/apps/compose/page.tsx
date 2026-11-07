@@ -23,7 +23,12 @@ import type { BizAppManifest } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
 import { getApiBase } from "@/lib/auth-api";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
-import { installBizAppApi, saveBizAppDraftApi } from "@/lib/bizapp-api";
+import {
+  installBizAppApi,
+  listInstalledBizAppsApi,
+  saveBizAppDraftApi,
+  upgradeBizAppApi,
+} from "@/lib/bizapp-api";
 
 const DEFAULT_MANIFEST: BizAppManifest = {
   schema: "bizapp.v1",
@@ -108,8 +113,17 @@ export default function ComposeNewPage() {
 
   const handleInstall = async (updated: BizAppManifest) => {
     try {
-      await installBizAppApi(request, { manifest: updated });
-      toast.success(t("composer.installed"));
+      // An already-installed app upgrades in place instead of dead-ending on
+      // "already installed"; both paths keep existing records.
+      const installed = await listInstalledBizAppsApi(request);
+      const active = installed.some((app) => app.kind === updated.kind && app.status === "ACTIVE");
+      if (active) {
+        await upgradeBizAppApi(request, updated.kind, updated);
+        toast.success(t("composer.upgraded"));
+      } else {
+        await installBizAppApi(request, { manifest: updated });
+        toast.success(t("composer.installed"));
+      }
       router.push(`/apps/${updated.kind}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("composer.installFailed"));

@@ -24,7 +24,9 @@ import com.openvie.api.bizapp.dto.BizAppDtos.GenerateDraftResponse;
 import com.openvie.api.bizapp.dto.BizAppDtos.SaveDraftRequest;
 import com.openvie.api.bizapp.dto.BizAppDtos.ValidationResult;
 import com.openvie.api.bizapp.model.BizAppDraft;
+import com.openvie.api.bizapp.model.BizAppInstallation;
 import com.openvie.api.bizapp.repository.BizAppDraftRepository;
+import com.openvie.api.bizapp.repository.BizAppInstallationRepository;
 import com.openvie.api.common.enums.LogAction;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,6 +53,7 @@ import java.util.UUID;
 public class BizAppDraftService {
 
     private final BizAppDraftRepository draftRepository;
+    private final BizAppInstallationRepository installationRepository;
     private final BizAppManifestValidator validator;
     private final BizAppManifestParser parser;
     private final AiInferenceApi aiInferenceApi;
@@ -95,16 +99,16 @@ public class BizAppDraftService {
                 4. entities: array of entities with name, label (localized object {"en": "...", "vi": "..."}), and fields.
                 5. Field types: "string", "number", "boolean", "enum", "date", "ref".
                 6. storage: "jsonb" (never "typed").
-                7. rbac: map of capabilities to role arrays (allowed: "ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER").
+                7. rbac: map of capabilities to role arrays (allowed capabilities: "read", "write", "delete", "approve", "submit"; roles: "ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"). "submit" defaults to "write" when omitted.
                 8. NO SQL anywhere in the manifest! Reports must use declarative views with groupBy, metrics, filters, orderBy.
                 9. Never include credentials or private keys in the manifest.
                 10. blocks: optional array of blocks to automate workflows:
-                    - approval_workitem: {"id": "approvalBlockId", "type": "approval_workitem", "params": {"bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml", "candidateRole": "WORKSPACE_ADMIN"|"ORG_OWNER"}}
-                    - notify: {"id": "notifyBlockId", "type": "notify", "params": {"to": ["creator"|"record.<emailField>"], "title": "...", "subject": "..."}}
+                    - approval_workitem: at most ONE per manifest: {"id": "approvalBlockId", "type": "approval_workitem", "params": {"bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml", "candidateRole": "WORKSPACE_ADMIN"|"ORG_OWNER"}}. When rbac.approve is declared, candidateRole MUST be one of its roles. An approval block hooked on "onCreate"/"onUpdate" submits the record automatically for that event.
+                    - notify: {"id": "notifyBlockId", "type": "notify", "params": {"to": ["creator"|"record.<emailField>"|"config.<key>"|"someone@example.com"], "title": "...", "subject": "..."}}
                 11. hooks: inside an entity, link lifecycle events to declared block IDs:
                     - "onCreate": ["blockId"] (runs when a record is created)
                     - "onUpdate": ["blockId"] (runs when updated, e.g. requesting approval on stage changes)
-                    - "onDecide": ["blockId"] (runs after approval verdict, e.g. sending notification email)
+                    - "onDecide": ["blockId"] (runs after approval verdict, e.g. sending notification email; NEVER target approval_workitem here)
                 """;
 
         String userPrompt = "Create an application manifest for: " + request.prompt();
@@ -228,8 +232,74 @@ public class BizAppDraftService {
         BizAppDraft saved = draftRepository.save(draft);
         runtime.audit(tenantId, actorId, LogAction.BIZAPP_DRAFT_CREATED, "bizapp_draft",
                 saved.getId(), Map.of("title", saved.getTitle()));
+        syncInstalledDisplayName(orgId, actorId, saved);
 
         return toView(saved);
+    }
+
+    /**
+     * Display-name propagation: drafts own the name users see. Saving a draft
+     * whose kind is already installed keeps every active installation's
+     * display name in step, while the installation's frozen schema, records and
+     * workflow stay untouched.
+     */
+    private void syncInstalledDisplayName(UUID orgId, UUID actorId, BizAppDraft draft) {
+        if (orgId == null || draft == null || draft.getManifest() == null) {
+            return;
+        }
+        Map<String, Object> manifest = draft.getManifest();
+        String kind = stringOrNull(manifest.get("kind"));
+        if (kind == null || !(manifest.get("name") instanceof Map<?, ?> draftName)) {
+            return;
+        }
+        String nextVi = stringOrNull(draftName.get("vi"));
+        String nextEn = stringOrNull(draftName.get("en"));
+        if (nextVi == null && nextEn == null) {
+            return;
+        }
+        if (nextVi == null) nextVi = nextEn;
+        if (nextEn == null) nextEn = nextVi;
+
+        for (BizAppInstallation installation : installationRepository.findByOrgIdOrderByCreatedAtDesc(orgId)) {
+            if (installation == null
+                    || !installation.isActive()
+                    || installation.getKind() == null
+                    || !installation.getKind().equalsIgnoreCase(kind)) {
+                continue;
+            }
+            Map<String, Object> installedManifest = installation.getManifest() == null
+                    ? new LinkedHashMap<>()
+                    : new LinkedHashMap<>(installation.getManifest());
+            String currentVi = installedManifest.get("name") instanceof Map<?, ?> installedName
+                    ? stringOrNull(installedName.get("vi")) : null;
+            String currentEn = installedManifest.get("name") instanceof Map<?, ?> installedName
+                    ? stringOrNull(installedName.get("en")) : null;
+            final String resolvedVi = nextVi;
+            final String resolvedEn = nextEn;
+            if (Objects.equals(currentVi, resolvedVi) && Objects.equals(currentEn, resolvedEn)) {
+                continue;
+            }
+            Map<String, Object> installedName = new LinkedHashMap<>();
+            if (installedManifest.get("name") instanceof Map<?, ?> current) {
+                current.forEach((key, value) -> installedName.put(String.valueOf(key), value));
+            }
+            installedName.put("vi", resolvedVi);
+            installedName.put("en", resolvedEn);
+            installedManifest.put("name", installedName);
+            installation.setManifest(installedManifest);
+            installationRepository.save(installation);
+            runtime.audit(installation.getTenantId(), actorId, LogAction.BIZAPP_APP_RENAMED,
+                    "bizapp_installation", installation.getId(),
+                    Map.of("app", kind, "nameVi", resolvedVi, "nameEn", resolvedEn));
+        }
+    }
+
+    private static String stringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     @Transactional
@@ -367,7 +437,7 @@ public class BizAppDraftService {
         boolean validRbac = false;
         if (rbacObj instanceof Map<?, ?> rbacMap) {
             validRbac = rbacMap.keySet().stream()
-                    .anyMatch(k -> Set.of("read", "write", "delete", "approve").contains(String.valueOf(k).toLowerCase(java.util.Locale.ROOT)));
+                    .anyMatch(k -> Set.of("read", "write", "delete", "approve", "submit").contains(String.valueOf(k).toLowerCase(java.util.Locale.ROOT)));
         }
         if (!validRbac) {
             map.put("rbac", Map.of(
@@ -413,12 +483,26 @@ public class BizAppDraftService {
             return;
         }
         List<Map<String, Object>> normBlocks = new ArrayList<>();
+        String keptApprovalId = null;
+        Map<String, String> droppedApprovalIds = new LinkedHashMap<>();
         for (Object blockItem : blocks) {
             if (!(blockItem instanceof Map<?, ?> blockRaw)) {
                 continue;
             }
             Map<String, Object> blockMap = new LinkedHashMap<>((Map<String, Object>) blockRaw);
             if (APPROVAL_WORKITEM_BLOCK.equals(String.valueOf(blockMap.get("type")))) {
+                String blockId = String.valueOf(blockMap.get("id"));
+                if (keptApprovalId != null) {
+                    // The manifest supports exactly one approval block; a small
+                    // model emitting several would fail validation at install.
+                    // Keep the first and repoint its hooks so the draft stays
+                    // installable ("skip, not fail").
+                    droppedApprovalIds.put(blockId, keptApprovalId);
+                    log.warn("Draft declares multiple approval_workitem blocks; dropping {} and keeping {}",
+                            blockId, keptApprovalId);
+                    continue;
+                }
+                keptApprovalId = blockId;
                 Map<String, Object> params = blockMap.get("params") instanceof Map<?, ?> paramsRaw
                         ? new LinkedHashMap<>((Map<String, Object>) paramsRaw)
                         : new LinkedHashMap<>();
@@ -435,6 +519,41 @@ public class BizAppDraftService {
             normBlocks.add(blockMap);
         }
         map.put("blocks", normBlocks);
+        if (!droppedApprovalIds.isEmpty()) {
+            rewriteDroppedApprovalHooks(map, droppedApprovalIds);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void rewriteDroppedApprovalHooks(Map<String, Object> map, Map<String, String> droppedApprovalIds) {
+        if (!(map.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<Map<String, Object>> rewritten = new ArrayList<>();
+        for (Object entityItem : entities) {
+            if (!(entityItem instanceof Map<?, ?> entityRaw)) {
+                continue;
+            }
+            Map<String, Object> entityMap = new LinkedHashMap<>((Map<String, Object>) entityRaw);
+            if (entityRaw.get("hooks") instanceof Map<?, ?> hooksRaw) {
+                Map<String, Object> hooks = new LinkedHashMap<>();
+                hooksRaw.forEach((hookKey, hookValue) -> {
+                    if (hookValue instanceof List<?> targets) {
+                        List<String> remapped = new ArrayList<>();
+                        for (Object target : targets) {
+                            String value = String.valueOf(target);
+                            remapped.add(droppedApprovalIds.getOrDefault(value, value));
+                        }
+                        hooks.put(String.valueOf(hookKey), remapped);
+                    } else {
+                        hooks.put(String.valueOf(hookKey), hookValue);
+                    }
+                });
+                entityMap.put("hooks", hooks);
+            }
+            rewritten.add(entityMap);
+        }
+        map.put("entities", rewritten);
     }
 
     private DraftView toView(BizAppDraft d) {

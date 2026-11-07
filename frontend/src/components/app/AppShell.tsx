@@ -21,7 +21,7 @@ import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun } from "lu
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { logoutApi } from "@/lib/auth-api"
-import { visibleNavigation } from "@/components/app/navigation"
+import { activeNavigationHref, visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { ChatHistoryPanel } from "@/components/chat/ChatHistoryPanel"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
@@ -80,6 +80,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
   const navItems = visibleNavigation(user?.orgRole)
   const primaryNavigation = navItems.filter((item) => item.placement !== "footer")
   const footerNavigation = navItems.filter((item) => item.placement === "footer")
+  const activeHref = activeNavigationHref(pathname, navItems)
   async function handleLogout() {
     try {
       await logoutApi()
@@ -220,7 +221,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
             } as CSSProperties}
           />
           {primaryNavigation.map(({ href, labelKey, icon: Icon }) => {
-            const isActive = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
+            const isActive = activeHref === href
             return (
               <Link
                 key={href}
