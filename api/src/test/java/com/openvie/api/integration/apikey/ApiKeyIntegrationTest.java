@@ -175,6 +175,12 @@ class ApiKeyIntegrationTest {
         assertEquals(WorkspaceRole.WORKSPACE_ADMIN, live.workspaceRole());
         assertEquals(created.keyView().serviceUserId(), live.userId());
 
+        // Usage bookkeeping must survive the read-only authenticate transaction:
+        // lastUsedAt is stamped even though the caller transaction never writes.
+        var stamped = transactions.execute(status ->
+                em.find(ApiKey.class, created.id()).getLastUsedAt());
+        assertNotNull(stamped, "a successful authentication must stamp lastUsedAt");
+
         apiKeyService.revoke(orgId, ownerId, created.id());
         assertNull(apiKeyService.authenticate(created.key()), "revoked keys must not authenticate");
         assertEquals(UserStatus.SUSPENDED,

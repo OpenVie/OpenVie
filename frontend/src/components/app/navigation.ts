@@ -34,18 +34,20 @@ export type AppNavigationItem = {
   placement?: "main" | "footer"
   /** When set, the item only shows for callers holding an org-level role. */
   ownerOnly?: boolean
+  /** Small feature-maturity badge rendered next to the label (e.g. `beta`). */
+  badge?: "beta"
 }
 
 export const appNavigation: AppNavigationItem[] = [
   { href: "/", labelKey: "chat", icon: MessageSquare },
   { href: "/documents", labelKey: "documents", icon: FileText },
   { href: "/approvals", labelKey: "approvals", icon: ClipboardCheck },
-  { href: "/apps", labelKey: "apps", icon: LayoutGrid },
+  { href: "/apps", labelKey: "apps", icon: LayoutGrid, badge: "beta" },
   { href: "/users", labelKey: "users", icon: Users },
   { href: "/admin/organization", labelKey: "organization", icon: ShieldCheck, ownerOnly: true },
   { href: "/admin/organization/api-keys", labelKey: "apiKeys", icon: KeyRound, ownerOnly: true },
   { href: "/admin/workspaces", labelKey: "workspaces", icon: Building2, ownerOnly: true },
-  { href: "/admin/apps", labelKey: "marketplace", icon: Store, ownerOnly: true },
+  { href: "/admin/apps", labelKey: "marketplace", icon: Store, ownerOnly: true, badge: "beta" },
   { href: "/admin/settings", labelKey: "settings", icon: Settings, ownerOnly: true },
   { href: "/documentation", labelKey: "documentation", icon: BookOpen, placement: "footer" },
 ]

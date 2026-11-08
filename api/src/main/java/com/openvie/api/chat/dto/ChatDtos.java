@@ -32,9 +32,12 @@ public final class ChatDtos {
 
     @Schema(description = "Request body for creating a playground chat session.")
     public record CreateSessionRequest(
-            @Schema(description = "Chatbot profile the session runs with. Optional when the workspace has exactly one chatbot.")
+            @Schema(description = "Chatbot profile the session runs with. Optional: when omitted, the workspace's "
+                    + "default assistant (oldest active chatbot) is used — the same one `GET /tenants/me/workspace` returns.")
             @JsonProperty("chatbot_id") UUID chatbotId,
-            @Schema(description = "Knowledge base whose documents ground the answers.")
+            @Schema(description = "Knowledge base whose documents ground the answers. Optional when omitted together "
+                    + "with `chatbot_id` (the default assistant's knowledge base is used); when only this id is given, "
+                    + "the oldest active chatbot bound to that knowledge base answers.")
             @JsonProperty("knowledge_base_id") UUID knowledgeBaseId,
             @Schema(description = "Answer language hint (BCP-47).", example = "vi")
             @Size(max = 20) String locale,

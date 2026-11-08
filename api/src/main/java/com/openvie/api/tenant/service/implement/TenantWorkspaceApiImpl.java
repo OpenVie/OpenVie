@@ -20,6 +20,7 @@ import com.openvie.api.tenant.api.TenantWorkspaceApi;
 import com.openvie.api.tenant.enums.ChatbotStatus;
 import com.openvie.api.tenant.enums.KnowledgeBaseStatus;
 import com.openvie.api.tenant.api.TenantStatus;
+import com.openvie.api.tenant.model.Chatbot;
 import com.openvie.api.tenant.repository.ChatbotRepository;
 import com.openvie.api.tenant.repository.KnowledgeBaseRepository;
 import com.openvie.api.tenant.repository.TenantRepository;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -41,15 +43,38 @@ public class TenantWorkspaceApiImpl implements TenantWorkspaceApi, TenantKnowled
     @Transactional(readOnly = true)
     public WorkspaceContext requireActiveWorkspace(UUID tenantId, UUID chatbotId, UUID knowledgeBaseId) {
         var tenant = activeTenant(tenantId);
-        var chatbot = chatbotRepository.findByIdAndTenant_IdAndKnowledgeBase_IdAndStatus(
-                        chatbotId, tenantId, knowledgeBaseId, ChatbotStatus.ACTIVE)
-                .orElseThrow(this::notFound);
+        var chatbot = resolveChatbot(tenantId, chatbotId, knowledgeBaseId);
         var knowledgeBase = chatbot.getKnowledgeBase();
         if (knowledgeBase.getStatus() != KnowledgeBaseStatus.ACTIVE) {
             throw notFound();
         }
-        return new WorkspaceContext(tenantId, chatbotId, knowledgeBaseId, tenant.getName(),
+        return new WorkspaceContext(tenantId, chatbot.getId(), knowledgeBase.getId(), tenant.getName(),
                 knowledgeBase.getSearchRevision());
+    }
+
+    /**
+     * Resolves the active chatbot for a session. Both ids are optional at the
+     * boundary: a missing chatbot falls back to the oldest active chatbot in
+     * the workspace (optionally narrowed to a knowledge base), mirroring what
+     * {@code GET /tenants/me/workspace} returns as the workspace's assistant.
+     */
+    private Chatbot resolveChatbot(UUID tenantId, UUID chatbotId, UUID knowledgeBaseId) {
+        Optional<Chatbot> chatbot;
+        if (chatbotId == null && knowledgeBaseId == null) {
+            chatbot = chatbotRepository.findFirstByTenant_IdAndStatusOrderByCreatedAtAsc(
+                    tenantId, ChatbotStatus.ACTIVE);
+        } else if (chatbotId == null) {
+            chatbot = chatbotRepository.findFirstByTenant_IdAndKnowledgeBase_IdAndStatusOrderByCreatedAtAsc(
+                    tenantId, knowledgeBaseId, ChatbotStatus.ACTIVE);
+        } else {
+            // Explicit chatbot: the knowledge base id, when given, must be the
+            // chatbot's own; when absent the chatbot's binding decides.
+            chatbot = knowledgeBaseId == null
+                    ? chatbotRepository.findByIdAndTenant_IdAndStatus(chatbotId, tenantId, ChatbotStatus.ACTIVE)
+                    : chatbotRepository.findByIdAndTenant_IdAndKnowledgeBase_IdAndStatus(
+                            chatbotId, tenantId, knowledgeBaseId, ChatbotStatus.ACTIVE);
+        }
+        return chatbot.orElseThrow(this::notFound);
     }
 
     @Override
