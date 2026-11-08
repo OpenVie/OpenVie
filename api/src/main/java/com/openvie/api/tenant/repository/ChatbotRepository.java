@@ -31,6 +31,14 @@ public interface ChatbotRepository extends JpaRepository<Chatbot, UUID> {
             com.openvie.api.tenant.enums.ChatbotStatus status
     );
 
+    Optional<Chatbot> findFirstByTenant_IdAndStatusOrderByCreatedAtAsc(
+            UUID tenantId,
+            com.openvie.api.tenant.enums.ChatbotStatus status
+    );
+
     Optional<Chatbot> findByIdAndTenant_IdAndKnowledgeBase_IdAndStatus(
             UUID id, UUID tenantId, UUID knowledgeBaseId, ChatbotStatus status);
+
+    Optional<Chatbot> findByIdAndTenant_IdAndStatus(
+            UUID id, UUID tenantId, ChatbotStatus status);
 }

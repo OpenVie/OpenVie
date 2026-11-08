@@ -184,6 +184,21 @@ html[data-ov-palette="blue"] .ov-loading-screen .ov-aurora i:nth-child(3) { back
 .ov-brand { max-width: 180px; }
 .ov-new-chat-label { max-width: 180px; }
 .ov-nav-label { max-width: 180px; }
+.ov-nav-beta {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgb(31 182 255 / .45);
+  background: rgb(31 182 255 / .14);
+  color: #1fb6ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-transform: lowercase;
+}
+.ov-light .ov-nav-beta { border-color: rgb(7 133 197 / .45); background: rgb(31 182 255 / .12); color: #0785c5; }
 .ov-docs-label { max-width: 170px; }
 .ov-account-copy { max-width: 180px; }
 .ov-workspace-container {
@@ -209,6 +224,7 @@ html[data-ov-palette="blue"] .ov-loading-screen .ov-aurora i:nth-child(3) { back
   transform: translateY(-14px);
 }
 .ov-sidebar-collapsed .ov-history-slot { display: none; }
+.ov-sidebar-collapsed .ov-nav-beta { display: none; }
 .ov-sidebar-collapsed .ov-sidebar-collapse { margin-left: 0; }
 .ov-new-chat,
 .ov-navigation-link,

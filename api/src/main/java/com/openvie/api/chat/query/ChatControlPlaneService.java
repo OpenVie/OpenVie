@@ -106,8 +106,8 @@ public class ChatControlPlaneService {
         this.bizAppRuntimeApi = bizAppRuntimeApi;
     }
     public interface AnswerStreamListener {
-        void onContent(String content);
-        void onReset();
+        default void onContent(String content) { }
+        default void onReset() { }
     }
 
     public ChatDtos.SessionResponse createEmployeeSession(
@@ -517,12 +517,15 @@ public class ChatControlPlaneService {
 
     private ChatDtos.SessionResponse createSession(
             UUID tenantId, UUID userId, UUID chatbotId, UUID knowledgeBaseId, String locale) {
-        tenantWorkspaceApi.requireActiveWorkspace(tenantId, chatbotId, knowledgeBaseId);
+        // chatbot/knowledge-base ids are optional at the boundary: absent ids
+        // resolve to the workspace's default assistant (see
+        // TenantWorkspaceApiImpl), so integrators only need the key to chat.
+        var workspace = tenantWorkspaceApi.requireActiveWorkspace(tenantId, chatbotId, knowledgeBaseId);
         ChatSession session = new ChatSession();
         session.setTenantId(tenantId);
         session.setUserId(userId);
-        session.setChatbotId(chatbotId);
-        session.setKnowledgeBaseId(knowledgeBaseId);
+        session.setChatbotId(workspace.chatbotId());
+        session.setKnowledgeBaseId(workspace.knowledgeBaseId());
         session.setLocale(locale == null || locale.isBlank() ? "vi-VN" : locale);
         session.setChannel(ChatChannel.EMPLOYEE_PLAYGROUND);
         session = sessionRepository.save(session);

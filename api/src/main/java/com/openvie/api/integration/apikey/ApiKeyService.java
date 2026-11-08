@@ -52,6 +52,7 @@ public class ApiKeyService {
     private final TenantUserManagementService userManagementService;
     private final TenantIdentityApi identityApi;
     private final ApplicationEventPublisher eventPublisher;
+    private final ApiKeyUsageStamper usageStamper;
 
     @Transactional
     public ApiKeyDtos.CreatedApiKey create(UUID orgId, UUID creatorId, ApiKeyDtos.CreateApiKeyRequest request) {
@@ -101,7 +102,7 @@ public class ApiKeyService {
             return null;
         }
         MembershipSnapshot membership = identityApi.requireMembership(key.getUserId(), key.getTenantId());
-        touch(key);
+        usageStamper.stampUsage(key.getId());
         return membership;
     }
 
@@ -148,20 +149,6 @@ public class ApiKeyService {
             return null;
         }
         return key;
-    }
-
-    /**
-     * Strictly rate-throttled bookkeeping: at most one update every 30 s per key
-     * so high-frequency integrations do not hammer the database.
-     */
-    private void touch(ApiKey key) {
-        LocalDateTime now = LocalDateTime.now();
-        if (key.getLastUsedAt() == null || key.getLastUsedAt().isBefore(now.minusSeconds(30))) {
-            // The request thread holds no long transaction here; a tiny update
-            // on the hot path is the accepted trade for fresh last-used data.
-            key.setLastUsedAt(now);
-            keyRepository.save(key);
-        }
     }
 
     private ApiKeyDtos.ApiKeyView toView(ApiKey key) {

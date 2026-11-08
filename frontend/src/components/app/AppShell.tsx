@@ -220,7 +220,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
               "--ov-indicator-height": `${navIndicator.height}px`,
             } as CSSProperties}
           />
-          {primaryNavigation.map(({ href, labelKey, icon: Icon }) => {
+          {primaryNavigation.map(({ href, labelKey, icon: Icon, badge }) => {
             const isActive = activeHref === href
             return (
               <Link
@@ -237,6 +237,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
               >
                 <Icon className="size-4" />
                 <span className="ov-nav-label">{t(labelKey)}</span>
+                {badge ? <span className="ov-nav-beta">{badge}</span> : null}
               </Link>
             )
           })}
