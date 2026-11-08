@@ -66,6 +66,10 @@ app:
     encryption-key: ${BIZAPP_ENC_KEY:}
     outbound:
       allow-http: ${BIZAPPS_OUTBOUND_ALLOW_HTTP:false}
+      # Development escape hatch for local mock services (loopback/private
+      # hosts); it disables the SSRF resolution check in SafeOutboundHttp.
+      # Production must keep this false.
+      allow-private-hosts: ${BIZAPPS_OUTBOUND_ALLOW_PRIVATE_HOSTS:false}
     ai-drafting:
       enabled: ${BIZAPPS_AI_DRAFTING_ENABLED:true}
     # Per-task model routing. Blank means "use the AI service's LLM_MODEL_ID";
