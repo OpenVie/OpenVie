@@ -96,6 +96,27 @@ describe("Composer graph-manifest conversions (Workstream B)", () => {
     expect(roundTripped.ui?.layout?.leads).toEqual({ x: 100, y: 150 });
   });
 
+  it("maps edge add/remove back to entity hooks", () => {
+    const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
+    const withoutHook = graphToManifest(
+      nodes,
+      edges.filter((edge) => !(edge.source === "entity-leads" && edge.target === "block-notifyOwner")),
+      SAMPLE_MANIFEST,
+    );
+    expect(withoutHook.entities[0].hooks).toBeUndefined();
+
+    const withNewHook = graphToManifest(nodes, [
+      ...edges.filter((edge) => !(edge.source === "entity-leads" && edge.target === "block-notifyOwner")),
+      {
+        id: "hook-new",
+        source: "entity-leads",
+        target: "block-notifyOwner",
+        label: "onDecide",
+      },
+    ], SAMPLE_MANIFEST);
+    expect(withNewHook.entities[0].hooks).toEqual({ onDecide: ["notifyOwner"] });
+  });
+
   it("applies auto-layout correctly with dagre", () => {
     const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
     const layouted = layoutGraph(nodes, edges);

@@ -15,14 +15,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import toast from "react-hot-toast";
+import { AlertCircle, Download, Loader2, RefreshCw } from "lucide-react";
 
 import type { BizAppInstalledAppView } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
-import { runBizAppReportApi } from "@/lib/bizapp-api";
+import { exportBizAppReportApi, runBizAppReportApi } from "@/lib/bizapp-api";
+import { reportViewTitleFor } from "@/lib/bizapp-report";
+import { downloadBlob } from "@/lib/download";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * The `report:<view>` native view: rows of one manifest-declared SELECT,
@@ -35,10 +44,12 @@ export function BizAppReportView({ app, viewName, admin }: {
   admin: boolean;
 }) {
   const t = useTranslations("BizApps");
+  const locale = useLocale();
   const { request } = useApiClient();
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,11 +70,48 @@ export function BizAppReportView({ app, viewName, admin }: {
 
   const columns = rows.length === 0 ? [] : Object.keys(rows[0]).slice(0, 6);
 
+  // The file always carries every column and row the view returns, not the
+  // six columns the runtime table shows.
+  const onExport = async (format: "csv" | "xlsx") => {
+    setExporting(true);
+    try {
+      const file = await exportBizAppReportApi(request, app.kind, viewName, format, locale);
+      downloadBlob(file.blob, file.fileName);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.export"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button size="sm" variant="outline" disabled={exporting} aria-label={t("export.button")} />
+        }
+      >
+        {exporting
+          ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
+          : <Download className="mr-1.5 size-4" aria-hidden="true" />}
+        {t("export.button")}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => void onExport("csv")} onSelect={() => void onExport("csv")}>
+          {t("export.csv")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void onExport("xlsx")} onSelect={() => void onExport("xlsx")}>
+          {t("export.xlsx")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   if (!admin) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{t("report.title", { view: viewName })}</CardTitle>
+          <CardTitle>{reportViewTitleFor(app.manifest, viewName)}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">{t("report.adminOnly")}</p>
@@ -75,10 +123,13 @@ export function BizAppReportView({ app, viewName, admin }: {
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle>{t("report.title", { view: viewName })}</CardTitle>
-        <Button size="icon" variant="ghost" onClick={() => { void load(); }} aria-label={t("refresh")}>
-          {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-        </Button>
+        <CardTitle>{reportViewTitleFor(app.manifest, viewName)}</CardTitle>
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="ghost" onClick={() => { void load(); }} aria-label={t("refresh")}>
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          </Button>
+          {exportMenu}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {!loading && error && (

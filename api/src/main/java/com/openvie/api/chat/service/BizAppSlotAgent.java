@@ -52,7 +52,8 @@ import java.util.regex.Pattern;
 @Slf4j(topic = "SLOT-AGENT")
 public class BizAppSlotAgent {
 
-    private static final String DEFAULT_MODEL_ID = "vylinh";
+    @Value("${app.bizapps.ai.slot-model:}")
+    private String slotModel = "";
 
     private final AiInferenceApi aiInferenceApi;
     private final ObjectMapper objectMapper;
@@ -63,6 +64,10 @@ public class BizAppSlotAgent {
     public BizAppSlotAgent(AiInferenceApi aiInferenceApi, ObjectMapper objectMapper) {
         this.aiInferenceApi = aiInferenceApi;
         this.objectMapper = objectMapper;
+    }
+
+    private String slotModel() {
+        return slotModel == null || slotModel.isBlank() ? null : slotModel.trim();
     }
 
     public void setSlotMode(String slotMode) {
@@ -95,7 +100,7 @@ public class BizAppSlotAgent {
                     "Extract the requested slot values. Respond with JSON only.",
                     systemPrompt,
                     buildJsonSchema(entity),
-                    DEFAULT_MODEL_ID,
+                    slotModel(),
                     0.1f,
                     512
             ));

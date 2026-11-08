@@ -59,9 +59,11 @@ class GenerationGrpcHandler:
         self,
         generation: GenerationApi,
         result_cache: ProtobufGenerationResultCache,
+        structured_timeout_seconds: float = 300.0,
     ) -> None:
         self._generation = generation
         self._cache = result_cache
+        self._structured_timeout_seconds = structured_timeout_seconds
 
     async def generate(
         self, request: pb.GenerateAnswerRequest, context: grpc.aio.ServicerContext
@@ -159,6 +161,8 @@ class GenerationGrpcHandler:
                         max_output_tokens=max_tokens,
                         temperature=temperature,
                         format=provider_format,
+                        model_id=request.model_id or None,
+                        timeout_seconds=self._structured_timeout_seconds,
                     )
                 elif hasattr(model, "complete"):
                     output = await model.complete(messages)

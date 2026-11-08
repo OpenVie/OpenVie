@@ -68,6 +68,46 @@ class GenericAppKindResolutionTest {
     }
 
     @Test
+    void fieldOptionAliasesAndShortHomographsDoNotSelectAnApp() {
+        InstalledAppSummary booking = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "booking",
+                "Booking",
+                1,
+                "",
+                List.of("bookings"),
+                List.of(),
+                "ACTIVE",
+                List.of(new BizAppRuntimeApi.EntityDetail(
+                        "bookings",
+                        "Lịch hẹn",
+                        List.of(new BizAppRuntimeApi.FieldDetail(
+                                "service", "enum", true, "Dịch vụ",
+                                List.of("meeting-room"), null, Map.of(),
+                                Map.of("meeting-room", List.of("họp"))))
+                )),
+                List.of("đặt lịch")
+        );
+        Map<String, String> aliases = BizAppIntentRouter.buildAliasToKindMap(List.of(booking), List.of());
+        Set<String> kinds = Set.of("booking");
+
+        // "hộp thư" must not resolve to Booking via the slot value alias "họp".
+        assertNull(BizAppIntentRouter.resolveAppKind("gửi vào hộp thư duyệt", kinds, aliases));
+        assertNull(BizAppIntentRouter.resolveAppKind("phòng họp", kinds, aliases));
+        assertEquals("booking", BizAppIntentRouter.resolveAppKind("đặt lịch họp", kinds, aliases));
+
+        InstalledAppSummary meetingApp = new InstalledAppSummary(
+                UUID.randomUUID(), "meeting-app", "Meeting", 1, "",
+                List.of(), List.of(), "ACTIVE", List.of(), List.of("họp")
+        );
+        Map<String, String> meetingAliases =
+                BizAppIntentRouter.buildAliasToKindMap(List.of(meetingApp), List.of());
+        assertNull(BizAppIntentRouter.resolveAppKind("hộp thư", Set.of("meeting-app"), meetingAliases));
+        assertEquals("meeting-app",
+                BizAppIntentRouter.resolveAppKind("cuộc họp", Set.of("meeting-app"), meetingAliases));
+    }
+
+    @Test
     void deterministicGateMatchesGenericWriteVerbsAndDynamicAliases() {
         InstalledAppSummary warehouseApp = new InstalledAppSummary(
                 UUID.randomUUID(), "warehouse-mgr", "Quản lý kho", 1, "", List.of("items"), List.of(), "ACTIVE"

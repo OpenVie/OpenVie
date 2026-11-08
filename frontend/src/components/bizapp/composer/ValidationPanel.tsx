@@ -17,6 +17,7 @@
 import { useTranslations } from "next-intl";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
+import { friendlyValidationError } from "./validation-messages";
 
 interface ValidationPanelProps {
   isValid: boolean;
@@ -60,7 +61,7 @@ export function ValidationPanel({ isValid, errors, isValidating }: ValidationPan
           {errors.map((err, i) => (
             <div key={i} className="flex items-start gap-1.5 text-destructive text-[11px]">
               <span className="shrink-0">•</span>
-              <span>{err}</span>
+              <span>{friendlyValidationError(err)}</span>
             </div>
           ))}
         </div>

@@ -141,11 +141,17 @@
       "true": "Có",
       "false": "Không"
     },
+    "export": {
+      "button": "Xuất dữ liệu",
+      "csv": "CSV (.csv)",
+      "xlsx": "Excel (.xlsx)"
+    },
     "fallback": {
       "load": "Không tải được dự liệu. Vui lòng thử lại.",
       "save": "Không lưu được bản ghi.",
       "archive": "Không lưu trỹ được bản ghi.",
-      "submit": "Không nộp được bản ghi."
+      "submit": "Không nộp được bản ghi.",
+      "export": "Không xuất được dữ liệu."
     },
     "report": {
       "title": "Báo cáo: {view}",

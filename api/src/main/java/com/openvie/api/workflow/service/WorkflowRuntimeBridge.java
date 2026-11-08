@@ -46,4 +46,9 @@ public class WorkflowRuntimeBridge implements WorkflowRuntimeApi {
                 new EngineDtos.StartEngineProcessRequest(definitionKey, businessKey, variables));
         return new StartedProcess(view.id(), view.definitionKey());
     }
+
+    @Override
+    public void reassignPendingTasks(UUID workspaceId, String appKind, String oldGroup, String newGroup) {
+        engineService.reassignPendingTasks(workspaceId, appKind, oldGroup, newGroup);
+    }
 }

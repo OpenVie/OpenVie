@@ -178,6 +178,70 @@ export async function runBizAppReportApi(
   );
 }
 
+// ─── Export (CSV / XLSX, whole result set) ──────────────────────────────────
+
+export type BizAppExportFormat = "csv" | "xlsx";
+
+/**
+ * Filename from `Content-Disposition`: the RFC 5987 form first (it carries
+ * non-ASCII names), then the quoted ASCII fallback.
+ */
+function parseFileName(response: Response, fallback: string): string {
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim());
+    } catch {
+      // Malformed percent-encoding: fall back to the plain name.
+    }
+  }
+  const quoted = disposition.match(/filename="([^"]+)"/i)?.[1]
+    ?? disposition.match(/filename=([^;]+)/i)?.[1];
+  return quoted?.trim() || fallback;
+}
+
+/**
+ * Every record of one entity (active only) as a downloadable file. The
+ * server caps the export at 10 000 rows and rejects anything larger.
+ */
+export async function exportBizAppRecordsApi(
+  request: ApiRequest,
+  kind: string,
+  entity: string,
+  format: BizAppExportFormat,
+  locale: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await request(
+    `${getApiBase()}/bizapps/${encodeURIComponent(kind)}/entities/${encodeURIComponent(entity)}/export?format=${format}&locale=${encodeURIComponent(locale)}`,
+    { method: "GET" },
+  );
+  if (!response.ok) await readJsonOrThrow<unknown>(response);
+  return {
+    blob: await response.blob(),
+    fileName: parseFileName(response, `bizapp-${kind}-${entity}.${format}`),
+  };
+}
+
+/** Every row and column of one report view (workspace-admin only). */
+export async function exportBizAppReportApi(
+  request: ApiRequest,
+  kind: string,
+  viewName: string,
+  format: BizAppExportFormat,
+  locale: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await request(
+    `${getApiBase()}/bizapps/${encodeURIComponent(kind)}/reports/${encodeURIComponent(viewName)}/export?format=${format}&locale=${encodeURIComponent(locale)}`,
+    { method: "POST", body: JSON.stringify({ params: {} }) },
+  );
+  if (!response.ok) await readJsonOrThrow<unknown>(response);
+  return {
+    blob: await response.blob(),
+    fileName: parseFileName(response, `bizapp-${kind}-${viewName}.${format}`),
+  };
+}
+
 // ─── Marketplace (browse + install) ─────────────────────────────────────────
 
 export async function listBizAppTemplatesApi(
@@ -233,8 +297,8 @@ export async function installBizAppApi(
 }
 
 /**
- * Upgrade an installed app in place: same kind, higher version, same storage.
- * Records survive; the server rejects removals/type changes.
+ * Upgrade an installed app in place: same kind, same storage. Records survive;
+ * the server advances the manifest version and rejects removals/type changes.
  */
 export async function upgradeBizAppApi(
   request: ApiRequest,

@@ -142,14 +142,14 @@ export default function SettingsPage() {
   const saveChannel = async (values: ChannelForm) => {
     const payload: ChannelPayload = {
       enabled: values.enabled,
-      host: values.host,
+      host: values.host.trim(),
       port: Number(values.port) || 587,
       auth: values.auth,
       starttls: values.starttls,
     };
-    if (values.fromEmail) payload.fromEmail = values.fromEmail;
-    if (values.fromName) payload.fromName = values.fromName;
-    if (values.username) payload.username = values.username;
+    if (values.fromEmail.trim()) payload.fromEmail = values.fromEmail.trim();
+    if (values.fromName.trim()) payload.fromName = values.fromName.trim();
+    if (values.username.trim()) payload.username = values.username.trim();
     if (values.password) payload.password = values.password;
     try {
       await upsertChannelApi(request, "smtp", payload);

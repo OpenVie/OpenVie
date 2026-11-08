@@ -57,11 +57,18 @@ class OllamaChatModel:
         max_output_tokens: int,
         temperature: float | None = None,
         format: dict[str, Any] | None = None,
+        model_id: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> str:
         """Generate with a bounded output budget for auxiliary, non-answer calls.
 
         `format` accepts a JSON Schema dict and is forwarded to the provider as
         a structured-output constraint (Ollama native /api/chat "format").
+        `model_id` overrides the configured chat model for this call only, so
+        expensive manifest drafting can use a stronger local model while chat
+        answers stay on the low-latency default.
+        `timeout_seconds` overrides the provider timeout for this call (larger
+        models on CPU need more than the chat budget).
         """
         return (
             await self._complete_with_limits(
@@ -69,6 +76,8 @@ class OllamaChatModel:
                 max_output_tokens=max_output_tokens,
                 temperature=temperature,
                 provider_format=format,
+                model_id=model_id,
+                timeout_seconds=timeout_seconds,
             )
         ).content
 
@@ -87,9 +96,13 @@ class OllamaChatModel:
         temperature: float | None = None,
         allow_truncated: bool = False,
         provider_format: dict[str, Any] | None = None,
+        model_id: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> ModelCompletion:
         started_at = time.perf_counter()
         outcome = "success"
+        effective_model = model_id or self.model
+        effective_timeout = timeout_seconds or self._timeout_seconds
         try:
             return await asyncio.wait_for(
                 self._complete_ollama_native(
@@ -98,21 +111,23 @@ class OllamaChatModel:
                     temperature=temperature,
                     allow_truncated=allow_truncated,
                     provider_format=provider_format,
+                    model_id=model_id,
+                    timeout_seconds=effective_timeout,
                 ),
-                timeout=self._timeout_seconds,
+                timeout=effective_timeout,
             )
         except TimeoutError as exc:
             outcome = "timeout"
             AI_CHAT_MODEL_TIMEOUTS_TOTAL.labels(
                 provider=self.provider,
-                model=self.model,
+                model=effective_model,
             ).inc()
             raise ModelTimeoutError("Model generation timed out") from exc
         except httpx.TimeoutException as exc:
             outcome = "timeout"
             AI_CHAT_MODEL_TIMEOUTS_TOTAL.labels(
                 provider=self.provider,
-                model=self.model,
+                model=effective_model,
             ).inc()
             raise ModelTimeoutError("Model generation timed out") from exc
         except ModelUnavailableError:
@@ -124,7 +139,7 @@ class OllamaChatModel:
         finally:
             AI_CHAT_MODEL_SECONDS.labels(
                 provider=self.provider,
-                model=self.model,
+                model=effective_model,
                 outcome=outcome,
             ).observe(time.perf_counter() - started_at)
 
@@ -136,9 +151,11 @@ class OllamaChatModel:
         temperature: float | None = None,
         allow_truncated: bool = False,
         provider_format: dict[str, Any] | None = None,
+        model_id: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> ModelCompletion:
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": model_id or self.model,
             "messages": [
                 {"role": message.get("role", "user"), "content": str(message.get("content", ""))}
                 for message in messages
@@ -161,7 +178,7 @@ class OllamaChatModel:
         if self._settings.LLM_DISABLE_THINKING:
             payload["think"] = False
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=timeout_seconds or self._timeout_seconds) as client:
             response = await client.post(self._ollama_chat_url(), json=payload)
             response.raise_for_status()
             data = response.json()

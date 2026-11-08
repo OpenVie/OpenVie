@@ -234,6 +234,16 @@ public class BizAppPayloadValidator {
             }
         }
 
+        // ISO dates must bypass the d/m/y shorthand below: "2026-01-01T10:30"
+        // otherwise matches "26-01-01" and resolves to 2001-01-26.
+        if (str.trim().matches("^\\d{4}-\\d{2}-\\d{2}.*")) {
+            try {
+                return LocalDate.parse(str.trim().substring(0, 10));
+            } catch (Exception invalidIsoDate) {
+                return null;
+            }
+        }
+
         Matcher m = Pattern.compile("(\\d{1,2})[/-](\\d{1,2})(?:[/-](\\d{2,4}))?").matcher(str.trim());
         if (m.find()) {
             try {

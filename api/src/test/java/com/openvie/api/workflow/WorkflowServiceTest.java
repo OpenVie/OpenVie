@@ -43,7 +43,10 @@ import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.task.api.Task;
+import org.flowable.identitylink.api.IdentityLink;
+import org.flowable.identitylink.api.IdentityLinkType;
 import org.flowable.task.api.TaskQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -101,6 +104,8 @@ class WorkflowServiceTest {
         service = new WorkflowService(runtimeService, taskService, historyService,
                 slaConfigRepository, new WorkflowProperties(), documentApi, identityApi,
                 auditLogRepository, eventPublisher);
+        ProcessInstanceQuery processQuery = mock(ProcessInstanceQuery.class, RETURNS_SELF);
+        lenient().when(runtimeService.createProcessInstanceQuery()).thenReturn(processQuery);
         lenient().when(slaConfigRepository.findByOrganizationId(organizationId)).thenReturn(Optional.empty());
     }
 
@@ -286,6 +291,22 @@ class WorkflowServiceTest {
 
         assertThrows(AccessDeniedException.class, () -> service.claim(workspaceId, userId, taskId));
         verify(taskService, never()).claim(anyString(), anyString());
+    }
+
+    @Test
+    void memberClaimsALevelOneTaskWhenTheTemplateUsesTheMemberGroup() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        Task memberTask = task(WorkflowService.LEVEL_1_TASK_KEY, null,
+                Map.of("workspaceId", workspaceId.toString()));
+        IdentityLink candidate = mock(IdentityLink.class);
+        when(candidate.getType()).thenReturn(IdentityLinkType.CANDIDATE);
+        when(candidate.getGroupId()).thenReturn(WorkflowService.GROUP_MEMBER);
+        when(taskService.getIdentityLinksForTask(taskId.toString())).thenReturn(List.of(candidate));
+        stubTaskQuerySingle(memberTask);
+
+        service.claim(workspaceId, userId, taskId);
+
+        verify(taskService).claim(taskId.toString(), userId.toString());
     }
 
     @Test

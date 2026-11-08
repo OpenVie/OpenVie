@@ -158,6 +158,22 @@ async def test_ollama_complete_text_forwards_structured_output_format(
 
 
 @pytest.mark.asyncio
+async def test_ollama_complete_text_uses_request_model_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FakeOllamaClient)
+    gateway = OllamaChatModel(settings())
+
+    await gateway.complete_text(
+        [{"role": "user", "content": "draft a manifest"}],
+        max_output_tokens=32,
+        model_id="qwen2.5:7b-instruct",
+    )
+
+    assert FakeOllamaClient.last_json["model"] == "qwen2.5:7b-instruct"
+
+
+@pytest.mark.asyncio
 async def test_ollama_preserves_composed_message_content(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.modules.model.internal.chat.httpx.AsyncClient", FakeOllamaClient)
     gateway = OllamaChatModel(settings())

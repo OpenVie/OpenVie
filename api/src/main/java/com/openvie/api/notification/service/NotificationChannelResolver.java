@@ -121,11 +121,11 @@ public class NotificationChannelResolver {
         JsonNode credentials = readCredentials(channel);
         return new NotificationChannelConfig(
                 channel.getType().toLowerCase(Locale.ROOT),
-                text(credentials, "fromEmail", environmentFromEmail),
-                text(credentials, "fromName", environmentFromName),
-                text(credentials, "host", smtpHost),
+                text(credentials, "fromEmail", environmentFromEmail).trim(),
+                text(credentials, "fromName", environmentFromName).trim(),
+                text(credentials, "host", smtpHost).trim(),
                 credentials.path("port").asInt(smtpPort),
-                text(credentials, "username", smtpUsername),
+                text(credentials, "username", smtpUsername).trim(),
                 text(credentials, "password", smtpPassword),
                 credentials.path("auth").asBoolean(smtpAuth),
                 credentials.path("starttls").asBoolean(smtpStarttls));
@@ -133,8 +133,8 @@ public class NotificationChannelResolver {
 
     private NotificationChannelConfig environmentConfig(String type) {
         return new NotificationChannelConfig(
-                type, environmentFromEmail, environmentFromName,
-                smtpHost, smtpPort, smtpUsername, smtpPassword,
+                type, environmentFromEmail.trim(), environmentFromName.trim(),
+                smtpHost.trim(), smtpPort, smtpUsername.trim(), smtpPassword,
                 smtpAuth, smtpStarttls);
     }
 

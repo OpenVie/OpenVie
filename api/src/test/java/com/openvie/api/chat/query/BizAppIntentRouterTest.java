@@ -28,6 +28,7 @@ import com.openvie.api.chat.model.ChatMessage;
 import com.openvie.api.chat.service.BizAppSlotAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -86,6 +87,166 @@ class BizAppIntentRouterTest {
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("xin chào, bạn là ai?"));
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("hợp đồng lao động mẫu năm 2026"));
         assertFalse(BizAppIntentRouter.matchesDeterministicGate("chính sách nghỉ phép của công ty"));
+    }
+
+    @Test
+    void installedAppWithoutTriggersMatchesNaturalNameWords() {
+        InstalledAppSummary inventory = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "inventory",
+                "Yêu cầu Mua sắm",
+                1,
+                "",
+                List.of("shopping_requests"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "shopping_requests",
+                        "Yêu cầu Mua sắm",
+                        List.of(
+                                new FieldDetail("item_name", "string", true, "Món hàng"),
+                                new FieldDetail("amount", "number", true, "Số tiền")
+                        )
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(inventory));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi muốn viết một phiếu xin mua sắm", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("inventory", result.appKind());
+        assertTrue(result.reply().contains("Yêu cầu Mua sắm"));
+        assertTrue(result.reply().contains("Món hàng"), "the first prompt must include the field list");
+        verifyNoInteractions(aiInferenceApi);
+    }
+
+    @Test
+    void pendingRecordDetailsReturnsFieldsWithoutAnotherRegex() {
+        InstalledAppSummary inventory = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "inventory",
+                "Yêu cầu Mua sắm",
+                1,
+                "",
+                List.of("shopping_requests"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "shopping_requests",
+                        "Yêu cầu Mua sắm",
+                        List.of(
+                                new FieldDetail("item_name", "string", true, "Món hàng"),
+                                new FieldDetail("amount", "number", true, "Số tiền")
+                        )
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(inventory));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+        when(bizAppRuntimeApi.listActionCapabilities(tenantId, "MEMBER")).thenReturn(Map.of(
+                "inventory", new BizAppRuntimeApi.ActionCapabilities(
+                        true, true, true, false, true, false)));
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Cho tôi biết những thông tin cần điền nhé.", "vi-VN", sessionId, List.of(),
+                Map.of("bizappPending", Map.of(
+                        "appKind", "inventory",
+                        "entity", "shopping_requests")));
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("inventory", result.appKind());
+        assertEquals("shopping_requests", result.entity());
+        assertEquals("Field information request in active app context", result.reason());
+        assertTrue(result.reply().contains("Món hàng"));
+        assertTrue(result.reply().contains("Số tiền"));
+        verifyNoInteractions(aiInferenceApi);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pendingDetailsUsesManifestSlotAgentForFreeFormValues() {
+        InstalledAppSummary inventory = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "inventory",
+                "Yêu cầu Mua sắm",
+                1,
+                "",
+                List.of("shopping_requests"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "shopping_requests",
+                        "Yêu cầu Mua sắm",
+                        List.of(
+                                new FieldDetail("item_name", "string", true, "Món hàng"),
+                                new FieldDetail("amount", "number", true, "Số tiền")
+                        )
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(inventory));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+        when(bizAppRuntimeApi.listActionCapabilities(tenantId, "MEMBER")).thenReturn(Map.of(
+                "inventory", new BizAppRuntimeApi.ActionCapabilities(
+                        true, true, true, false, true, false)));
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse("{\"fields\":{\"item_name\":\"bút\"}}", "vylinh", 20, 10));
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi muốn mua một cây bút", "vi-VN", sessionId, List.of(),
+                Map.of("bizappPending", Map.of(
+                        "appKind", "inventory",
+                        "entity", "shopping_requests")));
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("inventory", result.appKind());
+        assertNotNull(result.actionCard());
+        Map<String, Object> fields = (Map<String, Object>) result.actionCard().get("fields");
+        assertEquals("bút", fields.get("item_name"));
+        verify(aiInferenceApi, atLeastOnce()).completeJson(any(StructuredJsonRequest.class));
+    }
+
+    @Test
+    void installedAppFollowUpUsesContextAndMemberWriteGrant() {
+        InstalledAppSummary inventory = new InstalledAppSummary(
+                UUID.randomUUID(),
+                "inventory",
+                "Yêu cầu Mua sắm",
+                1,
+                "",
+                List.of("shopping_requests"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "shopping_requests",
+                        "Yêu cầu Mua sắm",
+                        List.of(
+                                new FieldDetail("item_name", "string", true, "Món hàng"),
+                                new FieldDetail("amount", "number", true, "Số tiền")
+                        )
+                )),
+                List.of()
+        );
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(inventory));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+        when(bizAppRuntimeApi.listActionCapabilities(tenantId, "MEMBER")).thenReturn(Map.of(
+                "inventory", new BizAppRuntimeApi.ActionCapabilities(
+                        true, true, true, false, true, false)));
+
+        List<ChatMessage> prior = List.of(
+                message("user", "Tôi muốn viết một phiếu xin mua sắm"),
+                message("assistant", "Tôi hiểu bạn muốn tạo một yêu cầu mua sắm.")
+        );
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Tôi muốn xin mua cái này", "vi-VN", sessionId, prior);
+
+        assertEquals(BizAppIntentRouter.Intent.APP_RECORD_CREATE, result.intent());
+        assertEquals("inventory", result.appKind());
+        assertFalse(result.reply().contains("không được phép"));
+        verifyNoInteractions(aiInferenceApi);
     }
 
     @Test
@@ -167,6 +328,55 @@ class BizAppIntentRouterTest {
         verifyNoInteractions(aiInferenceApi);
     }
 
+    @Test
+    void explicitCreateAppBeatsCatalogAliasCollision() {
+        String prompt = "Tạo giúp tôi một ứng dụng quản lý mua sắm. Nhân viên điền phiếu xin mua, "
+                + "có thêm trường email của quản lý mà người tạo chọn; khi tạo phiếu thì gửi email "
+                + "ngay cho địa chỉ quản lý đó và tự gửi phiếu vào hộp thư duyệt của quản trị viên "
+                + "workspace. Quản trị viên duyệt xong mới được mua. Phiếu có mã phiếu, người yêu cầu, "
+                + "phòng ban, món hàng, số tiền, ngày cần, lý do.";
+
+        var result = router.route(tenantId, orgId, actorId, "ORG_OWNER",
+                prompt, "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.CREATE_APP, result.intent());
+        assertNotNull(result.actionCard());
+        assertEquals("bizapp.draft", result.actionCard().get("kind"));
+        assertEquals("PROPOSED", result.actionCard().get("status"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) result.actionCard().get("payload");
+        assertEquals(prompt, payload.get("hint"));
+        verifyNoInteractions(aiInferenceApi);
+        verifyNoInteractions(bizAppRuntimeApi);
+    }
+
+    @Test
+    void howToCreateAppQuestionStaysOnRag() {
+        var result = router.route(tenantId, orgId, actorId, "ORG_OWNER",
+                "Làm sao để tạo một ứng dụng?", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.NONE, result.intent());
+        verifyNoInteractions(aiInferenceApi);
+        verifyNoInteractions(bizAppRuntimeApi);
+    }
+
+    @Test
+    void createAppGuardDoesNotMisreadRecordPhrases() {
+        assertTrue(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics(
+                        "Tạo giúp tôi một ứng dụng quản lý mua sắm.")));
+        assertTrue(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics("Xây dựng cho tôi một app mới.")));
+        assertTrue(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics("Thiết kế ứng dụng theo dõi thiết bị.")));
+        assertFalse(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics("Tạo phiếu trong ứng dụng mua sắm.")));
+        assertFalse(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics("Tạo một bản ghi trong app.")));
+        assertFalse(BizAppIntentRouter.isExplicitCreateAppRequest(
+                BizAppIntentRouter.removeDiacritics("Cài đặt ứng dụng Booking.")));
+    }
+
     private static ChatMessage message(String role, String content) {
         ChatMessage message = new ChatMessage();
         message.setRole(role);
@@ -206,6 +416,52 @@ class BizAppIntentRouterTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = (Map<String, Object>) result.actionCard().get("payload");
         assertEquals("Tôi muốn gửi một yêu cầu mới.", payload.get("hint"));
+    }
+
+    @Test
+    void intentModelIsConfigurable() {
+        org.springframework.test.util.ReflectionTestUtils.setField(router, "intentModel",
+                "qwen2.5:7b-instruct");
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse(
+                        "{\"intent\":\"CREATE_APP\",\"confidence\":0.95,\"reply\":\"Tạo app\"}",
+                        "qwen2.5:7b-instruct", 80, 20));
+
+        var result = router.route(tenantId, orgId, actorId, "ORG_OWNER",
+                "Bạn có thể có cách nào quản lý thiết bị IT cho tôi không?", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.CREATE_APP, result.intent());
+        ArgumentCaptor<StructuredJsonRequest> captor =
+                ArgumentCaptor.forClass(StructuredJsonRequest.class);
+        verify(aiInferenceApi, atLeastOnce()).completeJson(captor.capture());
+        assertTrue(captor.getAllValues().stream()
+                .allMatch(request -> "qwen2.5:7b-instruct".equals(request.modelId())));
+    }
+
+    @Test
+    void painNarrativeWithNoMatchingAppProposesCreatingOne() {
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenAnswer(invocation -> {
+            StructuredJsonRequest request = invocation.getArgument(0);
+            if (request.systemPrompt().contains("OpenVie's app router")) {
+                return new StructuredJsonResponse(
+                        "{\"appKind\":null,\"confidence\":0}", "vylinh", 80, 20);
+            }
+            return new StructuredJsonResponse(
+                    "{\"intent\":\"APP_RECORD_SUBMIT\",\"confidence\":0.95,"
+                            + "\"reply\":\"Bạn muốn gửi yêu cầu mua sắm để duyệt.\"}",
+                    "vylinh", 80, 20);
+        });
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Công ty tôi mua sắm lộn xộn quá. Nhân viên toàn nhắn qua chat rồi quên. "
+                        + "Tôi muốn mọi người điền vào một chỗ, sếp duyệt xong mới được mua, "
+                        + "và tôi xem được ai xin bao nhiêu.",
+                "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.CREATE_APP, result.intent());
+        assertNotNull(result.actionCard());
+        assertEquals("bizapp.draft", result.actionCard().get("kind"));
+        assertEquals("Ứng dụng mới", result.actionCard().get("appName"));
     }
 
     @Test

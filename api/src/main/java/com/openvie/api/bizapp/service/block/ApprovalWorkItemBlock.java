@@ -53,6 +53,10 @@ public class ApprovalWorkItemBlock implements BizAppBlockExecutor {
         }
         variables.put("entity", context.entity());
         variables.put("appKind", context.appKind());
+        // The generic engine inbox scopes every task by its workspace process
+        // variable; without this the task exists in Flowable but is invisible.
+        variables.put("workspaceId", context.tenantId().toString());
+        variables.put("initiatorId", context.actorId() == null ? null : context.actorId().toString());
         variables.put("candidateRole", string(spec.params(), "candidateRole", "WORKSPACE_ADMIN"));
         @SuppressWarnings("unchecked")
         Map<String, Object> sla = spec.params() != null && spec.params().get("sla") instanceof Map<?, ?> map

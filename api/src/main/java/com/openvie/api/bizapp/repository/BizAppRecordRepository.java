@@ -36,6 +36,18 @@ public interface BizAppRecordRepository extends JpaRepository<BizAppRecord, UUID
 
     java.util.List<BizAppRecord> findByTenantIdAndAppKind(UUID tenantId, String appKind);
 
+    Optional<BizAppRecord> findByTenantIdAndAppKindAndEntityAndDedupeKey(
+            UUID tenantId, String appKind, String entity, String dedupeKey);
+
+    /**
+     * Serializes concurrent connector sinks writing the same dedupe identity
+     * for the rest of the transaction, so the unique index is never raced into
+     * an aborted statement.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            value = "SELECT pg_advisory_xact_lock(CAST(hashtext(:key) AS bigint))", nativeQuery = true)
+    void lockDedupeKey(@org.springframework.data.repository.query.Param("key") String key);
+
     @org.springframework.data.jpa.repository.Query(value = """
             SELECT * FROM bizapp_records
             WHERE app_kind = 'booking'

@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -197,6 +199,116 @@ class WorkflowEngineIntegrationTest {
         var ownerTasks = engineService.listTasks(workspaceId, ownerId, null, false, null, 10);
         assertEquals(1, ownerTasks.total(), "the organization owner sees the owner-candidate task");
         engineService.claimTask(workspaceId, ownerId, UUID.fromString(ownerTasks.tasks().get(0).id()), null);
+    }
+
+    @Test
+    void twoLevelBizAppPresetCompletesOnlyAfterTheOwnerDecision() throws Exception {
+        String xml = readBpmn("processes/bizapp-two-level-approval.bpmn20.xml");
+        UUID recordId = UUID.randomUUID();
+        var deployed = engineService.deployDefinition(workspaceId, ownerId,
+                "bizapp-two-level-" + suffix(), xml);
+        var started = engineService.startProcess(workspaceId, memberId,
+                new com.openvie.api.workflow.dto.EngineDtos.StartEngineProcessRequest(
+                        deployed.key(),
+                        recordId.toString(),
+                        Map.of(
+                                "workspaceId", workspaceId.toString(),
+                                "recordId", recordId.toString(),
+                                "appKind", "test-app",
+                                "entity", "requests",
+                                "initiatorId", memberId.toString(),
+                                "candidateRole", WorkflowService.GROUP_MEMBER,
+                                "reminderDuration", "PT24H",
+                                "escalationDuration", "PT48H")));
+
+        Task first = taskService.createTaskQuery()
+                .processInstanceId(started.id())
+                .singleResult();
+        assertNotNull(first);
+        assertEquals("level1Approval", first.getTaskDefinitionKey());
+        assertTrue(taskService.getIdentityLinksForTask(first.getId()).stream()
+                .anyMatch(link -> WorkflowService.GROUP_MEMBER.equals(link.getGroupId())));
+
+        var handoff = workflowService.complete(workspaceId, adminId,
+                UUID.fromString(first.getId()), new CompleteTaskRequest("APPROVE", ""));
+        assertFalse(handoff.processEnded());
+
+        Task second = taskService.createTaskQuery()
+                .processInstanceId(started.id())
+                .singleResult();
+        assertNotNull(second);
+        assertEquals("level2Approval", second.getTaskDefinitionKey());
+        assertTrue(taskService.getIdentityLinksForTask(second.getId()).stream()
+                .anyMatch(link -> WorkflowService.GROUP_ORG_OWNER.equals(link.getGroupId())));
+        var ownerTasks = workflowService.listTasks(workspaceId, ownerId).groupTasks();
+        assertEquals(1, ownerTasks.size());
+        assertEquals(2, ownerTasks.getFirst().approvalLevel());
+
+        var settled = workflowService.complete(workspaceId, ownerId,
+                UUID.fromString(second.getId()), new CompleteTaskRequest("APPROVE", ""));
+        assertTrue(settled.processEnded());
+        assertNull(taskService.createTaskQuery()
+                .processInstanceId(started.id())
+                .singleResult());
+    }
+
+    @Test
+    void twoLevelBizAppPresetCanRejectAtTheFirstLevel() throws Exception {
+        String xml = readBpmn("processes/bizapp-two-level-approval.bpmn20.xml");
+        UUID recordId = UUID.randomUUID();
+        var deployed = engineService.deployDefinition(workspaceId, ownerId,
+                "bizapp-two-level-reject-" + suffix(), xml);
+        var started = engineService.startProcess(workspaceId, memberId,
+                new com.openvie.api.workflow.dto.EngineDtos.StartEngineProcessRequest(
+                        deployed.key(),
+                        recordId.toString(),
+                        Map.of(
+                                "workspaceId", workspaceId.toString(),
+                                "recordId", recordId.toString(),
+                                "appKind", "test-app",
+                                "entity", "requests",
+                                "initiatorId", memberId.toString(),
+                                "candidateRole", WorkflowService.GROUP_MEMBER,
+                                "reminderDuration", "PT24H",
+                                "escalationDuration", "PT48H")));
+
+        Task first = taskService.createTaskQuery()
+                .processInstanceId(started.id())
+                .singleResult();
+        assertNotNull(first);
+
+        var settled = workflowService.complete(workspaceId, adminId,
+                UUID.fromString(first.getId()), new CompleteTaskRequest("REJECT", "Out of policy"));
+        assertTrue(settled.processEnded());
+    }
+
+    private String readBpmn(String resource) throws Exception {
+        InputStream stream = getClass().getClassLoader().getResourceAsStream(resource);
+        assertNotNull(stream, "missing BPMN " + resource);
+        try (stream) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    @Test
+    void changingAnApprovalRoleReassignsUnclaimedTasks() {
+        String definition = "roleChange" + suffix();
+        engineService.deployDefinition(workspaceId, ownerId, definition,
+                candidateBpmn(definition, "WORKSPACE_ADMIN"));
+        var started = engineService.startProcess(workspaceId, memberId,
+                new com.openvie.api.workflow.dto.EngineDtos.StartEngineProcessRequest(
+                        definition, null, java.util.Map.of(
+                                "workspaceId", workspaceId.toString(),
+                                "appKind", "inventory")));
+
+        engineService.reassignPendingTasks(workspaceId, "inventory",
+                "WORKSPACE_ADMIN", "ORG_OWNER");
+
+        assertTrue(engineService.listTasks(workspaceId, adminId, null, false, null, 10).tasks().isEmpty(),
+                "the old workspace-admin queue must be empty");
+        var ownerTasks = engineService.listTasks(workspaceId, ownerId, null, false, null, 10);
+        assertEquals(1, ownerTasks.total(), "the owner sees the reassigned task");
+        assertEquals(started.id(), ownerTasks.tasks().getFirst().processInstanceId());
     }
 
     private String candidateBpmn(String processKey, String candidateGroup) {

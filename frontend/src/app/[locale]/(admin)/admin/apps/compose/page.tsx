@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import type { BizAppManifest } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
+import { upgradeManifestVersion } from "@/lib/bizapp-upgrade";
 import { getApiBase } from "@/lib/auth-api";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
 import {
@@ -116,9 +117,10 @@ export default function ComposeNewPage() {
       // An already-installed app upgrades in place instead of dead-ending on
       // "already installed"; both paths keep existing records.
       const installed = await listInstalledBizAppsApi(request);
-      const active = installed.some((app) => app.kind === updated.kind && app.status === "ACTIVE");
+      const active = installed.find((app) => app.kind === updated.kind && app.status === "ACTIVE");
       if (active) {
-        await upgradeBizAppApi(request, updated.kind, updated);
+        const next = upgradeManifestVersion(updated, active.version);
+        await upgradeBizAppApi(request, updated.kind, next);
         toast.success(t("composer.upgraded"));
       } else {
         await installBizAppApi(request, { manifest: updated });

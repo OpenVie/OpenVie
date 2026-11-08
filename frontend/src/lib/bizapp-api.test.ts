@@ -21,6 +21,8 @@ import {
   canSubmitRecord,
   createBizAppRecordApi,
   deleteBizAppDraftApi,
+  exportBizAppRecordsApi,
+  exportBizAppReportApi,
   exportBizAppTemplateApi,
   generateBizAppDraftApi,
   importBizAppTemplateApi,
@@ -74,7 +76,26 @@ const request = vi.fn(async (input: string, init?: RequestInit) => {
   if (path.endsWith("/remix")) {
     return Response.json(draft, { status: 201 });
   }
-  if (path.endsWith("/export")) {
+  if (path.includes("/entities/leads/export")) {
+    return new Response("id,status\r\n", {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv;charset=UTF-8",
+        "Content-Disposition": "attachment; filename=\"bizapp-crm-leads-20260101-0900.csv\"",
+      },
+    });
+  }
+  if (path.includes("/reports/pipeline/export")) {
+    return new Response("PK-xlsx", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition":
+          "attachment; filename=\"fallback.xlsx\"; filename*=UTF-8''bizapp-crm-doanh%20thu-%C4%91%C3%A3.xlsx",
+      },
+    });
+  }
+  if (path.includes("/marketplace/bizapps/") && path.endsWith("/export")) {
     return Response.json(
       { envelope: "openvie.template.v1", meta: { license: "Apache-2.0" }, manifest: { kind: "crm" } },
       { status: 200 },
@@ -250,6 +271,25 @@ describe("bizapp api client", () => {
     expect(seen[2].url).toContain("/marketplace/bizapps/platform%3Acrm/remix");
     expect(JSON.parse(seen[2].init?.body as string)).toEqual({ summary: "add notes field" });
     expect(remixed.id).toBe("d1");
+  });
+
+  it("exports records as a GET download and reads the file name", async () => {
+    const file = await exportBizAppRecordsApi(request, "crm", "leads", "csv", "vi");
+
+    expect(seen[0].url).toContain("/bizapps/crm/entities/leads/export?format=csv&locale=vi");
+    expect(seen[0].init?.method).toBe("GET");
+    expect(file.fileName).toBe("bizapp-crm-leads-20260101-0900.csv");
+    expect(await file.blob.text()).toContain("id,status");
+  });
+
+  it("exports report views with POST and decodes the RFC 5987 file name", async () => {
+    const file = await exportBizAppReportApi(request, "crm", "pipeline", "xlsx", "en");
+
+    expect(seen[0].url).toContain("/bizapps/crm/reports/pipeline/export?format=xlsx&locale=en");
+    expect(seen[0].init?.method).toBe("POST");
+    expect(JSON.parse(seen[0].init?.body as string)).toEqual({ params: {} });
+    expect(file.fileName).toBe("bizapp-crm-doanh thu-đã.xlsx");
+    expect(await file.blob.text()).toBe("PK-xlsx");
   });
 
   it("validates manifests through validateBizAppManifestApi", async () => {

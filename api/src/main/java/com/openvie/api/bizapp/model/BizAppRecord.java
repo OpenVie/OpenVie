@@ -63,6 +63,10 @@ public class BizAppRecord extends BaseEntity {
     @Column(name = "status", nullable = false, length = 16)
     private String status = "ACTIVE";
 
+    /** Incremental-connector identity (hex SHA-256); only connector sinks set it. */
+    @Column(name = "dedupe_key", length = 64)
+    private String dedupeKey;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 

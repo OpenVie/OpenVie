@@ -44,7 +44,7 @@ public class SmtpEmailProvider implements EmailProvider {
 
     @Override
     public boolean available(NotificationChannelConfig config) {
-        return config != null && config.host() != null && !config.host().isBlank();
+        return config != null && config.host() != null && !config.host().trim().isBlank();
     }
 
     @Override
@@ -56,7 +56,7 @@ public class SmtpEmailProvider implements EmailProvider {
         }
 
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
-        sender.setHost(config.host());
+        sender.setHost(config.host().trim());
         sender.setPort(config.port());
         sender.setDefaultEncoding(StandardCharsets.UTF_8.name());
         if (config.username() != null && !config.username().isBlank()) {
@@ -77,8 +77,8 @@ public class SmtpEmailProvider implements EmailProvider {
             boolean hasInlineLogo = message.htmlContent() != null && message.htmlContent().contains("cid:openvie-logo");
             MimeMessage mimeMessage = sender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, hasInlineLogo, StandardCharsets.UTF_8.name());
-            helper.setFrom(config.fromEmail(), config.fromName());
-            helper.setTo(message.toEmail());
+            helper.setFrom(config.fromEmail().trim(), config.fromName());
+            helper.setTo(message.toEmail().trim());
             helper.setSubject(message.subject());
             helper.setText(message.htmlContent(), true);
             if (hasInlineLogo) {

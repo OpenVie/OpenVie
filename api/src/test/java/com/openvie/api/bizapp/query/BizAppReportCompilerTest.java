@@ -153,6 +153,53 @@ class BizAppReportCompilerTest {
     }
 
     @Test
+    void selectsOnlyTheChosenColumnsForAListView() {
+        Map<String, Object> viewSpec = Map.of(
+                "name", "names_only",
+                "entity", "leads",
+                "fields", List.of("name", "stage"),
+                "limit", 20
+        );
+
+        var compiled = compiler.compile(
+                BizAppReportCompiler.Dialect.POSTGRES,
+                orgId,
+                tenantId,
+                "crm",
+                sampleEntity(),
+                viewSpec,
+                Map.of(),
+                false,
+                null
+        );
+
+        String sql = compiled.sql();
+        assertTrue(sql.startsWith("SELECT (payload ->> 'name') AS name, (payload ->> 'stage') AS stage, created_at, updated_at FROM "));
+        assertFalse(sql.contains("dealValue"));
+    }
+
+    @Test
+    void rejectsUndeclaredReportColumn() {
+        Map<String, Object> viewSpec = Map.of(
+                "name", "bad_columns",
+                "entity", "leads",
+                "fields", List.of("name", "unknown_secret_column")
+        );
+
+        assertThrows(BadRequestException.class, () -> compiler.compile(
+                BizAppReportCompiler.Dialect.POSTGRES,
+                orgId,
+                tenantId,
+                "crm",
+                sampleEntity(),
+                viewSpec,
+                Map.of(),
+                false,
+                null
+        ));
+    }
+
+    @Test
     void rejectsUndeclaredFieldInFilters() {
         Map<String, Object> viewSpec = Map.of(
                 "name", "invalid_filter",

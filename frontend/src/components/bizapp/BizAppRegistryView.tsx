@@ -17,22 +17,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
-import { Archive, Pencil, Plus, RefreshCw, Send } from "lucide-react";
+import { Archive, Download, Loader2, Pencil, Plus, RefreshCw, Send } from "lucide-react";
 
 import type { BizAppField, BizAppInstalledAppView, BizAppRecordPage, BizAppRecordView } from "@/types";
 import {
   archiveBizAppRecordApi,
   bizAppApprovalBlock,
   canSubmitRecord,
+  exportBizAppRecordsApi,
   listBizAppRecordsApi,
   manifestAllows,
   submitBizAppRecordApi,
 } from "@/lib/bizapp-api";
+import { downloadBlob } from "@/lib/download";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ListPager } from "@/components/ui/list-pager";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BizAppEntityFormDialog } from "@/components/bizapp/BizAppEntityFormDialog";
@@ -68,6 +76,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
     openCreate ? { record: null } : null,
   );
   const [busyRecordId, setBusyRecordId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!entity) return;
@@ -133,6 +142,42 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
     return value === "APPROVED" || value === "REJECTED" || value === "PENDING" ? value : null;
   };
 
+  // Always the whole entity, never the 20 rows on screen.
+  const onExport = async (format: "csv" | "xlsx") => {
+    setExporting(true);
+    try {
+      const file = await exportBizAppRecordsApi(request, app.kind, entityName, format, locale);
+      downloadBlob(file.blob, file.fileName);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.export"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button size="sm" variant="outline" disabled={exporting || !data} aria-label={t("export.button")} />
+        }
+      >
+        {exporting
+          ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
+          : <Download className="mr-1.5 size-4" aria-hidden="true" />}
+        {t("export.button")}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => void onExport("csv")} onSelect={() => void onExport("csv")}>
+          {t("export.csv")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void onExport("xlsx")} onSelect={() => void onExport("xlsx")}>
+          {t("export.xlsx")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   // next-intl message keys are typed; the status set is closed so map it
   // explicitly instead of interpolating the key.
   const approvalKey: Record<"APPROVED" | "REJECTED" | "PENDING", "approval.approved" | "approval.rejected" | "approval.pending"> = {
@@ -149,6 +194,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
           <Button size="icon" variant="ghost" onClick={() => { void load(); }} aria-label={t("refresh")}>
             <RefreshCw className="size-4" />
           </Button>
+          {exportMenu}
           {canWrite && (
             <Button size="sm" onClick={() => setFormTarget({ record: null })}>
               <Plus className="mr-2 size-4" />

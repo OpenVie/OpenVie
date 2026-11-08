@@ -59,7 +59,7 @@ class GrpcAiInferenceClientTest {
                 provider.accept(input, output);
             }
         }).build().start();
-        client = new GrpcAiInferenceClient("localhost:" + server.getPort(), true, "", "", "", "", 5, 5, 5);
+        client = new GrpcAiInferenceClient("localhost:" + server.getPort(), true, "", "", "", "", 5, 300, 5, 5);
     }
 
     @AfterEach

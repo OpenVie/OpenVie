@@ -27,5 +27,9 @@ public interface BizAppCredentialRepository extends JpaRepository<BizAppCredenti
 
     Optional<BizAppCredential> findByIdAndOrgId(UUID id, UUID orgId);
 
-    Optional<BizAppCredential> findByOrgIdAndName(UUID orgId, String name);
+    Optional<BizAppCredential> findFirstByOrgIdAndNameAndTenantIdIsNull(UUID orgId, String name);
+
+    List<BizAppCredential> findByOrgIdAndTenantIdOrderByCreatedAtDesc(UUID orgId, UUID tenantId);
+
+    Optional<BizAppCredential> findByOrgIdAndTenantIdAndName(UUID orgId, UUID tenantId, String name);
 }

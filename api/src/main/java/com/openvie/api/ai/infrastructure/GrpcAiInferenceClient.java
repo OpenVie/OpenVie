@@ -49,6 +49,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
     private final ManagedChannel channel;
     private final InferenceServiceGrpc.InferenceServiceBlockingStub stub;
     private final long answerDeadlineSeconds;
+    private final long completeJsonDeadlineSeconds;
     private final long unitDeadlineSeconds;
     private final long deletionDeadlineSeconds;
 
@@ -60,6 +61,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
             @Value("${app.ai.grpc.client-key:}") String clientKey,
             @Value("${app.ai.grpc.authority-override:}") String authorityOverride,
             @Value("${app.ai.grpc.answer-deadline-seconds:100}") long answerDeadlineSeconds,
+            @Value("${app.ai.grpc.complete-json-deadline-seconds:300}") long completeJsonDeadlineSeconds,
             @Value("${app.ai.grpc.document-units-deadline-seconds:10}") long unitDeadlineSeconds,
             @Value("${app.ai.grpc.deletion-deadline-seconds:15}") long deletionDeadlineSeconds
     ) {
@@ -85,6 +87,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
         this.channel = builder.maxInboundMessageSize(16 * 1024 * 1024).build();
         this.stub = InferenceServiceGrpc.newBlockingStub(channel);
         this.answerDeadlineSeconds = answerDeadlineSeconds;
+        this.completeJsonDeadlineSeconds = completeJsonDeadlineSeconds;
         this.unitDeadlineSeconds = unitDeadlineSeconds;
         this.deletionDeadlineSeconds = deletionDeadlineSeconds;
     }
@@ -282,7 +285,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
 
     @Override
     public StructuredJsonResponse completeJson(StructuredJsonRequest request) {
-        return unavailableRetry(answerDeadlineSeconds, s -> {
+        return unavailableRetry(completeJsonDeadlineSeconds, s -> {
             var req = com.openvie.ai.v1.CompleteJsonRequest.newBuilder()
                     .setPrompt(request.prompt() != null ? request.prompt() : "")
                     .setSystemPrompt(request.systemPrompt() != null ? request.systemPrompt() : "")

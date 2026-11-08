@@ -36,6 +36,7 @@ import com.openvie.api.tenant.api.WorkspaceRole;
 import com.openvie.api.tenant.api.TenantWorkspaceApi.WorkspaceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -184,6 +185,41 @@ class ChatControlPlaneShortCircuitTest {
         assertEquals("bizapp_action", response.action().get("type"));
         assertEquals("bizapp.install", response.action().get("kind"));
         assertEquals("PROPOSED", response.action().get("status"));
+    }
+
+    @Test
+    void awaitingRecordDetailsPersistsPendingState() {
+        BizAppIntentRouter.RoutingResult routing = new BizAppIntentRouter.RoutingResult(
+                BizAppIntentRouter.Intent.APP_RECORD_CREATE,
+                "inventory",
+                "shopping_requests",
+                BigDecimal.valueOf(0.98),
+                "Tôi có thể giúp bạn tạo một mục mới trong Yêu cầu Mua sắm. Vui lòng cho tôi biết thông tin chi tiết nhé!",
+                "Awaiting record details",
+                null,
+                null
+        );
+        when(intentRouter.route(eq(tenantId), any(), eq(userId), any(), eq("tạo phiếu mua sắm"), any(), eq(sessionId), any()))
+                .thenReturn(routing);
+
+        controlPlaneService.submitEmployeeMessage(
+                tenantId, userId, sessionId, "tạo phiếu mua sắm", Map.of(), null, "key-state", "req-state",
+                new ChatControlPlaneService.AnswerStreamListener() {
+                    @Override public void onContent(String c) {}
+                    @Override public void onReset() {}
+                }
+        );
+
+        ArgumentCaptor<ChatSession> captor = ArgumentCaptor.forClass(ChatSession.class);
+        verify(sessionRepository, atLeastOnce()).save(captor.capture());
+        Map<String, Object> pending = captor.getAllValues().stream()
+                .map(ChatSession::getCustomerMetadata)
+                .filter(meta -> meta != null && meta.get("bizappPending") instanceof Map<?, ?>)
+                .map(meta -> (Map<?, ?>) meta.get("bizappPending"))
+                .map(m -> Map.<String, Object>of("appKind", m.get("appKind"), "entity", m.get("entity")))
+                .findFirst().orElseThrow();
+        assertEquals("inventory", pending.get("appKind"));
+        assertEquals("shopping_requests", pending.get("entity"));
     }
 
     @Test

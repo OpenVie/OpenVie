@@ -33,6 +33,9 @@ their terms before redistributing them. Components with noteworthy conditions:
   it dynamically.
 - H2 Database (com.h2database:h2, MPL-2.0 / EPL-1.0) is present only in test
   scope for in-memory integration testing and is never packaged into production JARs.
+- Eclipse Paho MQTT client (org.eclipse.paho:org.eclipse.paho.client.mqttv3)
+  is dual-licensed EPL-2.0 / EDL-1.0 (BSD-3-Clause); OpenVie uses it unmodified
+  under the BSD-3-Clause terms for MQTT connector jobs.
 - AI model weights referenced in configuration (such as vylinh, bge-m3, or
   models configured for AI manifest drafting) are third-party models with their
   own upstream licenses and are not relicensed by OpenVie.

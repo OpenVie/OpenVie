@@ -26,8 +26,11 @@ import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
 import {
   getBizAppDraftApi,
   installBizAppApi,
+  listInstalledBizAppsApi,
   saveBizAppDraftApi,
+  upgradeBizAppApi,
 } from "@/lib/bizapp-api";
+import { upgradeManifestVersion } from "@/lib/bizapp-upgrade";
 
 export default function ComposeDraftPage({
   params,
@@ -85,8 +88,22 @@ export default function ComposeDraftPage({
 
   const handleInstall = async (updated: BizAppManifest) => {
     try {
-      await installBizAppApi(request, { draftId });
-      toast.success(t("composer.installed"));
+      const installed = await listInstalledBizAppsApi(request);
+      const active = installed.find((app) => app.kind === updated.kind && app.status === "ACTIVE");
+      if (active) {
+        const next = upgradeManifestVersion(updated, active.version);
+        await upgradeBizAppApi(request, updated.kind, next);
+        await saveBizAppDraftApi(request, draftId, {
+          id: draftId,
+          title: next.name?.en || next.kind,
+          source: "canvas",
+          manifest: next,
+        });
+        toast.success(t("composer.upgraded"));
+      } else {
+        await installBizAppApi(request, { manifest: updated });
+        toast.success(t("composer.installed"));
+      }
       router.push(`/apps/${updated.kind}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("composer.installFailed"));

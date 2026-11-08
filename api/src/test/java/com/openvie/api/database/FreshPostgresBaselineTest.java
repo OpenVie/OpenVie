@@ -138,14 +138,29 @@ class FreshPostgresBaselineTest {
     private EntityManager em;
 
     @Test
-    void flywayMigratesTheBaselineIntoAnEmptyDatabase() {
+    void flywayMigratesTheBaselineIntoAnEmptyDatabase() throws java.io.IOException {
         List<Map<String, Object>> history = jdbc.queryForList(
                 "select version, description, success from flyway_schema_history order by installed_rank");
-        assertEquals(17, history.size(), "baseline must contain migrations V1 through V17");
-        for (int i = 0; i < 17; i++) {
+        int expected = highestMigrationVersion();
+        assertEquals(expected, history.size(), "baseline must contain migrations V1 through V" + expected);
+        for (int i = 0; i < expected; i++) {
             assertEquals(String.valueOf(i + 1), String.valueOf(history.get(i).get("version")));
             assertTrue((Boolean) history.get(i).get("success"),
                     "migration " + history.get(i).get("version") + " must be recorded as successful");
+        }
+    }
+
+    /** Highest `V<n>__` in the migration directory: the schema must apply every one. */
+    private static int highestMigrationVersion() throws java.io.IOException {
+        try (java.util.stream.Stream<java.nio.file.Path> files =
+                java.nio.file.Files.list(java.nio.file.Path.of("src/main/resources/db/migration"))) {
+            return files
+                    .map(path -> path.getFileName().toString())
+                    .map(name -> java.util.regex.Pattern.compile("^V(\\d+)__").matcher(name))
+                    .filter(java.util.regex.Matcher::find)
+                    .mapToInt(matcher -> Integer.parseInt(matcher.group(1)))
+                    .max()
+                    .orElse(0);
         }
     }
 
@@ -162,7 +177,8 @@ class FreshPostgresBaselineTest {
                 "api_keys", "webhook_endpoints", "webhook_deliveries",
                 "bizapp_marketplace_templates", "bizapp_installations",
                 "bizapp_records", "bizapp_credentials",
-                "bizapp_drafts", "bizapp_crm_leads", "bizapp_booking_appointments");
+                "bizapp_drafts", "bizapp_crm_leads", "bizapp_booking_appointments",
+                "bizapp_connector_jobs");
         List<String> allTables = jdbc.queryForList(
                 "select table_name from information_schema.tables "
                         + "where table_schema = 'public' and table_name <> 'flyway_schema_history'",
