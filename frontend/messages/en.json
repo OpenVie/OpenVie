@@ -399,7 +399,7 @@
     "bizapps": {
       "introTitle": "What is a BizApp?",
       "introBody": "A BizApp is a declarative application that runs directly on OpenVie's headless platform without requiring custom microservices or backends. Everything it does is described by one JSON manifest under the frozen bizapp.v1 contract: entities, executable blocks, declarative reports, role permissions, and runtime views.",
-      "introStructure": "Installing freezes the manifest, deploys the app's approval process (if any), and serves runtime views under /apps/<app kind>. The AI assistant can answer questions about app records through knowledge projection with citations.",
+      "introStructure": "Installing freezes the manifest, deploys the app's approval process (if any), and serves runtime views under /apps - one path per app kind. The AI assistant can answer questions about app records through knowledge projection with citations.",
       "topIdentity": "kind is a unique lowercase key per [locale]; name holds vi/en labels and is shown as the app title; version starts at 1 and is bumped automatically on upgrade.",
       "topStorage": "jsonb is the generic store for custom apps; typed tables are reserved for the platform's bundled templates.",
       "topRbac": "Capability → workspace role lists. Defaults keep reading open, restrict writes/deletes/approvals to admins, and let submit fall back to write.",
