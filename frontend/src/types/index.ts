@@ -48,6 +48,12 @@ export interface WorkflowTask {
   documentId: string;
   documentFileName: string;
   createdAt: string;
+  appKind?: string | null;
+  entity?: string | null;
+  recordId?: string | null;
+  recordTitle?: string | null;
+  recordSummary?: string | null;
+  recordFields?: Record<string, string> | null;
 }
 
 export interface WorkspaceTasks {
@@ -61,12 +67,16 @@ export interface WorkflowProcess {
   documentFileName: string;
   sensitive: boolean;
   approvalLevel: number;
-  policyVersion: string;
-  publishTarget: PublishTarget;
+  policyVersion: string | null;
+  publishTarget: PublishTarget | null;
   documentStatus: string;
   escalated: boolean;
   startedAt: string;
   endedAt: string | null;
+  title?: string | null;
+  summary?: string | null;
+  appKind?: string | null;
+  entity?: string | null;
 }
 
 export interface StartProcessResponse {

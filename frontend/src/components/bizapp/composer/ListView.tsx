@@ -17,6 +17,7 @@
 import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
 import { Database, Sliders, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { blockDisplayName, blockSummary } from "@/lib/bizapp-block";
 
 interface ListViewProps {
   manifest: BizAppManifest;
@@ -140,10 +141,8 @@ export function ListView({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm font-mono">{block.id}</span>
-                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-muted rounded">
-                      {block.type}
-                    </span>
+                    <span className="font-semibold text-sm">{blockDisplayName(block.type)}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">{block.id}</span>
                   </div>
                   <button
                     type="button"
@@ -158,8 +157,8 @@ export function ListView({
                   </button>
                 </div>
 
-                <div className="text-xs text-muted-foreground font-mono truncate">
-                  {JSON.stringify(block.params || {})}
+                <div className="text-xs text-muted-foreground">
+                  {blockSummary(block)}
                 </div>
               </div>
             ))}

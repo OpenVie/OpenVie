@@ -19,6 +19,7 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { BarChart3, Bot, History, List, PlusCircle } from "lucide-react";
 import type { BizAppInstalledAppView } from "@/types";
+import { reportViewTitleFor } from "@/lib/bizapp-report";
 import { BizAppRegistryView } from "@/components/bizapp/BizAppRegistryView";
 import { BizAppReportView } from "@/components/bizapp/BizAppReportView";
 import { BizAppTimelineView } from "@/components/bizapp/BizAppTimelineView";
@@ -48,7 +49,7 @@ export function BizAppRenderer({ app, admin = false }: { app: BizAppInstalledApp
 
   const label = (view: UiView): string => {
     if (view.prefix === "report") {
-      return t("nav.report", { view: view.target });
+      return reportViewTitleFor(app.manifest, view.target);
     }
     if (view.prefix === "assistant") {
       return t("nav.assistant", { fallback: "Trợ lý AI" });

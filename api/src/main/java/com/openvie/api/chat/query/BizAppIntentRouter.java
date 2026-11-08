@@ -119,7 +119,7 @@ public class BizAppIntentRouter {
     );
 
     private static final Pattern WRITE_VERBS = Pattern.compile(
-            "\\b(them|tao|lap|nhap|ghi|ghi nhan|luu|luu tru|cap nhat|sua|doi|xoa|go bo|gui duyet|trinh duyet|"
+            "\\b(them|tao|lap|nhap|dien|ghi|ghi nhan|luu|luu tru|cap nhat|sua|doi|xoa|go bo|gui duyet|trinh duyet|"
             + "add|create|insert|log|save|update|edit|change|delete|remove|archive|submit|send for approval|"
             + "set up|set)\\b",
             Pattern.CASE_INSENSITIVE
@@ -138,6 +138,19 @@ public class BizAppIntentRouter {
     private static final Pattern MANAGEMENT_NEED = Pattern.compile(
             "\\b(quan ly|theo doi|kiem soat|giam sat|quan tri|luu tru thong tin|manage|track|monitor)\\b",
             Pattern.CASE_INSENSITIVE
+    );
+
+    /**
+     * Words too generic to identify an app on their own. Multi-word aliases
+     * containing one of these are not derived from app/entity names, so
+     * "quản lý" alone never routes to the first "Quản lý ..." app.
+     */
+    private static final Set<String> GENERIC_ALIAS_TOKENS = Set.of(
+            "quan", "ly", "yeu", "cau", "danh", "sach", "thong", "tin",
+            "ban", "ghi", "du", "lieu", "trang", "thai", "nguoi", "dung",
+            "he", "ung", "phan", "mem", "chinh", "quy", "trinh",
+            "tao", "them", "sua", "xoa", "xem", "tim", "kiem",
+            "bao", "cao", "moi", "cai"
     );
 
     /** Desire/politeness phrases that introduce an operational request in any domain. */
@@ -201,8 +214,12 @@ public class BizAppIntentRouter {
     private static final Pattern FIELD_INFO_REQUEST = Pattern.compile(
             "\\b(thong tin nao|thong tin gi|can cung cap|cung cap (?:nhung )?thong tin|"
             + "nhung thong tin nao|truong nao|field nao|can nhap|nhap gi|"
+            + "cho toi biet.*(?:thong tin|truong|field)|"
+            + "thong tin (?:can|de) (?:dien|nhap|khai)|"
+            + "can (?:dien|nhap|khai) (?:gi|nhung gi)|"
             + "what information|which (?:information|fields?)|"
-            + "what (?:do i|should i) (?:need|provide)|what details|details do you need|what fields)\\b",
+            + "what (?:do i|should i) (?:need|provide|fill)|what details|details do you need|what fields|"
+            + "which fields|field list|danh sach (?:truong|field))\\b",
             Pattern.CASE_INSENSITIVE
     );
 
@@ -254,6 +271,19 @@ public class BizAppIntentRouter {
             Pattern.CASE_INSENSITIVE
     );
 
+    /**
+     * "Build me an app" is an explicit CREATE_APP request, not an install of
+     * some catalog app. Keep the object of "tạo" close to the verb so record
+     * phrasings ("tạo phiếu trong ứng dụng") never match: the fillers allow
+     * politeness/quantity words, not arbitrary nouns.
+     */
+    private static final Pattern EXPLICIT_CREATE_APP_REQUEST = Pattern.compile(
+            "\\b(?:tao(?:\\s+moi)?|xay\\s+dung|thiet\\s+ke|lam(?:\\s+ra)?|viet|build|create|make)\\b"
+                    + "(?:\\s+(?:giup|cho|ho|toi|minh|chung\\s+toi|mot|cai|cac|nhung|ra|moi|nen|new|a|an|the)){0,5}"
+                    + "\\s+(?:ung\\s+dung|app|apps|phan\\s+mem)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
     /** True when the turn asks to REMOVE the app itself (vs. a record inside it). */
     public static boolean isUninstallAppRequest(String normalized) {
         if (normalized == null || normalized.isBlank()) return false;
@@ -265,10 +295,19 @@ public class BizAppIntentRouter {
         if (normalized == null || normalized.isBlank()) return false;
         return INSTALL_APP_REQUEST.matcher(normalized).find();
     }
+
+    /** True when the turn explicitly asks to build a new app. */
+    static boolean isExplicitCreateAppRequest(String normalized) {
+        if (normalized == null || normalized.isBlank()) return false;
+        return EXPLICIT_CREATE_APP_REQUEST.matcher(normalized).find();
+    }
     private final BizAppRuntimeApi bizAppRuntimeApi;
     private final AiInferenceApi aiInferenceApi;
     private final ObjectMapper objectMapper;
     private final BizAppSlotAgent slotAgent;
+
+    @Value("${app.bizapps.ai.intent-model:}")
+    private String intentModel = "";
 
     public BizAppIntentRouter(
             @org.springframework.context.annotation.Lazy BizAppRuntimeApi bizAppRuntimeApi,
@@ -331,6 +370,21 @@ public class BizAppIntentRouter {
             UUID sessionId,
             List<ChatMessage> priorMessages
     ) {
+        return route(tenantId, orgId, actorId, role, content, locale, sessionId,
+                priorMessages, Map.of());
+    }
+
+    public RoutingResult route(
+            UUID tenantId,
+            UUID orgId,
+            UUID actorId,
+            String role,
+            String content,
+            String locale,
+            UUID sessionId,
+            List<ChatMessage> priorMessages,
+            Map<String, Object> sessionState
+    ) {
         // RAG-neutrality: short-circuit before gate to introduce 0 latency when actions disabled
         if (!actionsEnabled && !recordActionsEnabled) {
             return RoutingResult.none();
@@ -338,6 +392,25 @@ public class BizAppIntentRouter {
 
         if (content == null || content.isBlank()) {
             return RoutingResult.none();
+        }
+
+        String normalized = removeDiacritics(content.toLowerCase(Locale.ROOT));
+
+        // Procedure/policy/guideline questions must always go to RAG,
+        // unless it is an inquiry about managing/tracking a workflow domain.
+        // This runs before the explicit create guard so "Làm sao để tạo ứng
+        // dụng?" stays a how-to question instead of opening a draft.
+        if (PROCEDURE_KEYWORDS.matcher(normalized).find()
+                && (!MANAGEMENT_NEED.matcher(normalized).find() || HARD_POLICY_KEYWORDS.matcher(normalized).find())) {
+            return RoutingResult.none();
+        }
+
+        // "Tạo giúp tôi một ứng dụng..." is unambiguously a new-app request.
+        // Resolve it before alias/app-kind selection: a catalog alias collision
+        // (for example Booking's slot value "họp" inside "hộp thư") must never
+        // turn it into an INSTALL or record prompt.
+        if (isExplicitCreateAppRequest(normalized)) {
+            return offerExplicitAppCreation(content, locale, sessionId);
         }
 
         List<InstalledAppSummary> installed = bizAppRuntimeApi.listInstalledSummary(tenantId);
@@ -351,7 +424,6 @@ public class BizAppIntentRouter {
         Set<String> knownKinds = new HashSet<>();
         visibleInstalled.forEach(i -> knownKinds.add(i.kind().toLowerCase(Locale.ROOT)));
         catalog.forEach(c -> knownKinds.add(c.kind().toLowerCase(Locale.ROOT)));
-        String normalized = removeDiacritics(content.toLowerCase(Locale.ROOT));
 
         // 1. Resolve app kind from content
         String directKind = resolveAppKind(content, knownKinds, aliasToKind);
@@ -367,11 +439,15 @@ public class BizAppIntentRouter {
             }
         }
 
-        // Procedure/policy/guideline questions must always go to RAG,
-        // unless it is an inquiry about managing/tracking a workflow domain.
-        if (PROCEDURE_KEYWORDS.matcher(normalized).find()
-                && (!MANAGEMENT_NEED.matcher(normalized).find() || HARD_POLICY_KEYWORDS.matcher(normalized).find())) {
-            return RoutingResult.none();
+        // A turn that was waiting for record details stays bound to the same
+        // app even when the user's follow-up does not repeat the app name.
+        PendingRecordDetails pending = pendingRecordDetails(sessionState);
+        if (directKind == null && pending != null && pending.appKind() != null) {
+            String pendingKind = pending.appKind().toLowerCase(Locale.ROOT);
+            if (knownKinds.contains(pendingKind)) {
+                directKind = pendingKind;
+                fromContext = true;
+            }
         }
 
         // Greetings/thanks/identity turns have no app intent. Returning before
@@ -485,6 +561,11 @@ public class BizAppIntentRouter {
                 EntityDetail targetEntity = preferredEntity != null
                         ? findEntity(preferredEntity, app.entityDetails())
                         : null;
+                if (targetEntity == null && pending != null
+                        && pending.appKind() != null
+                        && pending.appKind().equalsIgnoreCase(app.kind())) {
+                    targetEntity = findEntity(pending.entity(), app.entityDetails());
+                }
                 if (targetEntity == null) {
                     targetEntity = resolveEntity(accumulatedText, app.entityDetails());
                 }
@@ -501,21 +582,30 @@ public class BizAppIntentRouter {
                                 null
                         );
                     }
-                    Map<String, Object> fields = resolveRecordFields(priorMessages, content, targetEntity, app.name(), locale);
+                    Map<String, Object> fields = resolveRecordFields(
+                            priorMessages, content, targetEntity, app.name(), locale,
+                            pending != null && pending.appKind() != null
+                                    && pending.appKind().equalsIgnoreCase(app.kind()));
 
-                    // If user is asking generally without any fields, prompt for details instead of failing or going to RAG
+                    // If user is asking generally without any fields, list the
+                    // manifest fields immediately instead of asking a generic
+                    // "provide details" question the user cannot act on.
                     if (fields.isEmpty()) {
                         String appName = localizedAppName(app, locale);
                         String reply = (locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi"))
-                                ? "Tôi có thể giúp bạn tạo một mục mới trong " + appName + ". Vui lòng cho tôi biết thông tin chi tiết để tôi chuẩn bị nhé!"
-                                : "I can help you create a new entry in " + appName + ". Please provide the details so I can prepare it!";
+                                ? "Tôi có thể giúp bạn tạo một mục mới trong " + appName
+                                        + ". Vui lòng cho tôi biết thông tin chi tiết để tôi chuẩn bị nhé!\n\n"
+                                        + buildFieldInfoReply(app, targetEntity, locale)
+                                : "I can help you create a new entry in " + appName
+                                        + ". Please provide the details so I can prepare it!\n\n"
+                                        + buildFieldInfoReply(app, targetEntity, locale);
                         return new RoutingResult(
                                 Intent.APP_RECORD_CREATE,
                                 app.kind(),
                                 targetEntity.name(),
                                 BigDecimal.valueOf(0.98),
                                 reply,
-                                "Prompt for record details",
+                                "Awaiting record details",
                                 null,
                                 null
                         );
@@ -624,7 +714,7 @@ public class BizAppIntentRouter {
                     prompt,
                     systemPrompt,
                     INTENT_JSON_SCHEMA,
-                    "vylinh",
+                    intentModel(),
                     0.1f,
                     512
             ));
@@ -666,6 +756,15 @@ public class BizAppIntentRouter {
                 appKind = directKind;
             }
             if (appKind == null && isAppBoundIntent(intent)) {
+                if (directKind == null
+                        && (intent == Intent.APP_RECORD_CREATE || intent == Intent.APP_RECORD_SUBMIT)) {
+                    // The classifier saw a create/submit request but no
+                    // installed app covers it: propose creating the app
+                    // instead of dropping the turn into RAG. Small models
+                    // often pick SUBMIT for "gửi duyệt" narratives.
+                    return offerCreateAppForUncoveredAction(content, normalized, locale, sessionId,
+                            "Record request with no installed app", true);
+                }
                 return RoutingResult.none();
             }
 
@@ -948,12 +1047,25 @@ public class BizAppIntentRouter {
             String appName,
             String locale
     ) {
+        return resolveRecordFields(priorMessages, content, targetEntity, appName, locale, false);
+    }
+
+    private Map<String, Object> resolveRecordFields(
+            List<ChatMessage> priorMessages,
+            String content,
+            EntityDetail targetEntity,
+            String appName,
+            String locale,
+            boolean allowLlmWhenEmpty
+    ) {
         String accumulatedText = buildAccumulatedUserText(priorMessages, content);
         Map<String, Object> fields = new LinkedHashMap<>(extractFieldsFromPrompt(accumulatedText, targetEntity));
-        // General asks with zero deterministic signal keep the zero-LLM
-        // prompt-for-details path; the agent only runs when there is at least
-        // one anchor key to complete.
-        if (slotAgent != null && slotAgent.llmEnabled() && !fields.isEmpty()) {
+        // Once the assistant has explicitly asked for details, let the
+        // manifest-driven slot agent interpret free-form values even when the
+        // deterministic extractor found no anchor key. Without pending state
+        // we keep the zero-LLM prompt path to avoid inventing fields.
+        if (slotAgent != null && slotAgent.llmEnabled()
+                && (allowLlmWhenEmpty || !fields.isEmpty())) {
             Map<String, Object> llmSlots = slotAgent.extractSlots(targetEntity, appName, locale, priorMessages, content);
             llmSlots.forEach(fields::put);
         }
@@ -980,7 +1092,7 @@ public class BizAppIntentRouter {
         }
         if (dynamicAliases != null) {
             for (String alias : dynamicAliases) {
-                if (alias != null && alias.length() >= 3 && normalized.contains(alias)) {
+                if (normalizedAliasMatches(normalized, alias)) {
                     return true;
                 }
             }
@@ -1016,7 +1128,7 @@ public class BizAppIntentRouter {
                     "User request: " + content,
                     buildAppSelectorPrompt(installed, locale),
                     APP_SELECTOR_JSON_SCHEMA,
-                    "vylinh",
+                    intentModel(),
                     0.0f,
                     256
             ));
@@ -1253,6 +1365,31 @@ public class BizAppIntentRouter {
     }
 
     /**
+     * Explicit "build me an app" requests bypass app selection and go straight
+     * to a draft card. The draft generator receives the original message as
+     * its hint; no installed/catalog app is involved.
+     */
+    private RoutingResult offerExplicitAppCreation(String content, String locale, UUID sessionId) {
+        if (!actionsEnabled) {
+            return RoutingResult.none();
+        }
+        boolean vietnamese = locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
+        String reply = vietnamese
+                ? "Được, mình sẽ tạo bản thảo ứng dụng mới cho yêu cầu này. Bạn xem lại và xác nhận nhé."
+                : "Sure, I'll draft a new app for this request. Review it and confirm when ready.";
+        return new RoutingResult(
+                Intent.CREATE_APP,
+                null,
+                null,
+                BigDecimal.valueOf(0.98),
+                reply,
+                "Explicit create-app request",
+                null,
+                buildDraftActionCard(vietnamese ? "Ứng dụng mới" : "New app", content, sessionId)
+        );
+    }
+
+    /**
      * Last-resort route for an operational request that no installed app can
      * serve. It offers a generic draft app instead of pretending the request
      * was a document question. The user's own message is carried as the draft
@@ -1266,26 +1403,24 @@ public class BizAppIntentRouter {
             UUID sessionId,
             String reason
     ) {
-        if (!actionsEnabled || !looksLikeOperationalAction(normalized)) {
+        return offerCreateAppForUncoveredAction(content, normalized, locale, sessionId, reason, false);
+    }
+
+    private RoutingResult offerCreateAppForUncoveredAction(
+            String content,
+            String normalized,
+            String locale,
+            UUID sessionId,
+            String reason,
+            boolean classifierConfirmed
+    ) {
+        if (!actionsEnabled || (!classifierConfirmed && !looksLikeOperationalAction(normalized))) {
             return RoutingResult.none();
         }
         boolean vietnamese = locale != null && locale.toLowerCase(Locale.ROOT).startsWith("vi");
         String reply = vietnamese
                 ? "Hiện chưa có ứng dụng nào phù hợp với yêu cầu này. Mình có thể tạo một ứng dụng mới để xử lý quy trình bạn vừa nêu. Bạn có muốn tạo ứng dụng này không?"
                 : "No installed app covers this request yet. I can create a new app for the workflow you described. Would you like to create it?";
-        Map<String, Object> card = new LinkedHashMap<>();
-        card.put("type", "bizapp_action");
-        card.put("actionId", UUID.randomUUID().toString());
-        card.put("kind", "bizapp.draft");
-        card.put("appName", vietnamese ? "Ứng dụng mới" : "New app");
-        card.put("status", "PROPOSED");
-        card.put("requiresRole", "ORG_OWNER");
-        Map<String, Object> payload = new LinkedHashMap<>();
-        if (sessionId != null) {
-            payload.put("sessionId", sessionId.toString());
-        }
-        payload.put("hint", content);
-        card.put("payload", payload);
         return new RoutingResult(
                 Intent.CREATE_APP,
                 null,
@@ -1294,7 +1429,43 @@ public class BizAppIntentRouter {
                 reply,
                 reason,
                 null,
-                card
+                buildDraftActionCard(vietnamese ? "Ứng dụng mới" : "New app", content, sessionId)
+        );
+    }
+
+    private static Map<String, Object> buildDraftActionCard(
+            String appName, String content, UUID sessionId
+    ) {
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("type", "bizapp_action");
+        card.put("actionId", UUID.randomUUID().toString());
+        card.put("kind", "bizapp.draft");
+        card.put("appName", appName);
+        card.put("status", "PROPOSED");
+        card.put("requiresRole", "ORG_OWNER");
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (sessionId != null) {
+            payload.put("sessionId", sessionId.toString());
+        }
+        payload.put("hint", content);
+        card.put("payload", payload);
+        return card;
+    }
+
+    private record PendingRecordDetails(String appKind, String entity) {}
+
+    private static PendingRecordDetails pendingRecordDetails(Map<String, Object> sessionState) {
+        if (sessionState == null || !(sessionState.get("bizappPending") instanceof Map<?, ?> pending)) {
+            return null;
+        }
+        Object kind = pending.get("appKind");
+        if (kind == null || String.valueOf(kind).isBlank()) {
+            return null;
+        }
+        Object entity = pending.get("entity");
+        return new PendingRecordDetails(
+                String.valueOf(kind),
+                entity == null || String.valueOf(entity).isBlank() ? null : String.valueOf(entity)
         );
     }
 
@@ -1326,6 +1497,10 @@ public class BizAppIntentRouter {
             }
         }
         return null;
+    }
+
+    private String intentModel() {
+        return intentModel == null || intentModel.isBlank() ? null : intentModel.trim();
     }
 
     private String buildSystemPrompt(
@@ -1514,8 +1689,7 @@ public class BizAppIntentRouter {
         for (Map.Entry<String, String> e : aliasToKind.entrySet()) {
             String alias = e.getKey();
             if (alias == null || alias.length() < 3 || !directKind.equalsIgnoreCase(e.getValue())) continue;
-            String aliasNorm = removeDiacritics(alias.toLowerCase(Locale.ROOT));
-            if (normalized.contains(aliasNorm) || normalized.contains(alias)) {
+            if (normalizedAliasMatches(normalized, alias)) {
                 if (best == null || alias.length() > best.length()) {
                     best = alias;
                 }
@@ -1536,8 +1710,7 @@ public class BizAppIntentRouter {
         for (Map.Entry<String, String> e : aliasToKind.entrySet()) {
             String alias = e.getKey();
             if (alias == null || alias.length() < 3 || !kind.equalsIgnoreCase(e.getValue())) continue;
-            String aliasNorm = removeDiacritics(alias.toLowerCase(Locale.ROOT));
-            if (normalizedContent.contains(aliasNorm) || normalizedContent.contains(alias)) {
+            if (normalizedAliasMatches(normalizedContent, alias)) {
                 return true;
             }
         }
@@ -1576,20 +1749,60 @@ public class BizAppIntentRouter {
         }
         if (aliasToKind != null) {
             for (Map.Entry<String, String> entry : aliasToKind.entrySet()) {
-                String alias = entry.getKey();
-                if (alias != null && alias.length() >= 3 && (lower.contains(alias) || normalized.contains(alias))) {
+                if (aliasMatches(lower, normalized, entry.getKey())) {
                     return entry.getValue();
                 }
             }
         }
         if (knownKinds != null) {
             for (String k : knownKinds) {
-                if (lower.contains(k) || normalized.contains(k)) {
+                if (aliasMatches(lower, normalized, k)) {
                     return k;
                 }
             }
         }
         return null;
+    }
+
+    private static boolean aliasMatches(String lower, String normalized, String alias) {
+        if (alias == null) return false;
+        String aliasLower = alias.trim().toLowerCase(Locale.ROOT);
+        if (aliasLower.length() < 3) return false;
+        if (containsTokenSequence(lower, aliasLower)) return true;
+        String aliasNorm = removeDiacritics(aliasLower);
+        if (aliasNorm.isBlank()) return false;
+        // "họp" and "hộp" are different words that both normalize to "hop".
+        // A short accented alias may only match its accented spelling; longer
+        // aliases keep the unaccented fallback for "quan ly tai san" input.
+        if (!aliasLower.equals(aliasNorm) && aliasNorm.length() < 4) return false;
+        return containsTokenSequence(normalized, aliasNorm);
+    }
+
+    private static boolean normalizedAliasMatches(String normalized, String alias) {
+        if (normalized == null || alias == null) return false;
+        String aliasLower = alias.trim().toLowerCase(Locale.ROOT);
+        if (aliasLower.length() < 3) return false;
+        String aliasNorm = removeDiacritics(aliasLower);
+        if (aliasNorm.isBlank()) return false;
+        if (!aliasLower.equals(aliasNorm) && aliasNorm.length() < 4) return false;
+        return containsTokenSequence(normalized, aliasNorm);
+    }
+
+    private static boolean containsTokenSequence(String text, String needle) {
+        if (text == null || needle == null || needle.isBlank()) return false;
+        int from = 0;
+        while (from <= text.length() - needle.length()) {
+            int index = text.indexOf(needle, from);
+            if (index < 0) return false;
+            int before = index == 0 ? -1 : text.codePointBefore(index);
+            int afterIndex = index + needle.length();
+            int after = afterIndex >= text.length() ? -1 : text.codePointAt(afterIndex);
+            if (!Character.isLetterOrDigit(before) && !Character.isLetterOrDigit(after)) {
+                return true;
+            }
+            from = index + 1;
+        }
+        return false;
     }
 
     public static Map<String, String> buildAliasToKindMap(
@@ -1622,52 +1835,67 @@ public class BizAppIntentRouter {
     ) {
         if (kind == null || kind.isBlank()) return;
         String kLower = kind.toLowerCase(Locale.ROOT);
-        map.put(kLower, kLower);
-        map.put(removeDiacritics(kLower), kLower);
+        registerAlias(map, kLower, kLower);
         if (name != null && !name.isBlank()) {
-            String nLower = name.toLowerCase(Locale.ROOT);
-            map.put(nLower, kLower);
-            map.put(removeDiacritics(nLower), kLower);
+            registerAlias(map, name, kLower);
+            registerPhraseAliases(map, name, kLower);
         }
         // Manifest-declared conversational triggers (true plug-and-play contract)
         if (triggers != null) {
             for (String trig : triggers) {
-                if (trig != null && !trig.isBlank()) {
-                    String tLower = trig.toLowerCase(Locale.ROOT);
-                    map.put(tLower, kLower);
-                    map.put(removeDiacritics(tLower), kLower);
-                }
+                registerAlias(map, trig, kLower);
             }
         }
         if (entities != null) {
             for (EntityDetail e : entities) {
                 if (e.name() != null && !e.name().isBlank()) {
-                    String eLower = e.name().toLowerCase(Locale.ROOT);
-                    map.put(eLower, kLower);
-                    map.put(removeDiacritics(eLower), kLower);
+                    registerAlias(map, e.name(), kLower);
                 }
                 if (e.label() != null && !e.label().isBlank()) {
-                    String lLower = e.label().toLowerCase(Locale.ROOT);
-                    map.put(lLower, kLower);
-                    map.put(removeDiacritics(lLower), kLower);
+                    registerAlias(map, e.label(), kLower);
+                    registerPhraseAliases(map, e.label(), kLower);
                 }
-                if (e.fields() != null) {
-                    for (FieldDetail f : e.fields()) {
-                        if (f.optionAliases() != null) {
-                            for (List<String> optAliases : f.optionAliases().values()) {
-                                if (optAliases != null) {
-                                    for (String a : optAliases) {
-                                        if (a != null && a.length() >= 3) {
-                                            map.put(a.toLowerCase(Locale.ROOT), kLower);
-                                            map.put(removeDiacritics(a.toLowerCase(Locale.ROOT)), kLower);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                // Field option aliases are slot values ("họp" = meeting-room),
+                // not app identities. Registering them made "hộp thư" resolve
+                // to Booking after diacritic stripping; the slot agent owns
+                // these aliases instead.
             }
+        }
+    }
+
+    private static void registerAlias(Map<String, String> map, String alias, String kind) {
+        if (alias == null) return;
+        String lower = alias.trim().toLowerCase(Locale.ROOT);
+        if (lower.isEmpty()) return;
+        map.put(lower, kind);
+        String normalized = removeDiacritics(lower);
+        if (normalized.isBlank() || normalized.equals(lower)) return;
+        // Do not create a short diacritics-free alias: "họp" and "hộp" both
+        // normalize to "hop", so a 3-letter fallback is a homograph trap.
+        if (normalized.length() < 4) return;
+        map.put(normalized, kind);
+    }
+
+    /**
+     * Derives a few two-word aliases from an app/entity name so an installed
+     * app without hand-authored conversational triggers still matches natural
+     * requests ("phiếu xin mua sắm" ↔ "Yêu cầu Mua sắm"). Generic management
+     * words are excluded; the full name remains the precise alias.
+     */
+    private static void registerPhraseAliases(Map<String, String> map, String phrase, String kind) {
+        if (phrase == null || phrase.isBlank()) return;
+        String[] tokens = removeDiacritics(phrase.toLowerCase(Locale.ROOT))
+                .split("[^\\p{L}\\p{N}]+");
+        for (int i = 0; i + 1 < tokens.length; i++) {
+            String first = tokens[i];
+            String second = tokens[i + 1];
+            if (first.length() < 2 || second.length() < 2) continue;
+            if (GENERIC_ALIAS_TOKENS.contains(first) || GENERIC_ALIAS_TOKENS.contains(second)) {
+                continue;
+            }
+            String bigram = first + " " + second;
+            if (bigram.length() < 6) continue;
+            registerAlias(map, bigram, kind);
         }
     }
 

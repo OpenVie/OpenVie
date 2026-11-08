@@ -28,6 +28,7 @@ import com.openvie.api.tenant.api.OrgRole;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
+import com.openvie.api.workflow.api.WorkflowTaskContextApi;
 import com.openvie.api.workflow.api.event.WorkflowDecisionEvent;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskRequest;
 import com.openvie.api.workflow.dto.WorkflowDtos.CompleteTaskResponse;
@@ -52,6 +53,9 @@ import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.task.api.Task;
+import org.flowable.identitylink.api.IdentityLink;
+import org.flowable.identitylink.api.IdentityLinkType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -97,6 +101,7 @@ public class WorkflowService {
     public static final String LEVEL_2_TASK_KEY = "level2Approval";
     public static final String GROUP_WORKSPACE_ADMIN = "WORKSPACE_ADMIN";
     public static final String GROUP_ORG_OWNER = "ORG_OWNER";
+    public static final String GROUP_MEMBER = "MEMBER";
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
@@ -110,6 +115,9 @@ public class WorkflowService {
     private final TenantIdentityApi identityApi;
     private final AuditLogRepository auditLogRepository;
     private final ApplicationEventPublisher eventPublisher;
+
+    @Autowired(required = false)
+    private WorkflowTaskContextApi taskContextApi;
 
     // ------------------------------------------------------------------
     // Process lifecycle
@@ -219,7 +227,7 @@ public class WorkflowService {
         MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         List<WorkflowProcessView> views = new ArrayList<>();
         for (HistoricProcessInstance historic : historyQuery(workspaceId, membership, includeFinished)) {
-            views.add(processView(historic));
+            views.add(processView(workspaceId, historic));
         }
         return views;
     }
@@ -246,7 +254,7 @@ public class WorkflowService {
         List<WorkflowProcessView> views = new ArrayList<>();
         for (HistoricProcessInstance historic : processHistoryQuery(workspaceId, membership, includeFinished)
                 .listPage(requestedPage * requestedSize, requestedSize)) {
-            views.add(processView(historic));
+            views.add(processView(workspaceId, historic));
         }
         return new ProcessListResult(views, total);
     }
@@ -262,7 +270,8 @@ public class WorkflowService {
         if (historic == null) {
             throw new ResourceNotFoundException("Approval process not found");
         }
-        if (!workspaceId.toString().equals(String.valueOf(historic.getProcessVariables().get("workspaceId")))) {
+        if (!belongsToWorkspace(workspaceId,
+                String.valueOf(historic.getProcessVariables().get("workspaceId")), historic.getTenantId())) {
             // A known process of another workspace: forbidden, never silently filtered.
             throw new AccessDeniedException("This approval process belongs to another workspace");
         }
@@ -273,9 +282,9 @@ public class WorkflowService {
                 .taskUnassigned()
                 .orderByTaskCreateTime().asc()
                 .list()) {
-            tasks.add(taskView(task));
+            tasks.add(taskView(workspaceId, task));
         }
-        return new ProcessDetail(processView(historic), tasks);
+        return new ProcessDetail(processView(workspaceId, historic), tasks);
     }
 
     /**
@@ -295,7 +304,8 @@ public class WorkflowService {
         if (historic == null) {
             throw new ResourceNotFoundException("Approval process not found");
         }
-        if (!workspaceId.toString().equals(String.valueOf(historic.getProcessVariables().get("workspaceId")))) {
+        if (!belongsToWorkspace(workspaceId,
+                String.valueOf(historic.getProcessVariables().get("workspaceId")), historic.getTenantId())) {
             // A known process of another workspace: forbidden, never silently filtered.
             throw new AccessDeniedException("This approval process belongs to another workspace");
         }
@@ -316,7 +326,7 @@ public class WorkflowService {
                     actorId == null ? null : actorNames.get(actorId),
                     row.getAction().name(), row.getMetadata()));
         }
-        return new ProcessLog(processView(historic), entries);
+        return new ProcessLog(processView(workspaceId, historic), entries);
     }
 
     /** Display fallback chain for an audit actor: full name, then email. */
@@ -343,30 +353,66 @@ public class WorkflowService {
     public WorkspaceTasks listTasks(UUID workspaceId, UUID userId) {
         MembershipSnapshot membership = identityApi.requireMembership(userId, workspaceId);
         List<String> groups = candidateGroups(membership);
+        String workspace = workspaceId.toString();
 
-        List<WorkspaceTaskView> mine = new ArrayList<>();
-        for (Task task : taskService.createTaskQuery()
-                .processVariableValueEquals("workspaceId", workspaceId.toString())
+        List<String> tenantProcessIds = runtimeService.createProcessInstanceQuery()
+                .processInstanceTenantId(workspace)
+                .list()
+                .stream()
+                .map(org.flowable.engine.runtime.ProcessInstance::getId)
+                .toList();
+
+        List<Task> assigned = new ArrayList<>();
+        assigned.addAll(taskService.createTaskQuery()
+                .processVariableValueEquals("workspaceId", workspace)
                 .taskAssignee(userId.toString())
                 .includeProcessVariables()
                 .orderByTaskCreateTime().asc()
-                .list()) {
-            mine.add(taskView(task));
+                .list());
+        // BizApp approval processes carry the workspace on the engine process
+        // tenant; older starts may not have the workspaceId variable yet.
+        if (!tenantProcessIds.isEmpty()) {
+            assigned.addAll(taskService.createTaskQuery()
+                    .processInstanceIdIn(tenantProcessIds)
+                    .taskAssignee(userId.toString())
+                    .includeProcessVariables()
+                    .orderByTaskCreateTime().asc()
+                    .list());
         }
+        List<WorkspaceTaskView> mine = uniqueTasks(assigned).stream()
+                .map(task -> taskView(workspaceId, task)).toList();
 
-        List<WorkspaceTaskView> groupTasks = new ArrayList<>();
+        List<WorkspaceTaskView> groupTasks = List.of();
         if (!groups.isEmpty()) {
-            for (Task task : taskService.createTaskQuery()
-                    .processVariableValueEquals("workspaceId", workspaceId.toString())
+            List<Task> candidates = new ArrayList<>();
+            candidates.addAll(taskService.createTaskQuery()
+                    .processVariableValueEquals("workspaceId", workspace)
                     .taskCandidateGroupIn(groups)
                     .taskUnassigned()
                     .includeProcessVariables()
                     .orderByTaskCreateTime().asc()
-                    .list()) {
-                groupTasks.add(taskView(task));
+                    .list());
+            if (!tenantProcessIds.isEmpty()) {
+                candidates.addAll(taskService.createTaskQuery()
+                        .processInstanceIdIn(tenantProcessIds)
+                        .taskCandidateGroupIn(groups)
+                        .taskUnassigned()
+                        .includeProcessVariables()
+                        .orderByTaskCreateTime().asc()
+                        .list());
             }
+            groupTasks = uniqueTasks(candidates).stream()
+                    .map(task -> taskView(workspaceId, task)).toList();
         }
         return new WorkspaceTasks(mine, groupTasks);
+    }
+
+    private static List<Task> uniqueTasks(List<Task> tasks) {
+        Map<String, Task> unique = new java.util.LinkedHashMap<>();
+        for (Task task : tasks) {
+            unique.putIfAbsent(task.getId(), task);
+        }
+        return new ArrayList<>(unique.values());
     }
 
     @Transactional
@@ -389,7 +435,7 @@ public class WorkflowService {
         } else if (!task.getAssignee().equals(userId.toString())) {
             throw new ConflictException("Task already claimed by another approver");
         }
-        return taskView(taskService.createTaskQuery()
+        return taskView(workspaceId, taskService.createTaskQuery()
                 .taskId(taskId.toString())
                 .includeProcessVariables()
                 .singleResult());
@@ -430,20 +476,25 @@ public class WorkflowService {
         // The initiator may withdraw (reject) or hand the task upward, but a
         // real approval must come from someone else — only the org owner, the
         // terminal authority of the chain, may decide an own submission.
-        boolean selfDecision = userId.toString().equals(requireVariable(task, "initiatorId"));
+        String initiatorId = variable(task, "initiatorId", null);
+        boolean selfDecision = initiatorId != null && userId.toString().equals(initiatorId);
         if (selfDecision && "APPROVE".equals(decision)
                 && membership.orgRole() != OrgRole.ORG_OWNER) {
             throw new AccessDeniedException(
                     "You cannot approve your own submission. Hand it to another reviewer or escalate it upward.");
         }
 
-        UUID documentId = UUID.fromString(requireVariable(task, "documentId"));
+        UUID documentId = uuidOrNull(variable(task, "documentId", null));
+        String appKind = variable(task, "appKind", null);
+        UUID recordId = uuidOrNull(variable(task, "recordId", null));
         String policyVersion = variable(task, "policyVersion", "unknown");
         boolean sensitive = Boolean.parseBoolean(variable(task, "sensitive", "false"));
         String taskDefinitionKey = task.getTaskDefinitionKey();
 
         Map<String, Object> outcome = new HashMap<>();
         outcome.put("approvalOutcome", decision);
+        outcome.put("decision", decision);
+        outcome.put("decidedBy", userId.toString());
         outcome.put("rejectReason", reason);
         if ("ESCALATE".equals(decision)) {
             // The flow passed level 1 on the way to level 2, so journaling keeps
@@ -469,6 +520,10 @@ public class WorkflowService {
         metadata.put("sensitive", sensitive);
         metadata.put("policyVersion", policyVersion);
         metadata.put("documentId", documentId);
+        if (appKind != null) {
+            metadata.put("appKind", appKind);
+            metadata.put("recordId", recordId);
+        }
         metadata.put("taskDefinitionKey", taskDefinitionKey);
         if (selfDecision) {
             metadata.put("selfDecision", true);
@@ -476,18 +531,20 @@ public class WorkflowService {
         audit(workspaceId, userId, action, UUID.fromString(task.getProcessInstanceId()), metadata);
 
         CompleteTaskResponse response = terminalState(taskId, decision, task.getProcessInstanceId(), documentId);
-        if (response.processEnded()) {
-            // Terminal verdict: write it back onto the document and tell the
-            // submitter. A hand-off to level 2 is not a decision, so it only
-            // lands in the audit trail.
+        if (response.processEnded() && documentId != null) {
+            // Document approval: write the terminal verdict back and notify the
+            // submitter. BizApp processes are settled by their BPMN delegate,
+            // so they carry a recordId instead of a documentId.
             ApprovalStatus verdict = "APPROVE".equals(decision)
                     ? ApprovalStatus.APPROVED
                     : ApprovalStatus.REJECTED;
             documentApi.recordApprovalDecision(workspaceId, documentId, verdict, userId);
-            publishDecisionEvent(membership.orgId(), workspaceId, task.getProcessInstanceId(), documentId,
-                    variable(task, "documentFileName", null),
-                    UUID.fromString(requireVariable(task, "initiatorId")),
-                    decision, reason, level, variable(task, "publishTarget", null));
+            if (initiatorId != null) {
+                publishDecisionEvent(membership.orgId(), workspaceId, task.getProcessInstanceId(), documentId,
+                        variable(task, "documentFileName", null),
+                        UUID.fromString(initiatorId),
+                        decision, reason, level, variable(task, "publishTarget", null));
+            }
         }
         return response;
     }
@@ -598,21 +655,42 @@ public class WorkflowService {
         }
     }
 
-    private WorkflowProcessView processView(HistoricProcessInstance historic) {
+    private WorkflowProcessView processView(UUID workspaceId, HistoricProcessInstance historic) {
         Map<String, Object> variables = historic.getProcessVariables();
         boolean ended = historic.getEndTime() != null;
+        String appKind = nullableString(variables.get("appKind"));
+        String entity = nullableString(variables.get("entity"));
+        UUID recordId = uuidOrNull(nullableString(variables.get("recordId")));
+        WorkflowTaskContextApi.TaskContext context = null;
+        if (taskContextApi != null && appKind != null && recordId != null) {
+            context = taskContextApi.describe(workspaceId, appKind, entity, recordId);
+        }
+        String documentFileName = nullableString(variables.get("documentFileName"));
+        String title = context != null ? context.title() : documentFileName;
+        if (title == null) {
+            title = entity == null ? appKind : entity;
+        }
         return new WorkflowProcessView(
                 UUID.fromString(historic.getId()),
-                UUID.fromString(String.valueOf(variables.get("documentId"))),
-                String.valueOf(variables.get("documentFileName")),
+                uuidOrNull(nullableString(variables.get("documentId"))),
+                documentFileName,
                 Boolean.TRUE.equals(variables.get("sensitive")),
                 ((Number) variables.getOrDefault("approvalLevel", 1)).intValue(),
-                String.valueOf(variables.get("policyVersion")),
-                String.valueOf(variables.get("publishTarget")),
-                ended ? String.valueOf(variables.get("documentStatus")) : "IN_REVIEW",
+                nullableString(variables.get("policyVersion")),
+                nullableString(variables.get("publishTarget")),
+                ended ? nullableString(variables.get("documentStatus")) : "IN_REVIEW",
                 Boolean.TRUE.equals(variables.get("escalated")),
                 toLocalDateTime(historic.getStartTime()),
-                toLocalDateTime(historic.getEndTime()));
+                toLocalDateTime(historic.getEndTime()),
+                title,
+                context == null ? null : context.summary(),
+                appKind,
+                entity);
+    }
+
+    private static String nullableString(Object value) {
+        return value == null || String.valueOf(value).isBlank() || "null".equalsIgnoreCase(String.valueOf(value))
+                ? null : String.valueOf(value);
     }
 
     private CompleteTaskResponse terminalState(UUID taskId, String decision, String processInstanceId,
@@ -626,7 +704,7 @@ public class WorkflowService {
         String documentStatus = null;
         UUID nextTaskId = null;
         if (ended) {
-            documentStatus = String.valueOf(historic.getProcessVariables().get("documentStatus"));
+            documentStatus = nullableString(historic.getProcessVariables().get("documentStatus"));
         } else {
             nextTaskId = taskService.createTaskQuery()
                     .processInstanceId(processInstanceId)
@@ -642,6 +720,10 @@ public class WorkflowService {
 
     private List<String> candidateGroups(MembershipSnapshot membership) {
         List<String> groups = new ArrayList<>();
+        // Every workspace member belongs to MEMBER; the elevated roles are
+        // additive. Tasks explicitly targeted at MEMBER therefore remain
+        // visible to admins rather than becoming an orphaned queue.
+        groups.add(GROUP_MEMBER);
         if (membership.workspaceRole() == WorkspaceRole.WORKSPACE_ADMIN
                 || membership.orgRole() == OrgRole.ORG_OWNER) {
             groups.add(GROUP_WORKSPACE_ADMIN);
@@ -660,14 +742,36 @@ public class WorkflowService {
         if (task == null) {
             throw new ResourceNotFoundException("Approval task not found");
         }
-        if (!workspaceId.toString().equals(String.valueOf(task.getProcessVariables().get("workspaceId")))) {
+        var process = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(task.getProcessInstanceId())
+                .singleResult();
+        String tenantId = process == null ? null : process.getTenantId();
+        if (!belongsToWorkspace(workspaceId,
+                String.valueOf(task.getProcessVariables().get("workspaceId")), tenantId)) {
             throw new AccessDeniedException("This approval task belongs to another workspace");
         }
         return task;
     }
 
-    /** Routing decision of the level the task sits at, from the BPMN task keys. */
+    private static boolean belongsToWorkspace(UUID workspaceId, String variableWorkspaceId, String tenantId) {
+        return workspaceId.toString().equals(variableWorkspaceId)
+                || workspaceId.toString().equals(tenantId);
+    }
+
+    /**
+     * The candidate group actually attached to the task. BizApp approval
+     * templates may parameterize their first level with any supported role,
+     * so the task key alone is not enough to authorize claim/complete.
+     */
     private String requiredCandidateGroup(Task task) {
+        List<IdentityLink> links = taskService.getIdentityLinksForTask(task.getId());
+        if (links != null) {
+            for (IdentityLink link : links) {
+                if (IdentityLinkType.CANDIDATE.equals(link.getType()) && link.getGroupId() != null) {
+                    return link.getGroupId();
+                }
+            }
+        }
         return LEVEL_2_TASK_KEY.equals(task.getTaskDefinitionKey()) ? GROUP_ORG_OWNER : GROUP_WORKSPACE_ADMIN;
     }
 
@@ -675,8 +779,21 @@ public class WorkflowService {
         return LEVEL_2_TASK_KEY.equals(task.getTaskDefinitionKey()) ? 2 : 1;
     }
 
-    private WorkspaceTaskView taskView(Task task) {
+    private WorkspaceTaskView taskView(UUID workspaceId, Task task) {
         String documentId = variable(task, "documentId", null);
+        String appKind = variable(task, "appKind", null);
+        String entity = variable(task, "entity", null);
+        String recordId = variable(task, "recordId", null);
+        WorkflowTaskContextApi.TaskContext context = null;
+        UUID parsedRecordId = uuidOrNull(recordId);
+        if (taskContextApi != null && appKind != null && parsedRecordId != null) {
+            context = taskContextApi.describe(workspaceId, appKind, entity, parsedRecordId);
+        }
+        String recordTitle = context == null ? null : context.title();
+        String documentFileName = variable(task, "documentFileName", null);
+        if (documentFileName == null) {
+            documentFileName = recordTitle;
+        }
         return new WorkspaceTaskView(
                 UUID.fromString(task.getId()),
                 task.getName(),
@@ -685,9 +802,26 @@ public class WorkflowService {
                 requiredCandidateGroup(task),
                 task.getAssignee(),
                 UUID.fromString(task.getProcessInstanceId()),
-                documentId == null ? null : UUID.fromString(documentId),
-                variable(task, "documentFileName", null),
-                toLocalDateTime(task.getCreateTime()));
+                uuidOrNull(documentId),
+                documentFileName,
+                toLocalDateTime(task.getCreateTime()),
+                appKind,
+                entity,
+                parsedRecordId,
+                recordTitle,
+                context == null ? null : context.summary(),
+                context == null ? Map.of() : context.fields());
+    }
+
+    private static UUID uuidOrNull(String value) {
+        if (value == null || value.isBlank() || "null".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private LocalDateTime toLocalDateTime(java.util.Date time) {

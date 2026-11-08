@@ -67,8 +67,15 @@ public class SafeOutboundHttp {
             String method,
             Map<String, String> headers,
             String body,
-            List<String> allowedHosts
-    ) {}
+            List<String> allowedHosts,
+            Integer connectTimeoutMs,
+            Integer readTimeoutMs
+    ) {
+        public Request(String url, String method, Map<String, String> headers, String body,
+                List<String> allowedHosts) {
+            this(url, method, headers, body, allowedHosts, null, null);
+        }
+    }
 
     public record Response(
             int statusCode,
@@ -135,8 +142,10 @@ public class SafeOutboundHttp {
             URL targetUrl = uri.toURL();
             HttpURLConnection conn = (HttpURLConnection) targetUrl.openConnection();
             conn.setInstanceFollowRedirects(false);
-            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            conn.setReadTimeout(READ_TIMEOUT_MS);
+            conn.setConnectTimeout(req.connectTimeoutMs() == null
+                    ? CONNECT_TIMEOUT_MS : req.connectTimeoutMs());
+            conn.setReadTimeout(req.readTimeoutMs() == null
+                    ? READ_TIMEOUT_MS : req.readTimeoutMs());
 
             String method = req.method() == null ? "GET" : req.method().toUpperCase();
             conn.setRequestMethod(method);

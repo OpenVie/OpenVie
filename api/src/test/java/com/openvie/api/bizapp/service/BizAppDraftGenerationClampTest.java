@@ -60,6 +60,88 @@ class BizAppDraftGenerationClampTest {
                  "to":["creator","record.email"],"title":"Approved","subject":"Approved"}}]}
             """;
 
+    private static final String TYPE_HOOK_BARE_UI_JSON = """
+            {"schema":"bizapp.v1","kind":"procurement-approval","version":1,
+             "name":{"en":"Procurement","vi":"Mua sắm nội bộ"},
+             "storage":"jsonb",
+             "entities":[{"name":"purchase_requests","label":{"en":"Purchase Requests","vi":"Phiếu mua hàng"},
+               "fields":[{"name":"code","type":"string","required":true,"label":{"en":"Code","vi":"Mã phiếu"}}],
+               "hooks":{"onCreate":["approval_workitem"]}}],
+             "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                     "write":["MEMBER","WORKSPACE_ADMIN"],
+                     "approve":["ORG_OWNER","WORKSPACE_ADMIN"]},
+             "blocks":[{"id":"approvalBlockId","type":"approval_workitem","params":{
+                 "bpmnTemplate":"processes/bizapp-single-approval.bpmn20.xml",
+                 "candidateRole":"WORKSPACE_ADMIN"}}],
+             "ui":{"views":["registry","form","timeline"],"layout":{"reports":{"x":0,"y":1}}}}
+            """;
+
+    private static final String UNHOOKED_APPROVAL_JSON = """
+            {"schema":"bizapp.v1","kind":"procurement-approval","version":1,
+             "name":{"en":"Procurement","vi":"Mua sắm nội bộ"},
+             "storage":"jsonb",
+             "entities":[{"name":"purchase_requests","label":{"en":"Purchase Requests","vi":"Phiếu mua hàng"},
+               "fields":[{"name":"code","type":"string","required":true,"label":{"en":"Code","vi":"Mã phiếu"}}]}],
+             "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                     "write":["MEMBER","WORKSPACE_ADMIN"],
+                     "approve":["ORG_OWNER","WORKSPACE_ADMIN"]},
+             "blocks":[{"id":"approvalBlockId","type":"approval_workitem","params":{
+                 "bpmnTemplate":"processes/bizapp-single-approval.bpmn20.xml",
+                 "candidateRole":"WORKSPACE_ADMIN"}}]}
+            """;
+
+    private static final String CREATION_NOTIFY_JSON = """
+            {"schema":"bizapp.v1","kind":"creation-notify","version":1,
+             "name":{"en":"Creation Notify","vi":"Thông báo tạo"},
+             "storage":"jsonb",
+             "entities":[{"name":"requests","label":{"en":"Requests","vi":"Yêu cầu"},
+               "fields":[{"name":"email","type":"string"}],
+               "hooks":{"onCreate":["approvalBlockId"],"onDecide":["notifyBlockId"]}}],
+             "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                     "write":["ORG_OWNER","WORKSPACE_ADMIN"],
+                     "approve":["WORKSPACE_ADMIN"]},
+             "blocks":[{"id":"approvalBlockId","type":"approval_workitem","params":{
+                 "bpmnTemplate":"processes/bizapp-single-approval.bpmn20.xml",
+                 "candidateRole":"WORKSPACE_ADMIN"}},
+               {"id":"notifyBlockId","type":"notify","params":{
+                 "to":["creator","record.email"],"title":"New request","subject":"New request"}}]}
+            """;
+
+    private static final String INVALID_NOTIFY_JSON = """
+            {"schema":"bizapp.v1","kind":"procurement-approval","version":1,
+             "name":{"en":"Procurement","vi":"Mua sắm nội bộ"},
+             "storage":"jsonb",
+             "entities":[{"name":"requests","label":{"en":"Requests","vi":"Yêu cầu"},
+               "fields":[{"name":"title","type":"string"}]}],
+             "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                     "write":["WORKSPACE_ADMIN","MEMBER"]},
+             "blocks":[{"id":"notify1","type":"notify","params":{"to":["requestor"]}}]}
+            """;
+
+    private static final String UNTRIGGERED_IOT_JSON = """
+            {"schema":"bizapp.v1","kind":"iot-monitor","version":1,
+             "name":{"en":"IoT Monitor","vi":"Giám sát IoT"},
+             "storage":"jsonb",
+             "entities":[{"name":"device","label":{"en":"Device","vi":"Thiết bị"},
+               "fields":[
+                 {"name":"name","type":"string"},
+                 {"name":"enabled","type":"boolean"},
+                 {"name":"temperature","type":"number"},
+                 {"name":"last_checked_at","type":"date"},
+                 {"name":"manager_email","type":"string","format":"email"}]}],
+             "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                     "write":["WORKSPACE_ADMIN","MEMBER"]},
+             "blocks":[
+               {"id":"iotCall","type":"external_call","params":{
+                 "url":"https://iot.example.com/status","method":"POST",
+                 "credentialRef":"iot-key",
+                 "responseMap":{"temperature":"/temperature"},
+                 "sink":{"type":"field","mapping":{
+                   "temperature":"/temperature","last_checked_at":"/checkedAt"}}}},
+               {"id":"notifyManager","type":"notify","params":{
+                 "to":["creator","manager_email","ops@example.com"],"title":"Thiết bị mới","subject":"Thiết bị mới"}}]}
+            """;
+
     private BizAppDraftRepository draftRepository;
     private AiInferenceApi aiInferenceApi;
     private BizAppProperties properties;
@@ -133,6 +215,145 @@ class BizAppDraftGenerationClampTest {
         assertEquals(Boolean.TRUE, resp.validation().ok(),
                 "clamped manifest must pass the stateless validator on the first generation attempt");
         assertEquals(1, aiInvocations(), "repair loop must not re-invoke the model");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void typeNamedHooksAndBareUiViewsAreRepairedBeforeValidation() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(TYPE_HOOK_BARE_UI_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "Mua sắm nội bộ có duyệt", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) resp.manifest().get("entities");
+        Map<String, Object> hooks = (Map<String, Object>) entities.get(0).get("hooks");
+        assertEquals(List.of("approvalBlockId"), hooks.get("onCreate"),
+                "a hook targeting the block type must resolve to the unique block id");
+        Map<String, Object> ui = (Map<String, Object>) resp.manifest().get("ui");
+        assertEquals(List.of("registry:purchase_requests", "form:purchase_requests",
+                "timeline:purchase_requests"), ui.get("views"),
+                "bare view prefixes must attach to the declared entity");
+        assertEquals(1, aiInvocations());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unhookedApprovalBlockIsAttachedToTheFirstEntity() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(UNHOOKED_APPROVAL_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "hệ thống mua sắm, sếp duyệt trước khi mua", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) resp.manifest().get("entities");
+        Map<String, Object> hooks = (Map<String, Object>) entities.get(0).get("hooks");
+        assertEquals(List.of("approvalBlockId"), hooks.get("onCreate"),
+                "an unhooked approval block must be wired so member records are submitted");
+    }
+
+    @Test
+    void draftModelAndFallbackAreConfigurableAndAudited() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "draftModel", "strong-draft");
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "draftFallbackModel", "fallback-draft");
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenAnswer(invocation -> {
+            AiInferenceApi.StructuredJsonRequest request = invocation.getArgument(0);
+            String payload = "strong-draft".equals(request.modelId()) ? INVALID_NOTIFY_JSON : APPROVAL_JSON;
+            return new AiInferenceApi.StructuredJsonResponse(payload, request.modelId(), 64, 16);
+        });
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "mua sắm cần duyệt", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        assertEquals("fallback-draft", resp.meta().get("model"));
+        assertEquals(Boolean.TRUE, resp.meta().get("fallbackUsed"));
+        ArgumentCaptor<AiInferenceApi.StructuredJsonRequest> captor =
+                ArgumentCaptor.forClass(AiInferenceApi.StructuredJsonRequest.class);
+        verify(aiInferenceApi, times(4)).completeJson(captor.capture());
+        assertEquals(
+                List.of("strong-draft", "strong-draft", "strong-draft", "fallback-draft"),
+                captor.getAllValues().stream().map(AiInferenceApi.StructuredJsonRequest::modelId).toList());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pollingPromptAddsScheduleAndUnhookedNotifyIsWired() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(UNTRIGGERED_IOT_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "theo dõi thiết bị, cứ 5 phút kiểm tra một lần", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        List<Map<String, Object>> blocks = (List<Map<String, Object>>) resp.manifest().get("blocks");
+        Map<String, Object> call = blocks.stream()
+                .filter(block -> "iotCall".equals(block.get("id"))).findFirst().orElseThrow();
+        Map<String, Object> schedule = (Map<String, Object>) ((Map<String, Object>) call.get("params"))
+                .get("schedule");
+        assertEquals("PT5M", schedule.get("every"));
+        assertEquals("device", schedule.get("entity"));
+        assertEquals(Map.of("enabled", true), schedule.get("select"));
+
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) resp.manifest().get("entities");
+        Map<String, Object> hooks = (Map<String, Object>) entities.get(0).get("hooks");
+        assertEquals(List.of("notifyManager"), hooks.get("onCreate"),
+                "an unhooked notify block must be attached so the email is sent");
+        assertFalse(List.of("iotCall").equals(hooks.get("onCreate")),
+                "a scheduled call must not also run on create");
+        Map<String, Object> notify = blocks.stream()
+                .filter(block -> "notifyManager".equals(block.get("id"))).findFirst().orElseThrow();
+        assertEquals(List.of("creator", "record.manager_email", "ops@example.com"),
+                ((Map<String, Object>) notify.get("params")).get("to"),
+                "a bare declared string field must become a record reference");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void employeeWorkflowPromptGrantsMemberWrite() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(APPROVAL_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "Nhân viên điền đơn nghỉ phép, quản lý duyệt", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        Map<String, Object> rbac = (Map<String, Object>) resp.manifest().get("rbac");
+        assertEquals(List.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"), rbac.get("write"),
+                "the prose says employees fill the form, so MEMBER must be able to write");
+        assertNull(rbac.get("submit"), "submit falls back to the effective write grant");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void adminOnlyPromptDoesNotGrantMemberWrite() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(APPROVAL_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "Chỉ quản lý được tạo đơn nghỉ phép, nhân viên chỉ xem", List.of());
+
+        Map<String, Object> rbac = (Map<String, Object>) resp.manifest().get("rbac");
+        assertEquals(List.of("ORG_OWNER", "WORKSPACE_ADMIN"), rbac.get("write"),
+                "an admin-only/read-only member clause must not widen permissions");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void immediateCreateEmailPromptMovesNotifyToOnCreate() {
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(CREATION_NOTIFY_JSON, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "Khi tạo yêu cầu, gửi email ngay cho quản lý.", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) resp.manifest().get("entities");
+        Map<String, Object> hooks = (Map<String, Object>) entities.get(0).get("hooks");
+        assertEquals(List.of("approvalBlockId", "notifyBlockId"), hooks.get("onCreate"));
+        assertFalse(hooks.containsKey("onDecide"), "creation email must not wait for approval");
     }
 
     private int aiInvocations() {

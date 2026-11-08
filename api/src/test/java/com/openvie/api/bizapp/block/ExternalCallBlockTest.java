@@ -15,36 +15,32 @@
 package com.openvie.api.bizapp.block;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openvie.api.bizapp.model.BizAppCredential;
-import com.openvie.api.bizapp.repository.BizAppCredentialRepository;
-import com.openvie.api.bizapp.service.BizAppCredentialCipher;
+import com.openvie.api.bizapp.connector.BizAppConnectorSpecParser;
+import com.openvie.api.bizapp.service.BizAppConnectorJobService;
 import com.openvie.api.bizapp.service.block.BizAppBlockExecutor;
 import com.openvie.api.bizapp.service.block.ExternalCallBlock;
-import com.openvie.api.common.net.SafeOutboundHttp;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * The hook no longer performs provider I/O: it validates the connector
+ * declaration and enqueues a durable job inside the record transaction.
+ */
 class ExternalCallBlockTest {
 
-    private BizAppCredentialRepository credentialRepository;
-    private BizAppCredentialCipher cipher;
-    private SafeOutboundHttp outboundHttp;
-    private ObjectMapper objectMapper;
-
+    private BizAppConnectorJobService jobService;
     private ExternalCallBlock block;
 
     private final UUID orgId = UUID.randomUUID();
@@ -54,113 +50,57 @@ class ExternalCallBlockTest {
 
     @BeforeEach
     void setUp() {
-        credentialRepository = mock(BizAppCredentialRepository.class);
-        cipher = mock(BizAppCredentialCipher.class);
-        outboundHttp = mock(SafeOutboundHttp.class);
-        objectMapper = new ObjectMapper();
-
-        when(cipher.available()).thenReturn(true);
-
-        block = new ExternalCallBlock(credentialRepository, cipher, outboundHttp, objectMapper);
+        jobService = mock(BizAppConnectorJobService.class);
+        block = new ExternalCallBlock(new BizAppConnectorSpecParser(), jobService);
     }
 
     @Test
-    void rendersBodyTemplateWithAllowedPlaceholdersAndIdempotencyKey() {
-        UUID credId = UUID.randomUUID();
-        BizAppCredential credential = new BizAppCredential();
-        credential.setId(credId);
-        credential.setOrgId(orgId);
-        credential.setFormat("api_key");
-        credential.setEncryptedData("cipher_bytes");
-
-        when(credentialRepository.findByIdAndOrgId(credId, orgId)).thenReturn(Optional.of(credential));
-        when(cipher.decrypt("cipher_bytes")).thenReturn("secret-provider-token");
-
-        when(outboundHttp.execute(any())).thenReturn(new SafeOutboundHttp.Response(
-                200, "{\"id\": \"env-123\", \"status\": \"sent\"}", Map.of()
-        ));
+    void enqueuesAHookJobAndReportsItsId() {
+        UUID jobId = UUID.randomUUID();
+        when(jobService.enqueue(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(jobId);
 
         var spec = new BizAppBlockExecutor.BlockSpec(
                 "sendToProvider",
                 Map.of(
                         "url", "https://api.signing.test/v1/envelopes",
-                        "credentialRef", credId.toString(),
-                        "bodyTemplate", "{\"title\":\"{{record.title}}\",\"id\":\"{{record.id}}\",\"app\":\"{{app.kind}}\"}",
-                        "responseMap", Map.of("envelopeId", "/id", "status", "/status")
-                )
-        );
-
+                        "credentialRef", "provider-key"));
         var context = new BizAppBlockExecutor.BlockContext(
                 orgId, tenantId, actorId, "crm", "leads", recordId,
-                Map.of("title", "Test Contract"),
-                null,
-                Map.of("allowedHosts", List.of("api.signing.test")),
-                2
-        );
+                Map.of("title", "Test Contract"), null,
+                Map.of("allowedHosts", List.of("api.signing.test")), 2);
 
         var result = block.execute(spec, context);
 
-        ArgumentCaptor<SafeOutboundHttp.Request> reqCaptor = ArgumentCaptor.forClass(SafeOutboundHttp.Request.class);
-        verify(outboundHttp).execute(reqCaptor.capture());
-
-        var capturedReq = reqCaptor.getValue();
-        assertEquals("secret-provider-token", capturedReq.headers().get("X-API-Key"));
-        assertEquals(recordId + ":sendToProvider:2", capturedReq.headers().get("X-Idempotency-Key"));
-
-        String body = capturedReq.body();
-        assertTrue(body.contains("\"title\":\"Test Contract\""));
-        assertTrue(body.contains("\"id\":\"" + recordId + "\""));
-        assertTrue(body.contains("\"app\":\"crm\""));
-
-        // Response extraction
-        assertNotNull(result.runtimeUpdates());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> external = (Map<String, Object>) result.runtimeUpdates().get("external");
-        assertNotNull(external);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> blockState = (Map<String, Object>) external.get("sendToProvider");
-        assertEquals("env-123", blockState.get("envelopeId"));
-        assertEquals("sent", blockState.get("status"));
+        assertEquals("queued connector job " + jobId, result.summary());
+        assertTrue(result.runtimeUpdates().isEmpty());
+        verify(jobService).enqueue(eq(tenantId), eq(orgId), eq("crm"), eq("leads"),
+                eq(recordId), eq("sendToProvider"), eq(actorId), eq("HOOK"));
     }
 
     @Test
-    void rejectsUnsupportedPlaceholdersInBodyTemplate() {
-        var spec = new BizAppBlockExecutor.BlockSpec(
-                "sendToProvider",
-                Map.of(
-                        "url", "https://api.signing.test/v1",
-                        "bodyTemplate", "{\"bad\":\"{{system.secret}}\"}"
-                )
-        );
-
+    void rejectsAManifestWithoutUrlBeforeEnqueuing() {
+        var spec = new BizAppBlockExecutor.BlockSpec("sendToProvider", Map.of());
         var context = new BizAppBlockExecutor.BlockContext(
-                orgId, tenantId, actorId, "crm", "leads", recordId,
-                Map.of(), null, Map.of("allowedHosts", List.of("api.signing.test")), 1
-        );
+                orgId, tenantId, actorId, "crm", "leads", recordId, Map.of(), null, Map.of(), 1);
 
-        var result = block.execute(spec, context);
-        assertTrue(result.summary().contains("failed"), result.summary());
-        assertTrue(result.summary().contains("Unsupported placeholder"), result.summary());
+        assertThrows(com.openvie.api.common.exception.custom.BadRequestException.class,
+                () -> block.execute(spec, context));
     }
 
     @Test
-    void failsSafelyWhenAllowedHostsNotConfigured() {
-        when(outboundHttp.execute(any())).thenThrow(new com.openvie.api.common.exception.custom.BadRequestException(
-                "Outbound call blocked: installation has no allowedHosts configured"
-        ));
-
+    void propagatesEnqueueFailuresSoTheWriteRollsBack() {
+        when(jobService.enqueue(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new com.openvie.api.common.exception.custom.BadRequestException(
+                        "app crm is not installed"));
         var spec = new BizAppBlockExecutor.BlockSpec(
                 "sendToProvider",
-                Map.of("url", "https://api.signing.test/v1")
-        );
-
+                Map.of("url", "https://api.signing.test/v1", "credentialRef", "key"));
         var context = new BizAppBlockExecutor.BlockContext(
-                orgId, tenantId, actorId, "crm", "leads", recordId,
-                Map.of(), null, Map.of(), 1 // empty config
-        );
+                orgId, tenantId, actorId, "crm", "leads", recordId, Map.of(), null, Map.of(), 1);
 
-        var result = block.execute(spec, context);
-        assertTrue(result.summary().contains("failed"), result.summary());
-        assertTrue(result.summary().contains("no allowedHosts configured"), result.summary());
+        var error = assertThrows(com.openvie.api.common.exception.custom.BadRequestException.class,
+                () -> block.execute(spec, context));
+        assertTrue(error.getMessage().contains("not installed"));
     }
 }

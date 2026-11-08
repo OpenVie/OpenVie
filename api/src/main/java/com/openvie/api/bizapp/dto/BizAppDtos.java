@@ -169,14 +169,15 @@ public final class BizAppDtos {
     @Schema(description = "Save one vault entry; the plaintext exists only in this request.")
     public record CreateCredentialRequest(
             @NotBlank @Size(max = 120) String name,
-            @NotBlank @Schema(description = "`api_key`, `bearer` or `basic`.") String format,
+            @NotBlank @Schema(description = "`api_key`, `bearer`, `basic`, `oauth2`, `mqtt` or `hmac`.") String format,
             @NotBlank @Schema(description = "Secret plaintext; never echoed back.") String secret,
-            @Schema(description = "When `basic` carries user:pass as `secret`.") String user
+            @Schema(description = "When `basic`, `oauth2` or `mqtt` carries user:pass as `secret`.") String user,
+            @Schema(description = "Optional workspace scope; null keeps the credential organization-wide.") UUID workspaceId
     ) {
     }
 
     @Schema(description = "Vault entry without secret material.")
-    public record CredentialView(UUID id, String name, String format, LocalDateTime createdAt) {
+    public record CredentialView(UUID id, String name, String format, UUID workspaceId, LocalDateTime createdAt) {
     }
 
     @Schema(description = "Install result.")

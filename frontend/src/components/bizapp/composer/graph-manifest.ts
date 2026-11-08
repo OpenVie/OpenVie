@@ -15,6 +15,7 @@
 import dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
+import { syncReportViews } from "@/lib/bizapp-report";
 
 export interface EntityNodeData extends Record<string, unknown> {
   entity: BizAppEntity;
@@ -27,7 +28,20 @@ export interface BlockNodeData extends Record<string, unknown> {
 }
 
 const NODE_WIDTH = 260;
-const NODE_HEIGHT = 180;
+const MIN_NODE_HEIGHT = 180;
+
+/** Approximate rendered height so dagre does not overlap tall nodes. */
+function nodeHeight(node: Node): number {
+  if (node.type === "entityNode") {
+    const fields = (node.data as EntityNodeData).entity?.fields?.length ?? 0;
+    return Math.max(MIN_NODE_HEIGHT, 125 + fields * 22);
+  }
+  if (node.type === "blockNode") {
+    const params = Object.keys((node.data as BlockNodeData).block?.params ?? {}).length;
+    return Math.max(MIN_NODE_HEIGHT, 125 + params * 22);
+  }
+  return MIN_NODE_HEIGHT;
+}
 
 export function manifestToGraph(manifest: BizAppManifest): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
@@ -122,12 +136,30 @@ export function graphToManifest(
   const entities: BizAppEntity[] = [];
   const blocks: BizAppBlock[] = [];
   const layout: Record<string, { x: number; y: number }> = {};
+  const hookTargets = new Map<string, Record<string, string[]>>();
+
+  for (const edge of edges) {
+    if (!edge.source.startsWith("entity-") || !edge.target.startsWith("block-")) {
+      continue;
+    }
+    const entityName = edge.source.slice("entity-".length);
+    const blockId = edge.target.slice("block-".length);
+    const label = String(edge.label || "onCreate");
+    const hookKey = ["onCreate", "onUpdate", "onDecide"].includes(label) ? label : "onCreate";
+    const hooks = hookTargets.get(entityName) || {};
+    hooks[hookKey] = [...(hooks[hookKey] || []), blockId];
+    hookTargets.set(entityName, hooks);
+  }
 
   nodes.forEach((node) => {
     if (node.type === "entityNode") {
       const data = node.data as EntityNodeData;
       if (data.entity) {
-        entities.push(data.entity);
+        const hooks = hookTargets.get(data.entity.name);
+        entities.push({
+          ...data.entity,
+          hooks: hooks && Object.keys(hooks).length > 0 ? hooks : undefined,
+        });
         layout[data.entity.name] = {
           x: Math.round(node.position.x),
           y: Math.round(node.position.y),
@@ -145,7 +177,7 @@ export function graphToManifest(
     }
   });
 
-  return {
+  return syncReportViews({
     ...baseManifest,
     entities,
     blocks,
@@ -154,7 +186,7 @@ export function graphToManifest(
       views: baseManifest.ui?.views || [],
       layout,
     },
-  };
+  });
 }
 
 export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
@@ -163,7 +195,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
   g.setDefaultEdgeLabel(() => ({}));
 
   nodes.forEach((node) => {
-    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    g.setNode(node.id, { width: NODE_WIDTH, height: nodeHeight(node) });
   });
 
   edges.forEach((edge) => {
@@ -179,7 +211,7 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edge
       ...node,
       position: {
         x: Math.round(nodeWithPos.x - NODE_WIDTH / 2),
-        y: Math.round(nodeWithPos.y - NODE_HEIGHT / 2),
+        y: Math.round(nodeWithPos.y - nodeHeight(node) / 2),
       },
     };
   });

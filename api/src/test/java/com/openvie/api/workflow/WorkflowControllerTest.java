@@ -145,7 +145,7 @@ class WorkflowControllerTest {
                         new com.openvie.api.workflow.dto.WorkflowDtos.WorkflowProcessView(
                                 processInstanceId, documentId, "weekly-notes.docx", false, 1,
                                 "sensitive-keyword-v1", "workspace", "IN_REVIEW", false,
-                                java.time.LocalDateTime.now(), null),
+                                java.time.LocalDateTime.now(), null, "weekly-notes.docx", null, null, null),
                         java.util.List.of(new com.openvie.api.workflow.dto.WorkflowDtos.ProcessLogEntry(
                                 java.time.Instant.now(), userId, "Nguyen Van A",
                                 "WORKFLOW_STARTED", java.util.Map.of("documentId", documentId)))));
@@ -192,7 +192,7 @@ class WorkflowControllerTest {
         WorkflowProcessView view = new WorkflowProcessView(
                 UUID.randomUUID(), documentId, "weekly-notes.docx", false, 1,
                 "sensitive-keyword-v1", "workspace", "IN_REVIEW", false,
-                java.time.LocalDateTime.now(), null);
+                java.time.LocalDateTime.now(), null, "weekly-notes.docx", null, null, null);
         when(service.listProcessesPage(org.mockito.ArgumentMatchers.eq(tenantId),
                 org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(true),
                 org.mockito.ArgumentMatchers.eq(1), org.mockito.ArgumentMatchers.eq(10)))

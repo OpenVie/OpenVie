@@ -225,6 +225,26 @@ public class WorkflowEngineService {
     }
 
     @Transactional
+    public void reassignPendingTasks(UUID workspaceId, String appKind, String oldGroup, String newGroup) {
+        if (oldGroup == null || newGroup == null || oldGroup.equals(newGroup)) {
+            return;
+        }
+        List<Task> tasks = taskService.createTaskQuery()
+                .processVariableValueEquals("workspaceId", workspaceId.toString())
+                .processVariableValueEquals("appKind", appKind)
+                .taskCandidateGroup(oldGroup)
+                .taskUnassigned()
+                .list();
+        for (Task task : tasks) {
+            taskService.deleteCandidateGroup(task.getId(), oldGroup);
+            taskService.addCandidateGroup(task.getId(), newGroup);
+            runtimeService.setVariable(task.getProcessInstanceId(), "candidateRole", newGroup);
+            log.info("Approval task {} moved from {} to {} after app upgrade",
+                    task.getId(), oldGroup, newGroup);
+        }
+    }
+
+    @Transactional
     public Map<String, Object> claimTask(UUID workspaceId, UUID callerId, UUID taskId, EngineClaimRequest request) {
         Task task = requireTask(workspaceId, taskId);
         requireNotApprovalDomain(task);

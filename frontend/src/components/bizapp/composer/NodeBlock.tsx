@@ -28,6 +28,7 @@ import {
   Sliders,
 } from "lucide-react";
 import type { BlockNodeData } from "./graph-manifest";
+import { blockDisplayName, blockSummary } from "@/lib/bizapp-block";
 
 function blockIcon(type: string) {
   switch (type) {
@@ -53,7 +54,6 @@ function blockIcon(type: string) {
 export const NodeBlock = memo(function NodeBlock({ data, selected }: NodeProps) {
   const nodeData = data as BlockNodeData;
   const block = nodeData.block;
-  const params = block?.params || {};
 
   return (
     <div
@@ -65,8 +65,11 @@ export const NodeBlock = memo(function NodeBlock({ data, selected }: NodeProps) 
 
       <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2 rounded-t-xl">
         {blockIcon(block?.type || "")}
-        <div className="flex-1 truncate font-semibold text-xs">
-          {block?.id || "block"}
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-semibold text-xs">
+            {block ? blockDisplayName(block.type) : "Block"}
+          </div>
+          <div className="truncate text-[10px] text-muted-foreground">{block?.id || "block"}</div>
         </div>
         <span className="text-[10px] text-muted-foreground uppercase font-mono px-1 py-0.5 bg-muted rounded">
           {block?.type}
@@ -79,19 +82,7 @@ export const NodeBlock = memo(function NodeBlock({ data, selected }: NodeProps) 
       </div>
 
       <div className="p-3 space-y-1 text-xs">
-        {Object.entries(params)
-          .slice(0, 3)
-          .map(([k, v]) => (
-            <div key={k} className="flex justify-between items-center text-[11px] truncate">
-              <span className="text-muted-foreground font-mono">{k}:</span>
-              <span className="font-mono truncate max-w-[120px] text-right">
-                {typeof v === "object" ? JSON.stringify(v) : String(v)}
-              </span>
-            </div>
-          ))}
-        {Object.keys(params).length === 0 && (
-          <div className="text-[11px] text-muted-foreground italic">No parameters</div>
-        )}
+        <div className="text-[11px] text-muted-foreground">{block ? blockSummary(block) : "Block"}</div>
       </div>
 
       <Handle type="source" position={Position.Right} className="w-3 h-3 bg-primary" />

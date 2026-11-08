@@ -41,7 +41,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BizAppCredentialService {
 
-    private static final List<String> FORMATS = List.of("api_key", "bearer", "basic");
+    private static final List<String> FORMATS =
+            List.of("api_key", "bearer", "basic", "oauth2", "mqtt", "hmac");
 
     private final BizAppCredentialRepository repository;
     private final BizAppCredentialCipher cipher;
@@ -55,15 +56,25 @@ public class BizAppCredentialService {
         if (!FORMATS.contains(format)) {
             throw new BadRequestException("credential format must be one of " + FORMATS);
         }
-        if (repository.findByOrgIdAndName(orgId, request.name()).isPresent()) {
+        if (("basic".equals(format) || "oauth2".equals(format) || "mqtt".equals(format))
+                && (request.user() == null || request.user().isBlank())) {
+            throw new BadRequestException(
+                    "credential format " + format + " requires user (username or client id)");
+        }
+        UUID workspaceId = request.workspaceId();
+        boolean taken = workspaceId != null
+                ? repository.findByOrgIdAndTenantIdAndName(orgId, workspaceId, request.name()).isPresent()
+                : repository.findFirstByOrgIdAndNameAndTenantIdIsNull(orgId, request.name()).isPresent();
+        if (taken) {
             throw new ConflictException("Credential name is already taken in this organization");
         }
         requireCipher(properties);
         BizAppCredential credential = new BizAppCredential();
         credential.setOrgId(orgId);
+        credential.setTenantId(workspaceId);
         credential.setName(request.name());
         credential.setFormat(format);
-        String plaintext = "basic".equals(format)
+        String plaintext = "basic".equals(format) || "oauth2".equals(format) || "mqtt".equals(format)
                 ? request.user() + ":" + request.secret()
                 : request.secret();
         if (plaintext != null && plaintext.contains("-----BEGIN") && plaintext.contains("PRIVATE KEY-----")) {
@@ -75,7 +86,8 @@ public class BizAppCredentialService {
 
         runtime.audit(tenantId, actorId, LogAction.BIZAPP_CREDENTIAL_CREATED, "bizapp_credential",
                 saved.getId(), Map.of("name", request.name(), "format", format));
-        return new CredentialView(saved.getId(), saved.getName(), saved.getFormat(), saved.getCreatedAt());
+        return new CredentialView(saved.getId(), saved.getName(), saved.getFormat(),
+                saved.getTenantId(), saved.getCreatedAt());
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +95,7 @@ public class BizAppCredentialService {
         return repository.findByOrgIdOrderByCreatedAtDesc(orgId).stream()
                 .map(credential -> new CredentialView(
                         credential.getId(), credential.getName(), credential.getFormat(),
-                        credential.getCreatedAt()))
+                        credential.getTenantId(), credential.getCreatedAt()))
                 .toList();
     }
 

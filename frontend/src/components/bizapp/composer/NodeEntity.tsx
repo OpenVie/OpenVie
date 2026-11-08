@@ -48,18 +48,13 @@ export const NodeEntity = memo(function NodeEntity({ data, selected }: NodeProps
         <div className="text-muted-foreground font-medium">
           {fields.length} {fields.length === 1 ? "field" : "fields"}:
         </div>
-        <div className="space-y-1 max-h-[100px] overflow-y-auto">
-          {fields.slice(0, 5).map((f) => (
-            <div key={f.name} className="flex justify-between items-center text-[11px] bg-muted/30 px-1.5 py-0.5 rounded">
-              <span className="font-mono truncate max-w-[120px]">{f.name}</span>
-              <span className="text-muted-foreground">{f.type}</span>
+        <div className="space-y-1">
+          {fields.map((f) => (
+            <div key={f.name} className="flex items-start justify-between gap-2 text-[11px] bg-muted/30 px-1.5 py-0.5 rounded">
+              <span className="min-w-0 font-mono break-all">{f.name}</span>
+              <span className="shrink-0 text-muted-foreground">{f.type}</span>
             </div>
           ))}
-          {fields.length > 5 && (
-            <div className="text-[10px] text-muted-foreground text-center">
-              +{fields.length - 5} more
-            </div>
-          )}
         </div>
       </div>
 

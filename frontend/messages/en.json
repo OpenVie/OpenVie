@@ -141,11 +141,17 @@
       "true": "Yes",
       "false": "No"
     },
+    "export": {
+      "button": "Export",
+      "csv": "CSV (.csv)",
+      "xlsx": "Excel (.xlsx)"
+    },
     "fallback": {
       "load": "Could not load data. Please try again.",
       "save": "Could not save the record.",
       "archive": "Could not archive the record.",
-      "submit": "Could not submit the record."
+      "submit": "Could not submit the record.",
+      "export": "Could not export data."
     },
     "report": {
       "title": "Report: {view}",

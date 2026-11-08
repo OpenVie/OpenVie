@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -115,16 +116,23 @@ public class BizAppInstallService {
                     + " does not match the installed app " + kind);
         }
         int currentVersion = installation.getVersion();
-        int nextVersion = next.version() == null ? currentVersion + 1 : next.version();
-        if (nextVersion <= currentVersion) {
-            throw new ConflictException("Upgrade version must be greater than the installed version");
-        }
-        requireCompatible(parser.parse(installation.getManifest()), next);
+        int requestedVersion = next.version() == null ? currentVersion + 1 : next.version();
+        int nextVersion = Math.max(currentVersion + 1, requestedVersion);
+        Manifest current = parser.parse(installation.getManifest());
+        requireCompatible(current, next);
 
         String processKey = deployApprovalDefinition(next, tenantId, actorId);
+        String previousRole = approvalCandidateRole(current);
+        String nextRole = approvalCandidateRole(next);
+        if (previousRole != null && nextRole != null && !previousRole.equals(nextRole)) {
+            workflowRuntimeApi.reassignPendingTasks(tenantId, kind, previousRole, nextRole);
+        }
+
+        Map<String, Object> storedManifest = new LinkedHashMap<>(rawManifest);
+        storedManifest.put("version", nextVersion);
         installation.setOrgId(orgId);
         installation.setVersion(nextVersion);
-        installation.setManifest(rawManifest);
+        installation.setManifest(storedManifest);
         installation.setProcessKey(processKey);
         installation.setStatus("ACTIVE");
         BizAppInstallation saved = installationRepository.save(installation);
@@ -133,6 +141,20 @@ public class BizAppInstallService {
         log.info("BizApp {} upgraded workspace={} {} -> {} processKey={}",
                 kind, tenantId, currentVersion, nextVersion, processKey);
         return new InstallResult(saved.getId(), kind, nextVersion, processKey);
+    }
+
+    private String approvalCandidateRole(Manifest manifest) {
+        if (manifest == null || manifest.blocks() == null) {
+            return null;
+        }
+        return manifest.blocks().stream()
+                .filter(block -> ApprovalWorkItemBlock.TYPE.equals(block.type()))
+                .findFirst()
+                .map(block -> {
+                    Object role = block.params() == null ? null : block.params().get("candidateRole");
+                    return role instanceof String text && !text.isBlank() ? text : "WORKSPACE_ADMIN";
+                })
+                .orElse(null);
     }
 
     /** Same storage, no entity removal, no field removal or type change. */

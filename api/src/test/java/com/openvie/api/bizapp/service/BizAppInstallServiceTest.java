@@ -238,7 +238,7 @@ class BizAppInstallServiceTest {
     }
 
     @Test
-    void upgradeRejectsAVersionThatIsNotGreater() {
+    void upgradeAdvancesAStaleDraftVersionInsteadOfRejectingIt() {
         Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 2);
         Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
         when(parser.parse(currentRaw)).thenReturn(manifestWithField("booking", 2, "bookings", "name", "string"));
@@ -247,10 +247,32 @@ class BizAppInstallServiceTest {
         BizAppInstallation installation = activeInstallation("booking", 2);
         installation.setManifest(currentRaw);
         stubActiveInstallation(installation);
+        when(installationRepository.save(any(BizAppInstallation.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThrows(ConflictException.class,
-                () -> service.upgrade(tenantId, orgId, actorId, "booking", nextRaw));
-        verify(installationRepository, never()).save(any());
+        var result = service.upgrade(tenantId, orgId, actorId, "booking", nextRaw);
+
+        assertEquals(3, result.version());
+        assertEquals(3, installation.getManifest().get("version"));
+    }
+
+    @Test
+    void upgradeMovesPendingApprovalTasksToTheNewRole() {
+        Map<String, Object> currentRaw = Map.of("kind", "booking", "version", 1);
+        Map<String, Object> nextRaw = Map.of("kind", "booking", "version", 2);
+        when(parser.parse(currentRaw)).thenReturn(manifestWithApproval("booking", "WORKSPACE_ADMIN"));
+        when(parser.parse(nextRaw)).thenReturn(manifestWithApproval("booking", "ORG_OWNER"));
+        when(workflowRuntimeApi.deploy(eq(tenantId), eq(actorId), eq("bizapp-booking"), anyString()))
+                .thenReturn(new WorkflowRuntimeApi.DeployedDefinition("d1", "bizappSingleApproval", "Booking", 1));
+
+        BizAppInstallation installation = activeInstallation("booking", 1);
+        installation.setManifest(currentRaw);
+        stubActiveInstallation(installation);
+        when(installationRepository.save(any(BizAppInstallation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.upgrade(tenantId, orgId, actorId, "booking", nextRaw);
+
+        verify(workflowRuntimeApi).reassignPendingTasks(
+                tenantId, "booking", "WORKSPACE_ADMIN", "ORG_OWNER");
     }
 
     @Test
@@ -299,6 +321,24 @@ class BizAppInstallServiceTest {
     private void stubActiveInstallation(BizAppInstallation installation) {
         when(installationRepository.findByTenantIdAndKindAndStatus(
                 tenantId, installation.getKind(), "ACTIVE")).thenReturn(Optional.of(installation));
+    }
+
+    private Manifest manifestWithApproval(String kind, String role) {
+        return new Manifest(
+                "bizapp.v1",
+                kind,
+                new com.openvie.api.bizapp.dto.BizAppManifest.Localized(kind, kind),
+                1,
+                "icon",
+                "jsonb",
+                Map.of(),
+                List.of(),
+                List.of(new com.openvie.api.bizapp.dto.BizAppManifest.Block(
+                        "approval", "approval_workitem",
+                        Map.of("bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
+                                "candidateRole", role))),
+                null
+        );
     }
 
     private Manifest manifestWithField(String kind, int version, String entityName,

@@ -68,6 +68,13 @@ app:
       allow-http: ${BIZAPPS_OUTBOUND_ALLOW_HTTP:false}
     ai-drafting:
       enabled: ${BIZAPPS_AI_DRAFTING_ENABLED:true}
+    # Per-task model routing. Blank means "use the AI service's LLM_MODEL_ID";
+    # a non-blank value is forwarded as CompleteJson.model_id for that task.
+    ai:
+      intent-model: ${BIZAPPS_AI_INTENT_MODEL:}
+      slot-model: ${BIZAPPS_AI_SLOT_MODEL:}
+      draft-model: ${BIZAPPS_AI_DRAFT_MODEL:}
+      draft-fallback-model: ${BIZAPPS_AI_DRAFT_FALLBACK_MODEL:}
     projection-debounce-ms: ${BIZAPPS_PROJECTION_DEBOUNCE_MS:30000}
     remote-catalog:
       enabled: ${BIZAPPS_REMOTE_CATALOG_ENABLED:false}

@@ -83,7 +83,11 @@ public final class WorkflowDtos {
             String documentStatus,
             boolean escalated,
             LocalDateTime startedAt,
-            LocalDateTime endedAt) {
+            LocalDateTime endedAt,
+            String title,
+            String summary,
+            String appKind,
+            String entity) {
     }
 
     /** One page of the workspace approval journal; totalCount backs X-Total-Count. */
@@ -105,7 +109,13 @@ public final class WorkflowDtos {
             UUID processInstanceId,
             UUID documentId,
             String documentFileName,
-            LocalDateTime createdAt) {
+            LocalDateTime createdAt,
+            String appKind,
+            String entity,
+            UUID recordId,
+            String recordTitle,
+            String recordSummary,
+            Map<String, String> recordFields) {
     }
 
     @Schema(description = "The caller's task inbox: tasks assigned to them plus unclaimed candidate-group tasks.")

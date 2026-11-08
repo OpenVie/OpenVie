@@ -99,6 +99,8 @@ public class BizAppReportCompiler {
         List<Map<String, Object>> filters = (List<Map<String, Object>>) viewSpec.get("filters");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> orderBy = (List<Map<String, Object>>) viewSpec.get("orderBy");
+        @SuppressWarnings("unchecked")
+        List<String> selectedFields = (List<String>) viewSpec.get("fields");
 
         StringBuilder selectClause = new StringBuilder();
         StringBuilder groupByClause = new StringBuilder();
@@ -157,10 +159,21 @@ public class BizAppReportCompiler {
             selectClause.append(String.join(", ", metricSelects));
         }
 
-        // If neither groupBy nor metrics: select all declared entity fields
+        // If neither groupBy nor metrics: select the chosen columns, or all
+        // declared entity fields when the view leaves the list implicit.
         if (selectClause.length() == 0) {
             List<String> allCols = new ArrayList<>();
-            if (entityDef != null && entityDef.fields() != null) {
+            if (selectedFields != null && !selectedFields.isEmpty()) {
+                for (String fieldName : selectedFields) {
+                    validateName(fieldName);
+                    Field field = fieldsByName.get(fieldName);
+                    if (field == null) {
+                        throw new BadRequestException("Selected field " + fieldName + " not declared on entity");
+                    }
+                    allCols.add(fieldExpr(dialect, isTyped, fieldName, field) + " AS " + fieldName);
+                    validAliases.add(fieldName);
+                }
+            } else if (entityDef != null && entityDef.fields() != null) {
                 for (Field f : entityDef.fields()) {
                     allCols.add(fieldExpr(dialect, isTyped, f.name(), f) + " AS " + f.name());
                     validAliases.add(f.name());

@@ -114,7 +114,7 @@ public class BizAppMarketplaceController extends BaseController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Upgraded; returns the new version + process"),
             @ApiResponse(responseCode = "403", description = "Only the organization owner may upgrade apps"),
-            @ApiResponse(responseCode = "409", description = "The version is not greater than the installed one")
+            @ApiResponse(responseCode = "409", description = "The upgrade cannot be applied to the active installation")
     })
     @PostMapping("/apps/{kind}/upgrade")
     public ResponseEntity<BizAppDtos.InstallResult> upgrade(

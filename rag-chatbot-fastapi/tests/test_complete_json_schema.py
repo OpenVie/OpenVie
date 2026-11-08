@@ -53,13 +53,24 @@ class RecordingModel:
         self.payload: str = '{"fields": {"customerName": "Nguyen Van A"}}'
         self.fail = False
 
-    async def complete_text(self, messages, *, max_output_tokens, temperature, format=None):
+    async def complete_text(
+        self,
+        messages,
+        *,
+        max_output_tokens,
+        temperature,
+        format=None,
+        model_id=None,
+        timeout_seconds=None,
+    ):
         self.calls.append(
             {
                 "messages": messages,
                 "max_output_tokens": max_output_tokens,
                 "temperature": temperature,
                 "format": format,
+                "model_id": model_id,
+                "timeout_seconds": timeout_seconds,
             }
         )
         if self.fail:
@@ -96,7 +107,10 @@ SLOT_SCHEMA = '{"type":"object","required":["fields"],"properties":{"fields":{"t
 
 def test_parse_json_schema_accepts_schema_content_and_rejects_file_names() -> None:
     parsed = _parse_json_schema(SLOT_SCHEMA)
-    assert parsed == {"type": "object", "required": ["fields"], "properties": {"fields": {"type": "object"}}}
+    assert parsed == {
+        "type": "object", "required": ["fields"],
+        "properties": {"fields": {"type": "object"}},
+    }
 
     assert _parse_json_schema("bizapp_intent.schema.json") is None  # legacy file-name style
     assert _parse_json_schema("") is None
@@ -112,9 +126,14 @@ async def test_complete_json_forwards_inline_schema_as_provider_format() -> None
 
     assert response.json_output == '{"fields": {"customerName": "Nguyen Van A"}}'
     call = model.calls[0]
-    assert call["format"] == {"type": "object", "required": ["fields"], "properties": {"fields": {"type": "object"}}}
+    assert call["format"] == {
+        "type": "object", "required": ["fields"],
+        "properties": {"fields": {"type": "object"}},
+    }
     assert call["max_output_tokens"] == 256
     assert call["temperature"] == pytest.approx(0.1, rel=1e-3)
+    assert call["model_id"] == "vylinh"
+    assert call["timeout_seconds"] == 300.0
 
 
 @pytest.mark.asyncio
@@ -122,7 +141,8 @@ async def test_complete_json_legacy_schema_name_stays_plain_completion() -> None
     model = RecordingModel()
     generation = GenerationWithModel(model)
 
-    await handler(generation).complete_json(structured_request("bizapp_intent.schema.json"), Context())
+    await handler(generation).complete_json(
+        structured_request("bizapp_intent.schema.json"), Context())
 
     assert model.calls[0]["format"] is None
 

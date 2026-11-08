@@ -23,6 +23,8 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Transactional email block: renders a small record summary and sends it
@@ -38,6 +40,11 @@ public class NotifyBlock implements BizAppBlockExecutor {
 
     public static final String TYPE = "notify";
 
+    private static final Pattern RECORD_PLACEHOLDER = Pattern.compile(
+            "\\{\\{\\s*record\\.([A-Za-z0-9_]+)\\s*\\}\\}");
+    private static final Pattern FIELD_PLACEHOLDER = Pattern.compile(
+            "\\{\\{\\s*([A-Za-z0-9_]+)\\s*\\}\\}");
+
     private final NotificationRuntimeApi notificationRuntimeApi;
     private final TenantIdentityApi tenantIdentityApi;
 
@@ -49,11 +56,11 @@ public class NotifyBlock implements BizAppBlockExecutor {
     @Override
     public BlockResult execute(BlockSpec spec, BlockContext context) {
         List<?> recipients = spec.params() == null ? List.of() : list(spec.params().get("to"));
-        String subject = String.valueOf(spec.params().getOrDefault("subject",
-                "OpenVie — update in %s".formatted(context.appKind())));
+        String subject = renderTemplate(String.valueOf(spec.params().getOrDefault("subject",
+                "OpenVie — update in %s".formatted(context.appKind()))), context.payload());
         StringBuilder body = new StringBuilder()
-                .append("<h1>").append(escape(String.valueOf(spec.params()
-                        .getOrDefault("title", "BizApp update")))).append("</h1>")
+                .append("<h1>").append(escape(renderTemplate(String.valueOf(spec.params()
+                        .getOrDefault("title", "BizApp update")), context.payload()))).append("</h1>")
                 .append("<p>App <strong>").append(escape(context.appKind())).append("</strong>")
                 .append(" · entity <strong>").append(escape(context.entity())).append("</strong></p>")
                 .append(recordSummary(context.payload(), context.fieldLabels()));
@@ -64,9 +71,13 @@ public class NotifyBlock implements BizAppBlockExecutor {
                 sent++;
             } else if (to == null) {
                 log.warn("notify block {} skipped an unresolvable recipient {}", spec.blockId(), recipient);
+            } else {
+                log.warn("notify block {} could not deliver to {}; check the organization's email channel",
+                        spec.blockId(), to);
             }
         }
-        return new BlockResult("notify " + spec.blockId() + " -> " + sent + " email(s)");
+        return new BlockResult("notify " + spec.blockId() + " -> " + sent + " email(s)"
+                + (sent == 0 ? " (no delivery; check recipient and email channel)" : ""));
     }
 
     private String resolveRecipient(String token, BlockContext context) {
@@ -89,6 +100,26 @@ public class NotifyBlock implements BizAppBlockExecutor {
             }
         }
         return token.contains("@") ? token : null;
+    }
+
+    private String renderTemplate(String template, Map<String, Object> payload) {
+        if (template == null || payload == null || template.isEmpty()) {
+            return template == null ? "" : template;
+        }
+        String rendered = replacePlaceholders(template, RECORD_PLACEHOLDER, payload);
+        return replacePlaceholders(rendered, FIELD_PLACEHOLDER, payload);
+    }
+
+    private String replacePlaceholders(String template, Pattern pattern, Map<String, Object> payload) {
+        Matcher matcher = pattern.matcher(template);
+        StringBuilder rendered = new StringBuilder();
+        while (matcher.find()) {
+            Object value = payload.get(matcher.group(1));
+            matcher.appendReplacement(rendered,
+                    Matcher.quoteReplacement(value == null ? "" : String.valueOf(value)));
+        }
+        matcher.appendTail(rendered);
+        return rendered.toString();
     }
 
     private StringBuilder recordSummary(Map<String, Object> payload, Map<String, String> fieldLabels) {

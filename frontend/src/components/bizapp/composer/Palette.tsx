@@ -18,7 +18,6 @@ import { useTranslations } from "next-intl";
 import {
   BarChart3,
   Bell,
-  BookOpen,
   Bot,
   CheckCircle2,
   Database,
@@ -35,7 +34,6 @@ interface PaletteProps {
 const AVAILABLE_BLOCKS = [
   { type: "approval_workitem", label: "Approval", icon: CheckCircle2 },
   { type: "assistant", label: "Assistant", icon: Bot },
-  { type: "knowledge_base", label: "Knowledge Base", icon: BookOpen },
   { type: "report", label: "Report", icon: BarChart3 },
   { type: "notify", label: "Notify", icon: Bell },
   { type: "webhook_out", label: "Webhook Out", icon: Send },

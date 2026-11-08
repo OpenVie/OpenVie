@@ -80,6 +80,22 @@ class BizAppSlotAgentTest {
     }
 
     @Test
+    void slotModelIsConfigurable() {
+        org.springframework.test.util.ReflectionTestUtils.setField(agent, "slotModel",
+                "qwen2.5:7b-instruct");
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse("{\"fields\":{}}", "qwen2.5:7b-instruct", 10, 5));
+
+        agent.extractSlots(bookingEntity, "Booking", "vi",
+                List.of(message("user", "Đặt lịch cho Lan")), "Đặt lịch cho Lan");
+
+        ArgumentCaptor<StructuredJsonRequest> captor =
+                ArgumentCaptor.forClass(StructuredJsonRequest.class);
+        verify(aiInferenceApi).completeJson(captor.capture());
+        assertEquals("qwen2.5:7b-instruct", captor.getValue().modelId());
+    }
+
+    @Test
     void llmModeToggleMatchesSlotModeConfiguration() {
         assertTrue(agent.llmEnabled());
         agent.setSlotMode("regex");

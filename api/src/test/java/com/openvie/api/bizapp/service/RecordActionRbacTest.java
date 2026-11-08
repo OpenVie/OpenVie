@@ -15,6 +15,7 @@
 package com.openvie.api.bizapp.service;
 
 import com.openvie.api.bizapp.dto.BizAppManifest;
+import com.openvie.api.bizapp.dto.BizAppManifest.Entity;
 import com.openvie.api.bizapp.dto.BizAppManifest.Manifest;
 import org.junit.jupiter.api.Test;
 
@@ -78,6 +79,34 @@ class RecordActionRbacTest {
         assertFalse(recordService.canApprove(memberWritableManifest, "MEMBER"));
         assertFalse(recordService.canApprove(memberWritableManifest, "WORKSPACE_ADMIN"));
         assertTrue(recordService.canApprove(memberWritableManifest, "ORG_OWNER"));
+    }
+
+    @Test
+    void entityWriteGrantAllowsMemberWhenAppLevelListIsAdminOnly() {
+        Entity shopping = new Entity(
+                "shopping_requests",
+                new BizAppManifest.Localized("Yêu cầu Mua sắm", "Shopping Requests"),
+                List.of(new BizAppManifest.Field("item", "string", true, null, null, null)),
+                null,
+                Map.of("write", List.of("MEMBER", "WORKSPACE_ADMIN", "ORG_OWNER"),
+                        "submit", List.of("MEMBER")),
+                Map.of()
+        );
+        Manifest manifest = new Manifest(
+                "bizapp.v1", "inventory", new BizAppManifest.Localized("Yêu cầu Mua sắm", "Shopping Requests"),
+                1, "icon",
+                Map.of("read", List.of("ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"),
+                        "write", List.of("ORG_OWNER", "WORKSPACE_ADMIN"),
+                        "submit", List.of("WORKSPACE_ADMIN")),
+                List.of(shopping), List.of(), null
+        );
+
+        assertTrue(recordService.canWrite(manifest, "MEMBER"),
+                "an explicit entity write grant must be honored");
+        assertTrue(recordService.canSubmit(manifest, "MEMBER"),
+                "an explicit entity submit grant overrides the admin-only app list");
+        assertFalse(recordService.canDelete(manifest, "MEMBER"),
+                "entity delete grants do not widen the app-level delete capability");
     }
 
     @Test

@@ -164,6 +164,9 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_OUTPUT_TOKENS: int = 1024
     LLM_TIMEOUT_SECONDS: float = 90.0
+    # Manifest drafting / structured JSON may run on a larger model; it gets a
+    # longer budget than chat answers without slowing the chat path.
+    LLM_STRUCTURED_TIMEOUT_SECONDS: float = 300.0
     LLM_USE_OLLAMA_NATIVE_CHAT: bool = True
     LLM_DISABLE_THINKING: bool = True
 
@@ -317,6 +320,8 @@ class Settings(BaseSettings):
             raise ValueError("GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS must be at least 64")
         if self.LLM_MAX_OUTPUT_TOKENS < 64:
             raise ValueError("LLM_MAX_OUTPUT_TOKENS must be at least 64")
+        if self.LLM_STRUCTURED_TIMEOUT_SECONDS <= 0:
+            raise ValueError("LLM_STRUCTURED_TIMEOUT_SECONDS must be positive")
         if (
             min(
                 self.GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT,

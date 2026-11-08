@@ -39,10 +39,14 @@ public class BizAppCredential extends BaseEntity {
     @Column(name = "org_id", nullable = false)
     private UUID orgId;
 
+    /** Optional workspace scope; null keeps the credential organization-wide. */
+    @Column(name = "tenant_id")
+    private UUID tenantId;
+
     @Column(name = "name", nullable = false, length = 120)
     private String name;
 
-    /** {@code api_key} | {@code bearer} | {@code basic}. */
+    /** {@code api_key} | {@code bearer} | {@code basic} | {@code oauth2} | {@code mqtt} | {@code hmac}. */
     @Column(name = "format", nullable = false, length = 24)
     private String format;
 

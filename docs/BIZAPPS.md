@@ -57,6 +57,11 @@ Báo cáo không chứa chuỗi SQL tự do; thay vào đó định nghĩa dư�
 ```
 Trình biên dịch `BizAppReportCompiler` phân tích view spec thành câu lệnh tham số hóa có ràng buộc tenant/org/app nghiêm ngặt, hỗ trợ cả hai dialect `postgres` và `duckdb` (Lakehouse).
 
+**Xuất dữ liệu (CSV / Excel):** registry của entity và report view đều tải được toàn bộ kết quả (không chỉ trang đang hiển thị):
+- `GET /api/v1/bizapps/{kind}/entities/{entity}/export?format=csv|xlsx&locale=vi|en` — toàn bộ bản ghi đang hoạt động theo thứ tự khai báo trường (nhãn vi/en, fallback tên trường) cộng `ID`/trạng thái/thời điểm tạo, cập nhật; chặn ở 10 000 bản ghi.
+- `POST /api/v1/bizapps/{kind}/reports/{viewName}/export?format=csv|xlsx` — mọi cột và mọi dòng view trả về; chỉ workspace admin.
+- CSV là UTF-8 có BOM (Excel đọc đúng tiếng Việt), mọi ô được quote, ô bắt đầu bằng `= + - @` được thêm `'` để chặn formula injection; XLSX ghi bằng Apache POI `SXSSF` và giữ ô số đúng kiểu số.
+
 ### 2. Chiếu tri thức (Knowledge Projection: Bản ghi → Trợ lý AI)
 
 Nhằm cho phép trợ lý ảo trả lời câu hỏi về dữ liệu kinh doanh **kèm trích dẫn chính xác nguồn dữ liệu** mà không can thiệp vào tầng truy hồi (retrieval) và không dùng Text-to-SQL:
@@ -104,13 +109,14 @@ Mọi template đóng gói và trao đổi đều sử dụng phong bì tiêu ch
 
 ### 6. Khối gọi ngoài an toàn & Công thức Ký số (e-Signature Recipe)
 
-Khối `external_call` được tăng cường bảo vệ an ninh mạng:
-- Chỉ cho phép giao thức HTTPS (trừ khi bật dev profile `app.bizapps.outbound.allow-http`).
-- Bắt buộc host phải nằm trong danh sách cho phép `allowedHosts` do ORG_OWNER cấu hình.
-- Phân giải DNS và kiểm tra SSRF: chặn toàn bộ loopback, IP riêng RFC 1918, link-local, dải IP metadata đám mây (`169.254.169.254`).
-- Tắt cơ chế tự động chuyển hướng (no redirects); giới hạn kích thước phản hồi tối đa 256 KiB; không lưu log query string hoặc giá trị header nhạy cảm.
-- Tiêu đề chống gửi trùng lặp: `X-Idempotency-Key: <recordId>:<blockId>:<version>`.
-- Trích xuất phản hồi `responseMap` qua JSON-pointer vào `runtime.external.<blockId>`.
+Khối `external_call` là lớp connector khai báo (HTTP/HTTPS + MQTT):
+- Mỗi lần chạy là một job bền vững (`bizapp_connector_jobs`) chạy sau khi giao dịch ghi bản ghi commit; retry lũy thừa (mặc định 3 lần, backoff `PT10S`, tối đa 10 phút), mỗi lần thử được audit (`BIZAPP_EXTERNAL_CALL`) và đo bằng metric `bizapp_connector_runs_total` / `bizapp_connector_duration`.
+- HTTP/HTTPS: chỉ HTTPS (trừ dev `app.bizapps.outbound.allow-http`); host phải nằm trong `allowedHosts` của installation, `egress.allowedHosts` (nếu khai báo) chỉ thu hẹp thêm. DNS/SSRF, không redirect, phản hồi tối đa 256 KiB, log đã khử query/header nhạy cảm.
+- MQTT: `brokerUrl` dạng `ssl://` (hoặc `tcp://` khi bật `app.bizapps.outbound.allow-http`), subscribe có giới hạn `maxMessages`, timeout `readMs`, luôn disconnect sau mỗi job.
+- Xác thực: vault header mặc định (`api_key`, `bearer`, `basic`), `auth.type=hmac` ký `X-OpenVie-Timestamp` + `X-OpenVie-Signature`, `auth.type=oauth2` dùng client-credentials với token cache 80% TTL. Credential có thể scope theo workspace.
+- Tiêu đề chống gửi trùng lặp: `X-Idempotency-Key: <jobId>`; `responseMap` JSON-pointer ghi vào `runtime.external.<blockId>`.
+- Sink: `field` cập nhật bản ghi hiện tại; `record` append/upsert vào entity đích theo `dedupeKey` (unique index), nên poll lặp không nhân bản telemetry.
+- `schedule` (`every` 30s..7d, `select`, `limit`) do scheduler quét và enqueue; bản ghi có job PENDING/RUNNING hoặc vừa SUCCEEDED trong `every` sẽ được bỏ qua.
 
 ### 7. Ranh giới pháp lý (Legal Boundaries)
 
@@ -214,6 +220,11 @@ Report blocks no longer contain raw SQL strings; they are structured declarative
 ```
 The parameterized `BizAppReportCompiler` compiles view specifications with strict tenant, organization, and entity bounds, supporting both `postgres` and `duckdb` (Lakehouse) dialects.
 
+**Data export (CSV / Excel):** both the entity registry and a report view download the whole result set, not just the rendered page:
+- `GET /api/v1/bizapps/{kind}/entities/{entity}/export?format=csv|xlsx&locale=vi|en` — every active record in entity field order (vi/en labels with a field-name fallback) plus `ID`/status/created/updated columns; capped at 10 000 records.
+- `POST /api/v1/bizapps/{kind}/reports/{viewName}/export?format=csv|xlsx` — every column and row the view returns; workspace admins only.
+- CSV is UTF-8 with a BOM (Excel renders Vietnamese correctly), every cell is quoted, and cells starting with `= + - @` gain a `'` prefix to block formula injection; XLSX is written with Apache POI `SXSSF` and keeps numeric cells numeric.
+
 ### 2. Knowledge Projection (Records → AI Assistant)
 
 Allows the AI assistant to answer questions about business records **with verified citations** without modifying retrieval internals or using Text-to-SQL:
@@ -260,13 +271,14 @@ Templates travel inside the standard `openvie.template.v1` envelope (`contracts/
 
 ### 6. SSRF-Safe Outbound HTTP & e-Signature Recipe
 
-The `external_call` block features strict SSRF defense:
-- HTTPS only (unless development override `app.bizapps.outbound.allow-http=true` is set).
-- Host must exist in installation `allowedHosts` config.
-- DNS resolution checks reject loopback, RFC 1918 private IPs, link-local, and cloud metadata addresses (`169.254.169.254`).
-- Redirects disabled; response body capped at 256 KiB; URLs sanitized in logs.
-- Idempotency header: `X-Idempotency-Key: <recordId>:<blockId>:<version>`.
-- Parameter extraction via `responseMap` stored in `runtime.external.<blockId>`.
+The `external_call` block is a declarative connector layer (HTTP/HTTPS + MQTT):
+- Every run is a durable job (`bizapp_connector_jobs`) executed after the record write commits; exponential retries (default 3, `PT10S` backoff, capped at 10 minutes), and each attempt is audited (`BIZAPP_EXTERNAL_CALL`) and metered (`bizapp_connector_runs_total` / `bizapp_connector_duration`).
+- HTTP/HTTPS: HTTPS only (unless development override `app.bizapps.outbound.allow-http=true` is set); the host must exist in the installation `allowedHosts` config, and `egress.allowedHosts` (when declared) only narrows it further. DNS/SSRF checks, redirects disabled, response body capped at 256 KiB, sanitized logs.
+- MQTT: `brokerUrl` uses `ssl://` (or `tcp://` when `app.bizapps.outbound.allow-http` is enabled), one bounded subscribe per job (`maxMessages`, `readMs` timeout) that always disconnects.
+- Auth: vault header formats by default (`api_key`, `bearer`, `basic`), `auth.type=hmac` signs `X-OpenVie-Timestamp` + `X-OpenVie-Signature`, and `auth.type=oauth2` uses client-credentials with a token cache refreshed at 80% of the TTL. Credentials may be workspace-scoped.
+- Idempotency header: `X-Idempotency-Key: <jobId>`; `responseMap` parameter extraction is stored in `runtime.external.<blockId>`.
+- Sinks: `field` updates the current record; `record` appends/upserts the target entity by `dedupeKey` (unique index), so repeated polls never duplicate telemetry rows.
+- `schedule` (`every` 30s..7d, `select`, `limit`) is scanned by the scheduler; records whose latest job is PENDING/RUNNING, or SUCCEEDED within `every`, are skipped.
 
 ### 7. Legal Boundaries
 

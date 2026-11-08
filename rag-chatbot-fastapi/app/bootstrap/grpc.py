@@ -89,6 +89,7 @@ def create_grpc_service(
                 prefix=settings.CACHE_KEY_PREFIX,
                 ttl_seconds=settings.GENERATION_RESULT_CACHE_TTL_SECONDS,
             ),
+            structured_timeout_seconds=settings.LLM_STRUCTURED_TIMEOUT_SECONDS,
         ),
         IndexGrpcHandler(index_queries),
         IngestionGrpcHandler(

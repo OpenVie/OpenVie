@@ -31,6 +31,7 @@ import com.openvie.api.bizapp.service.block.BizAppBlockRegistry;
 import com.openvie.api.bizapp.service.block.ExternalCallBlock;
 import com.openvie.api.bizapp.service.block.NotifyBlock;
 import com.openvie.api.bizapp.service.block.WebhookOutBlock;
+import com.openvie.api.bizapp.service.storage.BizAppStorageStore;
 import com.openvie.api.common.enums.LogAction;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ConflictException;
@@ -70,6 +71,9 @@ public class BizAppRecordService {
     private final WebhookOutBlock webhookOutBlock;
     private final com.openvie.api.bizapp.service.storage.BizAppStorageRouter storageRouter;
 
+    /** Page size the storage layer caps at; export walks pages of this size. */
+    private static final int PAGE_SIZE = 100;
+
     /** The manifest capability a data-plane call is fenced on. */
     private enum Capability {
         READ("The manifest does not grant read to this role"),
@@ -102,6 +106,38 @@ public class BizAppRecordService {
                 .list(tenantId, appKind, entity, includeArchived, PageRequest.of(Math.max(page, 0), safeSize));
         Manifest manifest = manifestParser.parse(installation.getManifest());
         return rows.map(row -> toView(row, manifest));
+    }
+
+    /**
+     * Every record of one entity in listing order ({@code updated_at DESC}),
+     * for export. Same manifest/RBAC fence as {@link #list}, but bounded: a
+     * caller asking for more than {@code maxRows} gets a clear rejection
+     * instead of a truncated file.
+     */
+    @Transactional(readOnly = true)
+    public List<RecordView> exportRows(UUID tenantId, String appKind, String entity,
+            String role, boolean includeArchived, int maxRows) {
+        BizAppInstallation installation = activeInstallation(tenantId, appKind, entity, role, Capability.READ);
+        Manifest manifest = manifestParser.parse(installation.getManifest());
+        BizAppStorageStore store = storageRouter.route(appKind, entity);
+
+        Page<BizAppRecord> first = store.list(tenantId, appKind, entity, includeArchived, PageRequest.of(0, PAGE_SIZE));
+        long total = first.getTotalElements();
+        if (total > maxRows) {
+            throw new BadRequestException("Export is limited to " + maxRows
+                    + " records; narrow the query");
+        }
+        List<RecordView> rows = new ArrayList<>((int) Math.min(total, Integer.MAX_VALUE));
+        first.forEach(row -> rows.add(toView(row, manifest)));
+        for (int page = 1; rows.size() < total; page++) {
+            Page<BizAppRecord> next = store.list(tenantId, appKind, entity, includeArchived,
+                    PageRequest.of(page, PAGE_SIZE));
+            if (next.isEmpty()) {
+                break;
+            }
+            next.forEach(row -> rows.add(toView(row, manifest)));
+        }
+        return rows;
     }
 
     // ----------------------------------------------------------------- write
@@ -170,7 +206,10 @@ public class BizAppRecordService {
         BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_ARCHIVED, "bizapp_record", recordId,
                 Map.of("app", appKind, "entity", entity));
-        return toView(saved, manifestParser.parse(installation.getManifest()));
+        Manifest manifest = manifestParser.parse(installation.getManifest());
+        lifecycleWebhook(tenantId, installation, manifest, saved, "record.archived",
+                Map.of("archived_by", userId.toString()));
+        return toView(saved, manifest);
     }
 
     // --------------------------------------------------------------- approve
@@ -221,18 +260,20 @@ public class BizAppRecordService {
         UUID auditor = decidedBy != null ? decidedBy : record.getCreatedBy();
         runtime.audit(record.getTenantId(), auditor, LogAction.BIZAPP_RECORD_DECIDED,
                 "bizapp_record", recordId, Map.of("app", appKind, "decision", decisionState.get("decision")));
-        runtime.lifecycle(record.getOrgId(), record.getTenantId(),
-                "bizapp." + appKind + ".record.decided", recordId, eventData);
 
-        // onDecide hooks are best-effort: the decision is already final, so a
-        // failing notification must never roll it back.
+        // onDecide hooks and the decided webhook are best-effort: the decision
+        // is already final, so a failing notification must never roll it back.
         try {
             BizAppInstallation installation = installationRepository
                     .findByTenantIdAndKindAndStatus(record.getTenantId(), appKind, "ACTIVE")
                     .orElse(null);
             if (installation != null) {
-                runHooks(manifestParser.parse(installation.getManifest()), installation, record,
-                        "onDecide", auditor, null);
+                Manifest manifest = manifestParser.parse(installation.getManifest());
+                if (webhookEventEnabled(manifest, "record.decided")) {
+                    runtime.lifecycle(record.getOrgId(), record.getTenantId(),
+                            "bizapp." + appKind + ".record.decided", recordId, eventData);
+                }
+                runHooks(manifest, installation, record, "onDecide", auditor, null);
             }
         } catch (Exception exception) {
             log.warn("onDecide hooks failed for record {}: {}", recordId, exception.getMessage());
@@ -276,8 +317,10 @@ public class BizAppRecordService {
     /**
      * Runs the entity's hook targets for one lifecycle event. Failable work
      * runs first (approval, then external calls) so a later notification can
-     * never announce a record that the transaction will roll back; notify and
-     * webhook failures are audited but never fail the write, and onDecide
+     * never announce a record that the transaction will roll back; external
+     * calls enqueue a durable job inside this transaction (only an enqueue/DB
+     * failure rolls the write back, provider failures are the worker's), and
+     * notify/webhook failures are audited but never fail the write. onDecide
      * hooks are always best-effort.
      */
     private void runHooks(Manifest manifest, BizAppInstallation installation, BizAppRecord record,
@@ -428,15 +471,30 @@ public class BizAppRecordService {
                 Map.of("submitted_by", actorId.toString()));
     }
 
-    /** Decision + submit integrations always push; per-event hooks stay opt-in. */
+    /** Publish only the lifecycle events that a webhook block explicitly selects. */
     private void lifecycleWebhook(UUID tenantId, BizAppInstallation installation, Manifest manifest,
             BizAppRecord record, String eventSuffix, Map<String, Object> extra) {
-        boolean hasWebhooks = manifest.blocks() != null && manifest.blocks().stream()
-                .anyMatch(block -> WebhookOutBlock.TYPE.equals(block.type()));
-        if (hasWebhooks) {
-            runtime.lifecycle(installation.getOrgId(), tenantId,
-                    "bizapp." + installation.getKind() + "." + eventSuffix, record.getId(), extra);
+        if (!webhookEventEnabled(manifest, eventSuffix)) {
+            return;
         }
+        runtime.lifecycle(installation.getOrgId(), tenantId,
+                "bizapp." + installation.getKind() + "." + eventSuffix, record.getId(), extra);
+    }
+
+    private boolean webhookEventEnabled(Manifest manifest, String eventSuffix) {
+        if (manifest == null || manifest.blocks() == null) {
+            return false;
+        }
+        return manifest.blocks().stream()
+                .filter(block -> WebhookOutBlock.TYPE.equals(block.type()))
+                .anyMatch(block -> {
+                    Object raw = block.params() == null ? null : block.params().get("events");
+                    if (!(raw instanceof List<?> events)) {
+                        return false;
+                    }
+                    return events.stream()
+                            .anyMatch(event -> event != null && eventSuffix.equals(String.valueOf(event)));
+                });
     }
 
     private BlockContext contextFor(BizAppInstallation installation, Manifest manifest,
@@ -532,8 +590,33 @@ public class BizAppRecordService {
         if (isOwner(role)) {
             return true;
         }
+        if (entityGrants(manifest, "write", role)) {
+            return true;
+        }
         List<String> write = rbac(manifest, "write");
         return write == null ? isAdmin(role) : (role != null && write.contains(role));
+    }
+
+    /**
+     * AI-generated manifests sometimes put the per-entity write list under
+     * {@code entities[].rbac.write} while the app-level list stays admin-only.
+     * The entity declaration is an explicit grant, so honor it for write;
+     * delete/approve remain governed by the app-level lists.
+     */
+    private boolean entityGrants(Manifest manifest, String capability, String role) {
+        if (manifest.entities() == null || role == null) {
+            return false;
+        }
+        for (Entity entity : manifest.entities()) {
+            if (entity.rbac() == null) {
+                continue;
+            }
+            List<String> roles = entity.rbac().get(capability);
+            if (roles != null && roles.contains(role)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean canDelete(Manifest manifest, String role) {
@@ -555,6 +638,9 @@ public class BizAppRecordService {
     /** Submit falls back to write unless the manifest declares an explicit list. */
     public boolean canSubmit(Manifest manifest, String role) {
         if (isOwner(role)) {
+            return true;
+        }
+        if (entityGrants(manifest, "submit", role)) {
             return true;
         }
         List<String> submit = rbac(manifest, "submit");

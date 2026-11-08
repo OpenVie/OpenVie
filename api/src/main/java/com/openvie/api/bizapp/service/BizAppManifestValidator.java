@@ -14,6 +14,8 @@
 
 package com.openvie.api.bizapp.service;
 
+import com.openvie.api.bizapp.connector.BizAppConnectorSpec;
+import com.openvie.api.bizapp.connector.BizAppConnectorSpecParser;
 import com.openvie.api.bizapp.dto.BizAppManifest;
 import com.openvie.api.bizapp.dto.BizAppManifest.Block;
 import com.openvie.api.bizapp.dto.BizAppManifest.Entity;
@@ -125,6 +127,7 @@ public class BizAppManifestValidator {
         require(approvalBlocks.size() <= 1, "only one approval_workitem block is supported");
         validateApprovalCandidate(manifest.rbac(), approvalBlocks);
         validateHooks(entities, blocks);
+        validateConnectors(entities, blocks);
         validateUi(manifest.ui(), entities, blocks);
     }
 
@@ -236,14 +239,6 @@ public class BizAppManifestValidator {
         if ("report".equals(block.type())) {
             validateReportBlock(block, entityMap);
         }
-        if ("external_call".equals(block.type())) {
-            require(text(block.params(), "url") != null, "external_call requires url");
-            require(block.params() != null
-                            && block.params().get("credentialRef") instanceof String ref
-                            && !ref.isBlank(),
-                    "external_call secrets must use credentialRef, never inline values");
-            requireNoInlineSecrets(block.params());
-        }
         if ("notify".equals(block.type())) {
             require(paramsHasList(block.params(), "to") && !listOf(block.params().get("to")).isEmpty(),
                     "notify block requires a `to` list (creator or explicit email)");
@@ -283,6 +278,17 @@ public class BizAppManifestValidator {
             Map<String, Field> entityFields = new HashMap<>();
             if (entity.fields() != null) {
                 entity.fields().forEach(f -> entityFields.put(f.name(), f));
+            }
+
+            if (viewMap.get("fields") instanceof List<?> selectedFields) {
+                for (Object field : selectedFields) {
+                    if (field instanceof String selected) {
+                        require(entityFields.containsKey(selected),
+                                "report view " + selected + " field is not declared on entity " + entityName);
+                    } else {
+                        require(false, "report view fields must be strings");
+                    }
+                }
             }
 
             Set<String> declaredAliases = new HashSet<>();
@@ -479,6 +485,148 @@ public class BizAppManifestValidator {
                 default -> throw new BadRequestException("unknown ui view " + view);
             }
         }
+    }
+
+    /**
+     * Connector contract: protocol addressing, typed sink targets, schedule
+     * entities and the per-block egress subset. The installation-wide
+     * intersection is enforced at run time, where the config is known.
+     */
+    private void validateConnectors(List<Entity> entities, List<Block> blocks) {
+        BizAppConnectorSpecParser parser = new BizAppConnectorSpecParser();
+        Map<String, Entity> entityMap = new HashMap<>();
+        entities.forEach(entity -> entityMap.put(entity.name(), entity));
+        Map<String, List<String>> hookTargets = new HashMap<>();
+        for (Entity entity : entities) {
+            if (entity.hooks() == null) {
+                continue;
+            }
+            for (List<String> targets : entity.hooks().values()) {
+                if (targets == null) {
+                    continue;
+                }
+                for (String target : targets) {
+                    if (target != null && !target.startsWith("webhook_out:")) {
+                        hookTargets.computeIfAbsent(target, ignored -> new java.util.ArrayList<>())
+                                .add(entity.name());
+                    }
+                }
+            }
+        }
+        for (Block block : blocks) {
+            if (!"external_call".equals(block.type())) {
+                continue;
+            }
+            BizAppConnectorSpec spec = parser.parse(block);
+            validateConnectorAuth(spec);
+            requireNoInlineSecrets(block.params());
+            if (spec.sink() != null) {
+                validateConnectorSink(spec, block, entityMap, hookTargets);
+            }
+            if (spec.schedule() != null) {
+                Entity scheduled = entityMap.get(spec.schedule().entity());
+                require(scheduled != null,
+                        "external_call schedule.entity " + spec.schedule().entity() + " is not declared");
+                for (String field : spec.schedule().select().keySet()) {
+                    require(declaresField(scheduled, field),
+                            "external_call schedule.select field " + field
+                                    + " is not declared on " + scheduled.name());
+                }
+            }
+            validateConnectorEgress(spec);
+        }
+    }
+
+    private void validateConnectorAuth(BizAppConnectorSpec spec) {
+        BizAppConnectorSpec.Auth auth = spec.auth();
+        String type = auth == null ? "header" : auth.type();
+        if (!"http".equals(spec.protocol()) && !"header".equals(type)) {
+            throw new BadRequestException("external_call auth " + type + " is only supported for http");
+        }
+        switch (type) {
+            case "hmac" -> require(auth != null && auth.secretRef() != null,
+                    "external_call auth hmac requires secretRef");
+            case "oauth2" -> {
+                String tokenUrl = auth == null ? null : auth.tokenUrl();
+                require(tokenUrl != null && tokenUrl.toLowerCase(Locale.ROOT).startsWith("https://"),
+                        "external_call auth oauth2 requires an https tokenUrl");
+                require(auth.credentialRef() != null,
+                        "external_call auth oauth2 requires credentialRef");
+            }
+            default -> {
+                if ("http".equals(spec.protocol())) {
+                    require(spec.credentialRef() != null,
+                            "external_call (http) requires credentialRef");
+                }
+            }
+        }
+    }
+
+    private void validateConnectorSink(BizAppConnectorSpec spec, Block block,
+            Map<String, Entity> entityMap, Map<String, List<String>> hookTargets) {
+        BizAppConnectorSpec.Sink sink = spec.sink();
+        if ("field".equals(sink.type())) {
+            String targetName = spec.schedule() != null
+                    ? spec.schedule().entity()
+                    : singleHookEntity(block.id(), hookTargets);
+            Entity target = entityMap.get(targetName);
+            if (target == null) {
+                if (spec.schedule() != null) {
+                    throw new BadRequestException(
+                            "external_call schedule.entity " + targetName + " is not declared");
+                }
+                throw new BadRequestException("external_call field sink needs exactly one target entity");
+            }
+            requireDeclaredMapping(target, sink.mapping());
+        } else {
+            Entity target = entityMap.get(sink.entity());
+            if (target == null) {
+                throw new BadRequestException(
+                        "external_call sink.entity " + sink.entity() + " is not declared");
+            }
+            requireDeclaredMapping(target, sink.mapping());
+        }
+    }
+
+    private String singleHookEntity(String blockId, Map<String, List<String>> hookTargets) {
+        List<String> targets = hookTargets.getOrDefault(blockId, List.of());
+        if (targets.size() != 1) {
+            throw new BadRequestException("external_call field sink needs exactly one target entity");
+        }
+        return targets.get(0);
+    }
+
+    private void requireDeclaredMapping(Entity target, Map<String, String> mapping) {
+        for (String field : mapping.keySet()) {
+            require(declaresField(target, field),
+                    "external_call sink.mapping target field " + field
+                            + " is not declared on " + target.name());
+        }
+    }
+
+    private boolean declaresField(Entity entity, String fieldName) {
+        return entity.fields() != null && entity.fields().stream()
+                .anyMatch(field -> fieldName.equals(field.name()));
+    }
+
+    private void validateConnectorEgress(BizAppConnectorSpec spec) {
+        List<String> hosts = spec.egressHosts();
+        if (hosts.isEmpty()) {
+            return;
+        }
+        for (String host : hosts) {
+            require(host != null && !host.isBlank() && host.length() <= 253,
+                    "external_call egress.allowedHosts entries must be non-blank host names");
+        }
+        String url = "mqtt".equals(spec.protocol()) ? spec.brokerUrl() : spec.url();
+        String host;
+        try {
+            host = java.net.URI.create(url).getHost();
+        } catch (IllegalArgumentException invalid) {
+            host = null;
+        }
+        require(host != null && hosts.stream().anyMatch(host::equalsIgnoreCase),
+                "external_call egress.allowedHosts does not include " + host);
     }
 
     private void requireNoInlineSecrets(Map<String, Object> params) {

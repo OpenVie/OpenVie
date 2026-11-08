@@ -94,9 +94,15 @@ public final class BizAppManifest {
             Localized label,
             List<Field> fields,
             KnowledgeConfig knowledge,
+            Map<String, List<String>> rbac,
             Map<String, List<String>> hooks) {
+        public Entity(String name, Localized label, List<Field> fields, KnowledgeConfig knowledge,
+                Map<String, List<String>> hooks) {
+            this(name, label, fields, knowledge, null, hooks);
+        }
+
         public Entity(String name, Localized label, List<Field> fields, Map<String, List<String>> hooks) {
-            this(name, label, fields, null, hooks);
+            this(name, label, fields, null, null, hooks);
         }
     }
 

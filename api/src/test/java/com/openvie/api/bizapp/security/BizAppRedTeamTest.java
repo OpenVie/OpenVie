@@ -121,7 +121,7 @@ class BizAppRedTeamTest {
     @Test
     void rejectsPemPrivateKeyInVault() {
         String pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIVATE KEY-----";
-        var request = new CreateCredentialRequest("sign-key", "api_key", pem, null);
+        var request = new CreateCredentialRequest("sign-key", "api_key", pem, null, null);
         var mockRepo = org.mockito.Mockito.mock(com.openvie.api.bizapp.repository.BizAppCredentialRepository.class);
         var mockCipher = org.mockito.Mockito.mock(com.openvie.api.bizapp.service.BizAppCredentialCipher.class);
         org.mockito.Mockito.when(mockCipher.available()).thenReturn(true);

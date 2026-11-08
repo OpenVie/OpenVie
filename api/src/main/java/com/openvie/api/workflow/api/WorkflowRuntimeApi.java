@@ -20,7 +20,8 @@ import java.util.UUID;
 /**
  * Published boundary: process-engine actions other modules may drive.
  *
- * <p>The BizApp module deploys its approval definitions and starts processes
+ * <p>The BizApp module deploys its approval definitions, starts processes, and
+ * moves in-flight approval tasks when a manifest changes its approver role
  * through this contract instead of the engine service internals. Task claim /
  * complete stay out on purpose — those remain journaled decisions behind
  * {@code /api/v1/workflow/engine/tasks/**}.
@@ -31,6 +32,12 @@ public interface WorkflowRuntimeApi {
 
     StartedProcess start(UUID workspaceId, UUID initiatorId, String definitionKey,
             String businessKey, Map<String, Object> variables);
+
+    /**
+     * Move unclaimed approval tasks of one app to the role selected by a new
+     * manifest, so an approval-role change applies to work already in flight.
+     */
+    void reassignPendingTasks(UUID workspaceId, String appKind, String oldGroup, String newGroup);
 
     record DeployedDefinition(String deploymentId, String key, String name, int version) {}
 

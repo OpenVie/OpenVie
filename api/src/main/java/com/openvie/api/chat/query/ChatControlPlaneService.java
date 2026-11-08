@@ -223,6 +223,35 @@ public class ChatControlPlaneService {
         throw new CancellationException("The answer stream was cancelled.");
     }
 
+    /**
+     * Persists the one conversational state the router needs: after asking for
+     * record details, keep app/entity until the user supplies fields or asks
+     * a field question. Stored in the session's existing JSON metadata, so no
+     * schema migration and no domain-specific regex are required.
+     */
+    private void updateBizAppPendingState(ChatSession session, BizAppIntentRouter.RoutingResult routing) {
+        Map<String, Object> metadata = session.getCustomerMetadata() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(session.getCustomerMetadata());
+        boolean awaiting = "Awaiting record details".equals(routing.reason())
+                || "Field information request in active app context".equals(routing.reason())
+                || "Filler pause turn in active app context".equals(routing.reason())
+                || "Prompt for remaining required fields".equals(routing.reason());
+        if (awaiting && routing.appKind() != null) {
+            Map<String, Object> pending = new LinkedHashMap<>();
+            pending.put("appKind", routing.appKind());
+            if (routing.entity() != null) {
+                pending.put("entity", routing.entity());
+            }
+            metadata.put("bizappPending", pending);
+        } else if (routing.intent() != BizAppIntentRouter.Intent.APP_RECORD_CREATE
+                || routing.actionCard() != null) {
+            metadata.remove("bizappPending");
+        }
+        session.setCustomerMetadata(metadata);
+        sessionRepository.save(session);
+    }
+
     /** The caller's manifest RBAC role: owners act as ORG_OWNER, everyone else as their workspace role. */
     private String manifestRole(UUID userId, UUID tenantId) {
         TenantIdentityApi.MembershipSnapshot membership = tenantIdentityApi.requireMembership(userId, tenantId);
@@ -307,13 +336,21 @@ public class ChatControlPlaneService {
         turn.setAttemptCount(1);
         turn = turnRepository.save(turn);
 
-        BizAppIntentRouter.RoutingResult routing = (intentRouter != null)
-                ? intentRouter.route(tenantId, session.getTenantId(), userId,
-                        manifestRole(userId, session.getTenantId()), content, session.getLocale(), sessionId, prior)
-                : BizAppIntentRouter.RoutingResult.none();
+        BizAppIntentRouter.RoutingResult routing;
+        if (intentRouter == null) {
+            routing = BizAppIntentRouter.RoutingResult.none();
+        } else if (session.getCustomerMetadata() == null || session.getCustomerMetadata().isEmpty()) {
+            routing = intentRouter.route(tenantId, session.getTenantId(), userId,
+                    manifestRole(userId, session.getTenantId()), content, session.getLocale(), sessionId, prior);
+        } else {
+            routing = intentRouter.route(tenantId, session.getTenantId(), userId,
+                    manifestRole(userId, session.getTenantId()), content, session.getLocale(), sessionId, prior,
+                    session.getCustomerMetadata());
+        }
         if (routing == null) {
             routing = BizAppIntentRouter.RoutingResult.none();
         }
+        updateBizAppPendingState(session, routing);
 
         if (routing.intent() != BizAppIntentRouter.Intent.NONE) {
             turn.setIntent(routing.intent().name());

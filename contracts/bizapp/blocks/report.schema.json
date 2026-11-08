@@ -12,7 +12,9 @@
         "required": ["name", "entity"],
         "properties": {
           "name": { "type": "string" },
+          "title": { "type": "string", "maxLength": 120 },
           "entity": { "type": "string" },
+          "fields": { "type": "array", "items": { "type": "string" } },
           "groupBy": { "type": "array", "items": { "type": "string" } },
           "metrics": {
             "type": "array",
