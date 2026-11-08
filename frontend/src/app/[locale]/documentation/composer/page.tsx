@@ -20,6 +20,7 @@ import {
   Callout,
   DocArticle,
   DocSection,
+  ParameterTable,
   RelatedLinks,
 } from "@/components/documentation/DocumentationComponents"
 import type { AppLocale } from "@/i18n/routing"
@@ -43,6 +44,12 @@ export default async function ComposerDocumentationPage({ params }: PageProps) {
     <DocArticle title={page.title} description={page.description}>
       <DocSection id="canvas-editing" title={sections["canvas-editing"]}>
         <p>{t("canvasBody")}</p>
+        <BulletList>
+          <li>{t("canvasTabs")}</li>
+          <li>{t("canvasEdges")}</li>
+          <li>{t("canvasDerived")}</li>
+          <li>{t("canvasValidation")}</li>
+        </BulletList>
         <Callout type="tip" title="Automated Graph Layout">
           {t("autoLayoutTip")}
         </Callout>
@@ -51,19 +58,64 @@ export default async function ComposerDocumentationPage({ params }: PageProps) {
       <DocSection id="blocks-entities" title={sections["blocks-entities"]}>
         <BulletList>
           <li>{t("entityNodeText")}</li>
+          <li>{t("entityDeep")}</li>
           <li>{t("blockNodeText")}</li>
+          <li>{t("blockDefaults")}</li>
         </BulletList>
+        <ParameterTable
+          parameters={[
+            { name: "approval_workitem", type: "block", required: false, description: t("blockApproval") },
+            { name: "notify", type: "block", required: false, description: t("blockNotify") },
+            { name: "webhook_out", type: "block", required: false, description: t("blockWebhook") },
+            { name: "external_call", type: "block", required: false, description: t("blockExternal") },
+            { name: "knowledge_base", type: "block", required: false, description: t("blockKnowledge") },
+            { name: "assistant", type: "block", required: false, description: t("blockAssistant") },
+          ]}
+        />
+      </DocSection>
+
+      <DocSection id="report-builder" title={sections["report-builder"]}>
+        <p>{t("reportBuilderBody")}</p>
+        <BulletList>
+          <li>{t("reportModes")}</li>
+          <li>{t("reportMetrics")}</li>
+          <li>{t("reportFilters")}</li>
+          <li>{t("reportLimit")}</li>
+        </BulletList>
+        <Callout type="note" title={t("reportRuntimeTitle")}>
+          {t("reportRuntimeBody")}
+        </Callout>
       </DocSection>
 
       <DocSection id="ai-drafting" title={sections["ai-drafting"]}>
         <p>{t("aiDraftingBody")}</p>
-        <Callout type="note" title="Human Review Before Installation">
+        <p className="text-[var(--ov-docs-muted)]">{t("aiDraftingFlow")}</p>
+        <Callout type="warning" title="Human Review Before Installation">
           {t("aiDraftingTip")}
         </Callout>
       </DocSection>
 
       <DocSection id="template-exchange" title={sections["template-exchange"]}>
         <p>{t("templateExchangeBody")}</p>
+        <BulletList>
+          <li>{t("templateExport")}</li>
+          <li>{t("templateImport")}</li>
+          <li>{t("templateLicenses")}</li>
+          <li>{t("templateRemix")}</li>
+        </BulletList>
+      </DocSection>
+
+      <DocSection id="upgrade" title={sections.upgrade}>
+        <p>{t("upgradeBody")}</p>
+        <ParameterTable
+          parameters={[
+            { name: "upgrade.version", type: "auto = max(current+1, requested)", required: false, description: t("upgradeVersion") },
+            { name: "upgrade.compatible", type: "same storage · no removals", required: false, description: t("upgradeCompatible") },
+          ]}
+        />
+        <Callout type="note" title={t("draftsTitle")}>
+          {t("draftsBody")}
+        </Callout>
         <RelatedLinks
           links={[
             {
