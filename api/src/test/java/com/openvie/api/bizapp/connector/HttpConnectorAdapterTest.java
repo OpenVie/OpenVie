@@ -194,6 +194,32 @@ class HttpConnectorAdapterTest {
     }
 
     @Test
+    void getRequestsCarryNoBodySoTheMethodStaysGet() {
+        when(credentials.resolve(any(), any(), any()))
+                .thenReturn(new ConnectorCredentials.Resolved("api_key", "secret-token"));
+        // HttpURLConnection upgrades GET+body to POST, so a GET-only API would
+        // answer with a confusing 400/405; the adapter must send no body.
+        var spec = spec(Map.of(
+                "url", "https://ot-gateway.test/readings?deviceId=boiler-1",
+                "method", "GET",
+                "credentialRef", "gateway-key",
+                "bodyTemplate", "{\"title\":\"{{record.title}}\"}"));
+        when(outboundHttp.execute(any())).thenReturn(
+                new SafeOutboundHttp.Response(200, "{\"temp\":42}", Map.of()));
+
+        adapter.execute(spec, context());
+
+        ArgumentCaptor<SafeOutboundHttp.Request> captor =
+                ArgumentCaptor.forClass(SafeOutboundHttp.Request.class);
+        verify(outboundHttp).execute(captor.capture());
+        SafeOutboundHttp.Request request = captor.getValue();
+        assertEquals("GET", request.method());
+        assertEquals(null, request.body());
+        assertFalse(request.headers().containsKey("Content-Type"));
+        assertTrue(request.headers().containsKey("X-Idempotency-Key"));
+    }
+
+    @Test
     void rendersPlaceholdersAndFallsBackToTheRecordBody() {
         when(credentials.resolve(any(), any(), any()))
                 .thenReturn(new ConnectorCredentials.Resolved("basic", "user:pass"));

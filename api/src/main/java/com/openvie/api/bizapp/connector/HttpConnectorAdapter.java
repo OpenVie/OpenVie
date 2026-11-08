@@ -28,6 +28,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,15 +65,22 @@ public class HttpConnectorAdapter implements ConnectorAdapter {
                     "connector host " + host + " is not allowed for this installation");
         }
 
-        String body = renderBody(spec, context);
+        String method = spec.method() == null ? "POST" : spec.method().toUpperCase(Locale.ROOT);
+        // HttpURLConnection turns a GET with an output stream into a POST, so a
+        // declared GET must carry no body at all. GET-only APIs (weather,
+        // health, readings feeds) would otherwise receive an unexpected POST.
+        boolean bodyless = "GET".equals(method) || "HEAD".equals(method);
+        String body = bodyless ? null : renderBody(spec, context);
         Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "application/json");
+        if (!bodyless) {
+            headers.put("Content-Type", "application/json");
+        }
         headers.put("X-Idempotency-Key", idempotencyKey(context));
-        applyAuth(spec, context, installationHosts, body, headers);
+        applyAuth(spec, context, installationHosts, body == null ? "" : body, headers);
 
         SafeOutboundHttp.Response response = outboundHttp.execute(new SafeOutboundHttp.Request(
                 url,
-                spec.method() == null ? "POST" : spec.method(),
+                method,
                 headers,
                 body,
                 effectiveHosts,

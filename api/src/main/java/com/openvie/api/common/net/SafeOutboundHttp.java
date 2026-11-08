@@ -41,7 +41,8 @@ import java.util.Map;
  *   <li>HTTPS only by default (HTTP permitted only when {@code app.bizapps.outbound.allow-http=true})</li>
  *   <li>Host must be explicitly present in the provided {@code allowedHosts} allow-list</li>
  *   <li>DNS resolution with SSRF validation: rejects loopback, private RFC 1918, link-local,
- *       cloud metadata (169.254.169.254), IPv6 unique local/link-local, and multicast addresses</li>
+ *       cloud metadata (169.254.169.254), IPv6 unique local/link-local, and multicast addresses
+ *       (relaxed only by the development switch {@code app.bizapps.outbound.allow-private-hosts})</li>
  *   <li>Redirects disabled (never follows 3xx)</li>
  *   <li>Timeouts: connect 10s, read 15s</li>
  *   <li>Response body capped at 256 KiB</li>
@@ -57,9 +58,17 @@ public class SafeOutboundHttp {
     public static final int READ_TIMEOUT_MS = 15_000;
 
     private final boolean allowHttp;
+    private final boolean allowPrivateHosts;
 
-    public SafeOutboundHttp(@Value("${app.bizapps.outbound.allow-http:false}") boolean allowHttp) {
+    public SafeOutboundHttp(
+            @Value("${app.bizapps.outbound.allow-http:false}") boolean allowHttp,
+            @Value("${app.bizapps.outbound.allow-private-hosts:false}") boolean allowPrivateHosts) {
         this.allowHttp = allowHttp;
+        this.allowPrivateHosts = allowPrivateHosts;
+        if (allowPrivateHosts) {
+            log.warn("SSRF protection relaxed: app.bizapps.outbound.allow-private-hosts is on, "
+                    + "loopback/private hosts are reachable (development only)");
+        }
     }
 
     public record Request(
@@ -207,6 +216,11 @@ public class SafeOutboundHttp {
     }
 
     public void validateHostResolution(String host) {
+        if (allowPrivateHosts) {
+            // Development escape hatch for local mock services (see the
+            // application-dev profile); production keeps the SSRF fence.
+            return;
+        }
         try {
             InetAddress[] addresses = InetAddress.getAllByName(host);
             for (InetAddress address : addresses) {

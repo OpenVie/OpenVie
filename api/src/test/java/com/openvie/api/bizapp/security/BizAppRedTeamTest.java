@@ -43,7 +43,7 @@ class BizAppRedTeamTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BizAppManifestParser parser = new BizAppManifestParser(objectMapper);
     private final BizAppManifestValidator validator = new BizAppManifestValidator();
-    private final SafeOutboundHttp outboundHttp = new SafeOutboundHttp(false);
+    private final SafeOutboundHttp outboundHttp = new SafeOutboundHttp(false, false);
     private final BizAppReportCompiler reportCompiler = new BizAppReportCompiler();
 
     private Map<String, Object> readFixture(String name) throws Exception {

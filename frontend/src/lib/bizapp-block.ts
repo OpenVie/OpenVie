@@ -53,8 +53,15 @@ export function blockSummary(block: BizAppBlock): string {
       const recipients = Array.isArray(params.to) ? params.to.length : 0;
       return recipients === 0 ? "Needs recipients" : `${recipients} recipient${recipients === 1 ? "" : "s"}`;
     }
-    case "external_call":
+    case "external_call": {
+      const protocol = typeof params.protocol === "string" ? params.protocol : "http";
+      if (protocol === "mqtt") {
+        const hasBroker = typeof params.brokerUrl === "string" && params.brokerUrl.trim().length > 0;
+        const hasTopic = typeof params.topic === "string" && params.topic.trim().length > 0;
+        return hasBroker && hasTopic ? "MQTT topic configured" : "Needs a broker URL and topic";
+      }
       return params.url ? "API call configured" : "Needs an API URL";
+    }
     case "assistant":
       return params.instructions ? "Assistant configured" : "Assistant";
     default:

@@ -92,6 +92,7 @@ public class BizAppMarketplaceService {
     @Transactional
     public TemplateView saveCustom(UUID orgId, UUID tenantId, UUID actorId, SaveTemplateRequest request) {
         requireEnabled();
+        requireKnownKeys(request.manifest());
         var manifest = parser.parse(request.manifest());
         validator.validate(manifest, false);
         BizAppMarketplaceTemplate existing = templateRepository
@@ -221,6 +222,7 @@ public class BizAppMarketplaceService {
         }
 
         // Validate manifest (re-run full validator from scratch)
+        requireKnownKeys(manifestMap);
         var parsed = parser.parse(manifestMap);
         validator.validate(parsed, false);
 
@@ -336,6 +338,14 @@ public class BizAppMarketplaceService {
     private void requireEnabled() {
         if (!properties.enabled()) {
             throw new ResourceNotFoundException("BizApps are disabled on this installation");
+        }
+    }
+
+    /** Templates and imports must not carry keys the manifest contract ignores. */
+    private void requireKnownKeys(Map<String, Object> manifest) {
+        List<String> unknown = BizAppManifestKeys.unknownKeys(manifest);
+        if (!unknown.isEmpty()) {
+            throw new BadRequestException(String.join("; ", unknown));
         }
     }
 
