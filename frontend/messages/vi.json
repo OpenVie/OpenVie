@@ -399,7 +399,7 @@
     "bizapps": {
       "introTitle": "BizApp là gì?",
       "introBody": "BizApp là ứng dụng nghiệp vụ khai báo chạy trực tiếp trên các headless service của OpenVie mà không đòi hỏi microservice hay backend riêng. Toàn bộ hành vi nằm trong một manifest JSON duy nhất theo hợp đồng đóng băng bizapp.v1: thực thể, khối thực thi, báo cáo khai báo, quyền theo vai trò và khung xem runtime.",
-      "introStructure": "Cài đặt sẽ đóng băng manifest, deploy quy trình phê duyệt (nếu khai báo) và phục vụ khung xem tại `/apps/{'kind'}`. Trợ lý AI có thể trả lời câu hỏi về bản ghi nhờ chiếu tri thức kèm trích dẫn.",
+      "introStructure": "Cài đặt sẽ đóng băng manifest, deploy quy trình phê duyệt (nếu khai báo) và phục vụ khung xem tại /apps/<mã ứng dụng>. Trợ lý AI có thể trả lời câu hỏi về bản ghi nhờ chiếu tri thức kèm trích dẫn.",
       "topIdentity": "kind là mã duy nhất dạng chữ thường; name chứa nhãn vi/en dùng làm tiêu đề; version bắt đầu từ 1 và tự tăng khi nâng cấp.",
       "topStorage": "jsonb là kho chung cho custom app; typed table chỉ dành cho template platform cốt lõi.",
       "topRbac": "Map khả năng → danh sách vai trò. Mặc định: đọc mở cho mọi vai trò, ghi/xoá/phê duyệt chỉ admin, submit rơi về write.",
@@ -439,7 +439,7 @@
       "reportsExport": "Export registry in mọi bản ghi ACTIVE; export report in mọi cột/dòng của view. CSV là UTF-8 kèm BOM, quote toàn bộ, chặn công thức; Excel giữ số là số.",
       "knowledgeTitle": "Chiếu tri thức cho trợ lý AI",
       "knowledgeBody": "Entity bật knowledge.project sẽ mirror từng bản ghi thành tài liệu Markdown (chỉ field khai báo, không pii) và sinh tài liệu digest theo mẫu bizapp__'kind'__digest.md, tổng hợp mọi report view dưới dạng bảng Markdown, debounce 30 giây.",
-      "knowledgeTarget": "Chat chỉ truy hồi trong KB của chatbot phiên. Đặt config.knowledgeBaseId của installation về KB mặc định workspace (PATCH /bizapps/{'appKind'}/config) rồi touch một bản ghi để chiếu lại đúng chỗ.",
+      "knowledgeTarget": "Chat chỉ truy hồi trong KB của chatbot phiên. Đặt config.knowledgeBaseId của installation về KB mặc định workspace (PATCH /bizapps/〈appKind〉/config) rồi touch một bản ghi để chiếu lại đúng chỗ.",
       "knowledgeDebounce": "Digest được gộp nút cho mỗi (workspace, app); cài/gỡ không ghi tài liệu nên không làm các lượt chat đang stream gặp conflict revision.",
       "coverageTitle": "Truy hồi không đảm bảo bao quát",
       "coverageBody": "Câu trả lời chat là truy hồi top-K, không quét toàn bộ bản ghi. Hãy coi report view (và export) là nguồn số liệu chính; digest chỉ hỗ trợ và phụ thuộc view được khai báo.",
