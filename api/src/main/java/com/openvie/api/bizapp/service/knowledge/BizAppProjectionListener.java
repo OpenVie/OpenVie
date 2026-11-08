@@ -26,6 +26,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -35,6 +37,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j(topic = "BIZAPP-PROJECTION-LISTENER")
 public class BizAppProjectionListener {
+
+    /** Event data keys that carry the acting user for projection attribution. */
+    private static final List<String> ACTOR_KEYS =
+            List.of("created_by", "updated_by", "decided_by", "submitted_by", "archived_by");
 
     private final BizAppKnowledgeProjector projector;
     private final BizAppInstallationRepository installationRepository;
@@ -64,7 +70,7 @@ public class BizAppProjectionListener {
                 .ifPresent(installation -> {
                     var manifest = parser.parse(installation.getManifest());
                     UUID recordId = event.getSourceId();
-                    UUID actorId = event.getTenantId(); // tenant-scoped service/actor fallback
+                    UUID actorId = actorFor(event, installation);
 
                     if (manifest.entities() != null) {
                         for (var e : manifest.entities()) {
@@ -76,5 +82,36 @@ public class BizAppProjectionListener {
                         }
                     }
                 });
+    }
+
+    /**
+     * Projection writes a {@code documents} row whose {@code uploaded_by} is a
+     * foreign key to {@code users(id)}, so the tenant id used previously made
+     * every ingest fail and left records in the FAILED knowledge state. Prefer
+     * the acting user carried by the event, else the installer.
+     */
+    private UUID actorFor(BizAppLifecycleEvent event, BizAppInstallation installation) {
+        Map<String, Object> data = event.getData() == null ? Map.of() : event.getData();
+        for (String key : ACTOR_KEYS) {
+            UUID actor = asUuid(data.get(key));
+            if (actor != null) {
+                return actor;
+            }
+        }
+        return installation.getInstalledBy();
+    }
+
+    private UUID asUuid(Object value) {
+        if (value instanceof UUID uuid) {
+            return uuid;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return UUID.fromString(text.trim());
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 }
