@@ -377,6 +377,47 @@ class BizAppIntentRouterTest {
                 BizAppIntentRouter.removeDiacritics("Cài đặt ứng dụng Booking.")));
     }
 
+    @Test
+    void aggregationQuestionsGoToRagInsteadOfRecordSlots() {
+        when(bizAppRuntimeApi.listInstalledSummary(tenantId)).thenReturn(List.of(airQualityApp()));
+        when(bizAppRuntimeApi.listMarketplaceSummary(tenantId)).thenReturn(List.of());
+        when(aiInferenceApi.completeJson(any(StructuredJsonRequest.class))).thenReturn(
+                new StructuredJsonResponse(
+                        "{\"intent\":\"APP_RECORD_UPDATE\",\"confidence\":0.9,"
+                                + "\"appKind\":\"aq-mqtt-demo\",\"entity\":\"devices\"}",
+                        "vylinh", 80, 20));
+
+        var result = router.route(tenantId, orgId, actorId, "MEMBER",
+                "Bụi mịn trung bình từng trạm là bao nhiêu?", "vi-VN", sessionId);
+
+        assertEquals(BizAppIntentRouter.Intent.NONE, result.intent(),
+                "an aggregation question must fall through to RAG, not ask for a record id");
+        assertNull(result.actionCard());
+    }
+
+    private static InstalledAppSummary airQualityApp() {
+        return new InstalledAppSummary(
+                UUID.randomUUID(),
+                "aq-mqtt-demo",
+                "Chất lượng không khí",
+                1,
+                "",
+                List.of("devices"),
+                List.of(),
+                "ACTIVE",
+                List.of(new EntityDetail(
+                        "devices",
+                        "Cảm biến",
+                        List.of(
+                                new FieldDetail("deviceId", "string", true, "Mã thiết bị"),
+                                new FieldDetail("pm25", "number", false, "Bụi mịn")
+                        )
+                )),
+                List.of("bụi mịn", "chất lượng không khí"),
+                "Chất lượng không khí"
+        );
+    }
+
     private static ChatMessage message(String role, String content) {
         ChatMessage message = new ChatMessage();
         message.setRole(role);
