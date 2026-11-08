@@ -112,6 +112,9 @@ Mọi template đóng gói và trao đổi đều sử dụng phong bì tiêu ch
 Khối `external_call` là lớp connector khai báo (HTTP/HTTPS + MQTT):
 - Mỗi lần chạy là một job bền vững (`bizapp_connector_jobs`) chạy sau khi giao dịch ghi bản ghi commit; retry lũy thừa (mặc định 3 lần, backoff `PT10S`, tối đa 10 phút), mỗi lần thử được audit (`BIZAPP_EXTERNAL_CALL`) và đo bằng metric `bizapp_connector_runs_total` / `bizapp_connector_duration`.
 - HTTP/HTTPS: chỉ HTTPS (trừ dev `app.bizapps.outbound.allow-http`); host phải nằm trong `allowedHosts` của installation, `egress.allowedHosts` (nếu khai báo) chỉ thu hẹp thêm. DNS/SSRF, không redirect, phản hồi tối đa 256 KiB, log đã khử query/header nhạy cảm.
+- `method: GET` không gửi body (trước đây `HttpURLConnection` tự đổi GET+body thành POST khiến API chỉ-GET trả 400); `bodyTemplate` chỉ áp dụng cho POST/PUT/PATCH.
+- Test mock nội bộ: bật `app.bizapps.outbound.allow-private-hosts=true` (dev only) để cho phép host loopback/private, kèm `allow-http=true` nếu dùng `http://`.
+- Manifest có key lạ (`reports`/`hooks` ở cấp manifest, `maxLength`…) bị **từ chối** kèm gợi ý sửa, thay vì bị bỏ qua im lặng.
 - MQTT: `brokerUrl` dạng `ssl://` (hoặc `tcp://` khi bật `app.bizapps.outbound.allow-http`), subscribe có giới hạn `maxMessages`, timeout `readMs`, luôn disconnect sau mỗi job.
 - Xác thực: vault header mặc định (`api_key`, `bearer`, `basic`), `auth.type=hmac` ký `X-OpenVie-Timestamp` + `X-OpenVie-Signature`, `auth.type=oauth2` dùng client-credentials với token cache 80% TTL. Credential có thể scope theo workspace.
 - Tiêu đề chống gửi trùng lặp: `X-Idempotency-Key: <jobId>`; `responseMap` JSON-pointer ghi vào `runtime.external.<blockId>`.
@@ -274,6 +277,9 @@ Templates travel inside the standard `openvie.template.v1` envelope (`contracts/
 The `external_call` block is a declarative connector layer (HTTP/HTTPS + MQTT):
 - Every run is a durable job (`bizapp_connector_jobs`) executed after the record write commits; exponential retries (default 3, `PT10S` backoff, capped at 10 minutes), and each attempt is audited (`BIZAPP_EXTERNAL_CALL`) and metered (`bizapp_connector_runs_total` / `bizapp_connector_duration`).
 - HTTP/HTTPS: HTTPS only (unless development override `app.bizapps.outbound.allow-http=true` is set); the host must exist in the installation `allowedHosts` config, and `egress.allowedHosts` (when declared) only narrows it further. DNS/SSRF checks, redirects disabled, response body capped at 256 KiB, sanitized logs.
+- `method: GET` sends no body (previously `HttpURLConnection` upgraded GET+body to POST, so GET-only APIs answered 400); `bodyTemplate` applies to POST/PUT/PATCH only.
+- Local mock testing: set `app.bizapps.outbound.allow-private-hosts=true` (development only) to allow loopback/private hosts, plus `allow-http=true` for `http://`.
+- Manifests carrying unknown keys (top-level `reports`/`hooks`, `maxLength`, ...) are **rejected** with a corrective message instead of being silently dropped.
 - MQTT: `brokerUrl` uses `ssl://` (or `tcp://` when `app.bizapps.outbound.allow-http` is enabled), one bounded subscribe per job (`maxMessages`, `readMs` timeout) that always disconnects.
 - Auth: vault header formats by default (`api_key`, `bearer`, `basic`), `auth.type=hmac` signs `X-OpenVie-Timestamp` + `X-OpenVie-Signature`, and `auth.type=oauth2` uses client-credentials with a token cache refreshed at 80% of the TTL. Credentials may be workspace-scoped.
 - Idempotency header: `X-Idempotency-Key: <jobId>`; `responseMap` parameter extraction is stored in `runtime.external.<blockId>`.
