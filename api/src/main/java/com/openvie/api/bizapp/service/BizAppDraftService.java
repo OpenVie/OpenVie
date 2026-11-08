@@ -71,6 +71,21 @@ public class BizAppDraftService {
     @Value("${app.bizapps.ai.draft-fallback-model:}")
     private String draftFallbackModel = "";
 
+    /**
+     * Forward the real manifest JSON Schema to the model (Ollama structured
+     * output) instead of a file name. The AI service treats a non-JSON string
+     * as a legacy reference and drops the constraint, so passing the body is
+     * what actually prevents keys like top-level {@code reports} or
+     * {@code maxLength}. Set to false to fall back to prompt-only generation.
+     */
+    @Value("${app.bizapps.ai.draft-json-schema:true}")
+    private boolean draftJsonSchema = true;
+
+    private static final String MANIFEST_SCHEMA_RESOURCE = "contracts/bizapp/bizapp.v1.schema.json";
+    private static final String MANIFEST_SCHEMA_NAME = "bizapp.v1.schema.json";
+
+    private volatile String manifestSchemaCache;
+
     /** The only BizApp-tier approval process bundled with the platform. */
     private static final String GENERIC_APPROVAL_BPMN = "processes/bizapp-single-approval.bpmn20.xml";
 
@@ -104,6 +119,12 @@ public class BizAppDraftService {
     public ValidationResult validateStateless(Map<String, Object> rawManifest) {
         if (rawManifest == null) {
             return new ValidationResult(false, List.of("Manifest cannot be null"));
+        }
+        // Unknown keys are dropped by Jackson, so surface them before the typed
+        // validator sees a manifest that no longer contains the author's intent.
+        List<String> unknownKeys = BizAppManifestKeys.unknownKeys(rawManifest);
+        if (!unknownKeys.isEmpty()) {
+            return new ValidationResult(false, unknownKeys);
         }
         try {
             var manifest = parser.parse(rawManifest);
@@ -218,7 +239,7 @@ public class BizAppDraftService {
                 var aiResp = aiInferenceApi.completeJson(new AiInferenceApi.StructuredJsonRequest(
                         prompt,
                         systemPrompt,
-                        "bizapp.v1.schema.json",
+                        manifestSchema(),
                         model,
                         0.2f,
                         2048
@@ -247,6 +268,35 @@ public class BizAppDraftService {
     private String draftFallbackModel() {
         return draftFallbackModel == null || draftFallbackModel.isBlank()
                 ? null : draftFallbackModel.trim();
+    }
+
+    /** Schema body for structured output, or the legacy file name as fallback. */
+    String manifestSchema() {
+        if (!draftJsonSchema) {
+            return MANIFEST_SCHEMA_NAME;
+        }
+        String cached = manifestSchemaCache;
+        if (cached == null) {
+            cached = loadManifestSchema();
+            manifestSchemaCache = cached;
+        }
+        return cached;
+    }
+
+    private String loadManifestSchema() {
+        try (java.io.InputStream in = getClass().getClassLoader()
+                .getResourceAsStream(MANIFEST_SCHEMA_RESOURCE)) {
+            if (in == null) {
+                log.warn("Manifest schema {} is missing from the classpath; "
+                        + "drafting keeps prompt-only generation", MANIFEST_SCHEMA_RESOURCE);
+                return MANIFEST_SCHEMA_NAME;
+            }
+            String schema = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return schema.strip().startsWith("{") ? schema : MANIFEST_SCHEMA_NAME;
+        } catch (Exception ex) {
+            log.warn("Could not read the manifest schema: {}", ex.getMessage());
+            return MANIFEST_SCHEMA_NAME;
+        }
     }
 
     @Transactional

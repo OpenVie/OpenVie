@@ -242,6 +242,7 @@ export function ComposerCanvas({
         id: `hook-${connection.source}-${connection.target}-${Date.now()}`,
         label: "onCreate",
         type: "smoothstep",
+        data: { kind: "hook" },
       }, current);
       syncToManifest(nodes, next);
       return next;
@@ -252,7 +253,9 @@ export function ComposerCanvas({
     if (!edgeHook) return;
     setEdges((current) => {
       const updated = current.map((edge) =>
-        edge.id === edgeHook.id ? { ...edge, label: hook } : edge
+        edge.id === edgeHook.id
+          ? { ...edge, label: hook, data: { ...edge.data, kind: "hook" } }
+          : edge
       );
       syncToManifest(nodes, updated);
       return updated;
@@ -269,6 +272,50 @@ export function ComposerCanvas({
     });
     setEdgeHook(null);
   };
+
+  /**
+   * Report edges are derived from report views (block -> entity), so deleting
+   * the drawn edge must delete the view itself; otherwise the edge reappears on
+   * the next render and the action looks broken.
+   */
+  const removeReportView = (viewName: string) => {
+    if (!edgeHook) return;
+    const blockId = edgeHook.source.startsWith("block-")
+      ? edgeHook.source.slice("block-".length)
+      : "";
+    const updated = syncReportViews({
+      ...manifest,
+      blocks: (manifest.blocks || []).map((block) => {
+        if (block.id !== blockId) return block;
+        const views = Array.isArray(block.params?.views) ? block.params.views : [];
+        return {
+          ...block,
+          params: {
+            ...block.params,
+            views: (views as Array<{ name?: string }>).filter((view) => view.name !== viewName),
+          },
+        };
+      }),
+    });
+    setManifest(updated);
+    const graph = manifestToGraph(updated);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setEdgeHook(null);
+  };
+
+  const edgeData = edgeHook?.data;
+  const edgeKind = edgeData && typeof edgeData === "object" && "kind" in edgeData
+    ? String(edgeData.kind)
+    : "hook";
+  const edgeReportViews = edgeData && typeof edgeData === "object" && "views" in edgeData
+    && Array.isArray(edgeData.views)
+    ? edgeData.views.filter((view): view is string => typeof view === "string")
+    : [];
+  const edgeScheduleEvery = edgeData && typeof edgeData === "object" && "every" in edgeData
+    && typeof edgeData.every === "string"
+    ? edgeData.every
+    : "";
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (node.type === "entityNode") {
@@ -654,25 +701,65 @@ export function ComposerCanvas({
       <Dialog open={Boolean(edgeHook)} onOpenChange={(open) => !open && setEdgeHook(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Hook</DialogTitle>
-            <DialogDescription>Choose when this block runs for the entity.</DialogDescription>
+            <DialogTitle>
+              {edgeKind === "report"
+                ? "Report view"
+                : edgeKind === "schedule"
+                  ? "Schedule"
+                  : edgeKind === "hook"
+                    ? "Hook"
+                    : "Edge"}
+            </DialogTitle>
+            <DialogDescription>
+              {edgeKind === "report"
+                ? `Views reading from ${String(edgeHook?.target ?? "").replace("entity-", "")}. Removing a view deletes it from the report block.`
+                : edgeKind === "schedule"
+                  ? `${String(edgeHook?.source ?? "").replace("block-", "")} polls ${String(edgeHook?.target ?? "").replace("entity-", "")}${edgeScheduleEvery ? ` every ${edgeScheduleEvery}` : " on a timer"}. Change the interval, record selection and limit in the block inspector.`
+                  : edgeKind === "hook"
+                    ? "Choose when this block runs for the entity."
+                    : "This link is derived from the manifest and cannot be edited here."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap gap-2">
-            {["onCreate", "onUpdate", "onDecide"].map((hook) => (
-              <Button
-                key={hook}
-                type="button"
-                variant={String(edgeHook?.label) === hook ? "default" : "outline"}
-                onClick={() => updateEdgeHook(hook)}
-              >
-                {hook}
-              </Button>
-            ))}
-          </div>
+          {edgeKind === "report" && (
+            <div className="space-y-2">
+              {edgeReportViews.map((viewName) => (
+                <div
+                  key={viewName}
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+                >
+                  <span className="truncate">{viewName}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeReportView(viewName)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {edgeKind === "hook" && (
+            <div className="flex flex-wrap gap-2">
+              {["onCreate", "onUpdate", "onDecide"].map((hook) => (
+                <Button
+                  key={hook}
+                  type="button"
+                  variant={String(edgeHook?.label) === hook ? "default" : "outline"}
+                  onClick={() => updateEdgeHook(hook)}
+                >
+                  {hook}
+                </Button>
+              ))}
+            </div>
+          )}
           <DialogFooter>
-            <Button type="button" variant="destructive" onClick={deleteEdge}>
-              Delete edge
-            </Button>
+            {edgeKind === "hook" && (
+              <Button type="button" variant="destructive" onClick={deleteEdge}>
+                Delete edge
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

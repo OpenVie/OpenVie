@@ -351,6 +351,15 @@
 					<include>NOTICE</include>
 				</includes>
 			</resource>
+			<!-- Manifest contract, forwarded to the model as structured output. -->
+			<resource>
+				<directory>${project.basedir}/../contracts/bizapp</directory>
+				<targetPath>contracts/bizapp</targetPath>
+				<filtering>false</filtering>
+				<includes>
+					<include>bizapp.v1.schema.json</include>
+				</includes>
+			</resource>
 		</resources>
 		<plugins>
 			<plugin>

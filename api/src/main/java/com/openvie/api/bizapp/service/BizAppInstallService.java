@@ -69,10 +69,23 @@ public class BizAppInstallService {
         }
     }
 
+    /**
+     * Fails before the typed validator so a manifest carrying keys the contract
+     * does not declare is rejected instead of silently losing them (Jackson
+     * drops unknown properties).
+     */
+    private void requireKnownKeys(Map<String, Object> rawManifest) {
+        List<String> unknown = BizAppManifestKeys.unknownKeys(rawManifest);
+        if (!unknown.isEmpty()) {
+            throw new BadRequestException(String.join("; ", unknown));
+        }
+    }
+
     @Transactional
     public InstallResult install(UUID tenantId, UUID orgId, UUID actorId, Map<String, Object> rawManifest) {
         requireEnabled();
         Manifest parsed = parser.parse(rawManifest);
+        requireKnownKeys(rawManifest);
         boolean isPlatform = isPlatformBundledTemplate(parsed.kind());
         validator.validate(parsed, isPlatform);
         BizAppInstallation installation = installationRepository.findByTenantIdAndKind(tenantId, parsed.kind())
@@ -110,6 +123,7 @@ public class BizAppInstallService {
                 .findByTenantIdAndKindAndStatus(tenantId, kind, "ACTIVE")
                 .orElseThrow(() -> new ResourceNotFoundException("App " + kind + " is not installed"));
         Manifest next = parser.parse(rawManifest);
+        requireKnownKeys(rawManifest);
         validator.validate(next, isPlatformBundledTemplate(next.kind()));
         if (!kind.equals(next.kind())) {
             throw new BadRequestException("Upgrade manifest kind " + next.kind()

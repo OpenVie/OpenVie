@@ -14,6 +14,7 @@
 
 package com.openvie.api.common.net;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -29,7 +30,7 @@ import java.util.Map;
 
 class SafeOutboundHttpTest {
 
-    private final SafeOutboundHttp client = new SafeOutboundHttp(false);
+    private final SafeOutboundHttp client = new SafeOutboundHttp(false, false);
 
     @Test
     void rejectsHttpSchemeWhenDisabled() {
@@ -86,6 +87,24 @@ class SafeOutboundHttpTest {
         // Public IP should NOT be blocked
         assertFalse(SafeOutboundHttp.isBlockedIp(InetAddress.getByName("8.8.8.8")));
         assertFalse(SafeOutboundHttp.isBlockedIp(InetAddress.getByName("1.1.1.1")));
+    }
+
+    @Test
+    void rejectsPrivateHostsByDefault() {
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> client.validateHostResolution("localhost"));
+        assertTrue(ex.getMessage().contains("restricted/private IP"), ex.getMessage());
+    }
+
+    @Test
+    void theDevelopmentSwitchAllowsLocalMockHosts() throws Exception {
+        var local = new SafeOutboundHttp(false, true);
+
+        assertDoesNotThrow(() -> local.validateHostResolution("localhost"));
+        assertDoesNotThrow(() -> local.validateHostResolution("127.0.0.1"));
+        // The raw predicate still reports what is blocked: only the resolution
+        // fence is relaxed, so production keeps a single source of truth.
+        assertTrue(SafeOutboundHttp.isBlockedIp(InetAddress.getByName("127.0.0.1")));
     }
 
     @Test

@@ -68,22 +68,28 @@ export function manifestToGraph(manifest: BizAppManifest): { nodes: Node[]; edge
           target: `entity-${field.entity}`,
           label: field.name,
           animated: true,
+          data: { kind: "ref" },
         });
       }
     });
 
-    // Hook edges (entity -> block)
+    // Hook edges (entity -> block); a repeated target under one hook key must
+    // not produce a duplicate edge id.
     if (entity.hooks) {
+      const hookIds = new Set<string>();
       Object.entries(entity.hooks).forEach(([hookKey, targets]) => {
         (targets || []).forEach((target) => {
-          if (!target.startsWith("webhook_out:")) {
-            edges.push({
-              id: `hook-${entity.name}-${hookKey}->${target}`,
-              source: `entity-${entity.name}`,
-              target: `block-${target}`,
-              label: hookKey,
-            });
-          }
+          if (target.startsWith("webhook_out:")) return;
+          const edgeId = `hook-${entity.name}-${hookKey}->${target}`;
+          if (hookIds.has(edgeId)) return;
+          hookIds.add(edgeId);
+          edges.push({
+            id: edgeId,
+            source: `entity-${entity.name}`,
+            target: `block-${target}`,
+            label: hookKey,
+            data: { kind: "hook" },
+          });
         });
       });
     }
@@ -100,17 +106,48 @@ export function manifestToGraph(manifest: BizAppManifest): { nodes: Node[]; edge
       data: { block },
     });
 
-    // Report view edges (report -> entity)
+    // Report view edges (report -> entity), one edge per entity: several views
+    // over the same entity would otherwise overlap on the same path and stack
+    // their labels. The edge carries the view names for the inspector.
     if (block.type === "report" && Array.isArray(block.params?.views)) {
-      block.params.views.forEach((view: { name?: string; entity?: string }) => {
-        if (view.entity) {
-          edges.push({
-            id: `report-${block.id}->${view.entity}`,
-            source: `block-${block.id}`,
-            target: `entity-${view.entity}`,
-            label: view.name || "view",
-          });
-        }
+      const viewsByEntity = new Map<string, string[]>();
+      block.params.views.forEach((view: { name?: string; entity?: string }, viewIndex: number) => {
+        if (!view.entity) return;
+        const viewName = view.name || `view-${viewIndex}`;
+        viewsByEntity.set(view.entity, [...(viewsByEntity.get(view.entity) ?? []), viewName]);
+      });
+      for (const [entity, viewNames] of viewsByEntity) {
+        edges.push({
+          id: `report-${block.id}->${entity}`,
+          source: `block-${block.id}`,
+          target: `entity-${entity}`,
+          label: viewNames.length === 1 ? viewNames[0] : `${viewNames.length} views`,
+          data: { kind: "report", views: viewNames },
+        });
+      }
+    }
+
+    // Schedule edge (external_call -> entity): a connector polled on a timer
+    // has no hook, so without this line the canvas shows it floating. It is
+    // read-only: the interval and the selected records live in params.schedule.
+    const schedule: unknown = block.params?.schedule;
+    const scheduleEntity = schedule !== null && typeof schedule === "object"
+      && "entity" in schedule && typeof schedule.entity === "string"
+      ? schedule.entity
+      : null;
+    if (block.type === "external_call" && scheduleEntity) {
+      const every = schedule !== null && typeof schedule === "object"
+        && "every" in schedule && typeof schedule.every === "string"
+        ? schedule.every
+        : "";
+      edges.push({
+        id: `schedule-${block.id}->${scheduleEntity}`,
+        source: `block-${block.id}`,
+        target: `entity-${scheduleEntity}`,
+        label: every ? `every ${every}` : "scheduled",
+        data: { kind: "schedule", every },
+        animated: true,
+        style: { strokeDasharray: "6 4" },
       });
     }
 
@@ -121,6 +158,7 @@ export function manifestToGraph(manifest: BizAppManifest): { nodes: Node[]; edge
         source: `block-${block.id}`,
         target: `block-${block.params.knowledgeBaseBlock}`,
         label: "kb",
+        data: { kind: "assistant" },
       });
     }
   });

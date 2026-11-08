@@ -117,6 +117,91 @@ describe("Composer graph-manifest conversions (Workstream B)", () => {
     expect(withNewHook.entities[0].hooks).toEqual({ onDecide: ["notifyOwner"] });
   });
 
+  it("tags edge kinds so the inspector can tell hooks from derived links", () => {
+    const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
+    const hookEdge = edges.find((e) => e.source === "entity-leads" && e.target === "block-notifyOwner");
+    const reportEdge = edges.find((e) => e.source === "block-leadPipeline" && e.target === "entity-leads");
+
+    expect(hookEdge?.data).toMatchObject({ kind: "hook" });
+    expect(reportEdge?.data).toMatchObject({ kind: "report", views: ["pipeline"] });
+
+    // Relabelling a derived report edge must never invent a hook.
+    const relabelled = graphToManifest(nodes, [...edges, { ...reportEdge!, label: "onUpdate" }], SAMPLE_MANIFEST);
+    expect(relabelled.entities[0].hooks).toEqual({ onCreate: ["notifyOwner"] });
+  });
+
+  it("collapses report views over one entity into a single labelled edge", () => {
+    const manifest: BizAppManifest = {
+      ...SAMPLE_MANIFEST,
+      blocks: [
+        ...(SAMPLE_MANIFEST.blocks ?? []),
+        {
+          id: "leadReports",
+          type: "report",
+          params: {
+            views: [
+              { name: "recent_readings", entity: "leads" },
+              { name: "by_device", entity: "leads" },
+            ],
+          },
+        },
+      ],
+    };
+
+    const { edges } = manifestToGraph(manifest);
+    const ids = edges.map((edge) => edge.id);
+    const reportEdges = edges.filter((edge) => edge.id === "report-leadReports->leads");
+
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(reportEdges).toHaveLength(1);
+    expect(reportEdges[0].label).toBe("2 views");
+    expect(reportEdges[0].data).toMatchObject({ kind: "report", views: ["recent_readings", "by_device"] });
+  });
+
+  it("dedupes a repeated hook target instead of duplicating the edge id", () => {
+    const manifest: BizAppManifest = {
+      ...SAMPLE_MANIFEST,
+      entities: [{ ...SAMPLE_MANIFEST.entities[0], hooks: { onCreate: ["notifyOwner", "notifyOwner"] } }],
+    };
+
+    const { edges } = manifestToGraph(manifest);
+    const hookEdges = edges.filter((edge) => edge.source === "entity-leads" && edge.target === "block-notifyOwner");
+
+    expect(hookEdges).toHaveLength(1);
+  });
+
+  it("draws a read-only schedule edge for timer-driven connectors", () => {
+    const manifest: BizAppManifest = {
+      ...SAMPLE_MANIFEST,
+      blocks: [
+        ...(SAMPLE_MANIFEST.blocks ?? []),
+        {
+          id: "pollSensor",
+          type: "external_call",
+          params: {
+            protocol: "mqtt",
+            brokerUrl: "tcp://localhost:1883",
+            topic: "openvie/aq/aq-01/telemetry",
+            schedule: { every: "PT30S", entity: "leads", select: { enabled: true }, limit: 10 },
+          },
+        },
+      ],
+    };
+
+    const { nodes, edges } = manifestToGraph(manifest);
+    const scheduleEdge = edges.find((edge) => edge.id === "schedule-pollSensor->leads");
+
+    expect(scheduleEdge?.label).toBe("every PT30S");
+    expect(scheduleEdge?.data).toMatchObject({ kind: "schedule", every: "PT30S" });
+    expect(scheduleEdge?.style).toMatchObject({ strokeDasharray: "6 4" });
+
+    const ids = edges.map((edge) => edge.id);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // Derived like report edges: rebuilding the manifest must not add a hook.
+    expect(graphToManifest(nodes, edges, manifest).entities[0].hooks).toEqual({ onCreate: ["notifyOwner"] });
+  });
+
   it("applies auto-layout correctly with dagre", () => {
     const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
     const layouted = layoutGraph(nodes, edges);
