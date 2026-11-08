@@ -69,6 +69,7 @@ Nhằm cho phép trợ lý ảo trả lời câu hỏi về dữ liệu kinh doa
 - Mỗi bản ghi được chiếu thành một tài liệu Markdown tổng hợp (`bizapp_<kind>_<entity>_<recordId>.md`) đưa vào pipeline hấp thụ tự động của Qdrant và đồ thị tri thức Kuzu.
 - **Quy tắc fail-closed:** Chiếu tri thức chỉ được phép kích hoạt khi `rbac.read` bao gồm đầy đủ mọi vai trò trong workspace (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`). Trường đánh dấu `pii: true` không bao giờ bị chiếu.
 - **Tài liệu tổng hợp (Digest Document):** `bizapp_<kind>__digest.md` tự động kết xuất từ các report view đã khai báo để trả lời câu hỏi tổng hợp mang tính định lượng chính xác.
+- **Knowledge Base đích:** mặc định mỗi app chiếu vào KB riêng `bizapp-<kind>`; chat chỉ truy hồi trong KB gắn với chatbot của phiên (thường là KB mặc định workspace). Đặt `config.knowledgeBaseId` của installation trỏ về KB mặc định để trợ lý trả lời được dữ liệu ứng dụng; KB riêng chỉ có tác dụng với phiên/chatbot gắn KB đó.
 
 ### 3. Trình thiết kế trực quan (Visual Composer)
 
@@ -235,6 +236,7 @@ Allows the AI assistant to answer questions about business records **with verifi
 - Each record is projected into a synthetic Markdown document (`bizapp_<kind>_<entity>_<recordId>.md`) indexed through Qdrant vector search and Kuzu knowledge graphs.
 - **Fail-closed rule:** Projection is rejected unless `rbac.read` includes all workspace roles (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`). Fields marked `pii: true` are never projected.
 - **Digest Document:** `bizapp_<kind>__digest.md` automatically compiles declared report views into aggregated Markdown tables for cited quantitative queries.
+- **Target knowledge base:** each app projects into its own `bizapp-<kind>` base by default; chat retrieves only from the session chatbot's knowledge base (normally the workspace default). Point the installation `config.knowledgeBaseId` at the workspace default so the assistant can answer from app data; a dedicated base only reaches sessions bound to it.
 
 ### 3. Visual Composer
 
