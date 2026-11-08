@@ -249,6 +249,19 @@ public class BizAppIntentRouter {
     private static final Pattern RECORD_ID_PATTERN = Pattern.compile(
             "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
+    /**
+     * A data question ("PM2.5 trung bình từng trạm là bao nhiêu?") asks about
+     * aggregated records, not about one record's fields. Small classifiers tend
+     * to read it as APP_RECORD_UPDATE and then demand a record id, so the router
+     * must leave these turns to RAG over the app's knowledge digest. Matched
+     * against the diacritics-stripped normalized form.
+     */
+    private static final Pattern ANALYTICS_QUESTION = Pattern.compile(
+            "\\b(?:bao\\s+nhieu|bao\\s+nhiu|trung\\s+binh|tong\\s+cong|tong|cao\\s+nhat|thap\\s+nhat"
+                    + "|lon\\s+nhat|nho\\s+nhat|how\\s+many|how\\s+much|average|avg|total|sum|max|min|count)\\b",
+            Pattern.CASE_INSENSITIVE
+    );
+
     public static boolean isFillerTurn(String normalized) {
         if (normalized == null) return false;
         return FILLER_KEYWORDS.matcher(normalized).find();
@@ -745,6 +758,23 @@ public class BizAppIntentRouter {
                         ? offerCreateAppForUncoveredAction(
                                 content, normalized, locale, sessionId, "Uncovered operational request")
                         : RoutingResult.none();
+            }
+
+            // Aggregation questions belong to the knowledge digest, not to a
+            // record action: without this guard the classifier answers
+            // "PM2.5 trung bình từng trạm là bao nhiêu?" with APP_RECORD_UPDATE
+            // and the user is asked for a record id instead of getting data.
+            boolean recordActionIntent = switch (intent) {
+                case APP_RECORD_CREATE, APP_RECORD_UPDATE, APP_RECORD_ARCHIVE, APP_RECORD_SUBMIT -> true;
+                default -> false;
+            };
+            if (recordActionIntent
+                    && ANALYTICS_QUESTION.matcher(normalized).find()
+                    && !WRITE_VERBS.matcher(normalized).find()
+                    && !UPDATE_VERBS.matcher(normalized).find()
+                    && !ARCHIVE_VERBS.matcher(normalized).find()
+                    && !SUBMIT_VERBS.matcher(normalized).find()) {
+                return RoutingResult.none();
             }
 
             String rawKind = root.path("appKind").asText(null);
