@@ -399,7 +399,7 @@
     "bizapps": {
       "introTitle": "BizApp là gì?",
       "introBody": "BizApp là ứng dụng nghiệp vụ khai báo chạy trực tiếp trên các headless service của OpenVie mà không đòi hỏi microservice hay backend riêng. Toàn bộ hành vi nằm trong một manifest JSON duy nhất theo hợp đồng đóng băng bizapp.v1: thực thể, khối thực thi, báo cáo khai báo, quyền theo vai trò và khung xem runtime.",
-      "introStructure": "Cài đặt sẽ đóng băng manifest, deploy quy trình phê duyệt (nếu khai báo) và phục vụ khung xem tại /apps/<mã ứng dụng>. Trợ lý AI có thể trả lời câu hỏi về bản ghi nhờ chiếu tri thức kèm trích dẫn.",
+      "introStructure": "Cài đặt sẽ đóng băng manifest, deploy quy trình phê duyệt (nếu khai báo) và phục vụ các khung xem runtime dưới đường dẫn /apps theo mỗi kind riêng biệt. Trợ lý AI có thể trả lời câu hỏi về bản ghi nhờ chiếu tri thức kèm trích dẫn.",
       "topIdentity": "kind là mã duy nhất dạng chữ thường; name chứa nhãn vi/en dùng làm tiêu đề; version bắt đầu từ 1 và tự tăng khi nâng cấp.",
       "topStorage": "jsonb là kho chung cho custom app; typed table chỉ dành cho template platform cốt lõi.",
       "topRbac": "Map khả năng → danh sách vai trò. Mặc định: đọc mở cho mọi vai trò, ghi/xoá/phê duyệt chỉ admin, submit rơi về write.",
