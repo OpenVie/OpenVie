@@ -1,0 +1,52 @@
+name: Task
+description: Track a feature slice, fix, or release item with scope, acceptance criteria, and verification
+title: "feat(scope): concise deliverable"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open an issue before large patches touching public contracts, storage ownership, tenant isolation, or model-data handling (see [CONTRIBUTING.md](/CONTRIBUTING.md)). Never include customer documents, personal data, tokens, `.env` files, or model checkpoints.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is being delivered and why — user-visible behavior, not implementation narration.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope of Work
+      description: Concrete work items with file/module paths where known.
+      placeholder: "- [ ] Item — `path/to/module`"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Observable results that define done, including denied/error paths where relevant.
+      placeholder: "- [ ] Behavior that must hold"
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Commands and tests that exercise the change (see docs/DEVELOPMENT.md §5).
+      placeholder: "make -C api test"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Linked PR/changelog sections/contracts; precedent issues (#44, #48, #50 use this template).
+    validations:
+      required: false
