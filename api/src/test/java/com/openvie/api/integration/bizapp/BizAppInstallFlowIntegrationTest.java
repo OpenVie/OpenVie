@@ -21,7 +21,6 @@ import com.openvie.api.bizapp.service.BizAppMarketplaceService;
 import com.openvie.api.bizapp.service.BizAppRecordService;
 import com.openvie.api.bizapp.service.BizAppReportResolver;
 import com.openvie.api.common.exception.custom.BadRequestException;
-import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.testsupport.PostgresTestContainer;
 import com.openvie.api.tenant.api.OrgRole;
@@ -265,9 +264,11 @@ class BizAppInstallFlowIntegrationTest {
                 stringField("body")));
         assertThrows(BadRequestException.class,
                 () -> installService.upgrade(workspaceId, orgId, ownerId, "notes", retype));
-        // Versions must move forward.
-        assertThrows(ConflictException.class,
-                () -> installService.upgrade(workspaceId, orgId, ownerId, "notes", v2));
+        // Versions must move forward: a stale (same-version) manifest
+        // auto-advances to current+1 instead of rejecting.
+        InstallResult stale = installService.upgrade(workspaceId, orgId, ownerId, "notes", v2);
+        assertEquals(3, stale.version());
+        assertEquals(3, installService.getInstalled(workspaceId, "notes").version());
     }
 
     private Map<String, Object> notesManifest(int version, List<Map<String, Object>> fields) {
