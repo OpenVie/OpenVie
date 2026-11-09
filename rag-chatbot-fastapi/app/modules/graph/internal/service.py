@@ -57,7 +57,8 @@ class KuzuGraphRepository:
     def _schema(self) -> None:
         statements = (
             "CREATE NODE TABLE IF NOT EXISTS Source(id STRING, tenant_id STRING, "
-            "knowledge_base_id STRING, name STRING, document_kind STRING, source_ref STRING, PRIMARY KEY(id))",
+            "knowledge_base_id STRING, name STRING, document_kind STRING, "
+            "source_ref STRING, PRIMARY KEY(id))",
             "CREATE NODE TABLE IF NOT EXISTS KnowledgeUnit(id STRING, source_id STRING, "
             "text STRING, page_number INT64, section_path STRING, sheet_name STRING, "
             "cell_range STRING, PRIMARY KEY(id))",

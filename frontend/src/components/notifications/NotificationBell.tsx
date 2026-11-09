@@ -101,17 +101,24 @@ export function NotificationBell() {
   }, [request]);
 
   useEffect(() => {
-    void loadUnreadCount();
+    const initial = setTimeout(() => {
+      void loadUnreadCount();
+    }, 0);
     const interval = setInterval(() => {
       void loadUnreadCount();
     }, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
   }, [loadUnreadCount]);
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    const initial = setTimeout(() => {
       void loadNotifications();
-    }
+    }, 0);
+    return () => clearTimeout(initial);
   }, [open, loadNotifications]);
 
   const handleMarkOne = async (item: NotificationItem) => {

@@ -4,7 +4,7 @@
     "author": "LinkedNodeDigital",
     "license": "Apache-2.0",
     "source": "bundled",
-    "sha256": "e37e138658835b710de51eed56e029039c24dcd1ad1f1ee52bf99d88d1545e05",
+    "sha256": "cf6296680914a541a431d35d18b4424821d51fc4bc838e81dc91f55ce2341ac7",
     "generator": "human",
     "model": null,
     "changes": []
@@ -46,7 +46,7 @@
       {
         "name": "leads",
         "label": {
-          "vi": "Kh\u00e1ch h\u00e0ng ti\u1ec1m n\u0103ng",
+          "vi": "Khách hàng tiềm năng",
           "en": "Leads"
         },
         "fields": [
@@ -56,7 +56,7 @@
             "required": true,
             "maxLen": 200,
             "label": {
-              "vi": "T\u00ean kh\u00e1ch h\u00e0ng",
+              "vi": "Tên khách hàng",
               "en": "Customer name"
             }
           },
@@ -121,8 +121,8 @@
           "to": [
             "creator"
           ],
-          "title": "Lead m\u1edbi \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn",
-          "subject": "OpenVie CRM \u2014 lead m\u1edbi"
+          "title": "Lead mới đã được ghi nhận",
+          "subject": "OpenVie CRM — lead mới"
         }
       },
       {

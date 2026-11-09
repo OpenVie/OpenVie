@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 import pytest
 
 from app.bootstrap.settings import Settings
@@ -25,8 +26,6 @@ from app.modules.retrieval.internal.cache import (
 )
 from app.modules.retrieval.internal.retrieval import (
     HybridRetriever,
-    QueryRouter,
-    weighted_reciprocal_rank_fusion,
 )
 
 
@@ -177,7 +176,10 @@ def test_legacy_adapter_guard_fail_fast() -> None:
         ) -> list[RetrievedKnowledgeUnit]:
             return []
 
-    with pytest.raises(ValueError, match="Legacy adapter dense does not accept excluded_document_kinds"):
+    with pytest.raises(
+        ValueError,
+        match="Legacy adapter dense does not accept excluded_document_kinds",
+    ):
         HybridRetriever(
             settings=Settings(),
             dense=LegacyDenseWithoutExclusions(),  # type: ignore[arg-type]
@@ -191,7 +193,9 @@ async def test_vector_path_containment() -> None:
     candidates = [_chunk("doc-1", "u1"), _chunk("doc-2", "u2")]
 
     class DummyReranker:
-        async def rerank(self, query: str, chunks: list[RetrievedKnowledgeUnit]) -> list[RetrievedKnowledgeUnit]:
+        async def rerank(
+            self, query: str, chunks: list[RetrievedKnowledgeUnit]
+        ) -> list[RetrievedKnowledgeUnit]:
             return list(reversed(chunks))
 
     retriever = HybridRetriever(

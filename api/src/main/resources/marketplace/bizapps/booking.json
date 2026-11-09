@@ -4,7 +4,7 @@
     "author": "LinkedNodeDigital",
     "license": "Apache-2.0",
     "source": "bundled",
-    "sha256": "f0857af4cc41c563d6e720b8ab28f6cccc09850256c23785f339b97e701a4da9",
+    "sha256": "2641e85a0573cfc466b10db8703f79a600cba102ff3f4dca96e38b827ab29a03",
     "generator": "human",
     "model": null,
     "changes": []
@@ -13,7 +13,7 @@
     "schema": "bizapp.v1",
     "kind": "booking",
     "name": {
-      "vi": "\u0110\u1eb7t l\u1ecbch h\u1eb9n",
+      "vi": "Đặt lịch hẹn",
       "en": "Booking"
     },
     "version": 1,
@@ -50,7 +50,7 @@
       {
         "name": "bookings",
         "label": {
-          "vi": "L\u1ecbch h\u1eb9n",
+          "vi": "Lịch hẹn",
           "en": "Bookings"
         },
         "fields": [
@@ -60,7 +60,7 @@
             "required": true,
             "maxLen": 200,
             "label": {
-              "vi": "T\u00ean kh\u00e1ch",
+              "vi": "Tên khách",
               "en": "Customer name"
             }
           },
@@ -91,15 +91,27 @@
             "optionLabels": {
               "consultation": {
                 "label": "Tư vấn",
-                "aliases": ["tư vấn", "hỏi ý kiến", "tư vấn viên"]
+                "aliases": [
+                  "tư vấn",
+                  "hỏi ý kiến",
+                  "tư vấn viên"
+                ]
               },
               "tour": {
                 "label": "Tham quan",
-                "aliases": ["tham quan", "du lịch", "tour"]
+                "aliases": [
+                  "tham quan",
+                  "du lịch",
+                  "tour"
+                ]
               },
               "meeting-room": {
                 "label": "Phòng họp",
-                "aliases": ["phòng họp", "thuê phòng", "họp"]
+                "aliases": [
+                  "phòng họp",
+                  "thuê phòng",
+                  "họp"
+                ]
               }
             }
           },
@@ -159,8 +171,8 @@
             "creator",
             "record.customerEmail"
           ],
-          "title": "\u0110\u1eb7t l\u1ecbch h\u1eb9n \u0111\u00e3 \u0111\u01b0\u1ee3c ghi nh\u1eadn",
-          "subject": "OpenVie Booking \u2014 x\u00e1c nh\u1eadn \u0111\u1eb7t l\u1ecbch"
+          "title": "Đặt lịch hẹn đã được ghi nhận",
+          "subject": "OpenVie Booking — xác nhận đặt lịch"
         }
       },
       {

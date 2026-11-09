@@ -18,10 +18,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from typing import Any
 
-_active_excluded_kinds: ContextVar[tuple[str, ...]] = ContextVar(
-    "_active_excluded_kinds", default=()
-)
-
 from app.modules.generation.api import (
     GenerationApi,
     GenerationContext,
@@ -37,6 +33,10 @@ from app.modules.model.api import ModelTimeoutError, ModelUnavailableError
 from app.modules.retrieval.api import (
     RetrievalApi,
     RetrievalQuery,
+)
+
+_active_excluded_kinds: ContextVar[tuple[str, ...]] = ContextVar(
+    "_active_excluded_kinds", default=()
 )
 
 

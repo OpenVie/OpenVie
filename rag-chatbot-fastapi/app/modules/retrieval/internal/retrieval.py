@@ -207,7 +207,11 @@ class HybridRetriever:
                 )
                 if self._legacy_dense is not None
                 else self._dense_results(
-                    tenant_id, knowledge_base_id, query_vector, document_ids, excluded_document_kinds
+                    tenant_id,
+                    knowledge_base_id,
+                    query_vector,
+                    document_ids,
+                    excluded_document_kinds,
                 )
             ),
         )
