@@ -25,7 +25,6 @@ import {
   ExternalLink,
   FileEdit,
   FilePlus,
-  FileText,
   Layers,
   Loader2,
   Send,

@@ -15,12 +15,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.modules.graph.api import (
     GraphBatch,
     GraphEntity,
-    GraphRelation,
     GraphSearchQuery,
     GraphUnit,
 )
@@ -60,16 +60,27 @@ def test_graph_exclusion_legacy_nodes_treated_as_user(tmp_path: Path) -> None:
 
     # Insert legacy node directly into Kuzu with NULL document_kind
     repo._connection.execute(
-        "CREATE (:Source {id: 'legacy-doc', tenant_id: 'tenant-1', knowledge_base_id: 'kb-1', name: 'legacy.md'})"
+        "CREATE (:Source {id: 'legacy-doc', tenant_id: 'tenant-1',"
+        " knowledge_base_id: 'kb-1', name: 'legacy.md'})"
     )
     repo._connection.execute(
-        "CREATE (:KnowledgeUnit {id: 'legacy-doc:0', source_id: 'legacy-doc', text: 'Legacy info on Acme Corp', page_number: 1})"
+        "CREATE (:KnowledgeUnit {id: 'legacy-doc:0', source_id: 'legacy-doc',"
+        " text: 'Legacy info on Acme Corp', page_number: 1})"
     )
     repo._connection.execute(
-        "MERGE (e:Entity {id: 'tenant-1:kb-1:acme corp'}) SET e.tenant_id='tenant-1', e.knowledge_base_id='kb-1', e.normalized_name='acme corp', e.name='Acme Corp', e.entity_type='org', e.aliases='[\"Acme Corp\"]'"
+        "MERGE (e:Entity {id: 'tenant-1:kb-1:acme corp'})"
+        " SET e.tenant_id='tenant-1', e.knowledge_base_id='kb-1',"
+        " e.normalized_name='acme corp', e.name='Acme Corp',"
+        " e.entity_type='org', e.aliases='[\"Acme Corp\"]'"
     )
-    repo._connection.execute("MATCH (s:Source {id: 'legacy-doc'}), (u:KnowledgeUnit {id: 'legacy-doc:0'}) CREATE (s)-[:CONTAINS]->(u)")
-    repo._connection.execute("MATCH (u:KnowledgeUnit {id: 'legacy-doc:0'}), (e:Entity {id: 'tenant-1:kb-1:acme corp'}) CREATE (u)-[:MENTIONS {evidence_unit_id: '0'}]->(e)")
+    repo._connection.execute(
+        "MATCH (s:Source {id: 'legacy-doc'}), (u:KnowledgeUnit {id: 'legacy-doc:0'})"
+        " CREATE (s)-[:CONTAINS]->(u)"
+    )
+    repo._connection.execute(
+        "MATCH (u:KnowledgeUnit {id: 'legacy-doc:0'}), (e:Entity {id: 'tenant-1:kb-1:acme corp'})"
+        " CREATE (u)-[:MENTIONS {evidence_unit_id: '0'}]->(e)"
+    )
 
     # Legacy node has NULL document_kind. Exclude BIZAPP_RECORD and BIZAPP_DIGEST.
     query = GraphSearchQuery(
@@ -117,7 +128,9 @@ def test_graph_exclusion_filters_out_excluded_kinds(tmp_path: Path) -> None:
     assert all(m.evidence.document_id != "sys-doc" for m in mentions)
 
     # Direct query test: load_evidence_units
-    units = repo.load_evidence_units(filtered_query, [("sys-doc", "u_sys-doc"), ("user-doc", "u_user-doc")])
+    units = repo.load_evidence_units(
+        filtered_query, [("sys-doc", "u_sys-doc"), ("user-doc", "u_user-doc")]
+    )
     assert all(u.document_id != "sys-doc" for u in units)
 
 
@@ -126,7 +139,9 @@ def test_graph_exclusion_via_http_transport(tmp_path: Path) -> None:
     repo.replace_source(_sample_batch("user-doc", document_kind="USER"))
     repo.replace_source(_sample_batch("sys-doc", document_kind="BIZAPP_RECORD"))
 
-    app = create_graph_app(repository=repo, internal_token="test-token", database_path=str(tmp_path / "kuzu"))
+    app = create_graph_app(
+        repository=repo, internal_token="test-token", database_path=str(tmp_path / "kuzu")
+    )
     client = TestClient(app)
 
     response = client.post(

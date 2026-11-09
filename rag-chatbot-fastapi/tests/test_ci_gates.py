@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
 from qdrant_client.http import models
 
 from app.contracts.document_ingestion_v1 import DocumentIngestRequestedEvent
@@ -28,7 +28,14 @@ def test_gate_g1_whitelist_enforcement() -> None:
 
 
 def test_gate_g4_wire_neutrality_defaults() -> None:
-    fixture_path = Path(__file__).parents[2] / "contracts" / "document-ingestion" / "v1" / "fixtures" / "request.json"
+    fixture_path = (
+        Path(__file__).parents[2]
+        / "contracts"
+        / "document-ingestion"
+        / "v1"
+        / "fixtures"
+        / "request.json"
+    )
     raw = fixture_path.read_bytes()
     event = DocumentIngestRequestedEvent.parse_payload(raw)
 
@@ -86,4 +93,6 @@ def test_gate_g10_matrix_coverage_complete() -> None:
 
     assert len(matrix_rows) == 15
     for row_id, (path_name, test_ref) in matrix_rows.items():
-        assert test_ref is not None and len(test_ref) > 0, f"Row {row_id} ({path_name}) missing test reference"
+        assert test_ref is not None and len(test_ref) > 0, (
+            f"Row {row_id} ({path_name}) missing test reference"
+        )
