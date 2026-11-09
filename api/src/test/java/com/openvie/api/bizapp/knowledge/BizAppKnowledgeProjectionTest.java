@@ -134,7 +134,7 @@ class BizAppKnowledgeProjectionTest {
                 eq("bizapp__crm__leads__" + record.getId() + ".md"),
                 markdownCaptor.capture(),
                 eq(com.openvie.api.document.api.DocumentKind.BIZAPP_RECORD),
-                eq("bizapp:crm")
+                eq("bizapp:crm:leads")
         );
 
         String markdown = markdownCaptor.getValue();
