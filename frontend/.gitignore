@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# generated build-time artifacts (see scripts/prepare-pdf-worker.mjs)
+/public/pdf.worker.min.mjs
+
 # production
 /build
 
