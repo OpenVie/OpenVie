@@ -14,15 +14,15 @@
 
 package com.openvie.api.document.repository;
 
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.document.model.Document;
+import com.openvie.api.document.enums.DocumentStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import com.openvie.api.document.enums.DocumentStatus;
-import org.springframework.data.domain.Pageable;
 
 public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSpecificationExecutor<Document> {
     Optional<Document> findByIdAndTenantId(UUID id, UUID tenantId);
@@ -46,4 +46,11 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
 
     List<Document> findByStatusAndIdGreaterThanOrderByIdAsc(
             DocumentStatus status, UUID afterId, Pageable pageable);
+
+    List<Document> findByTenantIdAndSourceRef(UUID tenantId, String sourceRef);
+
+    List<Document> findByTenantIdAndSourceRefStartingWith(UUID tenantId, String sourceRefPrefix);
+
+    List<Document> findByTenantIdAndKnowledgeBaseIdAndDocumentKindOrderByCreatedAtDescIdDesc(
+            UUID tenantId, UUID knowledgeBaseId, DocumentKind documentKind);
 }

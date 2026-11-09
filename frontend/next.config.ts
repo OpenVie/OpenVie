@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   experimental: {
     proxyClientMaxBodySize: "200mb",
+    // Manifest drafting calls the AI service synchronously. A 3B repair loop
+    // can exceed the 30s Next proxy default, which made the UI report failure
+    // while the API kept running and eventually created the draft.
+    proxyTimeout: 300_000,
   },
   async redirects() {
     // Pre-hard-split URLs moved under /admin/*. Keep temporary redirects so

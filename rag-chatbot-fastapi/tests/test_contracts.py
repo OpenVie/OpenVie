@@ -33,6 +33,7 @@ def test_grpc_descriptor_is_wire_compatible() -> None:
         "GenerateAnswer",
         "ListDocumentUnits",
         "DeleteDocumentIndex",
+        "CompleteJson",
     ]
     expected = {
         "GenerateAnswerRequest": {
@@ -50,6 +51,7 @@ def test_grpc_descriptor_is_wire_compatible() -> None:
             "prompt_schema_version": 12,
             "trace": 13,
             "document_ids": 14,
+            "excluded_document_kinds": 15,
         },
         "GenerateAnswerResponse": {
             "generation_id": 1,

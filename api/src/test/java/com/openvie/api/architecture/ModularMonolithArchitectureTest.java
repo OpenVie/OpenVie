@@ -30,7 +30,7 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 class ModularMonolithArchitectureTest {
     private static final Set<String> BUSINESS_MODULES = Set.of(
-            "ai", "auth", "chat", "document", "notification", "tenant", "workflow");
+            "ai", "auth", "bizapp", "chat", "document", "notification", "tenant", "workflow");
 
     private static final ImportOption MAIN_OUTPUT_ONLY = location -> {
         String path = location.asURI().getPath();
@@ -115,6 +115,20 @@ class ModularMonolithArchitectureTest {
                         "com.openvie.api.bootstrap..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "org.springframework.jdbc..", "jakarta.persistence.EntityManager")
+                .check(classes);
+    }
+
+    @Test
+    void chatAndBizappDoNotDependOnDocumentService() {
+        noClasses().that().resideInAnyPackage("com.openvie.api.chat..", "com.openvie.api.bizapp..")
+                .should().dependOnClassesThat().resideInAPackage("com.openvie.api.document.service..")
+                .check(classes);
+    }
+
+    @Test
+    void aiDoesNotDirectlyCallInstall() {
+        noClasses().that().resideInAPackage("com.openvie.api.ai..")
+                .should().dependOnClassesThat().haveFullyQualifiedName("com.openvie.api.bizapp.service.BizAppInstallService")
                 .check(classes);
     }
 }

@@ -110,6 +110,22 @@ class NotificationChannelResolverTest {
     }
 
     @Test
+    void storedChannelSettingsAreTrimmedBeforeUse() {
+        NotificationChannel channel = storedChannel("smtp", true);
+        when(channelRepository.findByOrgIdOrderByCreatedAtAsc(orgId))
+                .thenReturn(List.of(channel));
+        when(cipher.available()).thenReturn(true);
+        when(cipher.decrypt("ciphertext")).thenReturn(
+                "{\"host\":\"  stored.relay  \",\"fromEmail\":\"  stored@example.com  \"}");
+
+        NotificationChannelResolver.ResolvedChannel resolved =
+                resolver.resolve(orgId).orElseThrow();
+
+        assertEquals("stored.relay", resolved.config().host());
+        assertEquals("stored@example.com", resolved.config().fromEmail());
+    }
+
+    @Test
     void disabledStoredChannelFallsBackToEnvironment() {
         NotificationChannel channel = storedChannel("smtp", false);
         when(channelRepository.findByOrgIdOrderByCreatedAtAsc(orgId))

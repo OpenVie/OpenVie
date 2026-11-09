@@ -142,7 +142,8 @@ public class WorkflowEngineController extends BaseController {
             @RequestParam(value = "assignee", required = false) UUID assigneeId,
             @RequestParam(value = "limit", required = false, defaultValue = "25") int limit,
             HttpServletRequest request) {
-        return engineService.listTasks(getTenantId(request), definitionKey, unassignedOnly, assigneeId, limit);
+        return engineService.listTasks(getTenantId(request), getUserId(request), definitionKey,
+                unassignedOnly, assigneeId, limit);
     }
 
     @Operation(summary = "Claim a task",

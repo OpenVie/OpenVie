@@ -1,0 +1,23 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-ssrf-metadata",
+  "name": { "vi": "SSRF Metadata", "en": "SSRF Metadata" },
+  "version": 1,
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "ssrfMeta",
+      "type": "external_call",
+      "params": {
+        "url": "https://169.254.169.254/latest/meta-data/",
+        "credentialRef": "vault-secret"
+      }
+    }
+  ]
+}

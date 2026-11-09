@@ -200,16 +200,31 @@ export default function ApprovalsPage() {
                 <div key={task.taskId} className="rounded-xl border p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{task.documentFileName}</p>
+                      <p className="truncate font-medium">{task.recordTitle || task.documentFileName || task.taskName}</p>
+                      {task.recordSummary && (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{task.recordSummary}</p>
+                      )}
                       <p className="mt-1 text-xs text-muted-foreground">{taskRole(task, t)} · {format.dateTime(new Date(task.createdAt), { dateStyle: "medium", timeStyle: "short" })}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: task.documentId, fileName: task.documentFileName })}>
-                        <Eye className="size-4" />
-                      </Button>
+                      {task.documentId && (
+                        <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: task.documentId!, fileName: task.documentFileName || task.taskName })}>
+                          <Eye className="size-4" />
+                        </Button>
+                      )}
                       <Badge variant="secondary">{task.assignee ? t("claimed") : t("unclaimed")}</Badge>
                     </div>
                   </div>
+                  {task.recordFields && Object.keys(task.recordFields).length > 0 && (
+                    <dl className="mt-3 grid max-h-44 gap-x-4 gap-y-1 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-2 text-xs sm:grid-cols-2">
+                      {Object.entries(task.recordFields).map(([label, value]) => (
+                        <div key={label} className="flex min-w-0 gap-1">
+                          <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+                          <dd className="min-w-0 break-words text-foreground">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {!task.assignee && (
                       <Button size="sm" variant="outline" disabled={busyTaskId === task.taskId} onClick={() => runTaskAction(task, () => claimApprovalTaskApi(request, task.taskId))}>
@@ -253,7 +268,10 @@ export default function ApprovalsPage() {
               {processes.length === 0 ? <p className="text-sm text-muted-foreground">{t("emptySubmissions")}</p> : processes.map((process) => (
                 <div key={process.processInstanceId} className="flex items-center justify-between gap-3 rounded-xl border p-4">
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{process.documentFileName}</p>
+                    <p className="truncate font-medium">{process.title || process.documentFileName || process.processInstanceId}</p>
+                    {process.summary && (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{process.summary}</p>
+                    )}
                     <p className="mt-1 text-xs text-muted-foreground">
                       {statusLabel(process.documentStatus)} · {format.dateTime(new Date(process.startedAt), { dateStyle: "medium", timeStyle: "short" })}
                     </p>
@@ -262,9 +280,11 @@ export default function ApprovalsPage() {
                     <Badge variant={process.documentStatus === "APPROVED" ? "default" : process.documentStatus === "REJECTED" ? "destructive" : "secondary"}>
                       {statusLabel(process.documentStatus)}
                     </Badge>
-                    <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: process.documentId, fileName: process.documentFileName })}>
-                      <Eye className="size-4" />
-                    </Button>
+                    {process.documentId && (
+                      <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: process.documentId!, fileName: process.documentFileName || process.title || process.processInstanceId })}>
+                        <Eye className="size-4" />
+                      </Button>
+                    )}
                     <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewLog")} onClick={() => openLog(process)}>
                       <History className="size-4" />
                     </Button>

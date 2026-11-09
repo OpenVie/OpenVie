@@ -1,3 +1,19 @@
+/*
+Copyright 2026 LinkedNodeDigital
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -184,6 +200,21 @@ html[data-ov-palette="blue"] .ov-loading-screen .ov-aurora i:nth-child(3) { back
 .ov-brand { max-width: 180px; }
 .ov-new-chat-label { max-width: 180px; }
 .ov-nav-label { max-width: 180px; }
+.ov-nav-beta {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgb(31 182 255 / .45);
+  background: rgb(31 182 255 / .14);
+  color: #1fb6ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-transform: lowercase;
+}
+.ov-light .ov-nav-beta { border-color: rgb(7 133 197 / .45); background: rgb(31 182 255 / .12); color: #0785c5; }
 .ov-docs-label { max-width: 170px; }
 .ov-account-copy { max-width: 180px; }
 .ov-workspace-container {
@@ -209,6 +240,7 @@ html[data-ov-palette="blue"] .ov-loading-screen .ov-aurora i:nth-child(3) { back
   transform: translateY(-14px);
 }
 .ov-sidebar-collapsed .ov-history-slot { display: none; }
+.ov-sidebar-collapsed .ov-nav-beta { display: none; }
 .ov-sidebar-collapsed .ov-sidebar-collapse { margin-left: 0; }
 .ov-new-chat,
 .ov-navigation-link,
@@ -739,23 +771,10 @@ html[data-theme="light"] .ov-results { color: #5c685f; }
 .ov-file-chip-docx { --ov-rotate: -3deg; right: -28px; bottom: -18px; animation-delay: -3s; }
 .ov-chat-composer-area { background: transparent; }
 .ov-chat-composer { border-color: rgb(255 255 255 / .14) !important; background: transparent !important; box-shadow: none !important; }
-/* Desktop keeps the single-line hero pill; phones use the same stacked layout as the conversation composer. */
-@media (min-width: 640px) {
-  .ov-chat-composer-empty { display: flex; align-items: center; gap: 10px; border-radius: 999px; padding: 7px 8px 7px 16px; }
-  .ov-chat-composer-empty textarea { width: auto; min-height: 28px; flex: 1; padding: 3px 0; overflow-x: hidden; white-space: nowrap; text-align: center; }
-  .ov-chat-composer-empty > div { height: auto; flex: none; }
-}
-
-/* Keep the empty-chat composer visually balanced: actions become icon-only
-   before their labels squeeze the message field or create a scrollbar. */
-@media (max-width: 1400px) {
-  .ov-chat-composer-empty .ov-composer-action-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .ov-chat-composer-empty button[type="button"] { width: 34px; justify-content: center; padding-inline: 0; }
-  .ov-chat-composer-empty > div { gap: 4px; }
-}
-@media (min-width: 640px) and (max-width: 1400px) {
-  .ov-chat-composer-empty textarea { width: 100%; text-align: center; }
-  .ov-chat-composer-empty > div { position: absolute; z-index: 1; right: 8px; top: 50%; transform: translateY(-50%); }
+@media (max-width: 640px) {
+  .ov-composer-action-label {
+    display: none;
+  }
 }
 .ov-chat-composer button[type="submit"], .ov-chat-composer button[type="button"]:last-child { color: #07090c !important; }
 

@@ -15,6 +15,9 @@
 package com.openvie.api.integration.apikey;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,4 +34,19 @@ public interface ApiKeyRepository extends JpaRepository<ApiKey, UUID> {
 
     /** Time-throttled usage tracking needs rows not touched in the last 30s. */
     List<ApiKey> findByUserIdAndLastUsedAtBeforeOrLastUsedAtIsNull(UUID userId, LocalDateTime threshold);
+
+    /**
+     * Stamps usage at most once every 30 s per key. The throttle lives in the
+     * WHERE clause so last-used bookkeeping is a single statement that may be
+     * executed on the authentication hot path.
+     */
+    @Modifying
+    @Query("""
+            update ApiKey k
+               set k.lastUsedAt = :now
+             where k.id = :keyId
+               and (k.lastUsedAt is null or k.lastUsedAt <= :threshold)
+            """)
+    int stampUsage(@Param("keyId") UUID keyId, @Param("now") LocalDateTime now,
+                   @Param("threshold") LocalDateTime threshold);
 }

@@ -691,14 +691,18 @@ export default function DocumentsPage() {
       </Card>
 
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("uploadDocuments")}</DialogTitle>
-            <DialogDescription>{t("filesSelected", { count: pendingFiles.length })}</DialogDescription>
+        <DialogContent className="sm:max-w-md min-w-0">
+          <DialogHeader className="min-w-0 pr-8">
+            <DialogTitle className="truncate">{t("uploadDocuments")}</DialogTitle>
+            <DialogDescription className="break-words">{t("filesSelected", { count: pendingFiles.length })}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-muted p-3 text-sm text-foreground">
-              {pendingFiles.map((file) => <p key={`${file.name}-${file.size}`} className="truncate">{file.name}</p>)}
+          <div className="min-w-0 w-full space-y-4">
+            <div className="max-h-40 min-w-0 w-full space-y-1 overflow-y-auto overflow-x-hidden rounded-lg bg-muted p-3 text-sm text-foreground">
+              {pendingFiles.map((file) => (
+                <p key={`${file.name}-${file.size}`} className="min-w-0 truncate" title={file.name}>
+                  {file.name}
+                </p>
+              ))}
             </div>
           </div>
           <DialogFooter>
@@ -717,8 +721,8 @@ export default function DocumentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("submitApprovalTitle")}</DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-foreground">{approvalTarget?.fileName}</span>
+            <DialogDescription className="min-w-0 break-words">
+              <span className="break-all font-medium text-foreground">{approvalTarget?.fileName}</span>
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
@@ -743,8 +747,8 @@ export default function DocumentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("deleteTitle")}</DialogTitle>
-            <DialogDescription>
-              <span className="font-medium text-foreground">{deleteTarget?.fileName}</span> {t("deleteDescription")}
+            <DialogDescription className="min-w-0 break-words">
+              <span className="break-all font-medium text-foreground">{deleteTarget?.fileName}</span> {t("deleteDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

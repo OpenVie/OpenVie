@@ -1,0 +1,145 @@
+{
+  "envelope": "openvie.template.v1",
+  "meta": {
+    "author": "LinkedNodeDigital",
+    "license": "Apache-2.0",
+    "source": "bundled",
+    "sha256": "5fb3a72cff439aac835f1ae70f6933218f2847b19b867fc7974433a48384de8a",
+    "generator": "human",
+    "model": null,
+    "changes": []
+  },
+  "manifest": {
+    "schema": "bizapp.v1",
+    "kind": "signature-request",
+    "name": {
+      "en": "Signature Request",
+      "vi": "Yeu cau ky so"
+    },
+    "version": 1,
+    "icon": "file-signature",
+    "storage": "jsonb",
+    "rbac": {
+      "read": [
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ],
+      "write": [
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ],
+      "approve": [
+        "WORKSPACE_ADMIN"
+      ]
+    },
+    "conversational": {
+      "triggers": [
+        "ký số",
+        "chữ ký",
+        "trình ký",
+        "ký văn bản",
+        "signature",
+        "signature-request"
+      ],
+      "description": "Quy trình trình ký và ký số tài liệu điện tử"
+    },
+    "entities": [
+      {
+        "name": "signature_requests",
+        "label": {
+          "en": "Signature Requests",
+          "vi": "Yeu cau ky so"
+        },
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "maxLen": 200,
+            "label": {
+              "en": "Title",
+              "vi": "Tieu de"
+            }
+          },
+          {
+            "name": "signerEmail",
+            "type": "string",
+            "format": "email",
+            "required": true,
+            "maxLen": 200,
+            "label": {
+              "en": "Signer Email",
+              "vi": "Email nguoi ky"
+            }
+          },
+          {
+            "name": "documentRef",
+            "type": "string",
+            "required": true,
+            "maxLen": 100,
+            "label": {
+              "en": "Document ID",
+              "vi": "Ma tai lieu"
+            }
+          },
+          {
+            "name": "signatureStatus",
+            "type": "enum",
+            "required": true,
+            "options": [
+              "PENDING",
+              "SIGNED",
+              "DECLINED",
+              "EXPIRED"
+            ],
+            "label": {
+              "en": "Signature Status",
+              "vi": "Trang thai ky"
+            }
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "maxLen": 500
+          }
+        ],
+        "hooks": {
+          "onCreate": [
+            "requestApproval"
+          ]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "requestApproval",
+        "type": "approval_workitem",
+        "params": {
+          "bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml",
+          "candidateRole": "WORKSPACE_ADMIN"
+        }
+      },
+      {
+        "id": "sendToSigningProvider",
+        "type": "external_call",
+        "params": {
+          "url": "https://api.signing-provider.test/v1/envelopes",
+          "credentialRef": "signing-provider-key",
+          "method": "POST",
+          "bodyTemplate": "{\"title\":\"{{record.title}}\",\"signerEmail\":\"{{record.signerEmail}}\",\"documentRef\":\"{{record.documentRef}}\",\"app\":\"{{app.kind}}\",\"id\":\"{{record.id}}\"}",
+          "responseMap": {
+            "envelopeId": "/id",
+            "providerStatus": "/status"
+          }
+        }
+      }
+    ],
+    "ui": {
+      "views": [
+        "registry:signature_requests",
+        "form:signature_requests",
+        "timeline:signature_requests"
+      ]
+    }
+  }
+}

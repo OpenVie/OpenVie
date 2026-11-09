@@ -22,6 +22,10 @@ có thể self-host toàn bộ backend và gọi thẳng API — hoặc dùng lu
   header `X-Refresh-Token`, body `{"refresh_token": "..."}` — client không có cookie dùng header/body.
 - Không có header tenant: workspace, người dùng và vai trò được server suy ra từ token và
   membership đang sống trong DB ở **mỗi** request.
+- **Tích hợp browser và timeout:** CORS prod mặc định trống (`CORS_ORIGINS`) — khai báo origin của
+  UI doanh nghiệp hoặc proxy same-origin qua APISIX. Chế độ chat JSON đồng bộ chờ tối đa
+  `app.ai.grpc.answer-deadline-seconds` (mặc định 100 s) — đặt timeout client theo đó, hoặc dùng SSE
+  để nhận bản nháp sớm hơn.
 
 ### 2. API key (machine-to-machine)
 
@@ -46,19 +50,35 @@ curl -X POST "$BASE/api/v1/admin/api-keys" \
 
 ### 3. Chat đồng bộ (server-to-server)
 
+Tạo phiên trước. Session thuộc **workspace active của token**: với user JWT là workspace đang bật
+(đổi qua `POST /api/v1/auth/workspaces/switch`); với API key là workspace gắn vào key lúc tạo.
+`knowledge_base_id` bắt buộc và phải là KB đang hoạt động của workspace đó:
+
+```bash
+curl -X POST "$BASE/api/v1/chat/sessions" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"knowledge_base_id":"<kb-uuid>","locale":"vi","metadata":{}}'
+# → 200 {"id":…, "chatbot_id":…, "knowledge_base_id":…, "tenant_id":…, "locale":"vi"}
+```
+
 Endpoint chat hỗ trợ hai chế độ trên cùng một pipeline (fingerprint, replay idempotent, kiểm tra scope):
 
 ```bash
 curl -X POST "$BASE/api/v1/chat/sessions/$SESSION_ID/messages" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"content":"Tóm tắt hợp đồng này","documentIds":["<doc-uuid>"]}'
+  -d '{"content":"Tóm tắt hợp đồng này","document_ids":["<doc-uuid>"]}'
+# → 200 (JSON cuối) hoặc text/event-stream: content/reset/complete/error
 ```
 
-- `Accept: application/json` → chờ và trả câu trả lời cuối cùng dạng JSON (dành cho tích hợp).
+- `Accept: application/json` → chờ và trả câu trả lời cuối cùng dạng JSON (dành cho tích hợp);
+  deadline mô hình mặc định 100 s.
 - Mọi `Accept` khác → stream SSE (`content`/`reset`/`complete`/`error`) như UI đang dùng.
-- `documentIds` (tối đa 20 tài liệu `COMPLETED` của kho tri thức phiên đó) thu hẹp phạm vi truy hồi;
-  bỏ trống = cả kho. Gửi `Idempotency-Key` để replay đúng lượt.
+- `document_ids` (tối đa 20 tài liệu `COMPLETED` của kho tri thức phiên đó) thu hẹp phạm vi truy hồi;
+  bỏ trống = cả kho. Field dùng **snake_case** — gửi camelCase `documentIds` sẽ bị bỏ qua tường minh
+  (không trả 400) và phạm vi không được thu hẹp. Gửi `Idempotency-Key` để replay đúng lượt.
+- Lịch sử và kết thúc: `GET /api/v1/chat/sessions/{id}/messages?limit=50&after=0`
+  (phân trang theo `sequence_number`) và `DELETE /api/v1/chat/sessions/{id}`.
 
 ### 4. Webhook (đẩy sự kiện có chữ ký)
 
@@ -70,7 +90,9 @@ curl -X POST "$BASE/api/v1/admin/webhook-endpoints" \
 ```
 
 - Sự kiện hiện có: `document.status.changed` (tiến độ hấp thụ), `workflow.started`,
-  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, và `webhook.test`.
+  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, `webhook.test`,
+  và họ `bizapp.<kind>.record.created|updated|archived|submitted|decided` từ nền tảng
+  BizApp (Tier 3 — xem [BIZAPPS.md](BIZAPPS.md)).
 - Body là envelope JSON: `{ "id", "type", "occurred_at", "workspace_id", "data" }`.
   `id` (`X-OpenVie-Event-Id`) ổn định cho một sự kiện → dùng làm khóa chống trùng phía nhận.
 - Chữ ký: header `X-OpenVie-Signature: t=<unix>,v1=<hex>` với
@@ -126,7 +148,8 @@ nhật ký tài liệu.
 
 Bộ sưu tập Postman mẫu đầy đủ kèm các biến môi trường (`baseUrl`, `token`, `workspaceId`, `sessionId`) được lưu trữ sẵn tại:
 [`contracts/postman/openvie_integration.postman_collection.json`](../contracts/postman/openvie_integration.postman_collection.json).
-Bao gồm đầy đủ các kịch bản mẫu: Xác thực, Cấp phát khóa API máy (M2M), Chat đồng bộ JSON / stream SSE, Đăng ký Webhook, và Thao tác động cơ quy trình BPMN Flowable L2.
+Bao gồm đầy đủ các kịch bản mẫu: Xác thực, Cấp phát khóa API máy (M2M), Chat (tạo phiên, JSON đồng bộ / stream SSE, lịch sử, đóng phiên), Đăng ký Webhook, và Thao tác động cơ quy trình BPMN Flowable L2.
+Màn hình quản trị [`/admin/organization/api-keys`](../frontend/src/app/[locale]/(admin)/admin/organization/api-keys/page.tsx) (chỉ `ORG_OWNER`) cung cấp list/tạo/thu hồi khóa trong UI; secret vẫn chỉ hiển thị đúng một lần sau khi tạo.
 
 
 ### 9. Truy vấn phân tích hồ dữ liệu Lakehouse (DuckDB OLAP)
@@ -144,6 +167,20 @@ Hồ dữ liệu Lakehouse tách biệt hoàn toàn dữ liệu giao dịch th�
 | Báo cáo dung lượng & định dạng tài liệu Hấp thụ | `GET /api/v1/analytics/lakehouse/documents` |
 | Báo cáo an ninh, nhật ký truy vết & kiểm toán | `GET /api/v1/analytics/lakehouse/audit` |
 | Báo cáo tiến độ & SLA phê duyệt quy trình | `GET /api/v1/analytics/lakehouse/workflows` |
+
+### 10. Tương tác Ứng dụng qua Chat & Nguồn gốc Tài liệu (v1.0.0)
+
+Phiên bản `v1.0.0` bổ sung các endpoint tương tác ứng dụng và mở rộng wire proto (tuân thủ SemVer 1.0 cộng thêm):
+
+| Phương thức | Đường dẫn | Quyền hạn | Mô tả |
+|---|---|---|---|
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Thực thi thẻ hành động (`install` / `uninstall`) đề xuất từ chat. Tham số đọc từ DB theo `messageId`+`actionId`; chống replay. |
+| `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Soạn bản thảo ứng dụng `bizapp.v1` từ ngữ cảnh hội thoại của `sessionId`. Không tự cài đặt. |
+| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Dữ liệu tất định tóm tắt ứng dụng đã cài cho UI và báo cáo (không dùng làm prompt RAG). |
+| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Liệt kê tài liệu; `include_system` mặc định `false` ẩn tài liệu hệ thống; `true` chỉ cho `ORG_OWNER`. |
+
+**Giao thức Wire gRPC:**
+- `GenerateAnswerRequest` thêm trường cộng thêm: `repeated string excluded_document_kinds = 15;`. Danh sách rỗng bảo toàn 100% hành vi hiện hữu; khi điền `["BIZAPP_RECORD", "BIZAPP_DIGEST"]`, hệ thống loại trừ triệt để tài liệu hệ thống khỏi mọi kênh truy hồi.
 ---
 
 ## Integrating with the OpenVie core
@@ -164,6 +201,10 @@ directly — or reuse the reference app as-is.
   client uses the header or body form.
 - There is no tenant header: workspace, user, and role are derived server-side from the token and the
   live membership on **every** request.
+- **Browser integrations and timeouts:** production CORS is empty by default (`CORS_ORIGINS`) — declare
+  the custom UI's origin or proxy same-origin through APISIX. The synchronous JSON chat mode waits up to
+  `app.ai.grpc.answer-deadline-seconds` (default 100 s); size the client timeout to it, or use SSE to
+  receive drafts earlier.
 
 ### 2. API keys (machine-to-machine)
 
@@ -189,6 +230,18 @@ curl -X POST "$BASE/api/v1/admin/api-keys" \
 
 ### 3. Synchronous chat (server-to-server)
 
+Create a session first. The session belongs to the **token's active workspace**: for a user JWT that is
+the selected workspace (switch via `POST /api/v1/auth/workspaces/switch`); for an API key it is the
+workspace bound to the key at creation time. `knowledge_base_id` is required and must be an active
+knowledge base in that workspace:
+
+```bash
+curl -X POST "$BASE/api/v1/chat/sessions" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"knowledge_base_id":"<kb-uuid>","locale":"vi","metadata":{}}'
+# → 200 {"id":…, "chatbot_id":…, "knowledge_base_id":…, "tenant_id":…, "locale":"vi"}
+```
+
 The chat endpoint supports two modes on the same pipeline (fingerprint, idempotent replay, scope
 validation):
 
@@ -196,13 +249,19 @@ validation):
 curl -X POST "$BASE/api/v1/chat/sessions/$SESSION_ID/messages" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"content":"Summarize this contract","documentIds":["<doc-uuid>"]}'
+  -d '{"content":"Summarize this contract","document_ids":["<doc-uuid>"]}'
+# → 200 (final JSON) or text/event-stream: content/reset/complete/error
 ```
 
-- `Accept: application/json` → wait and return the final answer as JSON (integration mode).
+- `Accept: application/json` → wait and return the final answer as JSON (integration mode); the model
+  deadline defaults to 100 s.
 - Any other `Accept` → stream SSE (`content`/`reset`/`complete`/`error`), exactly as the UI does.
-- `documentIds` (at most 20 `COMPLETED` documents of that session's knowledge base) narrows retrieval;
-  absent means the whole knowledge base. Send an `Idempotency-Key` to replay the same turn.
+- `document_ids` (at most 20 `COMPLETED` documents of that session's knowledge base) narrows retrieval;
+  absent means the whole knowledge base. The field is **snake_case** — a camelCase `documentIds` body
+  key is silently ignored (no 400) and the scope stays unselected. Send an `Idempotency-Key` to replay
+  the same turn.
+- History and teardown: `GET /api/v1/chat/sessions/{id}/messages?limit=50&after=0`
+  (paginated by `sequence_number`) and `DELETE /api/v1/chat/sessions/{id}`.
 
 ### 4. Webhooks (signed event push)
 
@@ -214,7 +273,9 @@ curl -X POST "$BASE/api/v1/admin/webhook-endpoints" \
 ```
 
 - Known events: `document.status.changed` (ingestion progress), `workflow.started`,
-  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, and `webhook.test`.
+  `workflow.approved`, `workflow.rejected`, `workflow.escalated`, `webhook.test`,
+  and the `bizapp.<kind>.record.created|updated|archived|submitted|decided` family
+  from the BizApp platform (Tier 3 — see [BIZAPPS.md](BIZAPPS.md)).
 - The body is a JSON envelope: `{ "id", "type", "occurred_at", "workspace_id", "data" }`.
   `id` (`X-OpenVie-Event-Id`) is stable per event → use it as the receiver-side dedupe key.
 - Signature: header `X-OpenVie-Signature: t=<unix>,v1=<hex>` where
@@ -272,7 +333,8 @@ integrator cannot bypass the document journal.
 
 A ready-to-import Postman collection with configured environment variables (`baseUrl`, `token`, `workspaceId`, `sessionId`) is provided at:
 [`contracts/postman/openvie_integration.postman_collection.json`](../contracts/postman/openvie_integration.postman_collection.json).
-It covers all integration scenarios: Authentication, Machine Credentials (M2M API Keys), Document Chat (Sync JSON & SSE), Signed Webhooks, and Flowable L2 BPMN Workflow Engine operations.
+It covers all integration scenarios: Authentication, Machine Credentials (M2M API Keys), Document Chat (session creation, Sync JSON & SSE, history, session close), Signed Webhooks, and Flowable L2 BPMN Workflow Engine operations.
+The admin screen [`/admin/organization/api-keys`](../frontend/src/app/[locale]/(admin)/admin/organization/api-keys/page.tsx) (ORG_OWNER only) provides list/create/revoke in the UI; the secret is still shown exactly once after creation.
 
 ### 9. Lakehouse Analytical Queries (DuckDB OLAP)
 
@@ -289,3 +351,17 @@ The Lakehouse architecture decouples operational transaction processing (Postgre
 | Document ingestion volume & format metrics | `GET /api/v1/analytics/lakehouse/documents` |
 | Security, audit trail & access metrics | `GET /api/v1/analytics/lakehouse/audit` |
 | Workflow approval progress & SLA metrics | `GET /api/v1/analytics/lakehouse/workflows` |
+
+### 10. Conversational App Management & Document Provenance (v1.0.0)
+
+Version `v1.0.0` introduces conversational app endpoints and additive proto fields (strictly SemVer 1.0 additive):
+
+| Method | Path | Required Role | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Executes interactive install/uninstall action cards proposed in chat. Authoritative DB lookup; replay-safe. |
+| `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Drafts a new `bizapp.v1` application manifest from recent session turns. Never auto-installed. |
+| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Deterministic installed app summary for UI/metrics (never injected into raw RAG prompts). |
+| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Lists documents; `include_system` defaults to `false` (hiding system docs); `true` is owner-only. |
+
+**gRPC Wire Protocol:**
+- `GenerateAnswerRequest` adds field: `repeated string excluded_document_kinds = 15;`. An empty list preserves 100% byte-neutral behavior; passing `["BIZAPP_RECORD", "BIZAPP_DIGEST"]` ensures system documents never contaminate document answers.

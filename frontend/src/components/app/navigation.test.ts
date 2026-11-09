@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_PATHS,
+  activeNavigationHref,
   adminNavigation,
   appNavigation,
   isAdminPath,
@@ -38,9 +39,12 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/approvals",
+      "/apps",
       "/users",
       "/admin/organization",
+      "/admin/organization/api-keys",
       "/admin/workspaces",
+      "/admin/apps",
       "/admin/settings",
       "/documentation",
     ]);
@@ -51,6 +55,7 @@ describe("application navigation", () => {
       "/",
       "/documents",
       "/approvals",
+      "/apps",
       "/users",
       "/documentation",
     ]);
@@ -66,10 +71,24 @@ describe("application navigation", () => {
     }
   });
 
+  it("highlights only the most specific destination", () => {
+    expect(activeNavigationHref("/admin/organization/api-keys", appNavigation))
+      .toBe("/admin/organization/api-keys");
+    expect(activeNavigationHref("/admin/organization", appNavigation))
+      .toBe("/admin/organization");
+    expect(activeNavigationHref("/apps/some-app", appNavigation)).toBe("/apps");
+    expect(activeNavigationHref("/documentation/api-keys", appNavigation)).toBe("/documentation");
+    expect(activeNavigationHref("/", appNavigation)).toBe("/");
+    expect(activeNavigationHref("/unknown", appNavigation)).toBeNull();
+    expect(activeNavigationHref(undefined, appNavigation)).toBeNull();
+  });
+
   it("keeps the admin boundary in sync with owner-only destinations", () => {
     expect(adminNavigation.map((item) => item.href).sort()).toEqual([...ADMIN_PATHS].sort());
     expect(isAdminPath("/admin/organization")).toBe(true);
+    expect(isAdminPath("/admin/organization/api-keys")).toBe(true);
     expect(isAdminPath("/admin/workspaces")).toBe(true);
+    expect(isAdminPath("/admin/apps")).toBe(true);
     expect(isAdminPath("/admin/settings")).toBe(true);
     expect(isAdminPath("/vi/admin/settings")).toBe(true);
     expect(isAdminPath("/organization")).toBe(false);

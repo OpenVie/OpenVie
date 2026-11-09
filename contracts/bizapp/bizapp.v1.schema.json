@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp.v1.schema.json",
+  "title": "OpenVie BizApp Manifest v1",
+  "description": "Frozen 1.0 canonical manifest contract for OpenVie Tier-3 business applications",
+  "type": "object",
+  "required": ["schema", "kind", "name", "entities"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "bizapp.v1"
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "name": {
+      "$ref": "#/$defs/localized"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "icon": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "storage": {
+      "type": "string",
+      "enum": ["jsonb", "typed"],
+      "default": "jsonb"
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read": { "$ref": "#/$defs/roleList" },
+        "write": { "$ref": "#/$defs/roleList" },
+        "delete": { "$ref": "#/$defs/roleList" },
+        "approve": { "$ref": "#/$defs/roleList" },
+        "submit": { "$ref": "#/$defs/roleList" }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "blocks": {
+      "type": "array",
+      "maxItems": 40,
+      "items": { "$ref": "#/$defs/block" }
+    },
+    "conversational": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "triggers": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "type": "string", "maxLength": 200 }
+        },
+        "description": { "type": "string", "maxLength": 2000 }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "views": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "maxLength": 100 }
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "x": { "type": "number", "minimum": -10000, "maximum": 10000 },
+              "y": { "type": "number", "minimum": -10000, "maximum": 10000 }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "localized": {
+      "type": "object",
+      "required": ["vi", "en"],
+      "additionalProperties": false,
+      "properties": {
+        "vi": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "en": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "roleList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["ORG_OWNER", "WORKSPACE_ADMIN", "MEMBER"]
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "boolean", "enum", "date", "ref"]
+        },
+        "entity": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "required": { "type": "boolean", "default": false },
+        "maxLen": { "type": "integer", "minimum": 1, "maximum": 2000 },
+        "format": { "type": "string", "enum": ["email", "uri", "phone"] },
+        "options": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 100 }
+        },
+        "optionLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "maxLength": 100 },
+              "aliases": {
+                "type": "array",
+                "maxItems": 100,
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "pii": { "type": "boolean", "default": false },
+        "label": { "$ref": "#/$defs/localized" }
+      }
+    },
+    "knowledgeConfig": {
+      "type": "object",
+      "required": ["project"],
+      "additionalProperties": false,
+      "properties": {
+        "project": { "type": "boolean" },
+        "titleField": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "required": ["name", "label", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "label": { "$ref": "#/$defs/localized" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 40,
+          "items": { "$ref": "#/$defs/field" }
+        },
+        "knowledge": { "$ref": "#/$defs/knowledgeConfig" },
+        "hooks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onCreate": { "type": "array", "items": { "type": "string" } },
+            "onUpdate": { "type": "array", "items": { "type": "string" } },
+            "onDecide": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "reportMetric": {
+      "type": "object",
+      "required": ["fn", "as"],
+      "additionalProperties": false,
+      "properties": {
+        "fn": { "type": "string", "enum": ["count", "sum", "avg", "min", "max"] },
+        "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "as": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+      }
+    },
+    "reportFilter": {
+      "type": "object",
+      "required": ["field", "op"],
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "op": { "type": "string", "enum": ["eq", "ne", "in", "gt", "gte", "lt", "lte", "contains", "isNull"] },
+        "value": {},
+        "values": { "type": "array" },
+        "param": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "reportOrderBy": {
+      "type": "object",
+      "required": ["by"],
+      "additionalProperties": false,
+      "properties": {
+        "by": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "dir": { "type": "string", "enum": ["asc", "desc"], "default": "asc" }
+      }
+    },
+    "reportView": {
+      "type": "object",
+      "required": ["name", "entity"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "entity": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "groupBy": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" }
+        },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reportMetric" }
+        },
+        "filters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reportFilter" }
+        },
+        "orderBy": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reportOrderBy" }
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "engine": { "type": "string", "enum": ["postgres", "lakehouse"], "default": "postgres" }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "approval_workitem",
+            "assistant",
+            "knowledge_base",
+            "report",
+            "notify",
+            "webhook_out",
+            "external_call",
+            "registry",
+            "form",
+            "timeline"
+          ]
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

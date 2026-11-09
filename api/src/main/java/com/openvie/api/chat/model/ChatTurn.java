@@ -20,20 +20,23 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-
 @Getter
 @Setter
 @Entity
-@Table(name = "chat_turns")
+@Table(name = "chat_turns", indexes = {
+        @Index(name = "idx_chat_turns_tenant_intent", columnList = "tenant_id,intent")
+})
 public class ChatTurn extends BaseEntity {
     @Column(name = "session_id", nullable = false)
     private UUID sessionId;
@@ -72,4 +75,13 @@ public class ChatTurn extends BaseEntity {
 
     @Column(name = "failure_code", length = 100)
     private String failureCode;
+
+    @Column(name = "intent", length = 32)
+    private String intent;
+
+    @Column(name = "intent_confidence", precision = 4, scale = 3)
+    private BigDecimal intentConfidence;
+
+    @Column(name = "intent_app_kind", length = 64)
+    private String intentAppKind;
 }

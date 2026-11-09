@@ -49,7 +49,10 @@ class QdrantKnowledgeIndexQuery:
             query=list(query.query_vector),
             using=self._dense_vector_name,
             query_filter=self._filter(
-                query.tenant_id, query.knowledge_base_id, query.document_ids
+                query.tenant_id,
+                query.knowledge_base_id,
+                query.document_ids,
+                excluded_document_kinds=query.excluded_document_kinds,
             ),
             limit=query.limit,
             with_payload=True,
@@ -68,7 +71,10 @@ class QdrantKnowledgeIndexQuery:
             ),
             using=self._sparse_vector_name,
             query_filter=self._filter(
-                query.tenant_id, query.knowledge_base_id, query.document_ids
+                query.tenant_id,
+                query.knowledge_base_id,
+                query.document_ids,
+                excluded_document_kinds=query.excluded_document_kinds,
             ),
             limit=query.limit,
             with_payload=True,
@@ -191,6 +197,7 @@ class QdrantKnowledgeIndexQuery:
         knowledge_base_id: str,
         document_ids: Sequence[str] | None,
         extra: Sequence[models.Condition] = (),
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> models.Filter:
         conditions: list[models.Condition] = [
             models.FieldCondition(
@@ -208,7 +215,15 @@ class QdrantKnowledgeIndexQuery:
                 )
             )
         conditions.extend(extra)
-        return models.Filter(must=conditions)
+        must_not: list[models.Condition] | None = None
+        if excluded_document_kinds:
+            must_not = [
+                models.FieldCondition(
+                    key="document_kind",
+                    match=models.MatchAny(any=list(excluded_document_kinds)),
+                )
+            ]
+        return models.Filter(must=conditions, must_not=must_not)
 
     @staticmethod
     def _from_point(point: Any) -> KnowledgeIndexResult | None:

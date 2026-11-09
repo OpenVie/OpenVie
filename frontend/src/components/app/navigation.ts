@@ -17,29 +17,37 @@ import {
   Building2,
   ClipboardCheck,
   FileText,
+  KeyRound,
+  LayoutGrid,
   MessageSquare,
   Settings,
   ShieldCheck,
+  Store,
   Users,
   type LucideIcon,
 } from "lucide-react"
 
 export type AppNavigationItem = {
   href: string
-  labelKey: "chat" | "documents" | "approvals" | "documentation" | "users" | "organization" | "workspaces" | "settings"
+  labelKey: "chat" | "documents" | "approvals" | "apps" | "documentation" | "users" | "organization" | "apiKeys" | "workspaces" | "marketplace" | "settings"
   icon: LucideIcon
   placement?: "main" | "footer"
   /** When set, the item only shows for callers holding an org-level role. */
   ownerOnly?: boolean
+  /** Small feature-maturity badge rendered next to the label (e.g. `beta`). */
+  badge?: "beta"
 }
 
 export const appNavigation: AppNavigationItem[] = [
   { href: "/", labelKey: "chat", icon: MessageSquare },
   { href: "/documents", labelKey: "documents", icon: FileText },
   { href: "/approvals", labelKey: "approvals", icon: ClipboardCheck },
+  { href: "/apps", labelKey: "apps", icon: LayoutGrid, badge: "beta" },
   { href: "/users", labelKey: "users", icon: Users },
   { href: "/admin/organization", labelKey: "organization", icon: ShieldCheck, ownerOnly: true },
+  { href: "/admin/organization/api-keys", labelKey: "apiKeys", icon: KeyRound, ownerOnly: true },
   { href: "/admin/workspaces", labelKey: "workspaces", icon: Building2, ownerOnly: true },
+  { href: "/admin/apps", labelKey: "marketplace", icon: Store, ownerOnly: true, badge: "beta" },
   { href: "/admin/settings", labelKey: "settings", icon: Settings, ownerOnly: true },
   { href: "/documentation", labelKey: "documentation", icon: BookOpen, placement: "footer" },
 ]
@@ -55,7 +63,7 @@ export function visibleNavigation(orgRole: string | undefined): AppNavigationIte
 // everything else stays on the main app (`:3000`, `openvie-frontend`).
 // The gateway routes `/admin/*` to the admin deployment and
 // `/api/v1/admin/*` to Spring, which still enforces `ORG_OWNER` per request.
-export const ADMIN_PATHS = ["/admin/organization", "/admin/workspaces", "/admin/settings"] as const
+export const ADMIN_PATHS = ["/admin/organization", "/admin/organization/api-keys", "/admin/workspaces", "/admin/apps", "/admin/settings"] as const
 
 export type AdminPath = (typeof ADMIN_PATHS)[number]
 
@@ -70,4 +78,24 @@ export function isAdminPath(pathname: string | undefined): boolean {
   return (ADMIN_PATHS as readonly string[]).some(
     (adminPath) => pathname === adminPath || pathname.endsWith(adminPath),
   )
+}
+
+/**
+ * The single navigation entry that owns the current path. Nested destinations
+ * (`/admin/organization/api-keys` under `/admin/organization`) must not light
+ * up their parent as well, so the longest matching href wins.
+ */
+export function activeNavigationHref(
+  pathname: string | undefined,
+  items: AppNavigationItem[],
+): string | null {
+  if (!pathname) return null
+  let active: string | null = null
+  for (const { href } of items) {
+    const matches = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
+    if (matches && (active === null || href.length > active.length)) {
+      active = href
+    }
+  }
+  return active
 }

@@ -44,7 +44,7 @@ public class SmtpEmailProvider implements EmailProvider {
 
     @Override
     public boolean available(NotificationChannelConfig config) {
-        return config != null && config.host() != null && !config.host().isBlank();
+        return config != null && config.host() != null && !config.host().trim().isBlank();
     }
 
     @Override
@@ -56,7 +56,7 @@ public class SmtpEmailProvider implements EmailProvider {
         }
 
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
-        sender.setHost(config.host());
+        sender.setHost(config.host().trim());
         sender.setPort(config.port());
         sender.setDefaultEncoding(StandardCharsets.UTF_8.name());
         if (config.username() != null && !config.username().isBlank()) {
@@ -74,12 +74,20 @@ public class SmtpEmailProvider implements EmailProvider {
         props.put("mail.smtp.writetimeout", "10000");
 
         try {
+            boolean hasInlineLogo = message.htmlContent() != null && message.htmlContent().contains("cid:openvie-logo");
             MimeMessage mimeMessage = sender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, StandardCharsets.UTF_8.name());
-            helper.setFrom(config.fromEmail(), config.fromName());
-            helper.setTo(message.toEmail());
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, hasInlineLogo, StandardCharsets.UTF_8.name());
+            helper.setFrom(config.fromEmail().trim(), config.fromName());
+            helper.setTo(message.toEmail().trim());
             helper.setSubject(message.subject());
             helper.setText(message.htmlContent(), true);
+            if (hasInlineLogo) {
+                org.springframework.core.io.ClassPathResource logoResource =
+                        new org.springframework.core.io.ClassPathResource("static/logo.png");
+                if (logoResource.exists()) {
+                    helper.addInline("openvie-logo", logoResource, "image/png");
+                }
+            }
             sender.send(mimeMessage);
         } catch (org.springframework.mail.MailException exception) {
             throw new EmailDeliveryException("SMTP delivery to " + message.toEmail() + " failed", exception);

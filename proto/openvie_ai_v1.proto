@@ -24,6 +24,7 @@ service InferenceService {
   rpc GenerateAnswer(GenerateAnswerRequest) returns (stream GenerateAnswerEvent);
   rpc ListDocumentUnits(ListDocumentUnitsRequest) returns (ListDocumentUnitsResponse);
   rpc DeleteDocumentIndex(DeleteDocumentIndexRequest) returns (DeleteDocumentIndexResponse);
+  rpc CompleteJson(CompleteJsonRequest) returns (CompleteJsonResponse);
 }
 
 message PriorMessage {
@@ -55,6 +56,8 @@ message GenerateAnswerRequest {
   // Optional document scope for retrieval: restricts the answer to the given
   // indexed documents. An empty list means the whole knowledge base.
   repeated string document_ids = 14;
+  // Optional document kinds to exclude from retrieval.
+  repeated string excluded_document_kinds = 15;
 }
 
 message Citation {
@@ -148,4 +151,20 @@ message DeleteDocumentIndexRequest {
 
 message DeleteDocumentIndexResponse {
   bool deleted = 1;
+}
+
+message CompleteJsonRequest {
+  string prompt = 1;
+  string system_prompt = 2;
+  string json_schema = 3;
+  string model_id = 4;
+  float temperature = 5;
+  int32 max_tokens = 6;
+}
+
+message CompleteJsonResponse {
+  string json_output = 1;
+  string model_id = 2;
+  int32 prompt_tokens = 3;
+  int32 completion_tokens = 4;
 }

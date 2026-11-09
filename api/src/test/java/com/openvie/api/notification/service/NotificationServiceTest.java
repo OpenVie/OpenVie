@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -69,6 +70,40 @@ class NotificationServiceTest {
         assertThrows(EmailDeliveryException.class, this::sendInvitation);
 
         assertEquals(NotificationStatus.FAILED, lastSavedNotification().getStatus());
+    }
+
+    @Test
+    void createInAppNotificationSavesWithSentStatusAndReadAtNull() {
+        UUID tenantId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        notificationService.createInAppNotification(
+                tenantId, userId, "BOOKING_REMINDER", "Nhắc lịch hẹn", "Bạn có lịch hẹn", "/apps/booking"
+        );
+
+        Notification saved = lastSavedNotification();
+        assertEquals(tenantId, saved.getTenantId());
+        assertEquals(userId, saved.getUserId());
+        assertEquals(NotificationType.BOOKING_REMINDER, saved.getType());
+        assertEquals("Nhắc lịch hẹn", saved.getTitle());
+        assertEquals("Bạn có lịch hẹn", saved.getMessage());
+        assertEquals("/apps/booking", saved.getLink());
+        assertEquals(NotificationStatus.SENT, saved.getStatus());
+        org.junit.jupiter.api.Assertions.assertNull(saved.getReadAt());
+    }
+
+    @Test
+    void markAsReadAndUnreadCountDelegateToRepository() {
+        UUID tenantId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID notifId = UUID.randomUUID();
+
+        when(notificationRepository.countUnreadForUser(tenantId, userId)).thenReturn(3L);
+        when(notificationRepository.markAsRead(eq(notifId), eq(tenantId), eq(userId), any())).thenReturn(1);
+        when(notificationRepository.markAllAsRead(eq(tenantId), eq(userId), any())).thenReturn(3);
+
+        assertEquals(3L, notificationService.getUnreadCount(tenantId, userId));
+        org.junit.jupiter.api.Assertions.assertTrue(notificationService.markAsRead(tenantId, userId, notifId));
+        assertEquals(3, notificationService.markAllAsRead(tenantId, userId));
     }
 
     private void sendInvitation() {

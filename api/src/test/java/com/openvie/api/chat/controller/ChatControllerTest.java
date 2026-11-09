@@ -73,6 +73,58 @@ class ChatControllerTest extends BaseController {
         assertEquals("Committed answer", assistant.content());
     }
 
+    /**
+     * Regression: an explicit `Accept: application/json` must still ROUTE to the
+     * handler. The former `produces = TEXT_EVENT_STREAM` mapping rejected JSON
+     * Accepts at handler-mapping time with HttpMediaTypeNotAcceptableException
+     * (surfaced as a generic 500) before the in-method JSON branch could run.
+     */
+    @Test
+    void jsonAcceptRoutesThroughTheHandlerMappingIntoTheJsonAnswer() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
+                any(), any(), isNull(), isNull(), any()))
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null, null));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc.perform(post("/api/v1/chat/sessions/{sessionId}/messages", sessionId)
+                        .requestAttr("tenantId", tenantId.toString())
+                        .requestAttr("userId", userId.toString())
+                        .accept(MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Question\",\"metadata\":{}}"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.role").value("assistant"))
+                .andExpect(jsonPath("$.content").value("Committed answer"));
+    }
+
+    /** Regression: wildcard Accept still streams; JSON mapping never wins it. */
+    @Test
+    void wildcardAcceptStillStreamsEventStream() throws Exception {
+        UUID sessionId = UUID.randomUUID();
+        when(service.submitEmployeeMessage(eq(tenantId), eq(userId), eq(sessionId), eq("Question"),
+                any(), any(), isNull(), isNull(), any()))
+                .thenReturn(new ChatDtos.AssistantMessageResponse("assistant", "Committed answer", List.of(), null, null));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        try {
+            var pending = mvc.perform(post("/api/v1/chat/sessions/{sessionId}/messages", sessionId)
+                            .requestAttr("tenantId", tenantId.toString())
+                            .requestAttr("userId", userId.toString())
+                            .accept(MediaType.ALL)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"content\":\"Question\",\"metadata\":{}}"))
+                    .andExpect(request().asyncStarted())
+                    .andReturn();
+            pending.getAsyncResult(3000);
+            var dispatched = mvc.perform(asyncDispatch(pending));
+            dispatched.andExpect(content().string(org.hamcrest.Matchers.containsString("event:complete")));
+        } finally {
+            controller.closeStreams();
+        }
+    }
+
     @Test
     void jsonAcceptWithWildcardlessEventStreamPreferenceStaysStreaming() throws Exception {
         when(request.getHeader("Accept")).thenReturn(null);

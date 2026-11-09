@@ -85,21 +85,34 @@ public class DocumentController extends BaseController {
             @RequestParam(value = "q", required = false) String query,
             @RequestParam(value = "status", required = false) DocumentStatus status,
             @RequestParam(value = "type", required = false) DocumentType type,
+            @RequestParam(value = "include_system", defaultValue = "false") boolean includeSystem,
             HttpServletRequest request
     ) {
         UUID tenantId = getTenantId(request);
-        if (page == null && size == null && query == null && status == null && type == null) {
-            return documentService.list(tenantId, knowledgeBaseId);
+        if (includeSystem && !"ORG_OWNER".equals(getOrgRole(request))) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only organization owners may list system documents");
         }
-        return documentService.list(
-                tenantId,
-                knowledgeBaseId,
-                page,
-                size,
-                query,
-                status,
-                type
-        );
+        if (page == null && size == null && query == null && status == null && type == null) {
+            return includeSystem
+                    ? documentService.list(tenantId, knowledgeBaseId, true)
+                    : documentService.list(tenantId, knowledgeBaseId);
+        }
+        return includeSystem
+                ? documentService.list(tenantId, knowledgeBaseId, page, size, query, status, type, true)
+                : documentService.list(tenantId, knowledgeBaseId, page, size, query, status, type);
+    }
+
+    public List<DocumentListItemResponse> list(
+            UUID knowledgeBaseId,
+            Integer page,
+            Integer size,
+            String query,
+            DocumentStatus status,
+            DocumentType type,
+            HttpServletRequest request
+    ) {
+        return list(knowledgeBaseId, page, size, query, status, type, false, request);
     }
 
     @Operation(summary = "List documents of a knowledge base",
@@ -125,22 +138,47 @@ public class DocumentController extends BaseController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate uploadedTo,
             @RequestParam(value = "sort", required = false) String sort,
             @RequestParam(value = "direction", required = false) String direction,
+            @RequestParam(value = "include_system", defaultValue = "false") boolean includeSystem,
             HttpServletRequest request
     ) {
         UUID tenantId = getTenantId(request);
+        if (includeSystem && !"ORG_OWNER".equals(getOrgRole(request))) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only organization owners may list system documents");
+        }
         if (page == null && size == null && query == null && status == null && type == null
                 && uploadedFrom == null && uploadedTo == null
                 && sort == null && direction == null) {
-            List<DocumentListItemResponse> documents = documentService.list(tenantId, knowledgeBaseId);
+            List<DocumentListItemResponse> documents = includeSystem
+                    ? documentService.list(tenantId, knowledgeBaseId, true)
+                    : documentService.list(tenantId, knowledgeBaseId);
             return ResponseEntity.ok().header("X-Total-Count", Long.toString(documents.size()))
                     .body(documents);
         }
-        var result = documentService.listResult(
-                tenantId, knowledgeBaseId, page, size, query, status, type,
-                uploadedFrom, uploadedTo, sort, direction);
+        var result = includeSystem
+                ? documentService.listResult(tenantId, knowledgeBaseId, page, size, query, status, type,
+                        uploadedFrom, uploadedTo, sort, direction, true)
+                : documentService.listResult(tenantId, knowledgeBaseId, page, size, query, status, type,
+                        uploadedFrom, uploadedTo, sort, direction);
         return ResponseEntity.ok()
                 .header("X-Total-Count", Long.toString(result.totalCount()))
                 .body(result.documents());
+    }
+
+    public ResponseEntity<List<DocumentListItemResponse>> listResponse(
+            UUID knowledgeBaseId,
+            Integer page,
+            Integer size,
+            String query,
+            DocumentStatus status,
+            DocumentType type,
+            LocalDate uploadedFrom,
+            LocalDate uploadedTo,
+            String sort,
+            String direction,
+            HttpServletRequest request
+    ) {
+        return listResponse(knowledgeBaseId, page, size, query, status, type, uploadedFrom, uploadedTo, sort, direction, false, request);
     }
 
     @Operation(summary = "Upload a document into a knowledge base",

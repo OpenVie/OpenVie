@@ -1,3 +1,17 @@
+# Copyright 2026 LinkedNodeDigital
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Environment shared by the Python services built from this repository
 # (the Kuzu graph service today; the same block feeds any future service
 # built from rag-chatbot-fastapi). Only keys the Python settings model
@@ -36,6 +50,7 @@ x-local-environment: &local-environment
   KUZU_DATABASE_PATH: /data/kuzu/openvie.kuzu
   GRAPH_SERVICE_URL: http://graph-service:8010
   GRAPH_INTERNAL_TOKEN: ${GRAPH_INTERNAL_TOKEN:-development-graph-token}
+  GRAPH_RETRIEVAL_ENABLED: ${GRAPH_RETRIEVAL_ENABLED:-true}
   SEAWEEDFS_MASTER_URL: http://seaweedfs-master:9333
   SEAWEEDFS_FILER_URL: http://seaweedfs-filer:8888
   SEAWEEDFS_S3_ENDPOINT: http://seaweedfs-s3:8333
@@ -47,6 +62,7 @@ x-local-environment: &local-environment
   LLM_INTERNAL_API_KEY: ${LLM_INTERNAL_API_KEY:-ollama}
   LLM_MODEL_ID: ${LLM_MODEL_ID:-vylinh}
   LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-1024}
+  LLM_STRUCTURED_TIMEOUT_SECONDS: ${LLM_STRUCTURED_TIMEOUT_SECONDS:-300}
   GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS: ${GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS:-512}
   GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT: ${GRAPH_EXTRACTION_MAX_ENTITIES_PER_UNIT:-2}
   GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT: ${GRAPH_EXTRACTION_MAX_RELATIONS_PER_UNIT:-2}

@@ -127,6 +127,40 @@
       "name": "3. Document-Grounded Chat",
       "item": [
         {
+          "name": "Create Chat Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"knowledge_base_id\": \"00000000-0000-0000-0000-000000000000\",\n  \"locale\": \"vi\",\n  \"metadata\": {}\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (typeof pm.response.json().id === 'string') {",
+                  "  pm.collectionVariables.set('sessionId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Submit Message (Sync JSON Integration Mode)",
           "request": {
             "method": "POST",
@@ -151,7 +185,7 @@
             "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}/messages",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"content\": \"T\\u00f3m t\\u1eaft \\u0111i\\u1ec1u kho\\u1ea3n thanh to\\u00e1n trong h\\u1ee3p \\u0111\\u1ed3ng n\\u00e0y.\",\n  \"documentIds\": [\n    \"00000000-0000-0000-0000-000000000000\"\n  ],\n  \"metadata\": {}\n}"
+              "raw": "{\n  \"content\": \"T\\u00f3m t\\u1eaft \\u0111i\\u1ec1u kho\\u1ea3n thanh to\\u00e1n trong h\\u1ee3p \\u0111\\u1ed3ng n\\u00e0y.\",\n  \"document_ids\": [],\n  \"metadata\": {}\n}"
             }
           }
         },
@@ -176,8 +210,34 @@
             "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}/messages",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"content\": \"Tr\\u1ee3 l\\u00fd gi\\u00fap t\\u00f4i tra c\\u1ee9u quy \\u0111\\u1ecbnh ngh\\u1ec9 ph\\u00e9p.\",\n  \"documentIds\": []\n}"
+              "raw": "{\n  \"content\": \"Tr\\u1ee3 l\\u00fd gi\\u00fap t\\u00f4i tra c\\u1ee9u quy \\u0111\\u1ecbnh ngh\\u1ec9 ph\\u00e9p.\",\n  \"document_ids\": []\n}"
             }
+          }
+        },
+        {
+          "name": "List Session History (Cursor Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}/messages?limit=50&after=0"
+          }
+        },
+        {
+          "name": "Close Chat Session",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat/sessions/{{sessionId}}"
           }
         }
       ]

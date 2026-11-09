@@ -15,9 +15,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import suppress
+from typing import Any
 
 import grpc
 
@@ -38,14 +40,30 @@ from app.modules.generation.transport.result_cache import ProtobufGenerationResu
 logger = logging.getLogger(__name__)
 
 
+def _parse_json_schema(raw: str) -> dict[str, Any] | None:
+    """Returns the schema dict when the request carries actual JSON schema
+    content; None for legacy schema *file name* references (kept lenient for
+    older callers)."""
+    schema = (raw or "").strip()
+    if not schema.startswith("{"):
+        return None
+    try:
+        parsed = json.loads(schema)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 class GenerationGrpcHandler:
     def __init__(
         self,
         generation: GenerationApi,
         result_cache: ProtobufGenerationResultCache,
+        structured_timeout_seconds: float = 300.0,
     ) -> None:
         self._generation = generation
         self._cache = result_cache
+        self._structured_timeout_seconds = structured_timeout_seconds
 
     async def generate(
         self, request: pb.GenerateAnswerRequest, context: grpc.aio.ServicerContext
@@ -111,6 +129,69 @@ class GenerationGrpcHandler:
             with suppress(asyncio.CancelledError):
                 await producer
 
+    async def complete_json(
+        self, request: pb.CompleteJsonRequest, context: grpc.aio.ServicerContext
+    ) -> pb.CompleteJsonResponse:
+        messages = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.append({"role": "user", "content": request.prompt})
+
+        max_tokens = request.max_tokens if request.max_tokens > 0 else 2048
+        temperature = request.temperature if request.temperature > 0 else 0.2
+
+        # Structured-output schema: callers may pass the JSON schema content
+        # itself. Legacy calls pass a schema *file name* (no JSON body) — those
+        # stay plain completions as before.
+        provider_format = _parse_json_schema(request.json_schema)
+
+        output = "{}"
+        gen = self._generation
+        model = (
+            getattr(gen, "model", None)
+            or getattr(gen, "_model", None)
+            or getattr(getattr(gen, "_delegate", None), "_chat_model", None)
+            or getattr(getattr(gen, "_delegate", None), "chat_model", None)
+        )
+        if model:
+            try:
+                if hasattr(model, "complete_text"):
+                    output = await model.complete_text(
+                        messages,
+                        max_output_tokens=max_tokens,
+                        temperature=temperature,
+                        format=provider_format,
+                        model_id=request.model_id or None,
+                        timeout_seconds=self._structured_timeout_seconds,
+                    )
+                elif hasattr(model, "complete"):
+                    output = await model.complete(messages)
+            except Exception as exc:
+                logger.warning("CompleteJson model invocation failed: %s", exc)
+                output = "{}"
+
+        cleaned = output.strip()
+        if "```json" in cleaned:
+            start = cleaned.find("```json") + len("```json")
+            end = cleaned.rfind("```")
+            if end > start:
+                cleaned = cleaned[start:end].strip()
+        elif "```" in cleaned:
+            start = cleaned.find("```") + 3
+            end = cleaned.rfind("```")
+            if end > start:
+                cleaned = cleaned[start:end].strip()
+        first_brace = cleaned.find("{")
+        last_brace = cleaned.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            cleaned = cleaned[first_brace : last_brace + 1].strip()
+        return pb.CompleteJsonResponse(
+            json_output=cleaned,
+            model_id=request.model_id or "default",
+            prompt_tokens=len(request.prompt) // 4,
+            completion_tokens=len(cleaned) // 4,
+        )
+
 
 def _context(request: pb.GenerateAnswerRequest) -> GenerationContext:
     return GenerationContext(
@@ -130,6 +211,7 @@ def _context(request: pb.GenerateAnswerRequest) -> GenerationContext:
         tenant_name=request.tenant_name,
         prompt_schema_version=request.prompt_schema_version,
         document_ids=tuple(request.document_ids),
+        excluded_document_kinds=tuple(request.excluded_document_kinds),
     )
 
 

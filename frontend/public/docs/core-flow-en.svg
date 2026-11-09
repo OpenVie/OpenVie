@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 210" role="img" aria-label="OpenVie knowledge lifecycle: Source Documents -> Knowledge Base -> Cited Answers">
+  <defs>
+    <linearGradient id="card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0b0f19"/>
+    </linearGradient>
+    <linearGradient id="card-grad-active" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#112236"/>
+      <stop offset="100%" stop-color="#0b1320"/>
+    </linearGradient>
+    <linearGradient id="badge-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1fb6ff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#1fb6ff" stop-opacity="0.05"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 1.5 L8 5 L0 8.5 z" fill="#1fb6ff"/>
+    </marker>
+  </defs>
+
+  <!-- Background base for consistent contrast -->
+  <rect width="900" height="210" rx="16" fill="#070a0f"/>
+
+  <!-- Card 1: Documents -->
+  <g transform="translate(35, 22)">
+    <rect width="250" height="130" rx="14" fill="url(#card-grad)" stroke="#1e293b" stroke-width="1.5"/>
+    <rect x="105" y="16" width="40" height="40" rx="10" fill="url(#badge-grad)" stroke="#1fb6ff" stroke-opacity="0.4" stroke-width="1"/>
+    <!-- Document Icon -->
+    <path d="M118 26 h10 l6 6 v14 h-16 z" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M128 26 v6 h6" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="125" y="80" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#f2f5f0">Your Documents</text>
+    <text x="125" y="103" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#94a3b8">PDF · DOCX · XLSX · CSV</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M285 87 H 325" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+  <!-- Card 2: Knowledge Base -->
+  <g transform="translate(325, 22)">
+    <rect width="250" height="130" rx="14" fill="url(#card-grad-active)" stroke="#1fb6ff" stroke-opacity="0.6" stroke-width="1.5"/>
+    <rect x="105" y="16" width="40" height="40" rx="10" fill="url(#badge-grad)" stroke="#1fb6ff" stroke-opacity="0.6" stroke-width="1"/>
+    <!-- Database / Vector Layers Icon -->
+    <ellipse cx="125" cy="30" rx="10" ry="4" fill="none" stroke="#1fb6ff" stroke-width="2"/>
+    <path d="M115 30 v6 c0 2.2 4.5 4 10 4 s10 -1.8 10 -4 v-6" fill="none" stroke="#1fb6ff" stroke-width="2"/>
+    <path d="M115 36 v6 c0 2.2 4.5 4 10 4 s10 -1.8 10 -4 v-6" fill="none" stroke="#1fb6ff" stroke-width="2"/>
+    <text x="125" y="80" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#f2f5f0">Knowledge Base</text>
+    <text x="125" y="103" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#94a3b8">Vector search isolated by workspace</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M575 87 H 615" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+  <!-- Card 3: Cited Answers -->
+  <g transform="translate(615, 22)">
+    <rect width="250" height="130" rx="14" fill="url(#card-grad)" stroke="#1e293b" stroke-width="1.5"/>
+    <rect x="105" y="16" width="40" height="40" rx="10" fill="url(#badge-grad)" stroke="#1fb6ff" stroke-opacity="0.4" stroke-width="1"/>
+    <!-- Chat bubble + checkmark -->
+    <path d="M116 30 h18 a4 4 0 0 1 4 4 v7 a4 4 0 0 1 -4 4 h-9 l-5 4 v-4 h-4 a4 4 0 0 1 -4 -4 v-7 a4 4 0 0 1 4 -4 z" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M121 37 l2.5 2.5 l5.5 -5" fill="none" stroke="#1fb6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="125" y="80" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#f2f5f0">Cited Answers</text>
+    <text x="125" y="103" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#94a3b8">Verified with source citations</text>
+  </g>
+
+  <!-- Pipeline summary footer -->
+  <text x="450" y="184" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" fill="#64748b">Asynchronous pipeline: Malware scan → Text extraction → Vector indexing → Ready for chat</text>
+</svg>

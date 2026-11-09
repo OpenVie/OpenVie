@@ -1,0 +1,23 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-ssrf-http",
+  "name": { "vi": "SSRF HTTP", "en": "SSRF HTTP" },
+  "version": 1,
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "ssrfHttp",
+      "type": "external_call",
+      "params": {
+        "url": "http://internal-service.local/leak",
+        "credentialRef": "vault-secret"
+      }
+    }
+  ]
+}

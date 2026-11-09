@@ -18,6 +18,7 @@ import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.document.api.DocumentApi;
 import com.openvie.api.document.api.ApprovalStatus;
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.model.Document;
 import com.openvie.api.document.repository.DocumentRepository;
@@ -63,6 +64,11 @@ public class DocumentApiImpl implements DocumentApi {
             throw new BadRequestException(
                     "Chat scope must reference completed documents of this knowledge base.");
         }
+        boolean hasSystemDocs = documents.stream()
+                .anyMatch(d -> d.getDocumentKind() != null && d.getDocumentKind() != DocumentKind.USER);
+        if (hasSystemDocs) {
+            throw new BadRequestException("Chat scope cannot include system documents.");
+        }
     }
 
     @Override
@@ -82,5 +88,58 @@ public class DocumentApiImpl implements DocumentApi {
     @Override
     public void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy) {
         documentService.recordApprovalDecision(tenantId, documentId, decision, decidedBy);
+    }
+
+    @Override
+    public UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent) {
+        return documentService.ingestText(tenantId, actorId, knowledgeBaseId, fileName, markdownContent);
+    }
+
+    @Override
+    public UUID ingestText(
+            UUID tenantId,
+            UUID actorId,
+            UUID knowledgeBaseId,
+            String fileName,
+            String markdownContent,
+            DocumentKind documentKind,
+            String sourceRef) {
+        return documentService.ingestText(
+                tenantId, actorId, knowledgeBaseId, fileName, markdownContent, documentKind, sourceRef);
+    }
+
+    @Override
+    public void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName) {
+        documentService.deleteByFileName(tenantId, knowledgeBaseId, fileName);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind) {
+        String ref = "bizapp:" + appKind;
+        return repository.findByTenantIdAndSourceRef(tenantId, ref).stream()
+                .map(Document::getId)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind, String entity) {
+        if (entity == null || entity.isBlank()) {
+            return listProjectedDocumentIds(tenantId, appKind);
+        }
+        String ref = "bizapp:" + appKind + ":" + entity;
+        List<UUID> ids = repository.findByTenantIdAndSourceRef(tenantId, ref).stream()
+                .map(Document::getId)
+                .toList();
+        if (!ids.isEmpty()) {
+            return ids;
+        }
+        // Fallback for legacy documents projected before sourceRef entity suffix
+        String prefix = "bizapp__" + appKind + "__" + entity + "__";
+        return repository.findByTenantIdAndSourceRef(tenantId, "bizapp:" + appKind).stream()
+                .filter(d -> d.getFileName() != null && d.getFileName().startsWith(prefix))
+                .map(Document::getId)
+                .toList();
     }
 }

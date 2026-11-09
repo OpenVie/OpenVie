@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/external_call.schema.json",
+  "title": "External Call Block",
+  "type": "object",
+  "required": ["url", "credentialRef"],
+  "properties": {
+    "url": { "type": "string", "maxLength": 500 },
+    "credentialRef": { "type": "string", "maxLength": 100 },
+    "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "default": "POST" },
+    "bodyTemplate": { "type": "string", "maxLength": 4096 },
+    "responseMap": {
+      "type": "object",
+      "maxProperties": 8,
+      "additionalProperties": { "type": "string", "maxLength": 200 }
+    }
+  }
+}

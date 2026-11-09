@@ -73,4 +73,23 @@ public interface DocumentApi {
      *             when the document does not exist in the workspace
      */
     void recordApprovalDecision(UUID tenantId, UUID documentId, ApprovalStatus decision, UUID decidedBy);
+
+    default UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String markdownContent) {
+        return ingestText(tenantId, actorId, knowledgeBaseId, fileName, markdownContent, DocumentKind.USER, null);
+    }
+
+    UUID ingestText(
+            UUID tenantId,
+            UUID actorId,
+            UUID knowledgeBaseId,
+            String fileName,
+            String markdownContent,
+            DocumentKind documentKind,
+            String sourceRef);
+
+    void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName);
+
+    List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind);
+
+    List<UUID> listProjectedDocumentIds(UUID tenantId, String appKind, String entity);
 }
