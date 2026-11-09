@@ -111,6 +111,7 @@ class RetrievalClient(Protocol):
         query_text: str,
         query_vector: Sequence[float],
         document_ids: Sequence[str] | None = None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]: ...
 
 

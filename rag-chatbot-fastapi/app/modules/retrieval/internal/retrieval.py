@@ -130,6 +130,21 @@ class QueryRouter:
         return self._weights[profile]
 
 
+def normalize_channel(
+    channel: str,
+    result: list[RetrievedChunk] | BaseException | None,
+) -> list[RetrievedChunk]:
+    """Turns `asyncio.gather(return_exceptions=True)` results into channel data.
+
+    A raised channel exception is recorded as a fallback counter and degrades
+    to an empty result, matching the legacy inline behavior.
+    """
+    if isinstance(result, BaseException) or result is None:
+        AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
+        return []
+    return result
+
+
 class HybridRetriever:
     def __init__(
         self,
@@ -252,28 +267,17 @@ class HybridRetriever:
                 ),
                 return_exceptions=True,
             )
-            normalized: list[list[RetrievedChunk]] = []
-            for channel, result in zip(("dense", "sparse", "graph"), channel_results, strict=True):
-                if isinstance(result, BaseException):
-                    AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
-                    normalized.append([])
-                else:
-                    normalized.append(result)
-            dense_results, sparse_results, graph_results = normalized
+            dense_results = normalize_channel("dense", channel_results[0])
+            sparse_results = normalize_channel("sparse", channel_results[1])
+            graph_results = normalize_channel("graph", channel_results[2])
         else:
-            channel_results = await asyncio.gather(
+            pair_results = await asyncio.gather(
                 dense_task,
                 sparse_task,
                 return_exceptions=True,
             )
-            normalized = []
-            for channel, result in zip(("dense", "sparse"), channel_results, strict=True):
-                if isinstance(result, BaseException):
-                    AI_RETRIEVAL_FALLBACKS_TOTAL.labels(component=channel).inc()
-                    normalized.append([])
-                else:
-                    normalized.append(result)
-            dense_results, sparse_results = normalized
+            dense_results = normalize_channel("dense", pair_results[0])
+            sparse_results = normalize_channel("sparse", pair_results[1])
             graph_results = []
         fused = weighted_reciprocal_rank_fusion(
             dense_results,
