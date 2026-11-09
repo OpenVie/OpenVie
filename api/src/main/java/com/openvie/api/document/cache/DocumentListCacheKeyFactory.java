@@ -37,7 +37,11 @@ public class DocumentListCacheKeyFactory {
     }
 
     public CanonicalFilters legacy() {
-        return canonical("legacy", 0, 0, null, null, null, null, null, null, null);
+        return legacy(false);
+    }
+
+    public CanonicalFilters legacy(boolean includeSystem) {
+        return canonical("legacy", 0, 0, null, null, null, null, null, null, null, includeSystem);
     }
 
     public CanonicalFilters paged(
@@ -47,8 +51,19 @@ public class DocumentListCacheKeyFactory {
             DocumentStatus status,
             DocumentType type
     ) {
+        return paged(page, size, searchText, status, type, false);
+    }
+
+    public CanonicalFilters paged(
+            int page,
+            int size,
+            String searchText,
+            DocumentStatus status,
+            DocumentType type,
+            boolean includeSystem
+    ) {
         return canonical("paged", page, size, searchText, status, type,
-                null, null, "uploaded", "desc");
+                null, null, "uploaded", "desc", includeSystem);
     }
 
     public CanonicalFilters paged(
@@ -56,8 +71,17 @@ public class DocumentListCacheKeyFactory {
             LocalDate uploadedFrom, LocalDate uploadedTo,
             String sort, String direction
     ) {
+        return paged(page, size, searchText, status, type, uploadedFrom, uploadedTo, sort, direction, false);
+    }
+
+    public CanonicalFilters paged(
+            int page, int size, String searchText, DocumentStatus status, DocumentType type,
+            LocalDate uploadedFrom, LocalDate uploadedTo,
+            String sort, String direction,
+            boolean includeSystem
+    ) {
         return canonical("paged", page, size, searchText, status, type,
-                uploadedFrom, uploadedTo, sort, direction);
+                uploadedFrom, uploadedTo, sort, direction, includeSystem);
     }
 
     public String key(UUID tenantId, UUID knowledgeBaseId, long generation, CanonicalFilters filters) {
@@ -72,11 +96,11 @@ public class DocumentListCacheKeyFactory {
             String searchText,
             DocumentStatus status,
             DocumentType type,
-
             LocalDate uploadedFrom,
             LocalDate uploadedTo,
             String sort,
-            String direction
+            String direction,
+            boolean includeSystem
     ) {
         String normalizedSearch = searchText == null ? null : Normalizer
                 .normalize(searchText.strip(), Normalizer.Form.NFC)
@@ -89,9 +113,10 @@ public class DocumentListCacheKeyFactory {
                 + "\nfrom=" + (uploadedFrom == null ? "" : uploadedFrom)
                 + "\nto=" + (uploadedTo == null ? "" : uploadedTo)
                 + "\nsort=" + (sort == null ? "" : sort)
-                + "\ndirection=" + (direction == null ? "" : direction);
+                + "\ndirection=" + (direction == null ? "" : direction)
+                + "\ninclude_system=" + includeSystem;
         return new CanonicalFilters(mode, page, size, normalizedSearch, status, type,
-                uploadedFrom, uploadedTo, sort, direction, sha256(canonical));
+                uploadedFrom, uploadedTo, sort, direction, includeSystem, sha256(canonical));
     }
 
     private String sha256(String value) {
@@ -110,11 +135,11 @@ public class DocumentListCacheKeyFactory {
             String searchText,
             DocumentStatus status,
             DocumentType type,
-
             LocalDate uploadedFrom,
             LocalDate uploadedTo,
             String sort,
             String direction,
+            boolean includeSystem,
             String sha256
     ) {}
 }

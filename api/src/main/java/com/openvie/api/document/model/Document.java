@@ -16,6 +16,7 @@ package com.openvie.api.document.model;
 
 import com.openvie.api.common.model.BaseEntity;
 import com.openvie.api.document.api.ApprovalStatus;
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.enums.DocumentType;
 import jakarta.persistence.*;
@@ -40,7 +41,9 @@ import java.util.UUID;
                 @Index(name = "idx_document_tenant_knowledge_base", columnList = "tenant_id,knowledge_base_id"),
                 @Index(name = "idx_documents_tenant_kb_filename", columnList = "tenant_id,knowledge_base_id,file_name"),
                 @Index(name = "idx_documents_tenant_kb_content_hash", columnList = "tenant_id,knowledge_base_id,content_hash"),
-                @Index(name = "idx_documents_tenant_approval_status", columnList = "tenant_id,approval_status")
+                @Index(name = "idx_documents_tenant_approval_status", columnList = "tenant_id,approval_status"),
+                @Index(name = "idx_documents_tenant_kb_kind", columnList = "tenant_id,knowledge_base_id,document_kind"),
+                @Index(name = "idx_documents_tenant_source_ref", columnList = "tenant_id,source_ref")
         }
 )
 public class Document extends BaseEntity {
@@ -111,4 +114,11 @@ public class Document extends BaseEntity {
 
     @Column(name = "approval_decided_at")
     private LocalDateTime approvalDecidedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "document_kind", nullable = false, length = 24)
+    private DocumentKind documentKind = DocumentKind.USER;
+
+    @Column(name = "source_ref", length = 128)
+    private String sourceRef;
 }

@@ -21,6 +21,8 @@
     "file_name": {"type": "string", "minLength": 1},
     "content_type": {"type": "string", "minLength": 1},
     "file_size_bytes": {"type": "integer", "minimum": 0},
-    "occurred_at": {"type": "string", "format": "date-time"}
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "document_kind": {"type": "string", "enum": ["USER", "BIZAPP_RECORD", "BIZAPP_DIGEST"]},
+    "source_ref": {"type": ["string", "null"]}
   }
 }

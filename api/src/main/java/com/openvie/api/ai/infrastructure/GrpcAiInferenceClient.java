@@ -49,6 +49,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
     private final ManagedChannel channel;
     private final InferenceServiceGrpc.InferenceServiceBlockingStub stub;
     private final long answerDeadlineSeconds;
+    private final long completeJsonDeadlineSeconds;
     private final long unitDeadlineSeconds;
     private final long deletionDeadlineSeconds;
 
@@ -60,6 +61,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
             @Value("${app.ai.grpc.client-key:}") String clientKey,
             @Value("${app.ai.grpc.authority-override:}") String authorityOverride,
             @Value("${app.ai.grpc.answer-deadline-seconds:100}") long answerDeadlineSeconds,
+            @Value("${app.ai.grpc.complete-json-deadline-seconds:300}") long completeJsonDeadlineSeconds,
             @Value("${app.ai.grpc.document-units-deadline-seconds:10}") long unitDeadlineSeconds,
             @Value("${app.ai.grpc.deletion-deadline-seconds:15}") long deletionDeadlineSeconds
     ) {
@@ -85,6 +87,7 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
         this.channel = builder.maxInboundMessageSize(16 * 1024 * 1024).build();
         this.stub = InferenceServiceGrpc.newBlockingStub(channel);
         this.answerDeadlineSeconds = answerDeadlineSeconds;
+        this.completeJsonDeadlineSeconds = completeJsonDeadlineSeconds;
         this.unitDeadlineSeconds = unitDeadlineSeconds;
         this.deletionDeadlineSeconds = deletionDeadlineSeconds;
     }
@@ -108,6 +111,11 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
             request.documentIds().stream()
                     .filter(java.util.Objects::nonNull)
                     .forEach(documentId -> builder.addDocumentIds(documentId.toString()));
+        }
+        if (request.excludedDocumentKinds() != null) {
+            request.excludedDocumentKinds().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .forEach(builder::addExcludedDocumentKinds);
         }
         request.priorMessages().stream().limit(20).forEach(message -> builder.addPriorMessages(
                 com.openvie.ai.v1.PriorMessage.newBuilder()
@@ -273,6 +281,27 @@ public class GrpcAiInferenceClient implements AiInferenceApi {
                 unit.hasTableId() ? unit.getTableId() : null,
                 unit.hasSourceStart() ? unit.getSourceStart() : null,
                 unit.hasSourceEnd() ? unit.getSourceEnd() : null);
+    }
+
+    @Override
+    public StructuredJsonResponse completeJson(StructuredJsonRequest request) {
+        return unavailableRetry(completeJsonDeadlineSeconds, s -> {
+            var req = com.openvie.ai.v1.CompleteJsonRequest.newBuilder()
+                    .setPrompt(request.prompt() != null ? request.prompt() : "")
+                    .setSystemPrompt(request.systemPrompt() != null ? request.systemPrompt() : "")
+                    .setJsonSchema(request.jsonSchema() != null ? request.jsonSchema() : "")
+                    .setModelId(request.modelId() != null ? request.modelId() : "")
+                    .setTemperature(request.temperature() != null ? request.temperature() : 0.2f)
+                    .setMaxTokens(request.maxTokens() != null ? request.maxTokens() : 2048)
+                    .build();
+            var resp = s.completeJson(req);
+            return new StructuredJsonResponse(
+                    resp.getJsonOutput(),
+                    resp.getModelId(),
+                    resp.getPromptTokens(),
+                    resp.getCompletionTokens()
+            );
+        }, "completeJson");
     }
 
     @PreDestroy

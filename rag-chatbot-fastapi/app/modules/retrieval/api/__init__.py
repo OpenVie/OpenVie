@@ -51,7 +51,7 @@ class RetrievalQuery:
     query_vector: tuple[float, ...] | None = None
     visibility: VisibilityScope = VisibilityScope.ALL_TENANT_DOCUMENTS
     document_ids: tuple[str, ...] | None = None
-
+    excluded_document_kinds: tuple[str, ...] = ()
 
 @dataclass(frozen=True, slots=True)
 class RetrievedKnowledgeUnit:

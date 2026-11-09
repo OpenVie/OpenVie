@@ -35,6 +35,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import com.openvie.api.chat.service.ChatActionService;
+import com.openvie.api.common.exception.custom.ResourceNotFoundException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
@@ -67,16 +70,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @SecurityRequirement(name = "bearerAuth")
 public class ChatController extends BaseController {
     private final ChatControlPlaneService chatService;
+    @Autowired(required = false)
+    private ChatActionService chatActionService;
     private final Map<Thread, Context.CancellableContext> activeStreams = new ConcurrentHashMap<>();
     @Value("${app.ai.grpc.answer-deadline-seconds:100}")
     private long answerDeadlineSeconds = 100;
 
     @Operation(summary = "Create a chat session",
-            description = "Creates an OPEN playground session owned by the caller in the active workspace.")
+            description = "Creates an OPEN playground session owned by the caller in the active workspace. "
+                    + "`chatbot_id` and `knowledge_base_id` are optional: when omitted, the workspace's default "
+                    + "assistant and its knowledge base are used (what `GET /tenants/me/workspace` returns), so "
+                    + "an integrator only needs the API key. Pass both ids to pin a specific assistant/KB.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Session created"),
             @ApiResponse(responseCode = "400", description = "Request validation failed, or the workspace or knowledge base is not active"),
-            @ApiResponse(responseCode = "403", description = "Caller has no active membership in the workspace")
+            @ApiResponse(responseCode = "403", description = "Caller has no active membership in the workspace"),
+            @ApiResponse(responseCode = "404", description = "Tenant workspace was not found, or no active chatbot/knowledge base matches the given ids")
     })
     @PostMapping("/sessions")
     public ChatDtos.SessionResponse create(
@@ -96,14 +105,14 @@ public class ChatController extends BaseController {
                     + "at most 20 COMPLETED documents of the session's knowledge base; empty or absent means the "
                     + "whole knowledge base.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "SSE stream opened; terminal event is `complete` or `error`"),
+            @ApiResponse(responseCode = "200", description = "JSON answer, or SSE stream whose terminal event is `complete` or `error`"),
             @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR, INVALID_DOCUMENT_SCOPE, or INVALID_REQUEST"),
             @ApiResponse(responseCode = "404", description = "SESSION_NOT_FOUND — the session id, even when an "
                     + "Idempotency-Key replays a different session"),
             @ApiResponse(responseCode = "409", description = "IDEMPOTENCY_KEY_REUSED, MESSAGE_IN_PROGRESS, or KNOWLEDGE_BASE_CHANGED"),
             @ApiResponse(responseCode = "502", description = "MODEL_PROVIDER_ERROR — the inference pipeline failed mid-answer")
     })
-    @PostMapping(value = "/sessions/{sessionId}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping("/sessions/{sessionId}/messages")
     public ResponseEntity<Object> submit(
             @PathVariable UUID sessionId,
             @Valid @RequestBody ChatDtos.SubmitMessageRequest body,
@@ -116,18 +125,18 @@ public class ChatController extends BaseController {
         // Integration mode: `Accept: application/json` runs the exact same turn
         // pipeline (fingerprint, idempotent replay, scope validation) but waits
         // for the final answer instead of streaming drafts. SSE stays the
-        // default for everything else, including `Accept: */*`.
+        // default for everything else, including `Accept: */*`. No `produces` on
+        // the mapping: it would exclude JSON Accepts at handler-mapping time
+        // before this branch ever runs.
         String accept = request.getHeader(HttpHeaders.ACCEPT);
         if (accept != null && accept.contains(MediaType.APPLICATION_JSON_VALUE)
                 && !accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE)) {
-            var result = chatService.submitEmployeeMessage(
-                    tenantId, userId, sessionId, body.content(), body.metadata(),
-                    body.documentIds(), idempotencyKey, requestId,
-                    new ChatControlPlaneService.AnswerStreamListener() {
-                        @Override public void onContent(String content) { }
-                        @Override public void onReset() { }
-                    });
-            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(result);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(chatService.submitEmployeeMessage(
+                            tenantId, userId, sessionId, body.content(), body.metadata(),
+                            body.documentIds(), idempotencyKey, requestId,
+                            new ChatControlPlaneService.AnswerStreamListener() { }));
         }
 
         SseEmitter emitter = new SseEmitter((2 * answerDeadlineSeconds + 10) * 1000);
@@ -335,5 +344,26 @@ public class ChatController extends BaseController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void hide(@PathVariable UUID sessionId, HttpServletRequest request) {
         chatService.hidePlayground(getTenantId(request), getUserId(request), sessionId);
+    }
+
+    @Operation(summary = "Execute a proposed app action card",
+            description = "App lifecycle actions are organization-owner only; record actions follow the app manifest RBAC. "
+                    + "The server re-resolves the caller's effective workspace role and the frozen app manifest.")
+    @PostMapping("/actions/execute")
+    public ResponseEntity<ChatDtos.AssistantMessageResponse> executeAction(
+            @Valid @RequestBody ChatDtos.ExecuteActionRequest body,
+            HttpServletRequest request
+    ) {
+        if (chatActionService == null) {
+            throw new ResourceNotFoundException("Chat action execution is unavailable");
+        }
+        UUID tenantId = getTenantId(request);
+        UUID orgId = getOrgId(request);
+        UUID actorId = getUserId(request);
+        // Owners act with admin authority inside their workspaces; otherwise the
+        // effective workspace role (WORKSPACE_ADMIN/MEMBER) is used for manifest RBAC.
+        String role = getManifestRole(request);
+        var response = chatActionService.executeAction(tenantId, orgId, actorId, role, body.messageId(), body.actionId());
+        return ResponseEntity.ok(response);
     }
 }

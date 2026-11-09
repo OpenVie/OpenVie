@@ -24,6 +24,9 @@ import com.openvie.api.workflow.dto.EngineDtos.EngineProcessHistoryView;
 import com.openvie.api.workflow.dto.EngineDtos.EngineProcessView;
 import com.openvie.api.workflow.dto.EngineDtos.EngineTaskView;
 import com.openvie.api.workflow.dto.EngineDtos.EngineTasks;
+import com.openvie.api.tenant.api.OrgRole;
+import com.openvie.api.tenant.api.TenantIdentityApi;
+import com.openvie.api.tenant.api.WorkspaceRole;
 import com.openvie.api.workflow.dto.EngineDtos.StartEngineProcessRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +35,8 @@ import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.identitylink.api.IdentityLink;
+import org.flowable.identitylink.api.IdentityLinkType;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.task.api.Task;
@@ -44,8 +49,10 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -68,6 +75,7 @@ public class WorkflowEngineService {
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final HistoryService historyService;
+    private final TenantIdentityApi tenantIdentityApi;
 
     @Transactional
     public EngineDefinitionView deployDefinition(UUID workspaceId, UUID deployerId, String name, String bpmnXml) {
@@ -175,12 +183,22 @@ public class WorkflowEngineService {
     }
 
     @Transactional(readOnly = true)
-    public EngineTasks listTasks(UUID workspaceId, String definitionKey, boolean unassignedOnly,
+    public EngineTasks listTasks(UUID workspaceId, UUID callerId, String definitionKey, boolean unassignedOnly,
                                  UUID assigneeId, int limit) {
+        TenantIdentityApi.MembershipSnapshot membership = membership(callerId, workspaceId);
         var query = taskService.createTaskQuery()
                 .taskTenantId(workspaceId.toString());
         if (definitionKey != null && !definitionKey.isBlank()) {
             query.processDefinitionKey(definitionKey);
+        }
+        if (!isOwner(membership)) {
+            // Members only see tasks they are a candidate for or already own;
+            // owner visibility is unconditional within the workspace.
+            List<String> groups = List.copyOf(candidateGroups(membership));
+            query.or()
+                    .taskCandidateGroupIn(groups)
+                    .taskAssignee(callerId.toString())
+                    .endOr();
         }
         if (unassignedOnly) {
             query.taskUnassigned();
@@ -207,12 +225,45 @@ public class WorkflowEngineService {
     }
 
     @Transactional
+    public void reassignPendingTasks(UUID workspaceId, String appKind, String oldGroup, String newGroup) {
+        if (oldGroup == null || newGroup == null || oldGroup.equals(newGroup)) {
+            return;
+        }
+        List<Task> tasks = taskService.createTaskQuery()
+                .processVariableValueEquals("workspaceId", workspaceId.toString())
+                .processVariableValueEquals("appKind", appKind)
+                .taskCandidateGroup(oldGroup)
+                .taskUnassigned()
+                .list();
+        for (Task task : tasks) {
+            taskService.deleteCandidateGroup(task.getId(), oldGroup);
+            taskService.addCandidateGroup(task.getId(), newGroup);
+            runtimeService.setVariable(task.getProcessInstanceId(), "candidateRole", newGroup);
+            log.info("Approval task {} moved from {} to {} after app upgrade",
+                    task.getId(), oldGroup, newGroup);
+        }
+    }
+
+    @Transactional
     public Map<String, Object> claimTask(UUID workspaceId, UUID callerId, UUID taskId, EngineClaimRequest request) {
         Task task = requireTask(workspaceId, taskId);
         requireNotApprovalDomain(task);
-        String assignee = request != null && request.assignee() != null && !request.assignee().isBlank()
+        TenantIdentityApi.MembershipSnapshot membership = membership(callerId, workspaceId);
+        boolean owner = isOwner(membership);
+        boolean admin = owner || (membership != null
+                && membership.workspaceRole() == WorkspaceRole.WORKSPACE_ADMIN);
+        boolean assignedToCaller = task.getAssignee() != null
+                && task.getAssignee().equals(callerId.toString());
+        if (!owner && !assignedToCaller && !isCandidate(task, candidateGroups(membership))) {
+            throw new AccessDeniedException("Your role is not a candidate for this task");
+        }
+        String requestedAssignee = request != null && request.assignee() != null && !request.assignee().isBlank()
                 ? request.assignee()
-                : callerId.toString();
+                : null;
+        if (requestedAssignee != null && !admin) {
+            throw new AccessDeniedException("Only workspace admins may assign a task to another user");
+        }
+        String assignee = requestedAssignee != null ? requestedAssignee : callerId.toString();
         if (task.getAssignee() != null && !task.getAssignee().equals(assignee)) {
             throw new ConflictException("Task already claimed by another assignee");
         }
@@ -226,6 +277,12 @@ public class WorkflowEngineService {
                                             EngineCompleteRequest request) {
         Task task = requireTask(workspaceId, taskId);
         requireNotApprovalDomain(task);
+        if (task.getAssignee() == null) {
+            throw new ConflictException("Claim the task before completing it");
+        }
+        if (!task.getAssignee().equals(callerId.toString())) {
+            throw new AccessDeniedException("Only the assigned user may complete this task");
+        }
         Map<String, Object> variables = request == null || request.variables() == null
                 ? Map.of()
                 : request.variables();
@@ -255,6 +312,46 @@ public class WorkflowEngineService {
                 ended,
                 ended ? historic.getDurationInMillis() : null,
                 historic.getProcessVariables());
+    }
+
+    private TenantIdentityApi.MembershipSnapshot membership(UUID callerId, UUID workspaceId) {
+        return tenantIdentityApi.requireMembership(callerId, workspaceId);
+    }
+
+    private boolean isOwner(TenantIdentityApi.MembershipSnapshot membership) {
+        return membership != null && membership.orgRole() == OrgRole.ORG_OWNER;
+    }
+
+    /**
+     * Candidate groups a caller answers to. Owners escalate over workspace
+     * admins, admins over members — matching the manifest role model.
+     */
+    private Set<String> candidateGroups(TenantIdentityApi.MembershipSnapshot membership) {
+        Set<String> groups = new HashSet<>();
+        if (isOwner(membership)) {
+            groups.add("ORG_OWNER");
+            return groups;
+        }
+        if (membership != null && membership.workspaceRole() == WorkspaceRole.WORKSPACE_ADMIN) {
+            groups.add("WORKSPACE_ADMIN");
+            return groups;
+        }
+        groups.add("MEMBER");
+        return groups;
+    }
+
+    private boolean isCandidate(Task task, Set<String> groups) {
+        if (groups.isEmpty()) {
+            return false;
+        }
+        for (IdentityLink link : taskService.getIdentityLinksForTask(task.getId())) {
+            if (IdentityLinkType.CANDIDATE.equals(link.getType())
+                    && link.getGroupId() != null
+                    && groups.contains(link.getGroupId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private HistoricProcessInstance historyInstance(UUID workspaceId, String processId) {

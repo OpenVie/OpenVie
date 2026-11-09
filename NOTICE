@@ -26,6 +26,25 @@ their terms before redistributing them. Components with noteworthy conditions:
 - The optional observability profile runs Grafana (AGPL-3.0) as an unmodified
   standalone service accessed over the network; no Grafana code is linked
   into OpenVie.
+- Mozilla PDF.js (npm package `pdfjs-dist`, declared in `frontend/package.json`,
+  Apache License, Version 2.0). Its web worker (`pdf.worker.min.mjs`) is not
+  committed to this repository: it is copied from the installed `pdfjs-dist`
+  package into `frontend/public/` at build/run time by
+  `frontend/scripts/prepare-pdf-worker.mjs`, so the shipped artifact always
+  matches the declared dependency version. `CHANGELOG.md` previously recorded
+  a vendored copy; that has been removed in v1.0.0.
+- sharp (frontend runtime dependency, Apache-2.0) bundles prebuilt libvips
+  binaries licensed under LGPL-3.0-or-later; Next.js image optimization utilizes
+  it dynamically.
+- H2 Database (com.h2database:h2, MPL-2.0 / EPL-1.0) is present only in test
+  scope for in-memory integration testing and is never packaged into production JARs.
+- Eclipse Paho MQTT client (org.eclipse.paho:org.eclipse.paho.client.mqttv3)
+  is dual-licensed EPL-2.0 / EDL-1.0 (BSD-3-Clause); OpenVie uses it unmodified
+  under the BSD-3-Clause terms for MQTT connector jobs.
+- AI model weights referenced in configuration (such as vylinh, bge-m3, or
+  models configured for AI manifest drafting) are third-party models with their
+  own upstream licenses and are not relicensed by OpenVie.
 - Remaining Python, Java, and frontend dependencies are permissive
-  (Apache-2.0, BSD, or MIT) and listed in `rag-chatbot-fastapi/pyproject.toml`,
+  (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, or CDDL-1.1/MPL-2.0
+  where unmodified) and listed in `rag-chatbot-fastapi/pyproject.toml`,
   `api/pom.xml`, and `frontend/package.json`.

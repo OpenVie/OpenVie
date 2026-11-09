@@ -17,6 +17,7 @@ package com.openvie.api.document.dto;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.enums.DocumentType;
 
@@ -38,6 +39,27 @@ public record DocumentListItemResponse(
         @Schema(description = "Number of source pages when known (PDF and images).") Integer pageCount,
         @Schema(description = "Set when ingestion FAILED; explains the worker-side reason.") String errorMessage,
         LocalDateTime uploadedAt,
-        UUID uploadedBy
+        UUID uploadedBy,
+        DocumentKind documentKind,
+        String sourceRef
 ) {
+    public DocumentListItemResponse(
+            UUID id,
+            UUID jobId,
+            String fileName,
+            DocumentType fileType,
+            long fileSizeBytes,
+            UUID knowledgeBaseId,
+            DocumentStatus status,
+            Integer chunkCount,
+            String textSource,
+            Integer pageCount,
+            String errorMessage,
+            LocalDateTime uploadedAt,
+            UUID uploadedBy
+    ) {
+        this(id, jobId, fileName, fileType, fileSizeBytes, knowledgeBaseId, status,
+                chunkCount, textSource, pageCount, errorMessage, uploadedAt, uploadedBy,
+                DocumentKind.USER, null);
+    }
 }

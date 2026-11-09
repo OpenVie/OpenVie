@@ -39,4 +39,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
 
     Optional<ChatMessage> findFirstBySessionIdAndSequenceNumberLessThanOrderBySequenceNumberDesc(
             UUID sessionId, int sequenceNumber);
+
+    List<ChatMessage> findByTenantIdAndRoleOrderByCreatedAtDesc(UUID tenantId, String role);
+
+    default Optional<ChatMessage> findByTenantIdAndActionId(UUID tenantId, String actionId) {
+        if (actionId == null || actionId.isBlank()) return Optional.empty();
+        return findByTenantIdAndRoleOrderByCreatedAtDesc(tenantId, "assistant").stream()
+                .filter(m -> m.getAction() != null && actionId.equalsIgnoreCase(String.valueOf(m.getAction().get("actionId"))))
+                .findFirst();
+    }
 }

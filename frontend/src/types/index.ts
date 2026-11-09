@@ -48,6 +48,12 @@ export interface WorkflowTask {
   documentId: string;
   documentFileName: string;
   createdAt: string;
+  appKind?: string | null;
+  entity?: string | null;
+  recordId?: string | null;
+  recordTitle?: string | null;
+  recordSummary?: string | null;
+  recordFields?: Record<string, string> | null;
 }
 
 export interface WorkspaceTasks {
@@ -61,12 +67,16 @@ export interface WorkflowProcess {
   documentFileName: string;
   sensitive: boolean;
   approvalLevel: number;
-  policyVersion: string;
-  publishTarget: PublishTarget;
+  policyVersion: string | null;
+  publishTarget: PublishTarget | null;
   documentStatus: string;
   escalated: boolean;
   startedAt: string;
   endedAt: string | null;
+  title?: string | null;
+  summary?: string | null;
+  appKind?: string | null;
+  entity?: string | null;
 }
 
 export interface StartProcessResponse {
@@ -198,6 +208,31 @@ export interface OrganizationMember {
   createdAt: string;
   lastLoginAt: string | null;
   currentUser: boolean;
+}
+
+/** Machine API key as reported by `/admin/api-keys` (secrets are write-only). */
+export interface ApiKeyView {
+  id: string;
+  workspaceId: string;
+  serviceUserId: string;
+  name: string;
+  /** `ovk_` + first secret characters, identification only. */
+  keyPrefix: string;
+  role: WorkspaceRole;
+  status: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdBy: string;
+  /** True when the key can no longer authenticate (revoked or expired). */
+  expired: boolean;
+}
+
+/** Creation response: `key` is the secret shown exactly once — store it now. */
+export interface CreatedApiKey {
+  id: string;
+  key: string;
+  keyView: ApiKeyView;
 }
 
 export interface InvitationValidation {
@@ -335,18 +370,22 @@ export interface ChatCitation {
 }
 
 export interface AssistantMessageResponse {
+  id?: string;
   role: "assistant";
   content: string;
   citations: ChatCitation[];
+  action?: Record<string, unknown> | null;
   /** Short follow-up questions (at most a few) the user can send next; absent when none were made. */
   suggested_questions?: string[];
 }
 
 export interface ChatHistoryMessageResponse {
+  id?: string;
   role: "user" | "assistant" | "system";
   content: string;
   citations: ChatCitation[];
   sequence_number?: number | null;
+  action?: Record<string, unknown> | null;
 }
 
 export interface PlaygroundSession {
@@ -356,4 +395,163 @@ export interface PlaygroundSession {
   status: string;
   created_at: string;
   last_activity_at: string;
+}
+
+// ─── BizApps (Tier 3) ────────────────────────────────────────────────────────
+// Mirror of the wire records in com.openvie.api.bizapp.dto.BizAppDtos and the
+// bizapp.v1 manifest shape the backend validator enforces.
+
+export interface BizAppLocalized {
+  vi?: string | null;
+  en?: string | null;
+}
+
+export interface BizAppField {
+  name: string;
+  type: "string" | "number" | "boolean" | "enum" | "date" | "ref";
+  entity?: string;
+  required?: boolean;
+  maxLen?: number;
+  format?: string;
+  options?: string[];
+  pii?: boolean;
+  label?: BizAppLocalized;
+}
+
+export interface BizAppEntity {
+  name: string;
+  label?: BizAppLocalized;
+  fields: BizAppField[];
+  knowledge?: {
+    project?: boolean;
+    titleField?: string;
+    fields?: string[];
+  };
+  hooks?: Record<string, string[]>;
+}
+
+export interface BizAppBlock {
+  id: string;
+  type: string;
+  params?: Record<string, unknown>;
+}
+
+export interface BizAppManifest {
+  schema: "bizapp.v1";
+  kind: string;
+  name: BizAppLocalized;
+  version?: number;
+  icon?: string;
+  storage?: "jsonb" | "typed";
+  rbac?: Record<string, string[]>;
+  entities: BizAppEntity[];
+  blocks?: BizAppBlock[];
+  conversational?: {
+    triggers?: string[];
+    description?: string;
+  };
+  ui?: {
+    views: string[];
+    layout?: Record<string, { x: number; y: number }>;
+  };
+}
+export interface BizAppInstalledAppView {
+  kind: string;
+  version: number;
+  nameEn: string;
+  nameVi: string;
+  icon?: string | null;
+  status: "ACTIVE" | "DISABLED";
+  manifest: BizAppManifest;
+  config?: Record<string, unknown> | null;
+  processKey?: string | null;
+  installedAt: string;
+}
+
+export interface BizAppTemplateView {
+  /** Only for org (`source === "org"`) templates; platform entries are null. */
+  id?: string | null;
+  source: "platform" | "org";
+  kind: string;
+  name: string;
+  nameVi?: string | null;
+  summary?: string | null;
+  version: number;
+}
+
+export interface BizAppRecordView {
+  id: string;
+  appKind: string;
+  entity: string;
+  payload: Record<string, unknown>;
+  runtime?: Record<string, unknown> | null;
+  status: "ACTIVE" | "ARCHIVED";
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Spring Data page body as serialized by the API. */
+export interface BizAppRecordPage {
+  content: BizAppRecordView[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface BizAppCredentialView {
+  id: string;
+  name: string;
+  format: "api_key" | "bearer" | "basic";
+  createdAt: string;
+}
+
+export interface BizAppInstallResult {
+  installationId: string;
+  kind: string;
+  version: number;
+  processKey?: string | null;
+}
+
+/** Stateless manifest validation result (`POST /bizapps/validate`). */
+export interface BizAppValidationResult {
+  ok: boolean;
+  errors: string[];
+}
+
+/** One draft entry — AI-generated, canvas-edited, imported or remixed. */
+export interface BizAppDraftView {
+  id: string;
+  source: "ai" | "canvas" | "import" | "remix";
+  title: string | null;
+  manifest: Record<string, unknown> | null;
+  /** `{ ok, errors[] }` as stored by the backend, when validation ran. */
+  validation: Record<string, unknown> | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Response of `POST /bizapps/drafts/generate` (draft only, never installs). */
+export interface BizAppGenerateDraftResult {
+  draftId: string;
+  manifest: Record<string, unknown> | null;
+  validation: BizAppValidationResult | null;
+  meta: Record<string, unknown> | null;
+}
+
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+  read: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface UnreadNotificationsCount {
+  unreadCount: number;
 }

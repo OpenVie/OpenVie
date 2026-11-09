@@ -28,9 +28,12 @@ const PAGE_TITLE_KEYS = {
   "/change-password": "changePassword",
   "/accept-invitation": "acceptInvitation",
   "/documents": "documents",
+  "/apps": "apps",
   "/users": "users",
   "/admin/organization": "organization",
+  "/admin/organization/api-keys": "apiKeys",
   "/admin/workspaces": "workspaces",
+  "/admin/apps": "marketplace",
   "/admin/settings": "settings",
 } as const;
 

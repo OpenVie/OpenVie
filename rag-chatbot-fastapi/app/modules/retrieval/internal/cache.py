@@ -53,7 +53,9 @@ def retrieval_configuration_fingerprint(settings: RetrievalConfig) -> str:
         "embedding_dimension": settings.TEXT_EMBEDDING_DIMENSION,
         "embedding_normalization_version": 1,
         "sparse_model": settings.SPARSE_MODEL_ID,
+        "document_kind_policy_version": "document-kind-v1",
         "graph_max_hops": settings.GRAPH_MAX_HOPS,
+        "graph_retrieval_enabled": getattr(settings, "GRAPH_RETRIEVAL_ENABLED", True),
         "graph_service_url": settings.GRAPH_SERVICE_URL,
         "graph_timeout_seconds": settings.GRAPH_TIMEOUT_SECONDS,
         "candidate_counts": {
@@ -109,6 +111,7 @@ class RetrievalClient(Protocol):
         query_text: str,
         query_vector: Sequence[float],
         document_ids: Sequence[str] | None = None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]: ...
 
 
@@ -328,6 +331,7 @@ class CachedRetriever:
         query_vector: Sequence[float],
         authoritative_revision: int = 0,
         document_ids: Sequence[str] | None = None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         started = time.perf_counter()
         outcome = "success"
@@ -340,6 +344,7 @@ class CachedRetriever:
                     query_text=query_text,
                     query_vector=query_vector,
                     document_ids=document_ids,
+                    excluded_document_kinds=excluded_document_kinds,
                 )
             try:
                 revision = (
@@ -368,6 +373,7 @@ class CachedRetriever:
                     query_text=query_text,
                     query_vector=query_vector,
                     document_ids=document_ids,
+                    excluded_document_kinds=excluded_document_kinds,
                 )
 
             cached = await self._cache_store.get(CACHE_NAME, key)
@@ -418,6 +424,7 @@ class CachedRetriever:
         query_text: str,
         query_vector: Sequence[float],
         document_ids: Sequence[str] | None,
+        excluded_document_kinds: Sequence[str] | None = None,
     ) -> list[RetrievedChunk]:
         scope = self._concurrent_loads.observe(CACHE_NAME, tracking_key) if tracking_key else None
         try:
@@ -430,6 +437,7 @@ class CachedRetriever:
                     query_text=query_text,
                     query_vector=query_vector,
                     document_ids=document_ids,
+                    excluded_document_kinds=excluded_document_kinds,
                 )
             except Exception:
                 outcome = "error"

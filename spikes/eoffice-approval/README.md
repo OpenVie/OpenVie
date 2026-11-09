@@ -1,9 +1,10 @@
 # PoC BPMN phê duyệt tài liệu e-Office
 
 Bản demo độc lập này mô hình hóa quy trình phê duyệt bằng Flowable
+
 ## Nội dung bao gồm
 
-- `bpmn/eoffice-document-approval.bpmn20.xml`: mô hình BPMN có thể thực thi, gồm external task đánh giá độ nhạy cảm, exclusive gateway, các candidate group cấp 1 và cấp 2, timer nhắc nhở/leo thang, các kết quả phê duyệt/từ chối, và các external task cho tác vụ phụ (side effect) ghi audit/xuất bản.
+- `bpmn/eoffice-document-approval.bpmn20.xml`: mô hình BPMN có thể thực thi, gồm external task đánh giá độ nhạy cảm, exclusive gateway, các candidate group cấp 1 và cấp 2, timer nhắc nhở/chuyển tiếp, các kết quả phê duyệt/từ chối, và các external task cho tác vụ phụ (side effect) ghi audit/xuất bản.
 - `data/demo-documents.json`: các tài liệu mẫu thông thường và nhạy cảm.
 - `scripts/worker.py`: worker xử lý external job, import trực tiếp `sensitive_policy.py` hiện có. Worker cố ý không sao chép lại bộ từ khóa hay phiên bản chính sách của file này.
 - `scripts/seed_demo.py`: triển khai (deploy) BPMN và khởi chạy cả hai process instance mẫu.
@@ -52,7 +53,7 @@ python scripts/worker.py
 
 External task `score-sensitivity` gọi hàm dùng chung `is_sensitive_query()` của repository và lưu `sensitive`, `policyVersion` và `approvalLevel` thành các process variable. Sau đó BPMN điều hướng các tài liệu workspace thông thường tới `WORKSPACE_ADMIN`; các tài liệu nhạy cảm và các tài liệu có `target=shared`/`target=public` được chuyển thẳng tới `ORG_OWNER`.
 
-## Demo phê duyệt, từ chối, nhận việc (claim) và leo thang
+## Demo phê duyệt, từ chối, nhận việc (claim) và chuyển tiếp
 
 Liệt kê các task đang hoạt động:
 
@@ -71,7 +72,7 @@ curl -u "rest-admin:$FLOWABLE_REST_PASSWORD" -H 'Content-Type: application/json'
   -d '{"action":"complete","variables":[{"name":"approvalOutcome","value":"APPROVE","type":"string"}]}'
 ```
 
-Với trường hợp từ chối, hãy đặt thêm `rejectReason` trong các biến khi hoàn thành task. Worker xử lý từ chối sẽ ghi một dấu audit `document-rejected`. Task cấp 1 khi đến hạn timer leo thang sẽ bị hủy và được chuyển lên cấp 2 sau khi audit worker `overdue, escalated` chạy. Timer nhắc nhở là loại không ngắt (non-interrupting) và giữ nguyên task cấp 1 ở trạng thái hoạt động.
+Với trường hợp từ chối, hãy đặt thêm `rejectReason` trong các biến khi hoàn thành task. Worker xử lý từ chối sẽ ghi một dấu audit `document-rejected`. Task cấp 1 khi đến hạn timer chuyển tiếp sẽ bị hủy và được chuyển lên cấp 2 sau khi audit worker `overdue, escalated` chạy. Timer nhắc nhở là loại không ngắt (non-interrupting) và giữ nguyên task cấp 1 ở trạng thái hoạt động.
 
 ## Kiểm tra các file cục bộ
 
@@ -88,5 +89,5 @@ Các test này chỉ kiểm tra các asset nguồn và việc tái sử dụng p
 - BPMN dùng các role candidate group chỉ như metadata định tuyến workflow. Đây không phải là sự thay thế cho cơ chế phân quyền của API OpenVie; trước khi đưa vào production, cần xác định role và phạm vi tenant/workspace từ principal đã được xác thực, không lấy từ các biến do client cung cấp.
 - Việc xem/nhận task theo candidate group phải được trung gian hóa qua API của ứng dụng để người dùng không thể truy vấn task của workspace khác.
 - Process lưu phiên bản policy và cấp quyết định để phục vụ audit. Thiết lập REST của engine hiện tại chỉ dành cho phát triển cục bộ.
-- Môi trường production vẫn cần kết nối bước publish với pipeline ingestion tài liệu hiện có, và nối các sự kiện nhắc nhở/leo thang với các kênh thông báo trong ứng dụng hiện có.
+- Môi trường production vẫn cần kết nối bước publish với pipeline ingestion tài liệu hiện có, và nối các sự kiện nhắc nhở/chuyển tiếp với các kênh thông báo trong ứng dụng hiện có.
 - Việc thực thi timer yêu cầu bật async executor của Flowable. Hãy xác nhận thiết lập này với đúng image/phiên bản container khi chạy thử runtime.

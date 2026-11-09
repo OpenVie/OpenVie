@@ -34,6 +34,7 @@ export type DocumentQuery = {
   uploadedTo?: string;
   sort?: "uploaded" | "filename" | "size";
   direction?: "asc" | "desc";
+  includeSystem?: boolean;
   signal?: AbortSignal;
 };
 
@@ -63,6 +64,7 @@ export async function queryDocumentsApi(
   if (query.uploadedTo) params.set("uploaded_to", query.uploadedTo);
   if (query.sort) params.set("sort", query.sort);
   if (query.direction) params.set("direction", query.direction);
+  if (query.includeSystem) params.set("include_system", "true");
   const res = await request(`${getApiBase()}/documents?${params}`, { signal: query.signal });
   const items = await readJsonOrThrow<Document[]>(res);
   return { items, total: Number(res.headers.get("X-Total-Count") ?? items.length) };

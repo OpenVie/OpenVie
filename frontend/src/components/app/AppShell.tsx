@@ -21,11 +21,12 @@ import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun } from "lu
 import { useAuthStore } from "@/components/providers/StoreProvider"
 import { useTokenRehydration } from "@/hooks/useTokenRehydration"
 import { logoutApi } from "@/lib/auth-api"
-import { visibleNavigation } from "@/components/app/navigation"
+import { activeNavigationHref, visibleNavigation } from "@/components/app/navigation"
 import { WorkspaceSwitcher } from "@/components/app/WorkspaceSwitcher"
 import { ChatHistoryPanel } from "@/components/chat/ChatHistoryPanel"
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher"
 import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle"
+import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { transitionTheme } from "@/lib/theme-transition"
 import { requestNewChat } from "@/lib/chat-events"
 import {
@@ -79,6 +80,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
   const navItems = visibleNavigation(user?.orgRole)
   const primaryNavigation = navItems.filter((item) => item.placement !== "footer")
   const footerNavigation = navItems.filter((item) => item.placement === "footer")
+  const activeHref = activeNavigationHref(pathname, navItems)
   async function handleLogout() {
     try {
       await logoutApi()
@@ -218,8 +220,8 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
               "--ov-indicator-height": `${navIndicator.height}px`,
             } as CSSProperties}
           />
-          {primaryNavigation.map(({ href, labelKey, icon: Icon }) => {
-            const isActive = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
+          {primaryNavigation.map(({ href, labelKey, icon: Icon, badge }) => {
+            const isActive = activeHref === href
             return (
               <Link
                 key={href}
@@ -235,6 +237,7 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
               >
                 <Icon className="size-4" />
                 <span className="ov-nav-label">{t(labelKey)}</span>
+                {badge ? <span className="ov-nav-beta">{badge}</span> : null}
               </Link>
             )
           })}
@@ -301,7 +304,9 @@ export function AppShell({ children, contentClassName }: AppShellProps) {
           >
             <Menu className="size-5" />
           </button>
-          <div className="ov-topbar-controls ml-auto">
+          <div className="ov-topbar-controls ml-auto flex items-center">
+            <NotificationBell />
+            <span className="ov-topbar-divider" aria-hidden="true" />
             <button
               type="button"
               className="ov-topbar-control"
@@ -391,4 +396,67 @@ export function ProtectedAdminShell({ children }: { children: ReactNode }) {
   }
 
   return <AppShell>{children}</AppShell>
+}
+
+/**
+ * Composer boundary: full-screen layout for the visual BizApp composer canvas.
+ * Same auth and `ORG_OWNER` requirement, but takes 100% of the screen with no sidebar.
+ */
+export function ProtectedComposerShell({ children }: { children: ReactNode }) {
+  const common = useTranslations("Common")
+  const navigation = useTranslations("Navigation")
+  const router = useRouter()
+  const status = useTokenRehydration()
+  const user = useAuthStore((state) => state.user)
+  const [theme, setTheme] = useState<Theme>(readStoredTheme)
+
+  useEffect(() => {
+    function syncTheme() {
+      const stored = window.localStorage.getItem("openvie.theme")
+      if (stored === "dark" || stored === "light") {
+        setTheme(stored)
+      }
+    }
+    syncTheme()
+    window.addEventListener("openvie:themechange", syncTheme)
+    window.addEventListener("storage", syncTheme)
+    return () => {
+      window.removeEventListener("openvie:themechange", syncTheme)
+      window.removeEventListener("storage", syncTheme)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      router.replace(withNext("/login", destination))
+    }
+  }, [router, status])
+
+  if (status === "rehydrating") {
+    return <AppLoadingScreen label={common("loading")} />
+  }
+
+  if (status === "unauthenticated") {
+    return null
+  }
+
+  if (user?.orgRole !== "ORG_OWNER") {
+    return (
+      <div className={cn("ov-shell flex min-h-dvh h-dvh w-screen items-center justify-center p-6 bg-background text-foreground", theme === "light" && "ov-light")}>
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive max-w-md text-center"
+        >
+          {navigation("adminOnly")}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn("ov-shell min-h-dvh h-screen h-dvh w-screen overflow-hidden bg-background text-foreground", theme === "light" && "ov-light")}>
+      {children}
+    </div>
+  )
 }

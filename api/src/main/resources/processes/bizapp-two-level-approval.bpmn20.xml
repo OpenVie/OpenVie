@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright 2026 LinkedNodeDigital
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:flowable="http://flowable.org/bpmn"
+  targetNamespace="https://openvie.dev/bpmn/bizapp">
+  <process id="bizappTwoLevelApproval" name="BizApp two-level record approval" isExecutable="true">
+    <documentation>Two-step BizApp record approval. The first user task uses the
+      manifest's candidateRole; the second task is always the organization owner.
+      Both tasks expose decision (APPROVE | REJECT) on the generic engine inbox.
+      Only the terminal delegate writes the decision back to the record, so a
+      first-level approval never settles the record early.</documentation>
+
+    <startEvent id="start" name="Record submitted" />
+    <sequenceFlow id="f_start_level1" sourceRef="start" targetRef="level1Approval" />
+
+    <userTask id="level1Approval" name="First-level review"
+      flowable:candidateGroups="${candidateRole}" />
+    <boundaryEvent id="level1Reminder" name="First-level reminder" attachedToRef="level1Approval" cancelActivity="false">
+      <timerEventDefinition><timeDuration>${reminderDuration}</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="f_level1_reminder" sourceRef="level1Reminder" targetRef="sendReminder" />
+    <boundaryEvent id="level1Escalation" name="First-level escalation" attachedToRef="level1Approval" cancelActivity="true">
+      <timerEventDefinition><timeDuration>${escalationDuration}</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="f_level1_escalate_timer" sourceRef="level1Escalation" targetRef="recordEscalation" />
+
+    <serviceTask id="sendReminder" name="Record in-app reminder"
+      flowable:delegateExpression="${workflowReminderDelegate}" />
+    <sequenceFlow id="f_reminder_end" sourceRef="sendReminder" targetRef="reminderEnd" />
+    <endEvent id="reminderEnd" name="Reminder recorded" />
+
+    <serviceTask id="recordEscalation" name="Audit SLA escalation"
+      flowable:delegateExpression="${workflowTimerEscalationDelegate}" />
+    <sequenceFlow id="f_escalation_to_level2" sourceRef="recordEscalation" targetRef="level2Approval" />
+
+    <sequenceFlow id="f_level1_decide" sourceRef="level1Approval" targetRef="level1Outcome" />
+    <exclusiveGateway id="level1Outcome" name="First-level decision" default="f_level1_reject" />
+    <sequenceFlow id="f_level1_approve" sourceRef="level1Outcome" targetRef="level2Approval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${decision == 'APPROVE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level1_handoff" sourceRef="level1Outcome" targetRef="level2Approval">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${decision == 'ESCALATE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level1_reject" sourceRef="level1Outcome" targetRef="recordDecision" />
+
+    <userTask id="level2Approval" name="Final approval"
+      flowable:candidateGroups="ORG_OWNER" />
+    <boundaryEvent id="level2Reminder" name="Final approval reminder" attachedToRef="level2Approval" cancelActivity="false">
+      <timerEventDefinition><timeDuration>${reminderDuration}</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="f_level2_reminder" sourceRef="level2Reminder" targetRef="sendReminder" />
+
+    <sequenceFlow id="f_level2_decide" sourceRef="level2Approval" targetRef="level2Outcome" />
+    <exclusiveGateway id="level2Outcome" name="Final decision" default="f_level2_reject" />
+    <sequenceFlow id="f_level2_approve" sourceRef="level2Outcome" targetRef="recordDecision">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${decision == 'APPROVE'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_level2_reject" sourceRef="level2Outcome" targetRef="recordDecision" />
+
+    <serviceTask id="recordDecision" name="Write decision back to the record"
+      flowable:delegateExpression="${bizAppRecordDecisionDelegate}" />
+    <sequenceFlow id="f_record_decision_end" sourceRef="recordDecision" targetRef="end" />
+    <endEvent id="end" name="Decision recorded" />
+  </process>
+</definitions>

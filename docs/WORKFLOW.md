@@ -15,15 +15,15 @@ cho PoC (xem [DEPLOYMENT §8](DEPLOYMENT.md#8-run-the-bpmn-workflow-demo-poc)).
 
 ### 1. Luồng phê duyệt tài liệu
 
-Quy trình: **nộp → duyệt/từ chối/leo thang (cấp 1) → duyệt/từ chối (cấp 2)** với external task
-cho mỗi cấp, exclusive gateway, timer nhắc nhở/leo thang.
+Quy trình: **nộp → duyệt/từ chối/chuyển tiếp (cấp 1) → duyệt/từ chối (cấp 2)** với external task
+cho mỗi cấp, exclusive gateway, timer nhắc nhở/chuyển tiếp.
 
-| Việc | Route |
-| --- | --- |
-| Nộp tài liệu vào luồng phê duyệt | `POST /api/v1/workflow/processes` |
-| Danh sách process (phân trang) + log từng process | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log` |
-| Inbox tác vụ; nhận / hoàn tất | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
-| Cấu hình SLA của tổ chức | `GET /api/v1/workflow/sla-config` |
+| Việc                                              | Route                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Nộp tài liệu vào luồng phê duyệt                  | `POST /api/v1/workflow/processes`                                                     |
+| Danh sách process (phân trang) + log từng process | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log`          |
+| Inbox tác vụ; nhận / hoàn tất                     | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
+| Cấu hình SLA của tổ chức                          | `GET /api/v1/workflow/sla-config`                                                     |
 
 Kết quả quyết định (APPROVE/REJECT/ESCALATE ở cấp 1; APPROVE/REJECT ở cấp 2) được ghi thẳng
 vào trạng thái tài liệu: cột `approval_status` (`PENDING → APPROVED | REJECTED`, Flyway V8)
@@ -34,7 +34,7 @@ trạng thái phê duyệt từ chính bảng `documents` — không cần đồ
 
 - Chính sách độ nhạy dùng chung `SensitivityPolicyService` (một nguồn chân lý, worker demo của
   PoC cũng tái dùng nó thay vì duy trì danh sách từ khóa riêng).
-- SLA ghi trong bảng `workflow_sla_configs` theo tổ chức; mặc định reminder `PT24H`, leo thang
+- SLA ghi trong bảng `workflow_sla_configs` theo tổ chức; mặc định reminder `PT24H`, chuyển tiếp
   `PT48H`, giới hạn trên `maxSlaMinutes = 20160` phút (14 ngày) để tổ chức không cấu hình giá
   trị vô lý. Timer → `WorkflowReminderDelegate` / `WorkflowTimerEscalationDelegate`.
 
@@ -68,12 +68,12 @@ tenant-scoping rules. The standalone demo stack in `spikes/eoffice-approval` is 
 Sequence: **submit → approve/reject/escalate (level 1) → approve/reject (level 2)** with an
 external task per level, an exclusive gateway, and reminder/escalation timers.
 
-| Task | Route |
-| --- | --- |
-| Submit a document for approval | `POST /api/v1/workflow/processes` |
-| Paged process list + per-process log | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log` |
-| Task inbox; claim / complete | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
-| Organization SLA configuration | `GET /api/v1/workflow/sla-config` |
+| Task                                 | Route                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| Submit a document for approval       | `POST /api/v1/workflow/processes`                                                     |
+| Paged process list + per-process log | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log`          |
+| Task inbox; claim / complete         | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
+| Organization SLA configuration       | `GET /api/v1/workflow/sla-config`                                                     |
 
 Decision outcomes (APPROVE/REJECT/ESCALATE at level 1; APPROVE/REJECT at level 2) are written
 directly onto document state: the `approval_status` column (`PENDING → APPROVED | REJECTED`,

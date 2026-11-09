@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/openvie.template.v1.schema.json",
+  "title": "OpenVie Template Envelope v1",
+  "description": "Standard distribution envelope for bundled, org, and imported BizApp templates",
+  "type": "object",
+  "required": ["envelope", "meta", "manifest"],
+  "additionalProperties": false,
+  "properties": {
+    "envelope": {
+      "type": "string",
+      "const": "openvie.template.v1"
+    },
+    "meta": {
+      "type": "object",
+      "required": ["author", "license", "source", "generator"],
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "license": {
+          "type": "string",
+          "enum": ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "CC0-1.0", "CC-BY-4.0"]
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "generator": {
+          "type": "string",
+          "enum": ["human", "ai"]
+        },
+        "model": {
+          "type": ["string", "null"]
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["by", "at", "summary"],
+            "additionalProperties": false,
+            "properties": {
+              "by": { "type": "string", "maxLength": 100 },
+              "at": { "type": "string", "format": "date-time" },
+              "summary": { "type": "string", "maxLength": 500 }
+            }
+          }
+        }
+      }
+    },
+    "manifest": {
+      "$ref": "bizapp.v1.schema.json"
+    }
+  }
+}

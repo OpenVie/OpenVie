@@ -187,6 +187,14 @@ class DuckDbLakehouseEngine:
                 "1::INTEGER as level, false::BOOLEAN as is_sensitive, "
                 "0.0::DOUBLE as duration_minutes, now()::TIMESTAMP as created_at WHERE 1=0"
             ),
+            LakehouseDataset.BIZAPP_RECORDS.value: (
+                "CREATE VIEW bizapp_records AS SELECT "
+                "''::VARCHAR as id, ''::VARCHAR as org_id, ''::VARCHAR as tenant_id, "
+                "''::VARCHAR as app_kind, ''::VARCHAR as entity, ''::VARCHAR as status, "
+                "'{}'::VARCHAR as payload, '{}'::VARCHAR as runtime, "
+                "''::VARCHAR as created_by, now()::TIMESTAMP as created_at, "
+                "now()::TIMESTAMP as updated_at WHERE 1=0"
+            ),
         }
         create_sql = schemas.get(
             dataset,

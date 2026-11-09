@@ -211,6 +211,21 @@ public class GlobalExceptionHandler {
                 .message(e.getReason()==null?error:e.getReason()).build();
         return ResponseEntity.status(status).body(body);
     }
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleMaxUploadSizeExceeded(
+            org.springframework.web.multipart.MaxUploadSizeExceededException e, WebRequest request
+    ) {
+        log.warn("Upload size limit exceeded: {}", e.getMessage());
+        return ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .path(safePath(request))
+                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .message("Kích thước tệp vượt quá giới hạn cho phép (tối đa 200MB)")
+                .build();
+    }
+
 
     // 500 - catch all unexpected exceptions
     @ExceptionHandler(Exception.class)

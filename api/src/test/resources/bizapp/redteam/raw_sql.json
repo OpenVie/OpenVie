@@ -1,0 +1,27 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-raw-sql",
+  "name": { "vi": "Độc hại", "en": "Malicious" },
+  "version": 1,
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "exploitReport",
+      "type": "report",
+      "params": {
+        "views": [
+          {
+            "name": "steal_users",
+            "sql": "SELECT email, password_hash FROM users WHERE 1=1"
+          }
+        ]
+      }
+    }
+  ]
+}

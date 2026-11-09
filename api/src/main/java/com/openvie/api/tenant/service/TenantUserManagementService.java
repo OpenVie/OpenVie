@@ -152,6 +152,7 @@ public class TenantUserManagementService {
 
         List<MemberResponse> members = memberRepository
                 .findByWorkspace_IdOrderByRoleAscCreatedAtAsc(workspaceId).stream()
+                .filter(membership -> !isServiceUser(membership.getUser()))
                 .map(membership -> toMember(membership, null))
                 .toList();
         List<InvitationResponse> pending = invitations.stream()
@@ -812,6 +813,11 @@ public class TenantUserManagementService {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 
+    private boolean isServiceUser(User user) {
+        return user != null && user.getEmail() != null
+                && user.getEmail().toLowerCase(Locale.ROOT).endsWith("@" + SERVICE_EMAIL_DOMAIN);
+    }
+
     private String generateToken() {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
@@ -950,6 +956,7 @@ public class TenantUserManagementService {
                 .findAddableCandidates(actor.orgId(), workspaceId, actorId,
                         "%" + query + "%", UserStatus.ACTIVE, PageRequest.of(0, 8))
                 .stream()
+                .filter(user -> !isServiceUser(user))
                 .map(user -> new OrganizationMemberResponse(
                         user.getId(),
                         user.getEmail(),
@@ -967,6 +974,7 @@ public class TenantUserManagementService {
             UUID orgId, UUID workspaceId, UUID currentUserId) {
         requireOrganizationOwner(orgId, workspaceId, currentUserId);
         return userRepository.findByOrganization_IdOrderByFullNameAsc(orgId).stream()
+                .filter(user -> !isServiceUser(user))
                 .map(user -> new OrganizationMemberResponse(
                         user.getId(),
                         user.getEmail(),

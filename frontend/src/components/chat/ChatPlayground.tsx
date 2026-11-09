@@ -65,6 +65,7 @@ import {
   listPlaygroundSessionsApi,
 } from "@/lib/chat-api"
 import { getTenantWorkspaceApi } from "@/lib/workspace-api"
+import { hasAnyInstalledBizAppApi } from "@/lib/bizapp-api"
 import type { ChatCitation, Document, DocumentStatus, TenantWorkspace } from "@/types"
 import {
   consumeNewChatRequest,
@@ -90,6 +91,7 @@ type ChatMessage = {
   citations?: ChatCitation[]
   /** Suggested follow-up questions returned with this answer (rendered for the latest turn). */
   suggestions?: string[]
+  action?: Record<string, unknown> | null
   loading?: boolean
   error?: boolean
 }
@@ -177,6 +179,9 @@ function Playground() {
   // a turn completes and `sending` flips back to false.
   const historyLoadedForRef = useRef<string | null>(null)
   const [sources, setSources] = useState<SourceDocument[]>([])
+  // Apps are installed into one workspace, but the composer must not become a
+  // dead end in a sibling workspace when the organization already runs apps.
+  const [hasInstalledApp, setHasInstalledApp] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [heroAnimationKey, setHeroAnimationKey] = useState(0)
@@ -204,6 +209,10 @@ function Playground() {
       source.status === "PENDING" ||
       source.status === "PROCESSING",
   )
+  // Questions are answerable from indexed documents in this workspace or from
+  // apps already installed anywhere in the organization. Only that combination
+  // being absent is a dead end for the composer.
+  const canAskQuestion = hasCompletedSource || hasInstalledApp
   const recentUploads = sources.filter((source) => recentUploadIds.includes(source.localId))
   const sourceProcessList = recentUploads.length > 0 ? (
     <div className="ov-source-process-list" aria-live="polite">
@@ -271,6 +280,26 @@ function Playground() {
       cancelled = true
     }
   }, [request, t])
+
+  useEffect(() => {
+    if (!workspace) return
+
+    let cancelled = false
+    // Any active app in the organization unlocks the composer even when this
+    // workspace has no indexed document yet. A failed lookup must never block
+    // chatting, hence the silent fallback to document-only gating.
+    hasAnyInstalledBizAppApi(request)
+      .then((installed) => {
+        if (!cancelled) setHasInstalledApp(installed)
+      })
+      .catch(() => {
+        // The BizApps surface may be disabled on this installation.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [request, workspace])
 
   useEffect(() => {
     if (!workspace) return
@@ -352,10 +381,11 @@ function Playground() {
           history
             .filter((item) => item.role === "user" || item.role === "assistant")
             .map((item) => ({
-              id: `${sessionId}-${item.sequence_number ?? makeId()}`,
+              id: item.id || `${sessionId}-${item.sequence_number ?? makeId()}`,
               role: item.role as "user" | "assistant",
               content: item.content,
               citations: item.citations,
+              action: item.action,
             })),
         )
       })
@@ -522,7 +552,7 @@ function Playground() {
 
   async function sendUserMessage(content: string, isRetry: boolean = false) {
     if (!content || sending || activeChatAbortRef.current) return
-    if (!hasCompletedSource) {
+    if (!canAskQuestion) {
       toast.error(
         hasIndexingSource
           ? t("waitForIndexing")
@@ -603,11 +633,12 @@ function Playground() {
       setMessages((current) => current.map((item): ChatMessage =>
         item.id === assistantId
           ? {
-              id: assistantId,
+              id: response.id || assistantId,
               role: "assistant",
               content: response.content,
               citations: response.citations,
               suggestions: response.suggested_questions,
+              action: response.action,
             }
           : item,
       ))
@@ -643,12 +674,22 @@ function Playground() {
       element.style.height = ""
       return
     }
-    element.style.height = "auto"
-    element.style.height = `${Math.min(element.scrollHeight, 256)}px`
+    const updateHeight = () => {
+      const savedScroll = element.scrollTop
+      element.style.height = "auto"
+      element.style.height = `${Math.min(element.scrollHeight, 256)}px`
+      if (element.scrollHeight > 256) {
+        element.scrollTop = savedScroll
+      }
+    }
+    updateHeight()
+    window.addEventListener("resize", updateHeight)
+    return () => window.removeEventListener("resize", updateHeight)
   }, [message, composerExpanded, sending])
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
+      if (event.nativeEvent.isComposing) return
       event.preventDefault()
       void submitMessage()
     }
@@ -719,7 +760,7 @@ function Playground() {
     event.target.value = ""
   }
 
-  const sendDisabled = !workspace || !message.trim() || !hasCompletedSource || sending
+  const sendDisabled = !workspace || !message.trim() || !canAskQuestion || sending
 
   const playgroundContent = (
     <div
@@ -799,6 +840,13 @@ function Playground() {
                         content={item.content}
                         citations={item.citations}
                         error={item.error}
+                        action={item.action}
+                        messageId={item.id}
+                        onActionExecuted={(updated) => {
+                          setMessages((curr) => curr.map((msg) =>
+                            msg.id === item.id ? { ...msg, action: updated.action } : msg
+                          ))
+                        }}
                       />
                       {index === messages.length - 1 && !sending && !item.error &&
                         item.suggestions && item.suggestions.length > 0 && (
@@ -851,31 +899,31 @@ function Playground() {
           {messages.length > 0 && sourceProcessList}
 
           <div className={cn(
-            "ov-chat-composer relative rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 sm:p-2",
+            "ov-chat-composer relative rounded-2xl sm:rounded-3xl border border-border bg-card p-2 sm:p-2.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20",
             composerExpanded && "flex h-[min(65dvh,34rem)] flex-col",
-            messages.length === 0 && !composerExpanded && "ov-chat-composer-empty ov-up",
+            messages.length === 0 && !composerExpanded && "ov-up",
           )} style={messages.length === 0 && !composerExpanded ? { animationDelay: ".55s" } : undefined}>
             <textarea
               ref={composerTextareaRef}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={handleComposerKeyDown}
-              rows={messages.length === 0 ? 1 : 2}
-              wrap={messages.length === 0 ? "off" : "soft"}
+              rows={1}
+              wrap="soft"
               placeholder={
-                hasCompletedSource
+                canAskQuestion
                   ? t("questionPlaceholder")
                   : t("uploadPlaceholder")
               }
               className={cn(
-                "ov-chat-composer-scroll block w-full resize-none bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:py-1.5 sm:text-sm",
+                "ov-chat-composer-scroll block w-full resize-none break-words bg-transparent px-2.5 py-1.5 text-base leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-sm",
                 composerExpanded
                   ? "min-h-0 flex-1 overflow-y-auto"
-                  : "max-h-64 min-h-16 overflow-y-auto sm:min-h-14",
+                  : "max-h-64 min-h-[40px] overflow-y-auto sm:min-h-[36px]",
               )}
               aria-label={t("message")}
             />
-            <div className="flex h-9 items-center justify-between gap-2">
+            <div className="flex h-9 items-center justify-between gap-2 pt-1">
               <div className="relative flex items-center gap-0.5">
                 <button
                   type="button"

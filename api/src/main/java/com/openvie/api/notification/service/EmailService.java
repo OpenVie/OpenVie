@@ -196,8 +196,23 @@ public class EmailService {
     }
 
     /**
+     * Runtime-API path for other modules (BizApp notification blocks): sends a
+     * caller-rendered HTML message through the org's configured channel without
+     * touching user lifecycle templates. Best-effort like the other paths.
+     */
+    public boolean sendRawEmail(UUID orgId, String toEmail, String subject, String htmlBody) {
+        String body = renderShell(isBlank(htmlBody) ? "" : htmlBody);
+        EmailMessage message = new EmailMessage(toEmail, toEmail, subject, body);
+        return trySend(orgId, message, "bizapp notice");
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    /**
      * Shared dark-brand shell: page background, card, logo, type colors and
-     * button mirror the app's dark theme tokens (#07090c background, #c8f53c
+     * button mirror the app's dark theme tokens (#07090c background, #1fb6ff
      * primary with #07090c text on it).
      */
     private String renderShell(String contentHtml) {
@@ -206,15 +221,17 @@ public class EmailService {
         <html lang="en"><head><meta charset="UTF-8">
         <meta name="viewport" content="width=device-width">
         <style>
-          body { font-family: Arial, sans-serif; background:#07090c; margin:0; padding:0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#07090c; margin:0; padding:0; }
           .wrapper { padding:32px 16px; }
           .container { max-width:560px; margin:0 auto; background:#10141a;
-            border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:40px; }
-          .logo { display:block; width:44px; height:44px; border-radius:10px; margin-bottom:22px; }
-          h1 { font-size:22px; line-height:1.3; color:#f2f5f0; margin:0 0 14px; }
-          p { color:#a9b3ab; line-height:1.65; margin:0 0 14px; }
-          strong { color:#e6ebe4; }
-          .btn { display:inline-block; padding:12px 26px; background:#c8f53c; color:#07090c !important;
+            border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:36px; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+          .logo { display:block; width:44px; height:44px; border-radius:11px; margin-bottom:22px; }
+          h1 { font-size:22px; font-weight:700; line-height:1.3; color:#f2f5f0; margin:0 0 14px; }
+          p { color:#a9b3ab; font-size:14px; line-height:1.65; margin:0 0 14px; }
+          strong { color:#f2f5f0; font-weight:600; }
+          ul, ol { margin:0 0 16px; padding-left:20px; color:#a9b3ab; font-size:14px; }
+          li { margin-bottom:6px; line-height:1.6; }
+          .btn { display:inline-block; padding:12px 26px; background:#1fb6ff; color:#07090c !important;
             text-decoration:none; border-radius:8px; font-weight:bold; font-size:14px; margin:10px 0 16px; }
           .footer { margin-top:30px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.08);
             font-size:12px; color:rgba(255,255,255,0.45); line-height:1.5; }
@@ -265,16 +282,6 @@ public class EmailService {
         if (configured != null && !configured.isBlank()) {
             return configured.trim();
         }
-        try {
-            URI base = URI.create(loginLink);
-            boolean realWebOrigin = base.isAbsolute() && ("http".equalsIgnoreCase(base.getScheme())
-                    || "https".equalsIgnoreCase(base.getScheme()));
-            if (realWebOrigin) {
-                return base.resolve("/logo.png").toString();
-            }
-        } catch (IllegalArgumentException ignored) {
-            // Not a usable URL; fall through to the local default.
-        }
-        return "http://localhost:3000/logo.png";
+        return "cid:openvie-logo";
     }
 }

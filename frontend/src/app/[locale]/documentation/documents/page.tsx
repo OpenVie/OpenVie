@@ -41,8 +41,12 @@ export default async function DocumentsDocumentationPage({ params }: PageProps) 
         { name: "Text", type: ".txt, .md, .markdown", description: t("textDescription") },
         { name: "HTML", type: ".html, .htm", description: t("htmlDescription") },
         { name: "Spreadsheet", type: ".xlsx, .csv", description: t("spreadsheetDescription") },
+        { name: "Audio (ASR)", type: ".mp3, .wav, .m4a, .flac, .ogg, .opus", description: t("audioDescription") },
+        { name: "Video (ASR + OCR)", type: ".mp4, .mov, .mkv, .avi, .webm", description: t("videoDescription") },
+        { name: "Image (OCR)", type: ".png, .jpg, .jpeg, .webp", description: t("imageDescription") },
       ]} />
       <Callout type="warning" title={t("limitTitle")}>{t("limitText")}</Callout>
+      <Callout type="security" title={t("antivirusTitle")}>{t("antivirusText")}</Callout>
     </DocSection>
     <DocSection id="indexing" title={sections.indexing}>
       <BulletList>

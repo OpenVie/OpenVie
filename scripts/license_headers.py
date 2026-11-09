@@ -26,8 +26,8 @@ excluded on purpose: they are outputs, not authored source.
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
+import sys
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,9 +57,37 @@ _TARGET_GLOBS: tuple[str, ...] = (
     "frontend/src/**/*.tsx",
     "frontend/e2e/**/*.ts",
     "frontend/*.config.ts",
+    "frontend/*.ts",
+    "frontend/scripts/**/*.mjs",
     "frontend/scripts/**/*.ts",
     "proto/*.proto",
     "scripts/**/*.sh",
+    "scripts/**/*.py",
+    "*/scripts/**/*.py",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    "docker-compose*.yml",
+    "docker-compose*.yaml",
+    "*/compose*.yaml",
+    "Dockerfile*",
+    "*/Dockerfile*",
+    "frontend/**/*.js",
+    "frontend/**/*.mjs",
+    "frontend/**/*.css",
+    "api/src/main/resources/*.yaml",
+    "api/src/main/resources/*.yml",
+    "api/pom.xml",
+    "api/src/main/resources/processes/*.bpmn20.xml",
+    "api/src/main/resources/db/migration/*.sql",
+    "apisix/**/*.yaml",
+    "apisix/**/*.yml",
+    "monitoring/**/*.yml",
+    "monitoring/**/*.yaml",
+    "spikes/**/*.py",
+    "spikes/**/*.sh",
+    "spikes/**/*.bpmn20.xml",
+    "spikes/**/*.yaml",
+    "spikes/**/*.yml",
 )
 
 # Substrings that skip a matched path: generated artifacts and scratch output.
@@ -67,8 +95,15 @@ _EXCLUDED_PIECES: tuple[str, ...] = (
     "app/generated/",
     "__pycache__",
     "node_modules/",
+    ".next/",
+    ".venv/",
+    "venv/",
+    "dist/",
+    ".turbo/",
+    "coverage/",
     "playwright-report/",
     "test-results/",
+    "target/",
 )
 
 # Generated-on-the-fly files must never gain a header.
@@ -108,17 +143,38 @@ def _has_header(text: str, prefix: str) -> bool:
 
 
 def _header_prefix(path: Path) -> str:
+    name = path.name
     rel = str(path.relative_to(ROOT))
-    if rel.endswith((".java", ".ts", ".tsx", ".proto")):
+    if rel.endswith((".java", ".ts", ".tsx", ".proto", ".mjs", ".js")):
         return "//"
-    if rel.endswith((".py", ".sh")):
+    if rel.endswith(".css"):
+        return "css"
+    if rel.endswith((".py", ".sh", ".yml", ".yaml")) or name.startswith("Dockerfile") or "Dockerfile" in name:
         return "#"
+    if rel.endswith(".sql"):
+        return "--"
+    if rel.endswith((".bpmn20.xml", ".xml")):
+        return "xml"
     raise AssertionError(f"no header comment syntax for {rel}")
 
 
 def _with_header(path: Path, text: str) -> str:
     prefix = _header_prefix(path)
     eol = _eol_of(text)
+    if prefix == "xml":
+        header = f"<!--{eol}" + f"{eol}".join(_BODY) + f"{eol}-->"
+        if text.startswith("<?xml"):
+            idx = text.find("?>")
+            if idx != -1:
+                line_end = text.find("\n", idx)
+                if line_end != -1:
+                    pre = text[: line_end + 1]
+                    post = text[line_end + 1 :]
+                    return pre + header + eol + post.lstrip("\r\n")
+        return header + eol + text
+    if prefix == "css":
+        header = f"/*{eol}" + f"{eol}".join(_BODY) + f"{eol}*/"
+        return header + eol + eol + text
     header = eol.join(header_lines(prefix))
     body = text
     if body.startswith("#!"):  # keep the shebang as the very first line

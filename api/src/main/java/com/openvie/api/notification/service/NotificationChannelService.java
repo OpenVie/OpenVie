@@ -204,11 +204,11 @@ public class NotificationChannelService {
                         channel.getId());
             }
         }
-        if (request.fromEmail() != null) merged.put("fromEmail", request.fromEmail());
-        if (request.fromName() != null) merged.put("fromName", request.fromName());
-        if (request.host() != null) merged.put("host", request.host());
+        if (request.fromEmail() != null) merged.put("fromEmail", request.fromEmail().trim());
+        if (request.fromName() != null) merged.put("fromName", request.fromName().trim());
+        if (request.host() != null) merged.put("host", request.host().trim());
         if (request.port() != null) merged.put("port", request.port());
-        if (request.username() != null) merged.put("username", request.username());
+        if (request.username() != null) merged.put("username", request.username().trim());
         if (request.password() != null) merged.put("password", request.password());
         if (request.auth() != null) merged.put("auth", request.auth());
         if (request.starttls() != null) merged.put("starttls", request.starttls());

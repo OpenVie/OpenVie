@@ -31,6 +31,25 @@ public record DocumentIngestRequestedEvent(
         @JsonProperty("file_name") String fileName,
         @JsonProperty("content_type") String contentType,
         @JsonProperty("file_size_bytes") long fileSizeBytes,
-        @JsonProperty("occurred_at") Instant occurredAt
+        @JsonProperty("occurred_at") Instant occurredAt,
+        @JsonProperty("document_kind") String documentKind,
+        @JsonProperty("source_ref") String sourceRef
 ) {
+    public DocumentIngestRequestedEvent(
+            String schemaVersion,
+            UUID eventId,
+            UUID jobId,
+            UUID tenantId,
+            UUID knowledgeBaseId,
+            UUID documentId,
+            UUID uploaderId,
+            String storageKey,
+            String fileName,
+            String contentType,
+            long fileSizeBytes,
+            Instant occurredAt
+    ) {
+        this(schemaVersion, eventId, jobId, tenantId, knowledgeBaseId, documentId, uploaderId,
+                storageKey, fileName, contentType, fileSizeBytes, occurredAt, "USER", null);
+    }
 }

@@ -40,6 +40,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
 | Đối chiếu repo với kiến trúc DX-OS / Open-Core và không gian H-P-D-I | [Ánh xạ DX-OS](DX_OS.md) |
 | Tự tích hợp ứng dụng vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
+| Xây dựng/tùy biến ứng dụng BizApp, composer trực quan, báo cáo, chiếu tri thức | [BizApps](BIZAPPS.md) |
 
 ## Cái gì nằm ở đâu
 
@@ -118,6 +119,7 @@ Start with the guide for your task.
 | Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
 | Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
 | Integrate your own app with the headless core (API keys, webhooks, synchronous chat, BPMN engine) | [Integration](INTEGRATION.md) |
+| Build or customize BizApps, the visual composer, reports, and knowledge projection | [BizApps](BIZAPPS.md) |
 
 ## What belongs where
 

@@ -17,12 +17,13 @@ from __future__ import annotations
 from app.generated import openvie_ai_v1_pb2 as pb
 
 
-def test_inference_service_exposes_only_the_three_rag_methods() -> None:
+def test_inference_service_exposes_the_proto_methods() -> None:
     methods = [method.name for method in pb.DESCRIPTOR.services_by_name["InferenceService"].methods]
     assert methods == [
         "GenerateAnswer",
         "ListDocumentUnits",
         "DeleteDocumentIndex",
+        "CompleteJson",
     ]
 
 
@@ -43,6 +44,7 @@ def test_generate_answer_descriptor_field_numbers() -> None:
         "prompt_schema_version": 12,
         "trace": 13,
         "document_ids": 14,
+        "excluded_document_kinds": 15,
     }
     assert pb.DESCRIPTOR.message_types_by_name.get("TicketDraft") is None
     assert pb.DESCRIPTOR.message_types_by_name.get("PrepareInterviewSessionRequest") is None

@@ -1,0 +1,227 @@
+{
+  "envelope": "openvie.template.v1",
+  "meta": {
+    "author": "LinkedNodeDigital",
+    "license": "Apache-2.0",
+    "source": "bundled",
+    "sha256": "2641e85a0573cfc466b10db8703f79a600cba102ff3f4dca96e38b827ab29a03",
+    "generator": "human",
+    "model": null,
+    "changes": []
+  },
+  "manifest": {
+    "schema": "bizapp.v1",
+    "kind": "booking",
+    "name": {
+      "vi": "Đặt lịch hẹn",
+      "en": "Booking"
+    },
+    "version": 1,
+    "icon": "calendar",
+    "storage": "jsonb",
+    "rbac": {
+      "read": [
+        "ORG_OWNER",
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ],
+      "write": [
+        "WORKSPACE_ADMIN",
+        "MEMBER"
+      ]
+    },
+    "conversational": {
+      "triggers": [
+        "lập lịch",
+        "đặt lịch",
+        "hẹn lịch",
+        "lên lịch",
+        "tạo lịch",
+        "cuộc hẹn",
+        "lịch hẹn",
+        "hẹn gặp",
+        "book lịch",
+        "schedule",
+        "booking"
+      ],
+      "description": "Ứng dụng đặt lịch hẹn, lên lịch gặp gỡ khách hàng"
+    },
+    "entities": [
+      {
+        "name": "bookings",
+        "label": {
+          "vi": "Lịch hẹn",
+          "en": "Bookings"
+        },
+        "fields": [
+          {
+            "name": "customerName",
+            "type": "string",
+            "required": true,
+            "maxLen": 200,
+            "label": {
+              "vi": "Tên khách",
+              "en": "Customer name"
+            }
+          },
+          {
+            "name": "customerEmail",
+            "type": "string",
+            "format": "email",
+            "required": true,
+            "maxLen": 200,
+            "label": {
+              "vi": "Email khách",
+              "en": "Customer email"
+            }
+          },
+          {
+            "name": "service",
+            "type": "enum",
+            "required": true,
+            "label": {
+              "vi": "Dịch vụ",
+              "en": "Service"
+            },
+            "options": [
+              "consultation",
+              "tour",
+              "meeting-room"
+            ],
+            "optionLabels": {
+              "consultation": {
+                "label": "Tư vấn",
+                "aliases": [
+                  "tư vấn",
+                  "hỏi ý kiến",
+                  "tư vấn viên"
+                ]
+              },
+              "tour": {
+                "label": "Tham quan",
+                "aliases": [
+                  "tham quan",
+                  "du lịch",
+                  "tour"
+                ]
+              },
+              "meeting-room": {
+                "label": "Phòng họp",
+                "aliases": [
+                  "phòng họp",
+                  "thuê phòng",
+                  "họp"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bookingDate",
+            "type": "date",
+            "required": true,
+            "label": {
+              "vi": "Thời gian hẹn",
+              "en": "Booking date/time"
+            }
+          },
+          {
+            "name": "guests",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "notes",
+            "type": "string",
+            "maxLen": 500
+          }
+        ],
+        "knowledge": {
+          "project": true,
+          "titleField": "customerName",
+          "fields": [
+            "customerName",
+            "customerEmail",
+            "service",
+            "bookingDate",
+            "guests",
+            "notes"
+          ]
+        },
+        "hooks": {
+          "onCreate": [
+            "notifyCustomer"
+          ]
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "confirmBooking",
+        "type": "approval_workitem",
+        "params": {
+          "bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml",
+          "candidateRole": "WORKSPACE_ADMIN"
+        }
+      },
+      {
+        "id": "notifyCustomer",
+        "type": "notify",
+        "params": {
+          "to": [
+            "creator",
+            "record.customerEmail"
+          ],
+          "title": "Đặt lịch hẹn đã được ghi nhận",
+          "subject": "OpenVie Booking — xác nhận đặt lịch"
+        }
+      },
+      {
+        "id": "pushBookingEvents",
+        "type": "webhook_out",
+        "params": {
+          "events": [
+            "record.created",
+            "record.submitted",
+            "record.decided"
+          ]
+        }
+      },
+      {
+        "id": "bookingOverview",
+        "type": "report",
+        "params": {
+          "views": [
+            {
+              "name": "upcoming",
+              "entity": "bookings",
+              "groupBy": [
+                "service"
+              ],
+              "metrics": [
+                {
+                  "fn": "count",
+                  "as": "total"
+                }
+              ],
+              "orderBy": [
+                {
+                  "by": "total",
+                  "dir": "desc"
+                }
+              ],
+              "limit": 100,
+              "engine": "postgres"
+            }
+          ]
+        }
+      }
+    ],
+    "ui": {
+      "views": [
+        "registry:bookings",
+        "form:bookings",
+        "report:upcoming"
+      ]
+    }
+  }
+}

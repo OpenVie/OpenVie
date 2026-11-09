@@ -61,6 +61,7 @@ import com.openvie.api.document.dto.DocumentUploadResponse;
 import com.openvie.api.document.event.FailedDocumentCleanupRequestedEvent;
 import com.openvie.api.document.enums.DocumentStatus;
 import com.openvie.api.document.api.ApprovalStatus;
+import com.openvie.api.document.api.DocumentKind;
 import com.openvie.api.document.enums.DocumentType;
 import com.openvie.api.document.messaging.DocumentIngestRequestedEvent;
 import com.openvie.api.document.messaging.DocumentIngestionPublisher;
@@ -69,11 +70,14 @@ import com.openvie.api.document.model.Document;
 import com.openvie.api.document.repository.DocumentRepository;
 import com.openvie.api.common.storage.DocumentStorage;
 import com.openvie.api.tenant.api.TenantWorkspaceApi;
-
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
+import java.nio.charset.StandardCharsets;
+
 @Service
+@Slf4j(topic = "DOCUMENT")
 public class DocumentService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -130,6 +134,17 @@ public class DocumentService {
 
     @Transactional(noRollbackFor = InternalServerErrorException.class)
     public DocumentUploadResponse upload(UUID tenantId, UUID userId, UUID knowledgeBaseId, MultipartFile file) {
+        return upload(tenantId, userId, knowledgeBaseId, file, DocumentKind.USER, null);
+    }
+
+    @Transactional(noRollbackFor = InternalServerErrorException.class)
+    public DocumentUploadResponse upload(
+            UUID tenantId,
+            UUID userId,
+            UUID knowledgeBaseId,
+            MultipartFile file,
+            DocumentKind documentKind,
+            String sourceRef) {
         try {
             tenantWorkspaceApi.requireActiveKnowledgeBase(tenantId, knowledgeBaseId);
         } catch (RuntimeException exception) {
@@ -182,8 +197,12 @@ public class DocumentService {
                 }
             } else {
                 if (currentStatus == DocumentStatus.PENDING || currentStatus == DocumentStatus.PROCESSING) {
-                    throw new BadRequestException(
-                            "Wait for current document processing to finish before updating it");
+                    if (documentKind != null && documentKind != DocumentKind.USER) {
+                        log.info("Coalescing projected document update for {} while {}", safeFileName, currentStatus);
+                    } else {
+                        throw new BadRequestException(
+                                "Wait for current document processing to finish before updating it");
+                    }
                 }
             }
 
@@ -195,6 +214,10 @@ public class DocumentService {
             existing.setStatus(DocumentStatus.PENDING);
             existing.setJobId(jobId.toString());
             existing.setErrorMessage(null);
+            existing.setDocumentKind(documentKind != null ? documentKind : DocumentKind.USER);
+            if (sourceRef != null) {
+                existing.setSourceRef(sourceRef);
+            }
 
             existing = documentRepository.save(existing);
             String storageKey = existing.getStoragePath();
@@ -227,9 +250,10 @@ public class DocumentService {
                     safeFileName,
                     file.getContentType(),
                     (long) fileBytes.length,
-                    Instant.now()
+                    Instant.now(),
+                    existing.getDocumentKind() != null ? existing.getDocumentKind().name() : "USER",
+                    existing.getSourceRef()
             );
-
             try {
                 ingestionPublisher.publish(event);
             } catch (RuntimeException e) {
@@ -258,6 +282,8 @@ public class DocumentService {
         document.setStoragePath("pending");
         document.setStatus(DocumentStatus.PENDING);
         document.setJobId(jobId.toString());
+        document.setDocumentKind(documentKind != null ? documentKind : DocumentKind.USER);
+        document.setSourceRef(sourceRef);
 
         document = documentRepository.save(document);
         String storageKey = storageKey(tenantId, knowledgeBaseId, document.getId(), safeFileName);
@@ -287,9 +313,10 @@ public class DocumentService {
                 safeFileName,
                 file.getContentType(),
                 (long) fileBytes.length,
-                Instant.now()
+                Instant.now(),
+                document.getDocumentKind() != null ? document.getDocumentKind().name() : "USER",
+                document.getSourceRef()
         );
-
         try {
             ingestionPublisher.publish(event);
         } catch (RuntimeException e) {
@@ -314,9 +341,17 @@ public class DocumentService {
     public void delete(UUID tenantId, UUID actorId, boolean workspaceAdmin, UUID documentId) {
         Document document = documentRepository.findByIdAndTenantId(documentId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+        if (document.getDocumentKind() != null && document.getDocumentKind() != DocumentKind.USER) {
+            throw new AccessDeniedException("System documents cannot be deleted");
+        }
         if (!workspaceAdmin && !actorId.equals(document.getUploadedBy())) {
             throw new AccessDeniedException("You can only delete documents you uploaded");
         }
+        deleteInternal(tenantId, document);
+    }
+
+    private void deleteInternal(UUID tenantId, Document document) {
+        UUID documentId = document.getId();
         if (document.getStatus() == DocumentStatus.PENDING
                 || document.getStatus() == DocumentStatus.PROCESSING) {
             throw new BadRequestException("Wait for document processing to finish before deleting it");
@@ -424,29 +459,39 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public List<DocumentListItemResponse> list(UUID tenantId, UUID knowledgeBaseId) {
+        return list(tenantId, knowledgeBaseId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DocumentListItemResponse> list(UUID tenantId, UUID knowledgeBaseId, boolean includeSystem) {
         if (!documentCachingAvailable()) {
-            return loadLegacyList(tenantId, knowledgeBaseId);
+            return loadLegacyList(tenantId, knowledgeBaseId, includeSystem);
         }
         OptionalLong generation = generationStore.current(tenantId, knowledgeBaseId);
         if (generation.isEmpty()) {
             return businessCache.bypassAndLoad(BusinessCache.DOCUMENT_LIST,
-                    () -> loadLegacyList(tenantId, knowledgeBaseId));
+                    () -> loadLegacyList(tenantId, knowledgeBaseId, includeSystem));
         }
-        var filters = documentCacheKeyFactory.legacy();
+        var filters = documentCacheKeyFactory.legacy(includeSystem);
         return businessCache.getOrLoad(
                 BusinessCache.DOCUMENT_LIST,
                 documentCacheKeyFactory.key(tenantId, knowledgeBaseId, generation.getAsLong(), filters),
                 DocumentListCacheValue.class,
-                () -> new DocumentListCacheValue(loadLegacyList(tenantId, knowledgeBaseId))
+                () -> new DocumentListCacheValue(loadLegacyList(tenantId, knowledgeBaseId, includeSystem))
         ).documents();
     }
 
-    private List<DocumentListItemResponse> loadLegacyList(UUID tenantId, UUID knowledgeBaseId) {
+    private List<DocumentListItemResponse> loadLegacyList(UUID tenantId, UUID knowledgeBaseId, boolean includeSystem) {
         requireActiveKnowledgeBase(tenantId, knowledgeBaseId);
 
-        return documentRepository
-                .findByTenantIdAndKnowledgeBaseIdOrderByCreatedAtDescIdDesc(tenantId, knowledgeBaseId)
-                .stream()
+        List<Document> allDocs = documentRepository
+                .findByTenantIdAndKnowledgeBaseIdOrderByCreatedAtDescIdDesc(tenantId, knowledgeBaseId);
+        List<Document> docs = includeSystem
+                ? allDocs
+                : allDocs.stream()
+                        .filter(d -> d.getDocumentKind() == null || d.getDocumentKind() == DocumentKind.USER)
+                        .toList();
+        return docs.stream()
                 .map(this::toListItemResponse)
                 .toList();
     }
@@ -462,7 +507,22 @@ public class DocumentService {
             DocumentType type
     ) {
         return listResult(tenantId, knowledgeBaseId, page, size, searchText, status, type,
-                null, null, null, null).documents();
+                null, null, null, null, false).documents();
+    }
+
+    @Transactional(readOnly = true)
+    public List<DocumentListItemResponse> list(
+            UUID tenantId,
+            UUID knowledgeBaseId,
+            Integer page,
+            Integer size,
+            String searchText,
+            DocumentStatus status,
+            DocumentType type,
+            boolean includeSystem
+    ) {
+        return listResult(tenantId, knowledgeBaseId, page, size, searchText, status, type,
+                null, null, null, null, includeSystem).documents();
     }
 
     @Transactional(readOnly = true)
@@ -478,6 +538,25 @@ public class DocumentService {
             LocalDate uploadedTo,
             String sort,
             String direction
+    ) {
+        return listResult(tenantId, knowledgeBaseId, page, size, searchText, status, type,
+                uploadedFrom, uploadedTo, sort, direction, false);
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentListResult listResult(
+            UUID tenantId,
+            UUID knowledgeBaseId,
+            Integer page,
+            Integer size,
+            String searchText,
+            DocumentStatus status,
+            DocumentType type,
+            LocalDate uploadedFrom,
+            LocalDate uploadedTo,
+            String sort,
+            String direction,
+            boolean includeSystem
     ) {
         int requestedPage = page == null ? 0 : page;
         int requestedSize = size == null ? DEFAULT_PAGE_SIZE : size;
@@ -501,17 +580,17 @@ public class DocumentService {
         if (!documentCachingAvailable()) {
             return loadPagedList(tenantId, knowledgeBaseId, requestedPage, requestedSize, query,
                     status, type, uploadedFrom, uploadedTo, requestedSort,
-                    requestedDirection);
+                    requestedDirection, includeSystem);
         }
         var filters = documentCacheKeyFactory.paged(
                 requestedPage, requestedSize, query, status, type, uploadedFrom,
-                uploadedTo, requestedSort, requestedDirection);
+                uploadedTo, requestedSort, requestedDirection, includeSystem);
         OptionalLong generation = generationStore.current(tenantId, knowledgeBaseId);
         if (generation.isEmpty()) {
             return businessCache.bypassAndLoad(BusinessCache.DOCUMENT_LIST,
                     () -> loadPagedList(tenantId, knowledgeBaseId, requestedPage, requestedSize,
                             filters.searchText(), status, type, uploadedFrom, uploadedTo,
-                            requestedSort, requestedDirection));
+                            requestedSort, requestedDirection, includeSystem));
         }
         DocumentListCacheValue cached = businessCache.getOrLoad(
                 BusinessCache.DOCUMENT_LIST,
@@ -520,7 +599,7 @@ public class DocumentService {
                 () -> {
                     DocumentListResult loaded = loadPagedList(tenantId, knowledgeBaseId,
                             requestedPage, requestedSize, filters.searchText(), status, type,
-                            uploadedFrom, uploadedTo, requestedSort, requestedDirection);
+                            uploadedFrom, uploadedTo, requestedSort, requestedDirection, includeSystem);
                     return new DocumentListCacheValue(loaded.documents(), loaded.totalCount());
                 }
         );
@@ -538,7 +617,8 @@ public class DocumentService {
             LocalDate uploadedFrom,
             LocalDate uploadedTo,
             String sort,
-            String direction
+            String direction,
+            boolean includeSystem
     ) {
         requireActiveKnowledgeBase(tenantId, knowledgeBaseId);
 
@@ -546,6 +626,12 @@ public class DocumentService {
                 builder.equal(root.get("tenantId"), tenantId),
                 builder.equal(root.get("knowledgeBaseId"), knowledgeBaseId)
         );
+        if (!includeSystem) {
+            specification = specification.and((root, criteriaQuery, builder) ->
+                    builder.equal(root.get("documentKind"), DocumentKind.USER));
+        }
+
+
         if (query != null) {
             String pattern = "%" + escapeLike(query.toLowerCase(Locale.ROOT)) + "%";
             specification = specification.and((root, criteriaQuery, builder) ->
@@ -623,6 +709,7 @@ public class DocumentService {
                     document.setTextSource(event.textSource());
                     document.setPageCount(event.pageCount());
                     document.setErrorMessage(event.errorMessage());
+                    documentRepository.save(document);
                     if (status == DocumentStatus.COMPLETED
                             && previousStatus != DocumentStatus.COMPLETED) {
                         incrementSearchRevision(event.tenantId(), document.getKnowledgeBaseId());
@@ -918,7 +1005,9 @@ public class DocumentService {
                 document.getPageCount(),
                 document.getErrorMessage(),
                 document.getCreatedAt(),
-                document.getUploadedBy()
+                document.getUploadedBy(),
+                document.getDocumentKind() != null ? document.getDocumentKind() : DocumentKind.USER,
+                document.getSourceRef()
         );
     }
 
@@ -954,5 +1043,39 @@ public class DocumentService {
         } catch (NoSuchAlgorithmException e) {
             throw new InternalServerErrorException("SHA-256 algorithm not available", e);
         }
+    }
+
+    @Transactional
+    public UUID ingestText(UUID tenantId, UUID actorId, UUID knowledgeBaseId, String fileName, String textContent) {
+        return ingestText(tenantId, actorId, knowledgeBaseId, fileName, textContent, DocumentKind.USER, null);
+    }
+
+    @Transactional
+    public UUID ingestText(
+            UUID tenantId,
+            UUID actorId,
+            UUID knowledgeBaseId,
+            String fileName,
+            String textContent,
+            DocumentKind documentKind,
+            String sourceRef) {
+        tenantWorkspaceApi.requireActiveKnowledgeBase(tenantId, knowledgeBaseId);
+        byte[] bytes = textContent.getBytes(StandardCharsets.UTF_8);
+        MultipartFile multipartFile = new ByteArrayMultipartFile(fileName, "text/markdown", bytes);
+        DocumentUploadResponse response = upload(tenantId, actorId, knowledgeBaseId, multipartFile, documentKind, sourceRef);
+        return response.id();
+    }
+
+    @Transactional
+    public void deleteByFileName(UUID tenantId, UUID knowledgeBaseId, String fileName) {
+        String safe = safeFileName(fileName);
+        documentRepository.findFirstByTenantIdAndKnowledgeBaseIdAndFileNameOrderByCreatedAtDesc(tenantId, knowledgeBaseId, safe)
+                .ifPresent(doc -> {
+                    try {
+                        deleteInternal(tenantId, doc);
+                    } catch (Exception ex) {
+                        log.warn("Failed to delete projected document {}: {}", safe, ex.getMessage());
+                    }
+                });
     }
 }

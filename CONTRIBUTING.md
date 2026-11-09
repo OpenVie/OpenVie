@@ -30,6 +30,12 @@ OpenVie nhận đóng góp cho ứng dụng Apache-2.0 trong repository này. Qu
 - Container image trong `docker-compose*.yml` và CI phải pin tag cụ thể, không dùng `latest`.
   Redis được pin ở 7.2.x một cách có chủ ý: Redis ≥7.4 chuyển sang RSALv2/SSPL, không phải giấy
   phép được OSI chấp thuận. Chỉ nâng cấp sau khi thảo luận và cập nhật [NOTICE](NOTICE).
+### Chính sách Dependency và Bản quyền bên thứ ba
+
+- **Giấy phép được phép (ASF Category A):** Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, PostgreSQL, Unlicense, CC0-1.0, Python-2.0.
+- **Giấy phép được phép kèm ghi chú NOTICE (ASF Category B):** MPL-2.0, EPL-2.0, CDDL-1.1 (không kết hợp tĩnh, không sửa đổi mã nguồn gốc).
+- **Cấm hoàn toàn:** GPL, AGPL, LGPL (ngoại trừ các service tách biệt qua mạng như Grafana hoặc binary prebuilt libvips được Next.js dùng động và đã công bố trong NOTICE), SSPL, RSAL, BUSL, "Commons Clause", hoặc không rõ bản quyền.
+- **Không sao chép từ Flowise hoặc bất kỳ dự án nào:** OpenVie chỉ kế thừa các pattern thiết kế (design pattern) độc lập, không sao chép code, template, icon hay asset. Tuyệt đối không sao chép bất kỳ nội dung nào từ các thư mục thương mại/enterprise của dự án khác (như `packages/server/src/enterprise` trong Flowise có giấy phép thương mại riêng).
 
 ### Pull request
 
@@ -80,6 +86,12 @@ service or agreement.
 - Container images in `docker-compose*.yml` and CI must pin specific tags, never `latest`.
   Redis is deliberately pinned to 7.2.x: Redis ≥7.4 switched to RSALv2/SSPL, which is not an
   OSI-approved license. Upgrade only after discussion and update [NOTICE](NOTICE).
+### Dependency policy & third-party licensing
+
+- **Allowed licenses (ASF Category A):** Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, PostgreSQL, Unlicense, CC0-1.0, Python-2.0.
+- **Allowed with NOTICE disclosure (ASF Category B):** MPL-2.0, EPL-2.0, CDDL-1.1 (unmodified, not statically combined).
+- **Strictly forbidden:** GPL, AGPL, LGPL (except standalone network-separated services like Grafana or prebuilt libvips used dynamically by Next.js and disclosed in NOTICE), SSPL, RSAL, BUSL, "Commons Clause", or unknown proprietary licenses.
+- **No copying from Flowise or any upstream project:** OpenVie reuses architectural patterns only, never code, templates, schemas, icons, or canvas assets. Never copy anything from third-party commercial/enterprise directories (such as `packages/server/src/enterprise` in Flowise which is under a separate commercial license).
 
 ### Pull requests
 

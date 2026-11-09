@@ -1,0 +1,56 @@
+{
+  "intent": [
+    {
+      "id": "procurement_explicit",
+      "prompt": "Tạo giúp tôi một ứng dụng quản lý mua sắm. Nhân viên điền phiếu xin mua đồ, quản lý xem và duyệt, duyệt rồi mới được mua. Phiếu có người xin, phòng ban, món hàng, số tiền, ngày cần, lý do. Tôi cần xem danh sách và báo cáo theo phòng ban.",
+      "expected": ["CREATE_APP"]
+    },
+    {
+      "id": "procurement_pain_narrative",
+      "prompt": "Công ty tôi mua sắm lộn xộn quá. Nhân viên toàn nhắn qua chat rồi quên. Tôi muốn mọi người điền vào một chỗ, sếp duyệt xong mới được mua, và tôi xem được ai xin bao nhiêu.",
+      "expected": ["CREATE_APP"]
+    },
+    {
+      "id": "crm_lead_create",
+      "prompt": "Tạo lead cho Công ty Minh Phát, email contact@minhphat.vn, điện thoại 0909 123 456, giai đoạn NEW, giá trị thương vụ 250 triệu.",
+      "expected": ["APP_RECORD_CREATE"]
+    },
+    {
+      "id": "policy_question",
+      "prompt": "Quy trình xử lý hồ sơ nghỉ phép gồm mấy bước và ai phê duyệt?",
+      "expected": ["NONE"]
+    },
+    {
+      "id": "iot_monitor_app",
+      "prompt": "Tạo giúp tôi một ứng dụng theo dõi thiết bị IoT, mỗi thiết bị có nhiệt độ, độ ẩm, lần kiểm tra gần nhất và trạng thái bật tắt.",
+      "expected": ["CREATE_APP"]
+    },
+    {
+      "id": "signature_request_record",
+      "prompt": "Trình ký hợp đồng dịch vụ HD-2026-001 cho anh Nguyễn Văn A, email a@congty.vn, mã tài liệu DOC-2026-001, trạng thái chờ ký.",
+      "expected": ["APP_RECORD_CREATE"]
+    },
+    {
+      "id": "install_booking",
+      "prompt": "Cài giúp tôi ứng dụng đặt lịch hẹn booking.",
+      "expected": ["INSTALL"]
+    }
+  ],
+  "draft": [
+    {
+      "id": "procurement_approval",
+      "prompt": "Tạo giúp tôi một ứng dụng quản lý mua sắm. Nhân viên điền phiếu xin mua đồ, quản lý xem và duyệt, duyệt rồi mới được mua. Khi nhân viên tạo phiếu, hệ thống tự gửi cho quản lý duyệt ngay, không cần bấm gửi duyệt. Khi bị từ chối, báo cho người tạo biết lý do. Phiếu có mã phiếu, người yêu cầu, phòng ban, món hàng, số tiền, ngày cần, lý do. Tôi muốn xem danh sách, tạo phiếu, xem lịch sử và báo cáo tổng tiền theo phòng ban.",
+      "checks": ["approval_block", "approval_hooked", "rbac_approve"]
+    },
+    {
+      "id": "manager_email",
+      "prompt": "Tạo giúp tôi một ứng dụng quản lý mua sắm. Nhân viên điền phiếu xin mua, có thêm trường email của quản lý mà người tạo chọn; khi tạo phiếu thì gửi email ngay cho địa chỉ quản lý đó và tự gửi phiếu vào hộp thư duyệt của quản trị viên workspace. Quản trị viên duyệt xong mới được mua. Phiếu có mã phiếu, người yêu cầu, phòng ban, món hàng, số tiền, ngày cần, lý do.",
+      "checks": ["approval_block", "approval_hooked", "manager_email_field", "notify_to_manager", "notify_hooked"]
+    },
+    {
+      "id": "iot_external_call",
+      "prompt": "Tạo giúp tôi một ứng dụng theo dõi thiết bị IoT. Mỗi thiết bị có tên, vị trí, nhiệt độ, độ ẩm, lần kiểm tra gần nhất và trạng thái bật tắt. Cứ 5 phút một lần, với các thiết bị đang bật, gọi tới https://iot-gateway.example.com/api/status bằng POST, gửi kèm tên thiết bị và mã thiết bị; kết quả trả về có temperature, humidity, checkedAt thì lưu vào các trường tương ứng. Dùng khóa trong kho tên iot-gateway-key. Tôi muốn xem danh sách thiết bị và báo cáo nhiệt độ trung bình theo vị trí.",
+      "checks": ["external_call_block", "external_call_credential", "external_call_sink", "external_call_schedule", "external_call_triggered"]
+    }
+  ]
+}

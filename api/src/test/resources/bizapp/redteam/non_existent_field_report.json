@@ -1,0 +1,28 @@
+{
+  "schema": "bizapp.v1",
+  "kind": "redteam-non-existent-field",
+  "name": { "vi": "Cột lạ", "en": "Unknown Column" },
+  "version": 1,
+  "entities": [
+    {
+      "name": "items",
+      "label": { "vi": "Mục", "en": "Items" },
+      "fields": [{ "name": "title", "type": "string" }]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "leakReport",
+      "type": "report",
+      "params": {
+        "views": [
+          {
+            "name": "leaky",
+            "entity": "items",
+            "groupBy": ["non_existent_field_or_users_table"]
+          }
+        ]
+      }
+    }
+  ]
+}

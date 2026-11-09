@@ -34,6 +34,7 @@ class RetrievalConfig(FrozenModuleConfig):
             "FUSION_CANDIDATE_COUNT",
             "GRAPH_CANDIDATE_COUNT",
             "GRAPH_MAX_HOPS",
+            "GRAPH_RETRIEVAL_ENABLED",
             "GRAPH_SERVICE_URL",
             "GRAPH_TIMEOUT_SECONDS",
             "NEIGHBOR_EXPANSION_LIMIT",

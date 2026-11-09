@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvie.dev/schemas/bizapp/blocks/webhook_out.schema.json",
+  "title": "Webhook Out Block",
+  "type": "object",
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,62}$" }
+    }
+  }
+}
