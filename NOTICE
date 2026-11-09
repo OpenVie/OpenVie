@@ -26,8 +26,13 @@ their terms before redistributing them. Components with noteworthy conditions:
 - The optional observability profile runs Grafana (AGPL-3.0) as an unmodified
   standalone service accessed over the network; no Grafana code is linked
   into OpenVie.
-- pdf.worker.min.mjs (frontend/public/pdf.worker.min.mjs) is vendored from
-  Mozilla PDF.js and distributed under the Apache License, Version 2.0.
+- Mozilla PDF.js (npm package `pdfjs-dist`, declared in `frontend/package.json`,
+  Apache License, Version 2.0). Its web worker (`pdf.worker.min.mjs`) is not
+  committed to this repository: it is copied from the installed `pdfjs-dist`
+  package into `frontend/public/` at build/run time by
+  `frontend/scripts/prepare-pdf-worker.mjs`, so the shipped artifact always
+  matches the declared dependency version. `CHANGELOG.md` previously recorded
+  a vendored copy; that has been removed in v1.0.0.
 - sharp (frontend runtime dependency, Apache-2.0) bundles prebuilt libvips
   binaries licensed under LGPL-3.0-or-later; Next.js image optimization utilizes
   it dynamically.

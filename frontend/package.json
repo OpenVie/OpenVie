@@ -4,8 +4,9 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "prepare:worker": "node scripts/prepare-pdf-worker.mjs",
+    "dev": "node scripts/prepare-pdf-worker.mjs && next dev --webpack",
+    "build": "node scripts/prepare-pdf-worker.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

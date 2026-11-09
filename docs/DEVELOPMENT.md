@@ -292,9 +292,12 @@ Chi tiết knob và ceiling (bucket seconds, timeout, cache artifact): `docs/RET
 
 | Lĩnh vực | Lệnh kiểm tra |
 | --- | --- |
+| **License headers** | `python3 scripts/license_headers.py --check` (CI gate — dừng khi thiếu header Apache). Sửa mềm: `python3 scripts/license_headers.py --add` rồi review. |
 | **Java API** | `make -C api test` hoặc `make -C api verify` |
 | **Python AI** | `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
 | **Web Frontend** | `npm --prefix frontend run lint` và `npm --prefix frontend run typecheck` |
+
+> **Chính sách header (v1.0.0):** mọi tệp nguồn authored (Java, TS/TSX, Python, SQL, YAML, MJS/JS, CSS, shell, BPMN, Dockerfile, compose) phải mang ASF Apache-2.0 header trong 4 KiB đầu, kể cả Flyway migration V1–V13 — comments bị Flyway loại khỏi checksum nên việc bổ sung header an toàn cho các migration đã áp dụng (`flyway:repair` chỉ cần khi `validate-on-migrate` bắt lỗi). Tệp sinh tự động (`.next/`, `node_modules/`, `app/generated/`, `frontend/next-env.d.ts`, `public/pdf.worker.min.mjs`) không mang header.
 
 ### Hướng dẫn chạy và kiểm tra đăng nhập SSO cục bộ (Local SSO Run & First-Run Checks)
 
