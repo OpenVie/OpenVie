@@ -22,9 +22,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): module năng lực, transport, vai trò runtime.
    - [Phát triển web và kiểm tra](DEVELOPMENT.md#2-các-bước-thiết-lập).
 5. Chỉ tra tài liệu tính năng khi thay đổi của bạn cần đến nó.
-6. Đọc [ánh xạ DX-OS / Open-Core](DX_OS.md) trước khi trình bày hay so sánh repo này với
-   kiến trúc ba tầng DX-OS.
-7. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi xuất một repo công khai.
+6. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi đóng góp.
 
 ## Guide theo việc
 
@@ -38,7 +36,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
 | Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | Self-host, đánh giá giấy phép, hay xuất bản nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
-| Đối chiếu repo với kiến trúc DX-OS / Open-Core và không gian H-P-D-I | [Ánh xạ DX-OS](DX_OS.md) |
+| Chọn hoặc đánh giá model cho chat, intent, slot và BizApp drafting | [Định tuyến model AI](AI_MODEL_ROUTING.md) |
 | Tự tích hợp ứng dụng vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
 | Xây dựng/tùy biến ứng dụng BizApp, composer trực quan, báo cáo, chiếu tri thức | [BizApps](BIZAPPS.md) |
 
@@ -101,9 +99,7 @@ Start with the guide for your task.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): capability modules, transports, and runtime roles.
    - [Web development and checks](DEVELOPMENT.md#2-step-by-step-setup).
 5. Consult the feature reference only when your change needs it.
-6. Read the [DX-OS / Open-Core mapping](DX_OS.md) before presenting or comparing this repository
-   with the three-tier DX-OS architecture.
-7. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before exporting a public repository.
+6. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before contributing to this repository.
 
 ## Guides by task
 
@@ -117,7 +113,7 @@ Start with the guide for your task.
 | Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
 | Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
 | Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
-| Map this repository against the DX-OS / Open-Core architecture and its H-P-D-I spaces | [DX-OS mapping](DX_OS.md) |
+| Select or evaluate models for chat, intent, slots, and BizApp drafting | [AI model routing](AI_MODEL_ROUTING.md) |
 | Integrate your own app with the headless core (API keys, webhooks, synchronous chat, BPMN engine) | [Integration](INTEGRATION.md) |
 | Build or customize BizApps, the visual composer, reports, and knowledge projection | [BizApps](BIZAPPS.md) |
 

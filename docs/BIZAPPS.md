@@ -426,6 +426,9 @@ UUID cho org template.
 | `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | kill-switch cho chat actions/records |
 | `CHAT_INTENT_CONFIDENCE_THRESHOLD` / `CHAT_INTENT_CLASSIFY_ALL_TURNS` | 0.75 / false | bộ phân loại app |
 
+Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
+[định tuyến model AI](AI_MODEL_ROUTING.md).
+
 ### 10. Sự cố & giới hạn báo lỗi thật
 
 | Triệu chứng / lỗi | Nguyên nhân & cách sửa |
@@ -863,6 +866,9 @@ Known limitations of the current build:
 | connectors (`enabled` true, `scan-delay-ms` 15000, `worker-delay-ms` 5000, `batch-size` 20) | | scheduler/worker cadence |
 | `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | chat kill-switches |
 | `CHAT_INTENT_CONFIDENCE_THRESHOLD` / `CHAT_INTENT_CLASSIFY_ALL_TURNS` | 0.75 / false | app intent classifier |
+
+For model selection, evaluation, and rollout for chat, intent, slots, and drafting, see
+[AI model routing](AI_MODEL_ROUTING.md).
 
 ### 10. Troubleshooting (real error messages)
 

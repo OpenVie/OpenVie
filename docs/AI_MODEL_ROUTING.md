@@ -1,144 +1,75 @@
-# AI model routing: chat vs. manifest drafting
+# AI model routing
 
-Status: implemented (per-task config, fallback model, AI-service model override).
-The eval harness under `scripts/ai/` remains the gate for choosing models.
+[Documentation index](README.md) · [BizApps](BIZAPPS.md)
 
-## Current state
+This page describes the model-selection boundary that is shipped with OpenVie.
+Configuration defaults and environment-variable descriptions live in the
+[BizApps configuration reference](BIZAPPS.md#9-configuration).
 
-- The Python AI service generates chat/RAG answers with `LLM_MODEL_ID`
-  (default `vylinh`, a 3B Qwen2 model served by Ollama).
-- The Java API no longer hardcodes the model in BizApp calls: intent, slot
-  extraction and manifest drafting read
-  `app.bizapps.ai.intent-model`, `app.bizapps.ai.slot-model`,
-  `app.bizapps.ai.draft-model` and `app.bizapps.ai.draft-fallback-model`.
-  Blank values mean "use the AI service's `LLM_MODEL_ID`", so existing
-  installations keep their behavior until an operator opts into a per-task
-  model.
-- `CompleteJson` in the AI service now forwards the request `model_id` to the
-  Ollama payload (it used to be ignored), which makes per-call models real.
+## Shipped routing
 
-## Observed failure modes (vylinh, 2026-11)
+| Workload | Model selection | Notes |
+| --- | --- | --- |
+| Chat and RAG answers | `LLM_MODEL_ID` (the configured 3B model) | Latency-sensitive request path. |
+| BizApp intent classification | `LLM_MODEL_ID` | The per-task override is blank by default. |
+| BizApp slot extraction | `LLM_MODEL_ID` | The per-task override is blank by default. |
+| BizApp manifest drafting and repair | `BIZAPPS_AI_DRAFT_MODEL` | Use a drafting-specific model when configured. |
+| Draft retry after validation failure | `BIZAPPS_AI_DRAFT_FALLBACK_MODEL` | Used after the primary drafting model fails validation. |
 
-| Task | Result |
-|---|---|
-| Plain “tạo giúp tôi ứng dụng mua sắm…” draft | Valid after the deterministic hook/UI clamps |
-| Pain narrative (“công ty tôi mua sắm lộn xộn…”) intent | `APP_RECORD_CREATE`, not `CREATE_APP` (rule issue; router fallback now covers it) |
-| “Email cho quản lý người tạo chọn” draft | No `managerEmail` field; invented recipients (`requestor`, `record.email`) → invalid draft |
-| Approval block | Emitted, but often unhooked and with `candidateRole` joined by `|` (clamped since) |
-
-These are a mix of **rule/architecture** defects and **model capability**
-defects. A stronger drafting model addresses the latter; validators and
-clamps remain mandatory.
-
-## Target routing
-
-| Task | Model | Why |
-|---|---|---|
-| Chat/RAG answers | 3B (`vylinh` or successor) | High volume, latency-sensitive |
-| Slot extraction | 3B | Narrow schema, low token count |
-| Intent classification | 3B + deterministic gate/fallback | Rules cover ambiguous pain narratives |
-| Manifest generation + repair | Stronger instruct model | Low volume, high value, complex schema |
-| Manifest repair after validation failure | Stronger model first, then current model as fallback | Small models repeat the same error |
-
-Configuration:
-
-```yaml
-app:
-  bizapps:
-    ai:
-      intent-model: ""            # blank = AI service LLM_MODEL_ID
-      slot-model: ""
-      draft-model: qwen2.5:7b-instruct
-      draft-fallback-model: vylinh
-```
-
-The Python service keeps `LLM_MODEL_ID` for chat/RAG. The Java call sites read
-these properties through `@Value` fields; the gRPC request carries the model id
-as it already does. A blank value is sent as an empty id and the AI service
-falls back to its configured default.
-
-## Draft flow (implemented)
-
-1. Try `draft-model` up to the existing 3-attempt repair loop.
-2. If the result is still invalid, retry once with `draft-fallback-model` and
-   the accumulated validation errors (skipped when both values match/blank).
-3. Persist `model`, `attempts`, `fallbackUsed`, `validation.ok` and `errors`
-   in draft meta and the generated audit entry.
-4. Keep all existing deterministic normalizers (approval BPMN/role, hook
-   repair, UI view repair).
-5. If the strong model makes synchronous generation too slow, move generation
-   to a background job; the drafts list already supports async completion.
-
-## Baseline (vylinh, 2026-11-07)
-
-`python scripts/ai/model_eval.py --models vylinh`:
-
-- intent: **5/7** (pain narrative → `APP_RECORD_SUBMIT`, signature request → `APP_RECORD_UPDATE`);
-- draft JSON/schema: **3/3** — the model can emit structurally valid manifests;
-- draft semantic checks: **5/13** — procurement approval 3/3, manager email 2/5, IoT external_call 0/5;
-- average draft latency: **15.3s**.
-
-Interpretation: JSON validity is not the bottleneck; semantic completeness is. The
-3B model omits `external_call` and the manager-email wiring. The router fallback
-now treats `APP_RECORD_SUBMIT` with no matching app the same as
-`APP_RECORD_CREATE`, so the pain narrative still reaches app creation.
-
-## Candidate comparison (raw model output)
-
-| Model | Draft schema | Semantic checks (raw) | Avg draft latency |
-|---|---|---|---|
-| `vylinh` (3B) | 3/3 | 5/13 | 15.3s |
-| `qwen2.5:7b-instruct` | 3/3 | 8/13 | 117.4s |
-
-Raw 7B output still omits some hooks/schedules, but the deterministic
-normalizers close the gap: re-running the saved 7B manifests through
-`normalizeGeneratedManifest` + `BizAppManifestValidator` produced:
-
-- procurement approval: approval block auto-hooked → valid, member create submits;
-- manager email: `manager_email` + notify auto-hooked on `onCreate` → valid, email sends;
-- IoT: `external_call` present with credential/sink, schedule auto-added as
-  `PT5M` from “cứ 5 phút” → valid, polling runs.
-
-The 7B is therefore a good default for drafting **with** the clamps in place;
-chat/RAG stays on the 3B.
+Intent and slot overrides fall back to `LLM_MODEL_ID` when unset. Drafts retain
+the selected model, attempt count, fallback use, and validation result in their
+metadata and audit entry. Deterministic manifest validation and normalization
+remain in the path for every model.
 
 ## Evaluation protocol
 
-`scripts/ai/model_eval.py` runs a golden prompt set through any Ollama model
-and reports:
+Run [`scripts/ai/model_eval.py`](../scripts/ai/model_eval.py) against the
+current model and candidate models before changing routing. It measures:
 
-- intent accuracy (exact expected intent),
-- draft JSON parse + JSON-schema validity,
-- business checks (approval block/hook, `rbac.approve`, manager email wiring,
-  external-call URL/credential/sink/schedule),
+- exact intent accuracy;
+- draft JSON parsing and schema validity;
+- business checks for approvals, RBAC, notification recipients, and external
+  calls;
 - latency per case.
 
-Baseline command:
+For example:
 
 ```bash
-python scripts/ai/model_eval.py --models vylinh,qwen2.5:3b --out scripts/ai/eval-results.json
+python scripts/ai/model_eval.py --models current-model,candidate-model \
+  --out scripts/ai/eval-results.json
 ```
 
-The harness reads the **current production draft system prompt** directly from
-`BizAppDraftService.java`, so prompt drift fails loudly instead of silently
-evaluating an outdated prompt. Intent cases use the classifier's documented
-contract.
+The harness reads the current draft system prompt from the application source,
+so evaluation uses the same prompt as the running service.
 
-## Rollout
+## Rollout, canary, and rollback
 
-1. Run the eval on the current model and 1–2 candidates; record pass rate and
-   latency. Do not switch on a single good sample.
-2. Set `BIZAPPS_AI_DRAFT_MODEL` (and optionally `BIZAPPS_AI_DRAFT_FALLBACK_MODEL`)
-   in the environment; chat/RAG stays on `LLM_MODEL_ID`.
-3. Canary the draft model on one environment; compare draft validation pass
-   rate, repair attempts, and generation latency.
-4. Keep the fallback and clamps; add notify-recipient normalization only if the
-   eval shows a recurring, safely repairable pattern.
-5. Roll back by changing one config value.
+1. Evaluate the current model and each candidate; record validity, semantic
+   checks, repair attempts, and latency.
+2. Set `BIZAPPS_AI_DRAFT_MODEL` and, if needed,
+   `BIZAPPS_AI_DRAFT_FALLBACK_MODEL`. Chat, intent, and slot routing remain on
+   `LLM_MODEL_ID` unless explicitly overridden.
+3. Canary the drafting model in one environment and compare validation pass
+   rate, fallback use, repair attempts, and generation latency.
+4. Keep the deterministic validators and normalizers enabled throughout the
+   rollout.
+5. Roll back by restoring the prior drafting-model environment variables.
 
-## Hardware note
+## Evidence (2026-11)
 
-The reference machine has a 4 GB GTX 1650 Ti. A 3B Q4 model fits; a 7B Q4
-partially offloads to CPU. Since manifest generation is low-volume, CPU-assisted
-7B is acceptable if latency stays within the draft UX budget; measure before
-committing.
+The following results are a November 2026 snapshot, not a routing guarantee.
+
+| Model | Draft schema | Semantic checks (raw) | Average draft latency |
+| --- | --- | --- | --- |
+| `vylinh` (3B) | 3/3 | 5/13 | 15.3 s |
+| `qwen2.5:7b-instruct` | 3/3 | 8/13 | 117.4 s |
+
+The `vylinh` baseline recorded 5/7 intent cases, including misses for a pain
+narrative and a signature-request prompt. The 3B model also missed manager-email
+wiring and `external_call` details in some drafts. The saved 7B drafts improved
+semantic coverage but still relied on deterministic normalization for approval
+hooks, notification recipients, and schedules.
+
+The reference machine was a 4 GB GTX 1650 Ti: a 3B Q4 model fit on the GPU,
+while a 7B Q4 model partly used CPU. Measure on the target deployment before
+selecting a drafting model.
