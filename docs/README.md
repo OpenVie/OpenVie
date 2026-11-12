@@ -99,7 +99,7 @@ Start with the guide for your task.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): capability modules, transports, and runtime roles.
    - [Web development and checks](DEVELOPMENT.md#2-step-by-step-setup).
 5. Consult the feature reference only when your change needs it.
-6. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before contributing to a public repository.
+6. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before contributing to this repository.
 
 ## Guides by task
 
