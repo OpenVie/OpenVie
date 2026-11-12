@@ -14,10 +14,6 @@ Với mã nguồn hiện tại: bắt đầu từ [phát triển cục bộ](doc
 [kiến trúc](docs/ARCHITECTURE.md), [hướng dẫn triển khai](docs/DEPLOYMENT.md), và
 [ranh giới nguồn mở](docs/OPEN_SOURCE.md). Người đóng góp: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-[Ánh xạ DX-OS](docs/DX_OS.md) ghi nhận vị trí của repo này trong kiến trúc ba tầng DX-OS
-Open-Core: dịch vụ lõi nào đã cung cấp, cái nào chưa, và mỗi màn hình web thuộc không gian
-năng lực H-P-D-I nào.
-
 > OpenVie là tên sản phẩm hướng tới người dùng. Tên package/protobuf nội bộ, tài nguyên triển
 > khai, route, tiền tố thông tin đăng nhập và tên miền hiện có cố ý giữ nguyên định danh. Việc
 > đổi thương hiệu trình bày này không thay đổi hợp đồng tích hợp.
@@ -203,10 +199,6 @@ licensed under [Apache License 2.0](LICENSE). Review the
 For the current code, start with [local development](docs/DEVELOPMENT.md), then review the
 [architecture](docs/ARCHITECTURE.md), [deployment guide](docs/DEPLOYMENT.md), and
 [open-source boundary](docs/OPEN_SOURCE.md). Contributors: [CONTRIBUTING.md](CONTRIBUTING.md).
-
-The [DX-OS mapping](docs/DX_OS.md) records how this repository sits in the three-tier DX-OS
-Open-Core architecture: which headless core services are delivered, which are not, and which
-H-P-D-I capability space each screen of the web client belongs to.
 
 > OpenVie is the user-facing product name. Internal package/protobuf names, deployment
 > resources, routes, credential prefixes, and existing domains intentionally retain their current

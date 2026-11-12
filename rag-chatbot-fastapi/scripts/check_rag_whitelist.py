@@ -16,7 +16,7 @@
 """
 CI Gate G-1 Validator:
 Asserts that changes inside rag-chatbot-fastapi/app/modules/{retrieval,index,graph,generation}/**
-strictly conform to the approved whitelist in PLAN.md G-1.
+strictly conform to the approved G-1 whitelist.
 """
 
 from __future__ import annotations

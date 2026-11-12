@@ -1,6 +1,6 @@
 # Integrating with the OpenVie core
 
-[Documentation index](README.md) · [Architecture](ARCHITECTURE.md) · [Deployment](DEPLOYMENT.md) · [DX-OS mapping](DX_OS.md)
+[Documentation index](README.md) · [Architecture](ARCHITECTURE.md) · [Deployment](DEPLOYMENT.md)
 
 > **Ngôn ngữ / Language:** [Tiếng Việt](#tích-hợp-với-lõi-openvie--tiếng-việt) · [English](#integrating-with-the-openvie-core-1)
 
