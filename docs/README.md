@@ -22,7 +22,7 @@ Bắt đầu từ guide đúng với việc bạn cần làm.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): module năng lực, transport, vai trò runtime.
    - [Phát triển web và kiểm tra](DEVELOPMENT.md#2-các-bước-thiết-lập).
 5. Chỉ tra tài liệu tính năng khi thay đổi của bạn cần đến nó.
-6. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi xuất một repo công khai.
+6. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi đóng góp.
 
 ## Guide theo việc
 
