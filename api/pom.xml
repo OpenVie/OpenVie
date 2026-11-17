@@ -25,7 +25,7 @@ limitations under the License.
 	</parent>
 	<groupId>com.openvie</groupId>
 	<artifactId>api</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.1</version>
 	<name>OpenVie API</name>
 	<description>OpenVie Core PaaS and BizApp Platform API</description>
 	<url>https://github.com/LinkedNodeDigital/OpenVie</url>

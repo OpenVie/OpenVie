@@ -5,9 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.1] — 2026-11-18
+
+Bản vá lỗi cho workspace đã lưu trữ trong bộ chuyển workspace.
+
+### Fixed
+- **Archived workspaces no longer appear in the workspace switcher**: `GET /api/v1/auth/workspaces` now excludes memberships whose workspace status is `ARCHIVED` (`WorkspaceMemberRepository.findVisibleByUserId`), so the header switcher no longer offers an entry that `POST /api/v1/auth/workspaces/switch` rejects with `This workspace is archived`. The admin **Workspaces** page still lists archived workspaces with the `Archived` badge for management, and a regression test covers the filtered membership list. Fixes #68.
+
+### Docs
+- **README no longer carries the MVP roadmap**: removed the duplicated `Lộ trình MVP` / `MVP roadmap` tables from both language halves. Release history stays in this changelog and GitHub Releases; the v1.0.0 summary link now points at `README.md` instead of the deleted anchor.
+
+### Changed
+- **Unified 1.0.1 versioning**: bumped `api/pom.xml`, `frontend/package.json` and `frontend/package-lock.json`, and `rag-chatbot-fastapi/pyproject.toml` to `1.0.1`.
+
 ## [v1.0.0] — 2026-11-09
 
-Khởi hành DX-OS 3 tầng & nền tảng BizApp hội thoại (xem [`README.md`](README.md#lộ-trình-mvp)); đóng băng hợp đồng `bizapp.v1` (SemVer 2.0)
+Khởi hành DX-OS 3 tầng & nền tảng BizApp hội thoại (xem [`README.md`](README.md)); đóng băng hợp đồng `bizapp.v1` (SemVer 2.0)
 
 ### Known limitations
 - Vector retrieval kiểu top-K: trích dẫn tài liệu loại `document_kind` chưa được index trực tiếp trong vector store (`GRAPH_RETRIEVAL_ENABLED` chỉ áp dụng như filter tầng GUI).
