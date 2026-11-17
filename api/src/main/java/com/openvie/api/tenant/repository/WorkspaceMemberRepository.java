@@ -35,7 +35,9 @@ public interface WorkspaceMemberRepository extends JpaRepository<WorkspaceMember
     Optional<WorkspaceMember> findByUser_IdAndWorkspace_IdForUpdate(
             @Param("userId") UUID userId, @Param("workspaceId") UUID workspaceId);
 
-    @Query("select m from WorkspaceMember m join fetch m.workspace where m.user.id = :userId")
+    @Query("select m from WorkspaceMember m join fetch m.workspace "
+            + "where m.user.id = :userId "
+            + "and m.workspace.status <> com.openvie.api.tenant.api.TenantStatus.ARCHIVED")
     List<WorkspaceMember> findVisibleByUserId(@Param("userId") UUID userId);
 
     List<WorkspaceMember> findByWorkspace_IdOrderByRoleAscCreatedAtAsc(UUID workspaceId);
