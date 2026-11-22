@@ -57,7 +57,7 @@ export function Inspector({
           {selectedNode.type === "entity" ? "Entity Properties" : "Block Properties"}
         </h3>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onDeleteNode} title="Delete">
+          <Button variant="ghost" size="icon-sm" onClick={onDeleteNode} title="Delete (Delete / Backspace)" aria-keyshortcuts="Delete Backspace">
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onClose} title="Close">

@@ -367,6 +367,8 @@ name/summary rồi `POST /marketplace/bizapps`), Install — nếu kind đã cà
 auto-bump, giữ bản ghi) thay vì báo "already installed". Card app đã cài trong `/admin/apps` cũng có
 **Save as template** dùng manifest đóng băng hiện tại.
 
+**Phím tắt composer:** `Ctrl/Cmd+S` lưu draft, `Delete`/`Backspace` xoá node/edge đang chọn (kèm dọn view/report/hook liên quan), `Esc` đóng Inspector hoặc dialog edge.
+
 ### 7. Chiếu tri thức & trợ lý AI
 
 - **Doc bản ghi:** với entity bật `knowledge.project`, mỗi bản ghi chiếu thành một tài liệu Markdown
@@ -844,6 +846,8 @@ Actions: Save draft (`PUT /drafts/{id}`, or `PUT /drafts/new` for the first save
 for name/summary → `POST /marketplace/bizapps`), Install — an already active kind **upgrades in place**
 (version bumped, records preserved). Installed-app cards in `/admin/apps` also offer **Save as template**
 using the frozen manifest.
+
+**Composer shortcuts:** `Ctrl/Cmd+S` saves the draft, `Delete`/`Backspace` removes the selected node/edge (and prunes dependent views/reports/hooks), `Esc` closes the inspector or edge dialog.
 
 ### 7. Knowledge projection & assistant
 

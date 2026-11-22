@@ -14,11 +14,27 @@
 
 import { describe, expect, it } from "vitest";
 import type { BizAppBlock } from "@/types";
-import { blockSummary } from "@/lib/bizapp-block";
+import { blockSummary, isHookableBlockType } from "@/lib/bizapp-block";
 
 function block(params: Record<string, unknown>, type = "external_call"): BizAppBlock {
   return { id: "pollSensor", type, params };
 }
+
+describe("isHookableBlockType", () => {
+  it("accepts only blocks the manifest validator allows as hook targets", () => {
+    for (const type of ["approval_workitem", "notify", "webhook_out", "external_call"]) {
+      expect(isHookableBlockType(type)).toBe(true);
+    }
+  });
+
+  it("rejects report, assistant, knowledge_base and presentation blocks", () => {
+    for (const type of ["report", "assistant", "knowledge_base", "registry", "form", "timeline"]) {
+      expect(isHookableBlockType(type)).toBe(false);
+    }
+    expect(isHookableBlockType(undefined)).toBe(false);
+    expect(isHookableBlockType("toString")).toBe(false);
+  });
+});
 
 describe("blockSummary external_call", () => {
   it("recognises an MQTT block by brokerUrl and topic", () => {

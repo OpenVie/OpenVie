@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Composer keyboard shortcuts**: `Ctrl/Cmd+S` saves the draft, `Delete`/`Backspace` removes the selected node or edge, `Esc` closes the inspector/edge dialog. Deletion now prunes `ui.views`, report views, layouts and entity hooks instead of leaving dangling references; React Flow's built-in Backspace handler is disabled so graph and manifest stay in sync.
 - **Save as Template is now in the UI**: the composer button (previously rendered only when a handler was passed, which never happened) and each installed-app card in `/admin/apps` open a name/summary dialog and call `POST /marketplace/bizapps` with the current/frozen manifest. The draft and installed app are unchanged.
 - **Workspace restore**: `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) flips `ARCHIVED` back to `ACTIVE`; memberships, slug, documents, BizApp data and index rows are retained by archive, so no provisioning/re-index runs. The admin Workspaces page gains a Restore action and archive timestamps.
 - **BizApp record restore**: `POST /api/v1/bizapp-data/{kind}/{entity}/{recordId}/restore` (manifest `delete`) flips `ARCHIVED` back to `ACTIVE`, publishes `record.restored` and re-projects the knowledge document/digest. The registry gains a Show archived toggle, archived badge, restore action and includes archived rows in export when toggled.
@@ -15,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Workspace archive/restore audit + cache invalidation**: `WORKSPACE_ARCHIVED` now stores timestamp metadata; restore and legal-hold changes are audited and invalidate the cached tenant workspace snapshot.
 
 ### Fixed
+- **Composer hook integrity**: canvas connections now only create lifecycle hooks for `approval_workitem`, `notify`, `webhook_out` and `external_call`; removing a report's last view removes the now-invalid report block, and auto-layout uses the rendered 240px node width.
 - **Background jobs skip archived workspaces**: the connector scheduler and worker check tenant status before enqueuing/running, and the booking reminder query joins `tenants` so an archived workspace cannot keep calling external systems or sending reminders.
 - **Record archive is approval-safe**: archiving a `PENDING` record now returns 409 (withdraw first), archived records reject edits with 400 instead of being silently mutable.
 

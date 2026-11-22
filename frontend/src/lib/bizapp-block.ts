@@ -15,6 +15,18 @@
 import type { BizAppBlock } from "@/types";
 import { defaultReportView, reportViewsOf, type ReportView } from "@/lib/bizapp-report";
 
+/** Mirrors BizAppManifestValidator.HOOKABLE_BLOCK_TYPES. */
+const HOOKABLE_BLOCK_TYPES: Record<string, true> = {
+  approval_workitem: true,
+  notify: true,
+  webhook_out: true,
+  external_call: true,
+};
+
+export function isHookableBlockType(type: string | undefined): boolean {
+  return type !== undefined && HOOKABLE_BLOCK_TYPES[type] === true;
+}
+
 const BLOCK_LABELS: Record<string, string> = {
   approval_workitem: "Approval",
   assistant: "Assistant",

@@ -27,7 +27,7 @@ export interface BlockNodeData extends Record<string, unknown> {
   error?: string;
 }
 
-const NODE_WIDTH = 260;
+const NODE_WIDTH = 240;
 const MIN_NODE_HEIGHT = 180;
 
 /** Approximate rendered height so dagre does not overlap tall nodes. */

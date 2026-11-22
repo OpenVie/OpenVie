@@ -15,7 +15,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ReactFlow,
   Background,
@@ -33,11 +33,15 @@ import "@xyflow/react/dist/style.css";
 
 import {
   ArrowLeft,
+  Check,
+  ChevronDown,
   Code,
+  Languages,
   LayoutTemplate,
   List as ListIcon,
   Loader2,
   Moon,
+  MoreHorizontal,
   Pencil,
   Play,
   Save,
@@ -48,14 +52,12 @@ import {
 
 import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
 import { validateBizAppManifestApi } from "@/lib/bizapp-api";
-import { useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import { listWorkspacesApi } from "@/lib/workspace-api";
 import { useTheme, type Theme } from "@/hooks/useTheme";
 import { transitionTheme } from "@/lib/theme-transition";
-import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
-import { liquidGlassMenuStyle } from "@/components/i18n/liquidGlassMenuStyle";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,13 +69,25 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { NodeEntity } from "./NodeEntity";
 import { NodeBlock } from "./NodeBlock";
 import { Palette } from "./Palette";
 import { DEFAULT_APPROVAL_TEMPLATE, Inspector } from "./Inspector";
 import { reportViewsOf, syncReportViews } from "@/lib/bizapp-report";
-import { defaultBlockParams } from "@/lib/bizapp-block";
+import { removeBlockFromManifest, removeEntityFromManifest } from "@/lib/bizapp-manifest-edit";
+import { composerShortcut } from "@/lib/composer-shortcuts";
+import { defaultBlockParams, isHookableBlockType } from "@/lib/bizapp-block";
 import { ValidationPanel } from "./ValidationPanel";
 import { JsonTab } from "./JsonTab";
 import { ListView } from "./ListView";
@@ -102,12 +116,13 @@ export function ComposerCanvas({
   onBack,
 }: ComposerCanvasProps) {
   const t = useTranslations("BizApps.composer");
+  const locale = useLocale();
+  const pathname = usePathname();
   const router = useRouter();
   const { request } = useApiClient();
   const user = useAuthStore((state) => state.user);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const { theme, setTheme } = useTheme();
-  const languageMenuStyle = useMemo(() => liquidGlassMenuStyle(theme), [theme]);
 
   const changeTheme = (nextTheme: Theme) => {
     transitionTheme(() => setTheme(nextTheme));
@@ -181,6 +196,13 @@ export function ComposerCanvas({
     blockNode: NodeBlock,
   }), []);
 
+  const viewOptions = [
+    { id: "canvas" as const, label: t("canvasTab"), Icon: Workflow },
+    { id: "list" as const, label: t("listTab"), Icon: ListIcon },
+    { id: "json" as const, label: t("jsonTab"), Icon: Code },
+  ];
+  const currentView = viewOptions.find((view) => view.id === activeTab) ?? viewOptions[0];
+
   // Synchronize graph to manifest
   const syncToManifest = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
     const updated = graphToManifest(currentNodes, currentEdges, manifest);
@@ -233,6 +255,8 @@ export function ComposerCanvas({
     const source = nodes.find((node) => node.id === connection.source);
     const target = nodes.find((node) => node.id === connection.target);
     if (source?.type !== "entityNode" || target?.type !== "blockNode") return;
+    const targetBlock = (target.data as BlockNodeData).block;
+    if (!isHookableBlockType(targetBlock?.type)) return;
     setEdges((current) => {
       if (current.some((edge) => edge.source === connection.source && edge.target === connection.target)) {
         return current;
@@ -263,7 +287,7 @@ export function ComposerCanvas({
     setEdgeHook(null);
   };
 
-  const deleteEdge = () => {
+  const deleteEdge = useCallback(() => {
     if (!edgeHook) return;
     setEdges((current) => {
       const updated = current.filter((edge) => edge.id !== edgeHook.id);
@@ -271,7 +295,7 @@ export function ComposerCanvas({
       return updated;
     });
     setEdgeHook(null);
-  };
+  }, [edgeHook, nodes, syncToManifest]);
 
   /**
    * Report edges are derived from report views (block -> entity), so deleting
@@ -283,19 +307,22 @@ export function ComposerCanvas({
     const blockId = edgeHook.source.startsWith("block-")
       ? edgeHook.source.slice("block-".length)
       : "";
+    const blocks = (manifest.blocks || []).map((block) => {
+      if (block.id !== blockId) return block;
+      const views = Array.isArray(block.params?.views) ? block.params.views : [];
+      return {
+        ...block,
+        params: {
+          ...block.params,
+          views: (views as Array<{ name?: string }>).filter((view) => view.name !== viewName),
+        },
+      };
+    });
+    // A report block with no views is invalid; removing its last view removes
+    // the block instead of leaving the manifest in a rejected state.
     const updated = syncReportViews({
       ...manifest,
-      blocks: (manifest.blocks || []).map((block) => {
-        if (block.id !== blockId) return block;
-        const views = Array.isArray(block.params?.views) ? block.params.views : [];
-        return {
-          ...block,
-          params: {
-            ...block.params,
-            views: (views as Array<{ name?: string }>).filter((view) => view.name !== viewName),
-          },
-        };
-      }),
+      blocks: blocks.filter((block) => block.id !== blockId || reportViewsOf(block).length > 0),
     });
     setManifest(updated);
     const graph = manifestToGraph(updated);
@@ -318,6 +345,7 @@ export function ComposerCanvas({
     : "";
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setEdgeHook(null);
     if (node.type === "entityNode") {
       const data = node.data as EntityNodeData;
       setSelectedNode({ type: "entity", data: data.entity });
@@ -406,32 +434,74 @@ export function ComposerCanvas({
     setSelectedNode({ type: "block", data: block });
   };
 
-  const handleDeleteSelected = () => {
+  const applyManifestEdit = useCallback((updated: BizAppManifest) => {
+    setManifest(updated);
+    const graph = manifestToGraph(updated);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setSelectedNode(null);
+  }, []);
+
+  const handleDeleteSelected = useCallback(() => {
     if (!selectedNode) return;
     if (selectedNode.type === "entity") {
-      const eName = (selectedNode.data as BizAppEntity).name;
-      const updated = {
-        ...manifest,
-        entities: (manifest.entities || []).filter((e) => e.name !== eName),
-      };
-      setManifest(updated);
-      const graph = manifestToGraph(updated);
-      setNodes(graph.nodes);
-      setEdges(graph.edges);
-      setSelectedNode(null);
+      applyManifestEdit(removeEntityFromManifest(
+        manifest,
+        (selectedNode.data as BizAppEntity).name,
+      ));
     } else {
-      const bId = (selectedNode.data as BizAppBlock).id;
-      const updated = syncReportViews({
-        ...manifest,
-        blocks: (manifest.blocks || []).filter((b) => b.id !== bId),
-      });
-      setManifest(updated);
-      const graph = manifestToGraph(updated);
-      setNodes(graph.nodes);
-      setEdges(graph.edges);
-      setSelectedNode(null);
+      applyManifestEdit(removeBlockFromManifest(
+        manifest,
+        (selectedNode.data as BizAppBlock).id,
+      ));
     }
-  };
+  }, [applyManifestEdit, manifest, selectedNode]);
+
+  // Ctrl/Cmd+S saves the draft; Delete/Backspace removes the selected node or
+  // edge; Escape closes the inspector/edge dialog. React Flow's built-in
+  // Backspace handler is disabled so both paths cannot delete different things.
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      return target.isContentEditable
+        || target.tagName === "INPUT"
+        || target.tagName === "TEXTAREA"
+        || target.tagName === "SELECT";
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = composerShortcut(event, {
+        editable: isEditableTarget(event.target),
+        hasSelection: Boolean(edgeHook || selectedNode),
+      });
+      if (!action) return;
+
+      if (action === "save") {
+        if (!onSaveDraft) return;
+        event.preventDefault();
+        if (isSaving) return;
+        setIsSaving(true);
+        void Promise.resolve(onSaveDraft(manifest))
+          .finally(() => setIsSaving(false));
+        return;
+      }
+
+      event.preventDefault();
+      if (action === "delete") {
+        if (edgeHook) {
+          deleteEdge();
+        } else {
+          handleDeleteSelected();
+        }
+      } else {
+        setEdgeHook(null);
+        setSelectedNode(null);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [manifest, onSaveDraft, isSaving, edgeHook, selectedNode, handleDeleteSelected, deleteEdge]);
 
   const handleManifestJsonChange = (newManifest: BizAppManifest) => {
     const synced = syncReportViews(newManifest);
@@ -441,17 +511,23 @@ export function ComposerCanvas({
     setEdges(graph.edges);
   };
 
+  const switchLocale = (next: "en" | "vi") => {
+    if (next === locale) return;
+    router.replace(`${pathname}${window.location.search}${window.location.hash}`, { locale: next });
+  };
+
   return (
     <div className="flex flex-col h-screen h-dvh w-full overflow-hidden bg-background">
       {/* Top Header / Toolbar */}
-      <header className="flex h-auto min-h-14 shrink-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:px-4 lg:h-14 lg:flex-nowrap lg:gap-4 lg:py-0">
-        {/* Left: Back button + Manifest Title */}
-        <div className="order-1 flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+      <header className="flex min-h-14 shrink-0 items-center gap-2 border-b bg-card px-3 py-2 sm:px-4">
+        {/* Left: back + app name. flex-1 + min-w-0 lets the title truncate
+            without collapsing the toolbar into a second row. */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleBack}
-            className="h-8 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground shrink-0"
+            className="h-8 shrink-0 gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
             aria-label={t("back")}
             title={t("back")}
           >
@@ -459,15 +535,18 @@ export function ComposerCanvas({
             <span className="hidden 2xl:inline">{t("back")}</span>
           </Button>
 
-          <div className="h-4 w-px bg-border shrink-0" aria-hidden="true" />
+          <div className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
 
           <div className="flex min-w-0 items-center gap-3">
-            <div className="p-1.5 bg-primary/10 rounded text-primary shrink-0">
+            <div className="hidden shrink-0 rounded bg-primary/10 p-1.5 text-primary sm:block">
               <Workflow className="size-4" />
             </div>
-            <div className="min-w-0 pr-2">
+            <div className="min-w-0 flex-1 pr-2">
               <div className="flex min-w-0 items-center gap-1">
-                <h1 className="min-w-0 truncate text-sm font-semibold leading-tight">
+                <h1
+                  className="min-w-0 whitespace-normal break-words text-sm font-semibold leading-tight"
+                  title={manifest.name?.vi || manifest.name?.en || manifest.kind || t("title")}
+                >
                   {manifest.name?.vi || manifest.name?.en || manifest.kind || t("title")}
                 </h1>
                 <Button
@@ -482,7 +561,7 @@ export function ComposerCanvas({
                   <Pencil className="size-3" />
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground truncate leading-none mt-0.5">
+              <p className="mt-0.5 hidden truncate text-[11px] leading-none text-muted-foreground sm:block">
                 {manifest.schema} · {manifest.kind} · v{manifest.version || 1}
                 {workspaceName ? ` · ${workspaceName}` : ""}
               </p>
@@ -490,51 +569,65 @@ export function ComposerCanvas({
           </div>
         </div>
 
-        {/* Center: View Switcher Tabs (own row below lg, inline after) */}
-        <div className="order-3 flex w-full shrink-0 items-center justify-center gap-0.5 rounded-lg border bg-muted/40 p-0.5 sm:gap-1 lg:order-2 lg:mx-auto lg:w-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab("canvas")}
-            aria-label={t("canvasTab")}
-            title={t("canvasTab")}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
-              activeTab === "canvas" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Workflow className="size-3.5" />
-            <span className="hidden 2xl:inline">{t("canvasTab")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("list")}
-            aria-label={t("listTab")}
-            title={t("listTab")}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
-              activeTab === "list" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ListIcon className="size-3.5" />
-            <span className="hidden 2xl:inline">{t("listTab")}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("json")}
-            aria-label={t("jsonTab")}
-            title={t("jsonTab")}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-colors",
-              activeTab === "json" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Code className="size-3.5" />
-            <span className="hidden 2xl:inline">{t("jsonTab")}</span>
-          </button>
+        {/* View switcher: segmented on desktop, dropdown when space is tight. */}
+        <div className="hidden shrink-0 items-center justify-center gap-0.5 rounded-lg border bg-muted/40 p-0.5 sm:gap-1 lg:flex">
+          {viewOptions.map((view) => (
+            <button
+              key={view.id}
+              type="button"
+              onClick={() => setActiveTab(view.id)}
+              aria-label={view.label}
+              aria-pressed={activeTab === view.id}
+              title={view.label}
+              className={cn(
+                "flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors sm:px-3",
+                activeTab === view.id
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <view.Icon className="size-3.5" />
+              <span className="hidden 2xl:inline">{view.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Right: Actions + Theme Toggle + Language Switcher */}
-        <div className="order-2 flex shrink-0 items-center gap-1.5 sm:gap-2 lg:order-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1 px-2 lg:hidden"
+                aria-label={currentView.label}
+                title={currentView.label}
+              />
+            }
+          >
+            <currentView.Icon className="size-3.5" />
+            <span className="hidden text-xs sm:inline">{currentView.label}</span>
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            {viewOptions.map((view) => (
+              <DropdownMenuItem
+                key={view.id}
+                onClick={() => setActiveTab(view.id)}
+                className="justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <view.Icon className="size-4" />
+                  {view.label}
+                </span>
+                {activeTab === view.id ? <Check className="size-4 text-primary" /> : null}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Primary actions stay inline; secondary actions also live in the
+            overflow menu so every action remains reachable at any width. */}
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           {activeTab === "canvas" && (
             <Button
               variant="outline"
@@ -542,7 +635,7 @@ export function ComposerCanvas({
               onClick={handleAutoLayout}
               aria-label={t("autoLayout")}
               title={t("autoLayout")}
-              className="h-8 text-xs gap-1.5 px-2.5 hidden md:inline-flex"
+              className="hidden h-8 gap-1.5 px-2.5 text-xs xl:inline-flex"
             >
               <LayoutTemplate className="size-3.5" />
               <span className="hidden 2xl:inline">{t("autoLayout")}</span>
@@ -563,8 +656,9 @@ export function ComposerCanvas({
               }}
               disabled={isSaving}
               aria-label={t("saveDraft")}
-              title={t("saveDraft")}
-              className="h-8 text-xs gap-1.5 px-2.5"
+              aria-keyshortcuts="Control+S Meta+S"
+              title={`${t("saveDraft")} (Ctrl+S / ⌘S)`}
+              className="h-8 gap-1.5 px-2.5 text-xs"
             >
               {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               <span className="hidden 2xl:inline">{t("saveDraft")}</span>
@@ -578,10 +672,10 @@ export function ComposerCanvas({
               onClick={() => onSaveTemplate(manifest)}
               aria-label={t("saveTemplate")}
               title={t("saveTemplate")}
-              className="h-8 text-xs gap-1.5 px-2.5 hidden sm:inline-flex"
+              className="hidden h-8 gap-1.5 px-2.5 text-xs 2xl:inline-flex"
             >
               <Share2 className="size-3.5" />
-              <span className="hidden xl:inline">{t("saveTemplate")}</span>
+              <span className="hidden 2xl:inline">{t("saveTemplate")}</span>
             </Button>
           )}
 
@@ -592,33 +686,69 @@ export function ComposerCanvas({
               disabled={!isValid}
               aria-label={t("install")}
               title={workspaceName ? `${t("install")}: ${workspaceName}` : t("install")}
-              className="h-8 text-xs gap-1.5 font-semibold px-2.5"
+              className="h-8 gap-1.5 px-2.5 text-xs font-semibold"
             >
               <Play className="size-3.5" />
               <span className="hidden xl:inline">{t("install")}</span>
             </Button>
           )}
 
-          <div className="mx-1 hidden h-4 w-px bg-border shrink-0 sm:block" aria-hidden="true" />
-
-          {/* Theme Toggle (phones rely on the app shell controls) */}
-          <button
-            type="button"
-            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
-            onClick={() => changeTheme(theme === "light" ? "dark" : "light")}
-            aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-          >
-            {theme === "light" ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
-          </button>
-
-          {/* Language Switcher */}
-          <LanguageSwitcher
-            className="hidden h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
-            menuClassName="ov-language-menu"
-            menuStyle={languageMenuStyle}
-            variant={theme === "light" ? "light" : "dark"}
-          />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="size-8 shrink-0"
+                  aria-label="More actions"
+                  title="More actions"
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {activeTab === "canvas" && (
+                <DropdownMenuItem onClick={handleAutoLayout}>
+                  <LayoutTemplate className="size-4" />
+                  {t("autoLayout")}
+                </DropdownMenuItem>
+              )}
+              {onSaveTemplate && (
+                <DropdownMenuItem onClick={() => onSaveTemplate(manifest)}>
+                  <Share2 className="size-4" />
+                  {t("saveTemplate")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => changeTheme(theme === "light" ? "dark" : "light")}>
+                {theme === "light" ? <Moon className="size-4" /> : <Sun className="size-4" />}
+                {theme === "light" ? "Dark mode" : "Light mode"}
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Languages className="size-4" />
+                  Language
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-40">
+                  {(["en", "vi"] as const).map((option) => (
+                    <DropdownMenuItem
+                      key={option}
+                      onClick={() => switchLocale(option)}
+                      className="justify-between"
+                    >
+                      {option === "en" ? "English" : "Tiếng Việt"}
+                      {locale === option ? <Check className="size-4 text-primary" /> : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem onClick={openRename}>
+                <Pencil className="size-4" />
+                {t("rename")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -635,11 +765,15 @@ export function ComposerCanvas({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
-                onEdgeClick={(_: React.MouseEvent, edge: Edge) => setEdgeHook(edge)}
+                onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
+                  setSelectedNode(null);
+                  setEdgeHook(edge);
+                }}
                 onNodeClick={onNodeClick}
                 nodeTypes={nodeTypes}
                 colorMode={theme}
                 proOptions={{ hideAttribution: true }}
+                deleteKeyCode={null}
                 fitView
               >
                 <Background />
@@ -670,21 +804,10 @@ export function ComposerCanvas({
               setActiveTab("canvas");
             }}
             onDeleteEntity={(name) => {
-              setManifest({
-                ...manifest,
-                entities: (manifest.entities || []).filter((e) => e.name !== name),
-              });
+              applyManifestEdit(removeEntityFromManifest(manifest, name));
             }}
             onDeleteBlock={(id) => {
-              const updated = syncReportViews({
-                ...manifest,
-                blocks: (manifest.blocks || []).filter((b) => b.id !== id),
-              });
-              setManifest(updated);
-              const graph = manifestToGraph(updated);
-              setNodes(graph.nodes);
-              setEdges(graph.edges);
-              setSelectedNode(null);
+              applyManifestEdit(removeBlockFromManifest(manifest, id));
             }}
             onAddEntity={handleAddEntity}
           />
