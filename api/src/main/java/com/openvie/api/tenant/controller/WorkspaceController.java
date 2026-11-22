@@ -216,6 +216,34 @@ public class WorkspaceController extends BaseController {
         workspaceService.removeMember(getUserId(request), workspaceId, userId);
     }
 
+    @Operation(summary = "Restore an archived workspace",
+            description = "Flips ARCHIVED back to ACTIVE. Memberships, slug, documents, knowledge base and index "
+                    + "data are retained by archive, so no provisioning or re-index runs. Idempotent for ACTIVE workspaces.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Workspace restored", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
+    @PostMapping("/{workspaceId}/restore")
+    public WorkspaceView restore(@PathVariable UUID workspaceId, HttpServletRequest request) {
+        return workspaceService.restore(getUserId(request), workspaceId);
+    }
+
+    @Operation(summary = "Set the retention legal hold on a workspace",
+            description = "A legal hold blocks retention purge regardless of how long the workspace has been archived.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hold applied", useReturnTypeSchema = true),
+            @ApiResponse(responseCode = "404", description = "Workspace was not found",
+                    content = @Content(schema = @Schema(implementation = com.openvie.api.common.exception.ErrorResponse.class)))
+    })
+    @PatchMapping("/{workspaceId}/legal-hold")
+    public WorkspaceView setLegalHold(
+            @PathVariable UUID workspaceId,
+            @Valid @RequestBody LegalHoldRequest body,
+            HttpServletRequest request) {
+        return workspaceService.setLegalHold(getUserId(request), workspaceId, body.isHold());
+    }
+
     // ─── Organization settings ────────────────────────────────────────────────
 
     @Operation(summary = "Read the organization snapshot",
@@ -282,5 +310,11 @@ public class WorkspaceController extends BaseController {
     @Setter
     public static class ToggleRequest {
         private boolean allowed;
+    }
+
+    @Getter
+    @Setter
+    public static class LegalHoldRequest {
+        private boolean hold;
     }
 }

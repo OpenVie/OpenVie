@@ -163,6 +163,21 @@ export async function submitBizAppRecordApi(
   );
 }
 
+/** Undo a soft archive under the manifest delete capability. */
+export async function restoreBizAppRecordApi(
+  request: ApiRequest,
+  kind: string,
+  entity: string,
+  recordId: string,
+): Promise<BizAppRecordView> {
+  return readJsonOrThrow<BizAppRecordView>(
+    await request(
+      `${getApiBase()}/bizapp-data/${encodeURIComponent(kind)}/${encodeURIComponent(entity)}/${encodeURIComponent(recordId)}/restore`,
+      { method: "POST", body: JSON.stringify({}) },
+    ),
+  );
+}
+
 /** Report views are workspace-admin material (the API enforces 403). */
 export async function runBizAppReportApi(
   request: ApiRequest,
@@ -211,9 +226,11 @@ export async function exportBizAppRecordsApi(
   entity: string,
   format: BizAppExportFormat,
   locale: string,
+  options?: { includeArchived?: boolean },
 ): Promise<{ blob: Blob; fileName: string }> {
+  const archived = options?.includeArchived ? "&includeArchived=true" : "";
   const response = await request(
-    `${getApiBase()}/bizapps/${encodeURIComponent(kind)}/entities/${encodeURIComponent(entity)}/export?format=${format}&locale=${encodeURIComponent(locale)}`,
+    `${getApiBase()}/bizapps/${encodeURIComponent(kind)}/entities/${encodeURIComponent(entity)}/export?format=${format}&locale=${encodeURIComponent(locale)}${archived}`,
     { method: "GET" },
   );
   if (!response.ok) await readJsonOrThrow<unknown>(response);
@@ -261,7 +278,7 @@ export async function getBizAppTemplateApi(
   );
 }
 
-/** Saves an arbitrary (validated backend-side) manifest as an org template. */
+/** Saves an arbitrary (validated backend-side) manifest as a company template. */
 export async function saveBizAppTemplateApi(
   request: ApiRequest,
   body: { name: string; summary?: string; manifest: Record<string, unknown> },

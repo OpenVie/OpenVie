@@ -65,6 +65,7 @@ public class BizAppConnectorScheduler {
     private final BizAppInstallationRepository installationRepository;
     private final BizAppManifestParser manifestParser;
     private final BizAppStorageRouter storageRouter;
+    private final com.openvie.api.tenant.repository.TenantRepository tenantRepository;
 
     @Scheduled(fixedDelayString = "${app.bizapps.connectors.scan-delay-ms:15000}")
     public void scanSchedules() {
@@ -73,12 +74,21 @@ public class BizAppConnectorScheduler {
         }
         for (BizAppInstallation installation : installationRepository.findByStatus("ACTIVE")) {
             try {
+                if (!tenantActive(installation.getTenantId())) {
+                    continue;
+                }
                 scan(installation);
             } catch (RuntimeException exception) {
                 log.warn("connector schedule scan failed for installation {}: {}",
                         installation.getId(), exception.getMessage());
             }
         }
+    }
+
+    /** Archived workspaces must not keep calling external systems. */
+    private boolean tenantActive(java.util.UUID tenantId) {
+        return tenantId != null && tenantRepository.existsByIdAndStatus(
+                tenantId, com.openvie.api.tenant.api.TenantStatus.ACTIVE);
     }
 
     private void scan(BizAppInstallation installation) {

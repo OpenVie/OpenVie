@@ -71,7 +71,7 @@ public class BizAppMaterializer {
             return template.getManifest();
         } catch (IllegalArgumentException notAnId) {
             throw new BadRequestException(
-                    "templateRef must be `platform:<kind>` or an organization template id");
+                    "templateRef must be `platform:<kind>` or a company template id");
         }
     }
 

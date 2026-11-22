@@ -281,6 +281,10 @@ export interface WorkspaceView {
   isDefault: boolean;
   memberCount: number;
   createdAt: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  legalHold?: boolean;
+  purgeEligibleAt?: string | null;
 }
 
 export interface WorkspaceMemberView {
@@ -489,6 +493,8 @@ export interface BizAppRecordView {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 }
 
 /** Spring Data page body as serialized by the API. */

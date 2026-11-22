@@ -277,6 +277,48 @@ class BizAppRecordServiceTest {
     }
 
     @Test
+    void archiveRejectsAPendingRecord() {
+        BizAppRecord record = pendingRecord("proc-1");
+        when(store.findById(tenantId, KIND, recordId)).thenReturn(Optional.of(record));
+
+        assertThrows(ConflictException.class,
+                () -> service.archive(tenantId, adminId, "WORKSPACE_ADMIN", KIND, ENTITY, recordId));
+        assertEquals("ACTIVE", record.getStatus());
+    }
+
+    @Test
+    void restoreArchivedRecordReactivatesAndPublishesTheEvent() {
+        BizAppRecord record = pendingRecord(null);
+        record.setStatus("ARCHIVED");
+        record.setArchivedAt(java.time.LocalDateTime.now());
+        record.setArchivedBy(adminId);
+        record.setRuntime(Map.of());
+        when(store.findById(tenantId, KIND, recordId)).thenReturn(Optional.of(record));
+
+        RecordView view = service.restore(tenantId, adminId, "WORKSPACE_ADMIN", KIND, ENTITY, recordId);
+
+        assertEquals("ACTIVE", view.status());
+        assertEquals(null, view.archivedAt());
+        verify(store).save(record);
+        verify(runtime).audit(eq(tenantId), eq(adminId), eq(LogAction.BIZAPP_RECORD_RESTORED),
+                eq("bizapp_record"), eq(recordId), any());
+        verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.restored"), any(), any());
+    }
+
+    @Test
+    void updateRejectsArchivedRecords() {
+        BizAppRecord record = pendingRecord(null);
+        record.setStatus("ARCHIVED");
+        record.setRuntime(Map.of());
+        when(store.findById(tenantId, KIND, recordId)).thenReturn(Optional.of(record));
+
+        assertThrows(com.openvie.api.common.exception.custom.BadRequestException.class,
+                () -> service.update(tenantId, memberId, "MEMBER", KIND, ENTITY, recordId,
+                        Map.of("reason", "edited")));
+        verify(store, never()).save(record);
+    }
+
+    @Test
     void submitRejectsARoleWithoutSubmitCapability() {
         BizAppRecord record = pendingRecord(null);
         record.setRuntime(Map.of());

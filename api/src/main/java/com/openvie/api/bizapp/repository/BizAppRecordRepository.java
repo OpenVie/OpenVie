@@ -40,6 +40,26 @@ public interface BizAppRecordRepository extends JpaRepository<BizAppRecord, UUID
             UUID tenantId, String appKind, String entity, String dedupeKey);
 
     /**
+     * Purge candidates: archived records old enough to expire, restricted to
+     * tenants that are ACTIVE and not under legal hold. Workspaces that are
+     * archived themselves are excluded — their hard removal is a reviewed
+     * workspace runbook, not a record sweep.
+     */
+    @org.springframework.data.jpa.repository.Query(value = """
+            SELECT r.* FROM bizapp_records r
+            JOIN tenants t ON t.id = r.tenant_id
+            WHERE r.status = 'ARCHIVED'
+              AND r.archived_at < :cutoff
+              AND t.status = 'ACTIVE'
+              AND t.legal_hold = false
+            ORDER BY r.archived_at ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    java.util.List<BizAppRecord> findPurgeCandidates(
+            @org.springframework.data.repository.query.Param("cutoff") java.time.LocalDateTime cutoff,
+            @org.springframework.data.repository.query.Param("limit") int limit);
+
+    /**
      * Serializes concurrent connector sinks writing the same dedupe identity
      * for the rest of the transaction, so the unique index is never raced into
      * an aborted statement.
@@ -49,14 +69,16 @@ public interface BizAppRecordRepository extends JpaRepository<BizAppRecord, UUID
     void lockDedupeKey(@org.springframework.data.repository.query.Param("key") String key);
 
     @org.springframework.data.jpa.repository.Query(value = """
-            SELECT * FROM bizapp_records
-            WHERE app_kind = :appKind
-              AND entity = :entity
-              AND status = 'ACTIVE'
-              AND (runtime ->> 'reminderSentAt') IS NULL
-            ORDER BY created_at ASC
+            SELECT r.* FROM bizapp_records r
+            JOIN tenants t ON t.id = r.tenant_id
+            WHERE t.status = 'ACTIVE'
+              AND r.app_kind = :appKind
+              AND r.entity = :entity
+              AND r.status = 'ACTIVE'
+              AND (r.runtime ->> 'reminderSentAt') IS NULL
+            ORDER BY r.created_at ASC
             LIMIT :limit
-            FOR UPDATE SKIP LOCKED
+            FOR UPDATE OF r SKIP LOCKED
             """, nativeQuery = true)
     java.util.List<BizAppRecord> findDueRemindersBatch(
             @org.springframework.data.repository.query.Param("appKind") String appKind,

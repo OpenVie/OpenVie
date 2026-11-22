@@ -24,6 +24,7 @@ import { useApiClient } from "@/hooks/useApiClient";
 import { upgradeManifestVersion } from "@/lib/bizapp-upgrade";
 import { getApiBase } from "@/lib/auth-api";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
+import { BizAppTemplateSaveDialog } from "@/components/bizapp/BizAppTemplateSaveDialog";
 import {
   installBizAppApi,
   listInstalledBizAppsApi,
@@ -64,12 +65,13 @@ export default function ComposeNewPage() {
   const { request } = useApiClient();
 
   const [manifest, setManifest] = useState<BizAppManifest | null>(null);
+  const [templateManifest, setTemplateManifest] = useState<BizAppManifest | null>(null);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       // "New from template": admins land here with ?template=<ref> to start
-      // the canvas from a platform or organization template's manifest.
+      // the canvas from a built-in or company template's manifest.
       const ref = new URLSearchParams(window.location.search).get("template");
       if (!ref) {
         setManifest(DEFAULT_MANIFEST);
@@ -112,6 +114,10 @@ export default function ComposeNewPage() {
     }
   };
 
+  const handleSaveTemplate = async (updated: BizAppManifest) => {
+    setTemplateManifest(updated);
+  };
+
   const handleInstall = async (updated: BizAppManifest) => {
     try {
       // An already-installed app upgrades in place instead of dead-ending on
@@ -141,11 +147,21 @@ export default function ComposeNewPage() {
   }
 
   return (
-    <ComposerCanvas
-      initialManifest={manifest}
-      onSaveDraft={handleSaveDraft}
-      onInstall={handleInstall}
-      onBack={() => router.push("/admin/apps")}
-    />
+    <>
+      <ComposerCanvas
+        initialManifest={manifest}
+        onSaveDraft={handleSaveDraft}
+        onSaveTemplate={handleSaveTemplate}
+        onInstall={handleInstall}
+        onBack={() => router.push("/admin/apps")}
+      />
+      {templateManifest && (
+        <BizAppTemplateSaveDialog
+          open
+          onOpenChange={(open) => { if (!open) setTemplateManifest(null); }}
+          manifest={templateManifest}
+        />
+      )}
+    </>
   );
 }

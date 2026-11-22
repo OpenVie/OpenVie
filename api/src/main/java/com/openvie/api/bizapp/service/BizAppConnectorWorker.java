@@ -57,6 +57,7 @@ public class BizAppConnectorWorker {
     private final BizAppRecordRepository recordRepository;
     private final BizAppManifestParser manifestParser;
     private final TransactionTemplate transactions;
+    private final com.openvie.api.tenant.repository.TenantRepository tenantRepository;
 
     @Scheduled(fixedDelayString = "${app.bizapps.connectors.worker-delay-ms:5000}")
     public void processDueJobs() {
@@ -114,6 +115,11 @@ public class BizAppConnectorWorker {
         if (!installation.isActive()) {
             throw ConnectorException.permanent(
                     "connector job " + jobId + " belongs to an inactive installation");
+        }
+        if (installation.getTenantId() == null || !tenantRepository.existsByIdAndStatus(
+                installation.getTenantId(), com.openvie.api.tenant.api.TenantStatus.ACTIVE)) {
+            throw ConnectorException.permanent(
+                    "connector job " + jobId + " belongs to an archived workspace");
         }
         Manifest manifest = manifestParser.parse(installation.getManifest());
         Block block = manifest.block(job.getBlockId())

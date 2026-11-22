@@ -356,6 +356,32 @@ class BizAppDraftGenerationClampTest {
         assertFalse(hooks.containsKey("onDecide"), "creation email must not wait for approval");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void nestedStorageKeysAreRemovedSoTheDraftValidates() {
+        String json = """
+                {"schema":"bizapp.v1","kind":"procurement-approval","version":1,
+                 "name":{"en":"Procurement","vi":"Mua sắm nội bộ"},"storage":"jsonb",
+                 "rbac":{"read":["ORG_OWNER","WORKSPACE_ADMIN","MEMBER"],
+                         "write":["WORKSPACE_ADMIN"]},
+                 "entities":[{"name":"purchase_requests","storage":"jsonb",
+                   "label":{"en":"Purchase Requests","vi":"Phiếu mua hàng"},
+                   "fields":[{"name":"amount","type":"number","storage":"jsonb"}]}]}
+                """;
+        when(aiInferenceApi.completeJson(any(AiInferenceApi.StructuredJsonRequest.class))).thenReturn(
+                new AiInferenceApi.StructuredJsonResponse(json, "vylinh", 64, 16));
+
+        var resp = service.generateDraftFromChat(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "Quản lý mua sắm", List.of());
+
+        assertEquals(Boolean.TRUE, resp.validation().ok(), resp.validation().errors().toString());
+        assertEquals("jsonb", resp.manifest().get("storage"), "the manifest-level storage is kept");
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) resp.manifest().get("entities");
+        assertFalse(entities.get(0).containsKey("storage"), "entity-level storage is removed");
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) entities.get(0).get("fields");
+        assertFalse(fields.get(0).containsKey("storage"), "field-level storage is removed");
+    }
+
     private int aiInvocations() {
         ArgumentCaptor<AiInferenceApi.StructuredJsonRequest> captor =
                 ArgumentCaptor.forClass(AiInferenceApi.StructuredJsonRequest.class);

@@ -180,6 +180,17 @@ public class BizAppController extends BaseController {
                 kind, entity, recordId);
     }
 
+    @Operation(summary = "Restore an archived record",
+            description = "Flips ARCHIVED back to ACTIVE under the manifest delete capability, re-projects the "
+                    + "knowledge document and publishes `record.restored`. Idempotent for active records.")
+    @PostMapping("/bizapp-data/{kind}/{entity}/{recordId}/restore")
+    public RecordView restoreRecord(
+            @PathVariable String kind, @PathVariable String entity, @PathVariable UUID recordId,
+            HttpServletRequest request) {
+        return recordService.restore(getTenantId(request), getUserId(request), getManifestRole(request),
+                kind, entity, recordId);
+    }
+
     private void requireOrgOwner(HttpServletRequest request) {
         if (!"ORG_OWNER".equals(getOrgRole(request))) {
             throw new AccessDeniedException("Only the organization owner may manage app configuration");

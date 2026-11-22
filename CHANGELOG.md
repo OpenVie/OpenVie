@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Save as Template is now in the UI**: the composer button (previously rendered only when a handler was passed, which never happened) and each installed-app card in `/admin/apps` open a name/summary dialog and call `POST /marketplace/bizapps` with the current/frozen manifest. The draft and installed app are unchanged.
+- **Workspace restore**: `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) flips `ARCHIVED` back to `ACTIVE`; memberships, slug, documents, BizApp data and index rows are retained by archive, so no provisioning/re-index runs. The admin Workspaces page gains a Restore action and archive timestamps.
+- **BizApp record restore**: `POST /api/v1/bizapp-data/{kind}/{entity}/{recordId}/restore` (manifest `delete`) flips `ARCHIVED` back to `ACTIVE`, publishes `record.restored` and re-projects the knowledge document/digest. The registry gains a Show archived toggle, archived badge, restore action and includes archived rows in export when toggled.
+- **Retention metadata, legal hold and sweep**: `tenants` and `bizapp_records` now carry `archived_at`/`archived_by` (V24); `tenants.legal_hold` blocks both the workspace report and record purge. `PATCH /admin/workspaces/{id}/legal-hold` toggles the hold. A daily `RetentionSweepService` audits purge-eligible workspaces (never deletes them) and purges archived BizApp records, including connector jobs, only for ACTIVE non-held workspaces when `app.retention.bizapp-record-purge-enabled=true`.
+- **Workspace archive/restore audit + cache invalidation**: `WORKSPACE_ARCHIVED` now stores timestamp metadata; restore and legal-hold changes are audited and invalidate the cached tenant workspace snapshot.
+
 ### Fixed
+- **Background jobs skip archived workspaces**: the connector scheduler and worker check tenant status before enqueuing/running, and the booking reminder query joins `tenants` so an archived workspace cannot keep calling external systems or sending reminders.
+- **Record archive is approval-safe**: archiving a `PENDING` record now returns 409 (withdraw first), archived records reject edits with 400 instead of being silently mutable.
+
+### Docs
+- `docs/BIZAPPS.md` (VI + EN): `record.restored`, archive/restore behavior, retention/legal-hold section, restore API rows and troubleshooting.
+- Template catalog wording is now **Built-in** vs **Company** (no "Organization templates" in UI/API docs), and the docs state the OSS self-host model: one organization per installation, workspaces as subdivisions.
+- Workspace lifecycle copy in `frontend/messages/{en,vi}.json` now matches the code (archive = soft delete + restore; hard purge is an operator runbook), and BizApp in-app docs list the restore event/toggle.
+- `docs/INTEGRATION.md` event families include `record.restored`.
+
+### Also fixed (manifest contract batch)
+- **Legacy manifests are repaired in place (V25)**: `V25__repair_legacy_bizapp_manifests.sql` removes nested `storage` from entities/fields across `bizapp_drafts`, `bizapp_marketplace_templates` and `bizapp_installations`, promotes `enumValues` to `options` where needed, and converts legacy root `storage: typed` to `jsonb`. All 15 stored manifests now pass `BizAppManifestValidator`.
+- **AI drafts strip misplaced `storage` keys**: small models sometimes repeat `storage` on entities/fields; `BizAppDraftService.normalizeGeneratedManifest` now removes those nested keys (keeping the manifest-level one), so new drafts validate instead of failing with `unknown key entities[...].storage`.
 - **Knowledge projection and lakehouse CDC no longer depend on `webhook_out`**: record lifecycle events (`record.created/updated/archived/submitted/decided`) are published unconditionally as `BizAppLifecycleEvent`; webhook delivery is a separate opt-in `BizAppWebhookEvent` raised only when a `webhook_out` block selects the event. Apps without a webhook block (e.g. the bundled CRM) now project records and digests as documented. Regression tests cover create/archive/decision with and without a selected webhook.
 - **Engine decisions are tenant-scoped**: `BizAppRecordDecisionDelegate` passes the `workspaceId` process variable to `applyEngineDecision`, and the record lookup is keyed by `(tenant, appKind, recordId)` instead of an unscoped id.
 - **Projection listener reads the record once**: the per-entity probe loop (N+1) was replaced with one tenant-scoped lookup; the record's own `entity` is checked against the manifest.
@@ -16,10 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`record.<field>` notify recipients are checked against the hooking entities**: a notify block reached by entity hooks must declare the recipient field on every source entity, so a valid-looking manifest can no longer silently skip delivery.
 - **Booking reminders are scoped to the bundled app**: the due-reminder query is parameterized by `app_kind`/`entity` and the scheduler documents that it is a bundled booking extension, not a generic runtime contract.
 
-### Changed
+### Changed (manifest contract batch)
 - **`storage: typed` is rejected**: no typed table ships in this build, so accepting it silently stored JSONB. The validator now returns `storage: typed is not available in this build`; the unused typed branches were removed from the report compiler, storage router and report resolver. The contract keeps the enum value reserved and documents the rejection.
 
-### Docs
+### Docs (manifest contract batch)
 - Updated `docs/BIZAPPS.md` (VI + EN), `contracts/bizapp/bizapp.v1.schema.json`, and the in-app BizApp documentation for the event split, typed storage, required entity labels, string-only `contains`, and per-entity notify recipients.
 
 ## [v1.0.1] — 2026-11-18

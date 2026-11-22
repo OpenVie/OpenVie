@@ -58,4 +58,15 @@ public class Tenant extends BaseEntity {
     /** The workspace every account lands in; exactly one per organization. */
     @Column(name = "is_default", nullable = false)
     private boolean defaultWorkspace = false;
+
+    /** Set when status becomes ARCHIVED; cleared on restore. */
+    @Column(name = "archived_at")
+    private java.time.LocalDateTime archivedAt;
+
+    @Column(name = "archived_by")
+    private java.util.UUID archivedBy;
+
+    /** Blocks retention purge regardless of how old the archive is. */
+    @Column(name = "legal_hold", nullable = false)
+    private boolean legalHold = false;
 }

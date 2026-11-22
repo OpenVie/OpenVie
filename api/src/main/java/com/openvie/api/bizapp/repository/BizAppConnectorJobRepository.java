@@ -29,10 +29,14 @@ public interface BizAppConnectorJobRepository extends JpaRepository<BizAppConnec
      * Due job ids in one atomic read: {@code SKIP LOCKED} keeps concurrent
      * workers from claiming the same row without serializing the whole queue.
      */
-    @Query(value = "SELECT id FROM bizapp_connector_jobs WHERE status = 'PENDING' AND next_attempt_at <= now() "
-            + "ORDER BY next_attempt_at ASC LIMIT :limit FOR UPDATE SKIP LOCKED", nativeQuery = true)
+    @Query(value = "SELECT j.id FROM bizapp_connector_jobs j "
+            + "JOIN tenants t ON t.id = j.tenant_id "
+            + "WHERE j.status = 'PENDING' AND j.next_attempt_at <= now() AND t.status = 'ACTIVE' "
+            + "ORDER BY j.next_attempt_at ASC LIMIT :limit FOR UPDATE OF j SKIP LOCKED", nativeQuery = true)
     List<UUID> claimDueIds(@Param("limit") int limit);
 
     Optional<BizAppConnectorJob> findFirstByInstallationIdAndBlockIdAndRecordIdOrderByCreatedAtDesc(
             UUID installationId, String blockId, UUID recordId);
+
+    void deleteByRecordId(UUID recordId);
 }

@@ -34,6 +34,8 @@ Ba bề mặt người dùng:
 | Ứng dụng runtime (registry, form, timeline, report, assistant) | `/apps`, `/apps/{kind}` | Theo `rbac` manifest |
 | Trợ lý hội thoại (Liệt kê/Cài đặt/Gợi ý/Tạo app/Bản ghi) | Chat workspace | Theo vai trò |
 
+> **Mô hình triển khai:** bản OSS self-host có **một organization** cho mỗi installation; `org` trong schema/API là tenant ngầm định, không phải multi-org UI. Catalog template gồm **built-in** (JSON trong codebase) và **company** (DB của organization đó).
+
 ### 1. Bắt đầu nhanh (10 phút)
 
 1. `/admin/apps/compose`: đặt tên (Vi/En), chỉnh thực thể mặc định `records` (thêm trường, kiểu,
@@ -226,7 +228,7 @@ khối trình bày (không thực thi). `report`/`knowledge_base`/`assistant` l�
 
 #### 3.3 `webhook_out`
 
-- `params.events` (bắt buộc): các sự kiện đã biết `record.created|updated|archived|submitted|decided`
+- `params.events` (bắt buộc): các sự kiện đã biết `record.created|updated|archived|restored|submitted|decided`
   (hoặc tuỳ ý pattern `[a-z0-9][a-z0-9._-]{1,62}`).
 - Record service chỉ đẩy event mà **một khối nào đó khai báo**. `hook: ["webhook_out:custom.event"]`
   đẩy sự kiện tuỳ ý `bizapp.<kind>.custom.event` ngay tại thời điểm hook chạy (best-effort).
@@ -296,7 +298,7 @@ row/limit view → không export được (file rỗng); Report đó vẫn an to
 
 | View | Hành vi |
 | --- | --- |
-| `registry:` | trang 20 bản ghi (`updated_at desc`), nút refresh, export CSV/XLSX, tạo, sửa, lưu trữ (soft, status `ARCHIVED`), gửi duyệt (chỉ khiم app có khối approval) |
+| `registry:` | trang 20 bản ghi (`updated_at desc`), refresh, export CSV/XLSX, tạo, sửa, lưu trữ (soft, status `ARCHIVED`), **khôi phục**, toggle **Show archived**, gửi duyệt (chỉ khi app có khối approval) |
 | `form:` | tương tự registry nhưng mở hộp thoại tạo bản ghi mặc định; form sinh từ manifest, field không khai báo không thể nhập (server cũng từ chối 400) |
 | `timeline:` | feed thẻ bản ghi mới nhất, 3 field đầu + badge trạng thái |
 | `report:` | bảng kết quả view (chỉ admin), refresh, export |
@@ -306,8 +308,13 @@ Trạng thái bản ghi:
 
 | Trường | Giá trị |
 | --- | --- |
-| `status` | `ACTIVE` \| `ARCHIVED` (xóa mềm; không có endpoint xoá cứng) |
+| `status` | `ACTIVE` \| `ARCHIVED` (xóa mềm; không có endpoint xoá cứng từ client; retention purge là job server-side) |
+| `archivedAt` / `archivedBy` | thời điểm/người lưu trữ; xoá khi restore |
 | `runtime.approvalStatus` | `PENDING` \| `APPROVED` \| `REJECTED`; `runtime.processId` khi đang chạy |
+
+Record đang `PENDING` **không được lưu trữ** (409, phải withdraw trước). Record `ARCHIVED` **không sửa được**
+(400, phải restore). Restore trả status `ACTIVE`, giữ payload/runtime (audit decision còn nguyên), phát
+`record.restored` và chiếu lại tài liệu knowledge (archive đã xoá doc).
 
 API bản ghi bị fence bởi `rbac` manifest + vai trò manifest suy lại từ request (client không gửi được);
 thực thể không khai báo → 404. Chấp nhận `payload` dạng patch; trường lạ bị từ chối 400. Update khi
@@ -355,9 +362,10 @@ và `/admin/apps/compose/{draftId}`.
 **Panel kiểm tra hợp lệ:** debounce 400ms gọi `POST /bizapps/validate`; nút Install disable khi không hợp lệ.
 Chuyển đổi palette language/theme ngay trên header.
 
-**Hành động:** Save draft (`PUT /drafts/{id}` hoặc `PUT /drafts/new` khi tạo mới), Install — nếu kind đã
-cài thì **nâng cấp tại chỗ** (version auto-bump, giữ bản ghi) thay vì báo "already installed". Publisher
-template (`Save template`) hiện chỉ có **API** (`POST /marketplace/bizapps`), chưa có nút UI.
+**Hành động:** Save draft (`PUT /drafts/{id}` hoặc `PUT /drafts/new` khi tạo mới), Save as Template (mở dialog
+name/summary rồi `POST /marketplace/bizapps`), Install — nếu kind đã cài thì **nâng cấp tại chỗ** (version
+auto-bump, giữ bản ghi) thay vì báo "already installed". Card app đã cài trong `/admin/apps` cũng có
+**Save as template** dùng manifest đóng băng hiện tại.
 
 ### 7. Chiếu tri thức & trợ lý AI
 
@@ -394,22 +402,23 @@ template (`Save template`) hiện chỉ có **API** (`POST /marketplace/bizapps`
 | `GET /bizapps/installed-summary`, `/installed-anywhere` | mọi thành viên | danh sách app cho chat/catalog |
 | `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | trang bản ghi (`page/size≤100/includeArchived`) |
 | `POST|PATCH|DELETE /bizapp-data/{kind}/{entity}[/{id}]` | `write`/`delete` | tạo/sửa/lưu trữ |
+| `POST …/{recordId}/restore` | `delete` | khôi phục bản ghi đã lưu trữ |
 | `POST …/{recordId}/submit` | `submit` | bắt đầu quy trình phê duyệt |
 | `POST /bizapps/{kind}/reports/{view}` | workspace admin | chạy view (body `{"params": {...}}`) |
 | `POST /bizapps/{kind}/reports/{view}/export` | workspace admin | CSV/XLSX đầy đủ cột/dòng |
-| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX mọi bản ghi ACTIVE (cap 10 000) |
+| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX bản ghi (ACTIVE; `includeArchived=true` để gồm lưu trữ, cap 10 000) |
 | `PATCH /bizapps/{kind}/config` | ORG_OWNER | thay `config` (vd `allowedHosts`, `knowledgeBaseId`) |
 | `POST /bizapps/validate` | ORG_OWNER | validate không lưu |
 | `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | soạn thảo AI / từ chat (≤20 turn gần nhất) |
 | `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | CRUD bản thảo |
-| `GET /marketplace/bizapps[/{templateRef}]` | mọi thành viên | catalog (platform + org) |
+| `GET /marketplace/bizapps[/{templateRef}]` | mọi thành viên | catalog (built-in + company) |
 | `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | cài / nâng cấp / gỡ (mềm) |
-| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | lưu-tuỳ ý xoá org template |
+| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | lưu/xoá template công ty |
 | `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (browse bất kỳ) | trao đổi template |
 | `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | kho xác thực |
 
 `templateRef` định danh: `platform:<kind>` cho template tích hợp sẵn (crm/booking/signature-request) hoặc
-UUID cho org template.
+UUID cho template công ty.
 
 ### 9. Cấu hình
 
@@ -424,6 +433,10 @@ UUID cho org template.
 | `BIZAPPS_PROJECTION_DEBOUNCE_MS` | 30000 |debounce digest |
 | `BIZAPPS_REMOTE_CATALOG_ENABLED` / `_HOSTS` | false / trống | host allowlist cho `GET /marketplace/catalog` và import theo URL |
 | `app.bizapps.connectors.*` (`enabled`, `scan-delay-ms`=15000, `worker-delay-ms`=5000, `batch-size`=20) | | connector scheduler/worker |
+| `app.retention.workspace-days` / `bizapp-record-days` | 0 (tắt) | ngưỡng purge-eligible; workspace chỉ được báo cáo |
+| `app.retention.bizapp-record-purge-enabled` | false | bật xoá cứng record BizApp đã archive quá hạn |
+| `app.retention.max-records-per-run` | 200 | cap purge mỗi lần chạy |
+| `app.retention.scan-delay-ms` / `initial-delay-ms` | 86400000 / 300000 | nhịp quét retention |
 | `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | kill-switch cho chat actions/records |
 | `CHAT_INTENT_CONFIDENCE_THRESHOLD` / `CHAT_INTENT_CLASSIFY_ALL_TURNS` | 0.75 / false | bộ phân loại app |
 
@@ -435,6 +448,7 @@ Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
 | Triệu chứng / lỗi | Nguyên nhân & cách sửa |
 | --- | --- |
 | `unknown manifest key … "maxLength"` | dùng `maxLen` |
+| `unknown key entities[...].storage` / `fields[...].storage` | `storage` chỉ hợp lệ ở root manifest; xoá khỏi entity/field. Draft AI mới được normalize tự động; manifest cũ trong DB được migration V25 sửa tại chỗ |
 | `storage: typed is not available in this build` | đổi `storage` sang `jsonb`; chưa có bảng typed nào được ship |
 | `entity <name> requires label.vi and label.en` | thêm `label` cho entity (schema bắt buộc) |
 | `filter op contains requires a string field, got …` | `contains` chỉ dùng cho field `string`; dùng `eq`/`in` cho enum/number |
@@ -455,6 +469,9 @@ Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
 | Chat không thấy dữ liệu app | set `config.knowledgeBaseId` = KB chat, touch 1 bản ghi, verify doc `PROJECTED`; nhớ top-K không phủ hết — dùng report cho số liệu chính |
 | Digest bị cũ | connector ghi không phát event; PATCH một bản ghi để trigger rebuild |
 | Đã set knowledge nhưng chat trộn doc app khác | xem giới hạn §7.4 |
+| `This record is pending approval; withdraw…` | record đang PENDING: withdraw/rút duyệt trước khi lưu trữ |
+| `Archived records must be restored before editing` | gọi `POST …/{recordId}/restore` trước khi sửa |
+| `storage: typed…` / `requires label` / `contains…` | xem các dòng đầu bảng §10 |
 
 ### 11. Ranh giới & pháp lý (Non-Goals)
 
@@ -463,6 +480,22 @@ Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
   cung cấp bên ngoài; giá trị pháp lý do provider + luật sở tại (operator tự tham vấn).
 - Không auto-install từ bản thảo/template/import; luôn có nút xác nhận.
 - Không detached cryptographic verification cho remote template; v1 neo = SHA-256 trong envelope/catalog.
+
+### 12. Khôi phục & retention
+
+- **Workspace:** archive = soft-delete, không truy cập được nhưng giữ memberships/slug/documents/app data/KB/index.
+  `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) đưa về `ACTIVE`; không cần provisioning/re-index.
+- **Bản ghi BizApp:** archive = `ARCHIVED`; `POST …/{recordId}/restore` (manifest `delete`) đưa về `ACTIVE`,
+  phát `record.restored`, chiếu lại knowledge doc + digest. Record `PENDING` phải withdraw trước khi archive.
+- **Retention:** `app.retention.workspace-days` / `app.retention.bizapp-record-days` (0 = tắt). Job hằng ngày
+  audit workspace đủ điều kiện purge nhưng **không tự xoá**; record purge chỉ chạy khi
+  `app.retention.bizapp-record-purge-enabled=true` (mặc định false) và xoá kèm connector jobs.
+- **Legal hold:** `PATCH /api/v1/admin/workspaces/{id}/legal-hold` đặt cờ chặn purge vĩnh viễn cho workspace.
+  Record purge cũng join `tenants`, nên workspace đang hold (hoặc đã archive) không bao giờ bị purge bản ghi.
+- **Dữ liệu archive trước V24** có `archived_at = NULL`, nên không bao giờ là purge candidate; chỉ restore thủ công/API.
+- `TenantStatus.INACTIVE` được giữ chỗ cho chế độ read-only tương lai; bản build này không expose transition nào.
+- **Hard delete workspace:** chỉ là runbook ops có review; FK trải documents/chat/KB/workflow/audit nên không
+  auto-purge.
 
 ---
 
@@ -488,6 +521,8 @@ flowchart LR
 | Marketplace + owner console (install/templates/drafts/credentials) | `/admin/apps`, `/admin/apps/compose` | Organization owner |
 | Runtime views (registry/form/timeline/report/assistant) | `/apps`, `/apps/{kind}` | Per manifest `rbac` |
 | Conversational BizApps (list/install/suggest/create/records) | Workspace chat | Per role |
+
+> **Deployment model:** the OSS self-host build runs **one organization per installation**; `org` in the schema/API is the implicit tenant, not a multi-org UI. The template catalog has **built-in** entries (JSON in the codebase) and **company** entries (that organization's DB).
 
 ### 1. Quickstart (10 minutes)
 
@@ -670,7 +705,7 @@ Rules: block `id` unique; hooks target only `approval_workitem` / `notify` / `we
 
 #### 3.3 `webhook_out`
 
-- `params.events` (required): `record.created|updated|archived|submitted|decided` or custom
+- `params.events` (required): `record.created|updated|archived|restored|submitted|decided` or custom
   `[a-z0-9][a-z0-9._-]{1,62}` kinds.
 - The record service publishes an event only when some block declares it; a hook target
   `webhook_out:<event>` publishes `bizapp.<kind>.<event>` immediately at hook time (best-effort).
@@ -739,7 +774,7 @@ the **first 6 columns** while export returns **all columns and rows**.
 
 | View | Behavior |
 | --- | --- |
-| `registry:` | 20 records per page (`updated_at desc`), refresh, CSV/XLSX export, create, edit, archive (soft), submit (only when the app has an approval block) |
+| `registry:` | 20 records per page (`updated_at desc`), refresh, CSV/XLSX export, create, edit, archive (soft), **restore**, **Show archived** toggle, submit (only when the app has an approval block) |
 | `form:` | same as registry with the create dialog pre-opened; the form is generated from the manifest so undeclared fields cannot be typed (the API also rejects them) |
 | `timeline:` | newest records as cards, first three fields plus a status badge |
 | `report:` | report table (admin only), refresh, export |
@@ -749,8 +784,13 @@ Record state:
 
 | Field | Values |
 | --- | --- |
-| `status` | `ACTIVE` \| `ARCHIVED` (soft; no hard-delete endpoint) |
+| `status` | `ACTIVE` \| `ARCHIVED` (soft; no client hard-delete endpoint; retention purge is a server-side job) |
+| `archivedAt` / `archivedBy` | archive timestamp/actor; cleared on restore |
 | `runtime.approvalStatus` | `PENDING` \| `APPROVED` \| `REJECTED`; `runtime.processId` while running |
+
+A `PENDING` record **cannot be archived** (409; withdraw first). An `ARCHIVED` record **cannot be edited**
+(400; restore first). Restore flips to `ACTIVE`, keeps payload/runtime (decision history stays attributable),
+publishes `record.restored` and re-projects the knowledge document (archive deleted it).
 
 Record APIs are fenced by manifest `rbac` plus the manifest role re-derived per request; unknown entities are
 404, unknown payload fields 400. Editing a `PENDING` record preserves its process state; editing after a
@@ -800,9 +840,10 @@ Inspector highlights:
 
 Validation panel: debounced 400ms `POST /bizapps/validate`; Install stays disabled while red.
 
-Actions: Save draft (`PUT /drafts/{id}`, or `PUT /drafts/new` for the first save), Install — an already
-active kind **upgrades in place** (version bumped, records preserved). Publishing a template is currently
-API-only (`POST /marketplace/bizapps`); there is no composer button yet.
+Actions: Save draft (`PUT /drafts/{id}`, or `PUT /drafts/new` for the first save), Save as Template (dialog
+for name/summary → `POST /marketplace/bizapps`), Install — an already active kind **upgrades in place**
+(version bumped, records preserved). Installed-app cards in `/admin/apps` also offer **Save as template**
+using the frozen manifest.
 
 ### 7. Knowledge projection & assistant
 
@@ -841,21 +882,22 @@ Known limitations of the current build:
 | `GET /bizapps/installed-summary`, `/installed-anywhere` | members | chat/catalog summaries |
 | `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | paged records (`page`, `size≤100`, `includeArchived`) |
 | `POST|PATCH|DELETE /bizapp-data/{kind}/{entity}[/{id}]` | `write`/`delete` | create/patch/archive |
+| `POST …/{recordId}/restore` | `delete` | restore an archived record |
 | `POST …/{recordId}/submit` | `submit` | start approval |
 | `POST /bizapps/{kind}/reports/{view}` | workspace admin | run the view (body `{"params": {…}}`) |
 | `POST /bizapps/{kind}/reports/{view}/export` | workspace admin | full CSV/XLSX |
-| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX of every active record (10 000 cap) |
+| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX records (ACTIVE; `includeArchived=true` adds archived rows, 10 000 cap) |
 | `PATCH /bizapps/{kind}/config` | ORG_OWNER | replace install config (`allowedHosts`, `knowledgeBaseId`, …) |
 | `POST /bizapps/validate` | ORG_OWNER | stateless manifest validation |
 | `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | AI drafting / draft from last 20 chat turns |
 | `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | draft CRUD |
-| `GET /marketplace/bizapps[/{templateRef}]` | members | platform + org catalog |
+| `GET /marketplace/bizapps[/{templateRef}]` | members | built-in + company catalog |
 | `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | install / upgrade / soft uninstall |
-| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | save / delete org template |
+| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | save / delete company template |
 | `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (browsing open) | template exchange |
 | `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | credential vault |
 
-`templateRef` is `platform:<kind>` (crm, booking, signature-request) or the org template UUID.
+`templateRef` is `platform:<kind>` (crm, booking, signature-request) or a company template UUID.
 
 ### 9. Configuration
 
@@ -870,6 +912,10 @@ Known limitations of the current build:
 | `BIZAPPS_PROJECTION_DEBOUNCE_MS` | 30000 | digest debounce window |
 | `BIZAPPS_REMOTE_CATALOG_ENABLED` / `_HOSTS` | false / empty | host allowlist for the remote catalog and URL imports |
 | connectors (`enabled` true, `scan-delay-ms` 15000, `worker-delay-ms` 5000, `batch-size` 20) | | scheduler/worker cadence |
+| `app.retention.workspace-days` / `bizapp-record-days` | 0 (disabled) | purge-eligibility window; workspaces are report-only |
+| `app.retention.bizapp-record-purge-enabled` | false | enable hard deletion of expired archived records |
+| `app.retention.max-records-per-run` | 200 | purge cap per sweep |
+| `app.retention.scan-delay-ms` / `initial-delay-ms` | 86400000 / 300000 | retention sweep cadence |
 | `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | chat kill-switches |
 | `CHAT_INTENT_CONFIDENCE_THRESHOLD` / `CHAT_INTENT_CLASSIFY_ALL_TURNS` | 0.75 / false | app intent classifier |
 
@@ -881,6 +927,7 @@ For model selection, evaluation, and rollout for chat, intent, slots, and drafti
 | Symptom / message | Cause & fix |
 | --- | --- |
 | `unknown manifest key … "maxLength"` | use `maxLen` |
+| `unknown key entities[...].storage` / `fields[...].storage` | `storage` is only valid at the manifest root; remove it from entities/fields. New AI drafts are normalized automatically; legacy stored manifests are repaired by migration V25 |
 | `storage: typed is not available in this build` | switch `storage` to `jsonb`; no typed table ships today |
 | `entity <name> requires label.vi and label.en` | add an entity `label` (schema requires it) |
 | `filter op contains requires a string field, got …` | `contains` is string-only; use `eq`/`in` for enum/number |
@@ -901,6 +948,9 @@ For model selection, evaluation, and rollout for chat, intent, slots, and drafti
 | chat cannot see app data | set `config.knowledgeBaseId` to the chat KB, touch a record, verify `PROJECTED`; remember top-K is not exhaustive — use reports for exact numbers |
 | digest is stale | connector writes emit no events; patch a record to trigger a rebuild |
 | chat mixes documents from another app | see limitation §7 |
+| `This record is pending approval; withdraw…` | the record is `PENDING`: withdraw the approval before archiving |
+| `Archived records must be restored before editing` | call `POST …/{recordId}/restore` first |
+| `storage: typed…` / `requires label` / `contains…` | see the top rows of §10 |
 
 ### 11. Boundaries & legal (non-goals)
 
@@ -910,3 +960,22 @@ For model selection, evaluation, and rollout for chat, intent, slots, and drafti
 - No auto-install from drafts/templates/imports; every install is an explicit confirmation.
 - No detached cryptographic verification for remote templates; v1 anchors trust in the SHA-256 hash inside
   the template envelope/catalog index.
+
+### 12. Restore & retention
+
+- **Workspace:** archive is a soft delete: unreachable, but memberships/slug/documents/app data/KB/index are
+  retained. `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) flips it back to `ACTIVE`; no
+  provisioning or re-index runs.
+- **BizApp record:** archive sets `ARCHIVED`; `POST …/{recordId}/restore` (manifest `delete`) flips it back to
+  `ACTIVE`, publishes `record.restored` and re-projects the knowledge doc/digest. A `PENDING` record must be
+  withdrawn before it can be archived.
+- **Retention:** `app.retention.workspace-days` / `app.retention.bizapp-record-days` (0 = disabled). The daily
+  sweep audits purge-eligible workspaces but never deletes them; record purge runs only when
+  `app.retention.bizapp-record-purge-enabled=true` (default false) and removes connector jobs with the row.
+- **Legal hold:** `PATCH /api/v1/admin/workspaces/{id}/legal-hold` blocks purge for that workspace regardless
+  of age. The record purge query also joins `tenants`, so a held (or archived) workspace never loses records.
+- **Rows archived before V24** have `archived_at = NULL`, so they are never purge candidates; restore them
+  through the API/UI.
+- `TenantStatus.INACTIVE` is reserved for a future read-only pause; this build exposes no transition to it.
+- **Workspace hard delete:** reviewed ops runbook only; FKs span documents/chat/KB/workflow/audit, so it is
+  never auto-purged.

@@ -173,6 +173,9 @@ public class BizAppRecordService {
             String entity, UUID recordId, Map<String, Object> payload) {
         BizAppInstallation installation = activeInstallation(tenantId, appKind, entity, role, Capability.WRITE);
         BizAppRecord record = resolveForEntity(tenantId, appKind, entity, recordId);
+        if ("ARCHIVED".equalsIgnoreCase(record.getStatus())) {
+            throw new BadRequestException("Archived records must be restored before editing");
+        }
         Manifest manifest = manifestParser.parse(installation.getManifest());
         payload.keySet().forEach(key -> {
             if (manifest.entities().stream().noneMatch(candidate -> candidate.name().equals(entity))
@@ -201,14 +204,50 @@ public class BizAppRecordService {
             String entity, UUID recordId) {
         BizAppInstallation installation = activeInstallation(tenantId, appKind, entity, role, Capability.DELETE);
         BizAppRecord record = resolveForEntity(tenantId, appKind, entity, recordId);
+        if ("PENDING".equals(approvalStatus(record))) {
+            throw new ConflictException(
+                    "This record is pending approval; withdraw the request before archiving it");
+        }
+        if ("ARCHIVED".equalsIgnoreCase(record.getStatus())) {
+            return toView(record, manifestParser.parse(installation.getManifest()));
+        }
         record.setStatus("ARCHIVED");
+        record.setArchivedAt(java.time.LocalDateTime.now());
+        record.setArchivedBy(userId);
         record.setUpdatedBy(userId);
         BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_ARCHIVED, "bizapp_record", recordId,
-                Map.of("app", appKind, "entity", entity));
+                Map.of("app", appKind, "entity", entity, "archivedAt",
+                        String.valueOf(saved.getArchivedAt())));
         Manifest manifest = manifestParser.parse(installation.getManifest());
         publishRecordEvent(tenantId, installation, manifest, saved, "record.archived",
                 Map.of("archived_by", userId.toString()));
+        return toView(saved, manifest);
+    }
+
+    /**
+     * Undoes a soft archive. The record keeps its payload/runtime (decision
+     * history stays attributable); projection re-ingests the document because
+     * archive deleted it.
+     */
+    @Transactional
+    public RecordView restore(UUID tenantId, UUID userId, String role, String appKind,
+            String entity, UUID recordId) {
+        BizAppInstallation installation = activeInstallation(tenantId, appKind, entity, role, Capability.DELETE);
+        BizAppRecord record = resolveForEntity(tenantId, appKind, entity, recordId);
+        Manifest manifest = manifestParser.parse(installation.getManifest());
+        if (!"ARCHIVED".equalsIgnoreCase(record.getStatus())) {
+            return toView(record, manifest);
+        }
+        record.setStatus("ACTIVE");
+        record.setArchivedAt(null);
+        record.setArchivedBy(null);
+        record.setUpdatedBy(userId);
+        BizAppRecord saved = storageRouter.route(appKind, entity).save(record);
+        runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_RESTORED, "bizapp_record", recordId,
+                Map.of("app", appKind, "entity", entity));
+        publishRecordEvent(tenantId, installation, manifest, saved, "record.restored",
+                Map.of("restored_by", userId.toString()));
         return toView(saved, manifest);
     }
 
@@ -710,6 +749,8 @@ public class BizAppRecordService {
                 record.getStatus(),
                 record.getCreatedBy(),
                 record.getCreatedAt(),
-                record.getUpdatedAt());
+                record.getUpdatedAt(),
+                record.getArchivedAt(),
+                record.getArchivedBy());
     }
 }

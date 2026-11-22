@@ -40,7 +40,7 @@ public class BizAppProjectionListener {
 
     /** Event data keys that carry the acting user for projection attribution. */
     private static final List<String> ACTOR_KEYS =
-            List.of("created_by", "updated_by", "decided_by", "submitted_by", "archived_by");
+            List.of("created_by", "updated_by", "decided_by", "submitted_by", "archived_by", "restored_by");
 
     private final BizAppKnowledgeProjector projector;
     private final BizAppInstallationRepository installationRepository;

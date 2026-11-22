@@ -73,6 +73,13 @@ public class BizAppRecord extends BaseEntity {
     @Column(name = "updated_by")
     private UUID updatedBy;
 
+    /** Set when status becomes ARCHIVED; cleared on restore. */
+    @Column(name = "archived_at")
+    private java.time.LocalDateTime archivedAt;
+
+    @Column(name = "archived_by")
+    private UUID archivedBy;
+
     public boolean isActive() {
         return "ACTIVE".equals(status);
     }

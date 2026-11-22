@@ -401,7 +401,7 @@ class BizAppExportServiceTest {
 
     private RecordView record(Map<String, Object> payload) {
         return new RecordView(recordId, KIND, ENTITY, payload, Map.of(), "ACTIVE", UUID.randomUUID(),
-                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDateTime.of(2026, 1, 2, 3, 5));
+                LocalDateTime.of(2026, 1, 2, 3, 4), LocalDateTime.of(2026, 1, 2, 3, 5), null, null);
     }
 
     private String text(ExportFile file) {

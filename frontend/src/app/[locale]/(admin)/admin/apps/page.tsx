@@ -24,6 +24,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Share2,
   Sparkles,
   Trash2,
   Upload,
@@ -61,6 +62,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { BizAppTemplateSaveDialog } from "@/components/bizapp/BizAppTemplateSaveDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -90,7 +92,7 @@ type RemixTarget = {
 
 /**
  * Owner marketplace console: browse the two-layer catalog (platform-bundled
- * plus org-crafted templates), install/uninstall apps, delete org templates,
+ * plus company templates), install/uninstall apps, delete company templates,
  * and manage the credential vault backing `external_call` blocks. The API
  * re-enforces `ORG_OWNER` on every route.
  */
@@ -109,6 +111,7 @@ export default function AdminAppsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [showCredentialForm, setShowCredentialForm] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+  const [templateSource, setTemplateSource] = useState<BizAppInstalledAppView | null>(null);
 
   // Composer entry points: AI drafting + template import land as drafts only
   // (install stays an explicit owner action), mirroring the backend contract.
@@ -532,6 +535,10 @@ export default function AdminAppsPage() {
                         <Button size="sm" variant="outline" onClick={() => router.push(`/apps/${app.kind}`)}>
                           {t("admin.open")}
                         </Button>
+                        <Button size="sm" variant="outline" onClick={() => setTemplateSource(app)}>
+                          <Share2 className="mr-1 size-3.5" />
+                          {t("admin.saveTemplate")}
+                        </Button>
                         <Button
                           size="sm" variant="outline"
                           disabled={Boolean(busy)}
@@ -858,6 +865,16 @@ export default function AdminAppsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {/* Save an installed app's frozen manifest as a company template */}
+      {templateSource && (
+        <BizAppTemplateSaveDialog
+          open
+          onOpenChange={(open) => { if (!open) setTemplateSource(null); }}
+          manifest={templateSource.manifest}
+          defaultName={templateSource.nameEn || templateSource.nameVi || templateSource.kind}
+          onSaved={() => load()}
+        />
+      )}
     </div>
   );
 }

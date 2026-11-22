@@ -23,6 +23,7 @@ import type { BizAppManifest } from "@/types";
 import { useApiClient } from "@/hooks/useApiClient";
 import { Button } from "@/components/ui/button";
 import { ComposerCanvas } from "@/components/bizapp/composer/ComposerCanvas";
+import { BizAppTemplateSaveDialog } from "@/components/bizapp/BizAppTemplateSaveDialog";
 import {
   getBizAppDraftApi,
   installBizAppApi,
@@ -43,6 +44,7 @@ export default function ComposeDraftPage({
   const { request } = useApiClient();
 
   const [manifest, setManifest] = useState<BizAppManifest | null>(null);
+  const [templateManifest, setTemplateManifest] = useState<BizAppManifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +86,10 @@ export default function ComposeDraftPage({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("composer.saveFailed"));
     }
+  };
+
+  const handleSaveTemplate = async (updated: BizAppManifest) => {
+    setTemplateManifest(updated);
   };
 
   const handleInstall = async (updated: BizAppManifest) => {
@@ -131,12 +137,22 @@ export default function ComposeDraftPage({
   }
 
   return (
-    <ComposerCanvas
-      initialManifest={manifest}
-      draftId={draftId}
-      onSaveDraft={handleSaveDraft}
-      onInstall={handleInstall}
-      onBack={() => router.push("/admin/apps")}
-    />
+    <>
+      <ComposerCanvas
+        initialManifest={manifest}
+        draftId={draftId}
+        onSaveDraft={handleSaveDraft}
+        onSaveTemplate={handleSaveTemplate}
+        onInstall={handleInstall}
+        onBack={() => router.push("/admin/apps")}
+      />
+      {templateManifest && (
+        <BizAppTemplateSaveDialog
+          open
+          onOpenChange={(open) => { if (!open) setTemplateManifest(null); }}
+          manifest={templateManifest}
+        />
+      )}
+    </>
   );
 }

@@ -14,6 +14,7 @@
 
 package com.openvie.api.tenant.service;
 
+import com.openvie.api.common.cache.BusinessCacheInvalidationPublisher;
 import com.openvie.api.common.enums.LogAction;
 import com.openvie.api.common.event.AuditLogEvent;
 import com.openvie.api.common.exception.custom.BadRequestException;
@@ -65,6 +66,8 @@ public class WorkspaceService {
     private final TenantWorkspaceService provisioning;
     private final TenantIdentityApi identityApi;
     private final ApplicationEventPublisher eventPublisher;
+    private final BusinessCacheInvalidationPublisher cacheInvalidation;
+    private final com.openvie.api.common.retention.RetentionProperties retentionProperties;
 
     @Transactional(readOnly = true)
     public OrganizationSnapshot requireOrg(UUID orgId) {
@@ -139,9 +142,9 @@ public class WorkspaceService {
     }
 
     /**
-     * Archives (soft-deletes) a workspace. Derived indexes are not touched here:
-     * the row is retained so audit history stays attributable, and hard removal
-     * of a workspace and its indexes is a separate reviewed operation.
+     * Archives (soft-deletes) a workspace: status ARCHIVED, unreachable from
+     * every workspace API, data retained for restore. Hard removal stays a
+     * separate reviewed operation.
      */
     @Transactional
     public void archive(UUID actorUserId, UUID workspaceId) {
@@ -154,9 +157,48 @@ public class WorkspaceService {
             return;
         }
         workspace.setStatus(TenantStatus.ARCHIVED);
+        workspace.setArchivedAt(java.time.LocalDateTime.now());
+        workspace.setArchivedBy(actorUserId);
         workspaceRepository.save(workspace);
-        audit(actorUserId, LogAction.WORKSPACE_ARCHIVED, workspaceId, Map.of());
+        cacheInvalidation.workspace(workspaceId);
+        audit(actorUserId, LogAction.WORKSPACE_ARCHIVED, workspaceId,
+                Map.of("archivedAt", String.valueOf(workspace.getArchivedAt())));
         log.info("Workspace archived: workspaceId={}, by={}", workspaceId, actorUserId);
+    }
+
+    /**
+     * Restores an archived workspace. Memberships, slug, knowledge base and
+     * index data were never touched by archive, so this is a state flip plus
+     * cache invalidation; no provisioning or re-index is required.
+     */
+    @Transactional
+    public WorkspaceView restore(UUID actorUserId, UUID workspaceId) {
+        IdentitySnapshot actor = requireOrgOwner(actorUserId);
+        Tenant workspace = requireWorkspaceAnyStatus(actor.orgId(), workspaceId);
+        if (workspace.getStatus() == TenantStatus.ARCHIVED) {
+            workspace.setStatus(TenantStatus.ACTIVE);
+            workspace.setArchivedAt(null);
+            workspace.setArchivedBy(null);
+            workspaceRepository.save(workspace);
+            cacheInvalidation.workspace(workspaceId);
+            audit(actorUserId, LogAction.WORKSPACE_RESTORED, workspaceId, Map.of());
+            log.info("Workspace restored: workspaceId={}, by={}", workspaceId, actorUserId);
+        }
+        return toView(workspace, memberCount(workspaceId));
+    }
+
+    /** Toggles the retention hold; an active hold always wins over purge. */
+    @Transactional
+    public WorkspaceView setLegalHold(UUID actorUserId, UUID workspaceId, boolean hold) {
+        IdentitySnapshot actor = requireOrgOwner(actorUserId);
+        Tenant workspace = requireWorkspaceAnyStatus(actor.orgId(), workspaceId);
+        workspace.setLegalHold(hold);
+        workspaceRepository.save(workspace);
+        audit(actorUserId, LogAction.WORKSPACE_LEGAL_HOLD_CHANGED, workspaceId,
+                Map.of("legalHold", hold));
+        log.info("Workspace legal hold {}: workspaceId={}, by={}",
+                hold ? "enabled" : "disabled", workspaceId, actorUserId);
+        return toView(workspace, memberCount(workspaceId));
     }
 
     @Transactional
@@ -251,6 +293,15 @@ public class WorkspaceService {
         return identity;
     }
 
+    private Tenant requireWorkspaceAnyStatus(UUID orgId, UUID workspaceId) {
+        Tenant workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Workspace was not found"));
+        if (!workspace.getOrganization().getId().equals(orgId)) {
+            throw new ResourceNotFoundException("Workspace was not found");
+        }
+        return workspace;
+    }
+
     private Tenant requireWorkspace(UUID orgId, UUID workspaceId) {
         Tenant workspace = workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace was not found"));
@@ -323,6 +374,12 @@ public class WorkspaceService {
                 .isDefault(workspace.isDefaultWorkspace())
                 .memberCount(members)
                 .createdAt(workspace.getCreatedAt())
+                .archivedAt(workspace.getArchivedAt())
+                .archivedBy(workspace.getArchivedBy())
+                .legalHold(workspace.isLegalHold())
+                .purgeEligibleAt(workspace.isLegalHold() ? null
+                        : retentionProperties.purgeEligibleAt(
+                                workspace.getArchivedAt(), retentionProperties.workspaceDays()))
                 .build();
     }
 
@@ -358,6 +415,10 @@ public class WorkspaceService {
         private boolean isDefault;
         private int memberCount;
         private java.time.LocalDateTime createdAt;
+        private java.time.LocalDateTime archivedAt;
+        private UUID archivedBy;
+        private boolean legalHold;
+        private java.time.LocalDateTime purgeEligibleAt;
     }
 
     @Getter

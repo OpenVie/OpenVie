@@ -41,6 +41,13 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     long countByOrganization_Id(UUID orgId);
 
+    boolean existsByIdAndStatus(UUID id, com.openvie.api.tenant.api.TenantStatus status);
+
+    org.springframework.data.domain.Page<Tenant> findByStatusAndArchivedAtBeforeAndLegalHoldFalse(
+            com.openvie.api.tenant.api.TenantStatus status,
+            java.time.LocalDateTime cutoff,
+            org.springframework.data.domain.Pageable pageable);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Tenant t where t.id = :tenantId")
     Optional<Tenant> findByIdForUpdate(@Param("tenantId") UUID tenantId);

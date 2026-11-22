@@ -20,7 +20,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { Archive, AlertCircle, Building2, Eye, EyeOff, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Archive, AlertCircle, Building2, Eye, EyeOff, Loader2, Pencil, Plus, RefreshCw, RotateCcw, ShieldCheck, ShieldOff } from "lucide-react";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import {
@@ -28,6 +28,8 @@ import {
   createWorkspaceApi,
   listWorkspacesApi,
   renameWorkspaceApi,
+  restoreWorkspaceApi,
+  setWorkspaceLegalHoldApi,
   setWorkspaceVisibilityApi,
 } from "@/lib/workspace-api";
 import type { WorkspaceView, WorkspaceVisibility } from "@/types";
@@ -57,6 +59,7 @@ export default function WorkspacesPage() {
   const [renameTarget, setRenameTarget] = useState<WorkspaceView | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<WorkspaceView | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<WorkspaceView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   // The visibility select is state-driven so its trigger shows the translated
   // label instead of the raw enum ("PUBLIC").
@@ -159,6 +162,35 @@ export default function WorkspacesPage() {
     }
   };
 
+  const onConfirmRestore = async () => {
+    if (!restoreTarget) return;
+    setBusyId(restoreTarget.id);
+    try {
+      const updated = await restoreWorkspaceApi(request, restoreTarget.id);
+      setWorkspaces(current => current.map(item => item.id === updated.id ? updated : item));
+      announceWorkspacesChanged();
+      toast.success(t("restored", { name: restoreTarget.name }));
+      setRestoreTarget(null);
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.restore"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const toggleLegalHold = async (workspace: WorkspaceView) => {
+    setBusyId(workspace.id);
+    try {
+      const updated = await setWorkspaceLegalHoldApi(request, workspace.id, !workspace.legalHold);
+      setWorkspaces(current => current.map(item => item.id === updated.id ? updated : item));
+      toast.success(updated.legalHold ? t("legalHoldOn") : t("legalHoldOff"));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.legalHold"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const formatDate = (value: string) => format.dateTime(new Date(value), { dateStyle: "medium" });
 
   return <div className="space-y-6">
@@ -184,6 +216,10 @@ export default function WorkspacesPage() {
               <div className="flex shrink-0 items-center gap-1.5">
                 {workspace.isDefault && <Badge variant="secondary">{t("default")}</Badge>}
                 {workspace.status === "ARCHIVED" && <Badge variant="secondary">{t("archivedBadge")}</Badge>}
+                {workspace.legalHold && <Badge variant="outline">{t("legalHoldBadge")}</Badge>}
+                {workspace.purgeEligibleAt && new Date(workspace.purgeEligibleAt) <= new Date() && (
+                  <Badge variant="destructive">{t("purgeEligibleBadge")}</Badge>
+                )}
                 <Badge variant={workspace.visibility === "PUBLIC" ? "default" : "outline"}>
                   {workspace.visibility === "PUBLIC" ? t("public") : t("private")}
                 </Badge>
@@ -194,20 +230,31 @@ export default function WorkspacesPage() {
             </p>
             {!workspace.isDefault && (
               <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-                <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
-                  <Pencil className="size-3.5" />
-                  {t("rename")}
-                </Button>
-                <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
-                  {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                  {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
-                </Button>
-                {workspace.status !== "ARCHIVED" && (
-                  <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}>
-                    <Archive className="size-3.5" />
-                    {t("archive")}
+                {workspace.status === "ARCHIVED" ? (
+                  <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => setRestoreTarget(workspace)}>
+                    <RotateCcw className="size-3.5" />
+                    {t("restore")}
                   </Button>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
+                      <Pencil className="size-3.5" />
+                      {t("rename")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
+                      {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}>
+                      <Archive className="size-3.5" />
+                      {t("archive")}
+                    </Button>
+                  </>
                 )}
+                <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={t("legalHoldHint")} onClick={() => void toggleLegalHold(workspace)}>
+                  {workspace.legalHold ? <ShieldOff className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
+                  {workspace.legalHold ? t("releaseHold") : t("legalHold")}
+                </Button>
               </div>
             )}
           </div>
@@ -223,6 +270,10 @@ export default function WorkspacesPage() {
               <span className="max-w-40 truncate font-medium text-foreground sm:max-w-none">{displayName(workspace)}</span>
               {workspace.isDefault && <Badge variant="secondary" className="ml-2">{t("default")}</Badge>}
               {workspace.status === "ARCHIVED" && <Badge variant="secondary" className="ml-2">{t("archivedBadge")}</Badge>}
+              {workspace.legalHold && <Badge variant="outline" className="ml-2">{t("legalHoldBadge")}</Badge>}
+              {workspace.purgeEligibleAt && new Date(workspace.purgeEligibleAt) <= new Date() && (
+                <Badge variant="destructive" className="ml-2">{t("purgeEligibleBadge")}</Badge>
+              )}
             </div>
           </TableCell>
           <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">{workspace.slug}</TableCell>
@@ -232,20 +283,31 @@ export default function WorkspacesPage() {
           <TableCell className="space-x-2 text-right">
             {!workspace.isDefault && (
               <>
-                <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
-                  <Pencil className="size-3.5" />
-                  {t("rename")}
-                </Button>
-                <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
-                  {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                  {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
-                </Button>
-                {workspace.status !== "ARCHIVED" && (
-                  <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}>
-                    <Archive className="size-3.5" />
-                    {t("archive")}
+                {workspace.status === "ARCHIVED" ? (
+                  <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => setRestoreTarget(workspace)}>
+                    <RotateCcw className="size-3.5" />
+                    {t("restore")}
                   </Button>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id} onClick={() => openRename(workspace)}>
+                      <Pencil className="size-3.5" />
+                      {t("rename")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={workspace.visibility === "PUBLIC" ? t("makePrivate") : t("makePublic")} onClick={() => void toggleVisibility(workspace)}>
+                      {workspace.visibility === "PUBLIC" ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      {workspace.visibility === "PUBLIC" ? t("private") : t("public")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busyId === workspace.id || workspace.id === user?.activeWorkspaceId} title={t("archive")} onClick={() => openArchive(workspace)}>
+                      <Archive className="size-3.5" />
+                      {t("archive")}
+                    </Button>
+                  </>
                 )}
+                <Button size="sm" variant="outline" disabled={busyId === workspace.id} title={t("legalHoldHint")} onClick={() => void toggleLegalHold(workspace)}>
+                  {workspace.legalHold ? <ShieldOff className="size-3.5" /> : <ShieldCheck className="size-3.5" />}
+                  {workspace.legalHold ? t("releaseHold") : t("legalHold")}
+                </Button>
               </>
             )}
           </TableCell>
@@ -330,6 +392,35 @@ export default function WorkspacesPage() {
             onClick={() => void onConfirmArchive()}
           >
             {busyId === archiveTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("archive")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Restore Workspace Dialog */}
+    <Dialog open={restoreTarget !== null} onOpenChange={(open) => { if (!open && !busyId) setRestoreTarget(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("restore")}</DialogTitle>
+          <DialogDescription>
+            {restoreTarget && t("confirmRestore", { name: restoreTarget.name })}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={Boolean(busyId)}
+            onClick={() => setRestoreTarget(null)}
+          >
+            {t("cancel")}
+          </Button>
+          <Button
+            type="button"
+            disabled={Boolean(busyId)}
+            onClick={() => void onConfirmRestore()}
+          >
+            {busyId === restoreTarget?.id ? <Loader2 className="size-4 animate-spin" /> : t("restore")}
           </Button>
         </DialogFooter>
       </DialogContent>

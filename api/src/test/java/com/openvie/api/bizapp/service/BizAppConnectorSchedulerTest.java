@@ -94,11 +94,14 @@ class BizAppConnectorSchedulerTest {
         when(router.route(anyString(), anyString())).thenReturn(store);
         when(manifestParser.parse(any())).thenReturn(MANIFEST);
         when(installationRepository.findByStatus("ACTIVE")).thenReturn(List.of(installation()));
+        var tenantRepository = mock(com.openvie.api.tenant.repository.TenantRepository.class);
+        when(tenantRepository.existsByIdAndStatus(tenantId,
+                com.openvie.api.tenant.api.TenantStatus.ACTIVE)).thenReturn(true);
         scheduler = new BizAppConnectorScheduler(
                 new BizAppProperties(true, false, false, false, ""),
                 new BizAppConnectorProperties(true, 15_000, 5_000, 20),
                 jobService, new BizAppConnectorSpecParser(), jobRepository,
-                installationRepository, manifestParser, router);
+                installationRepository, manifestParser, router, tenantRepository);
     }
 
     private BizAppInstallation installation() {
@@ -220,7 +223,8 @@ class BizAppConnectorSchedulerTest {
                 new BizAppProperties(true, false, false, false, ""),
                 new BizAppConnectorProperties(false, 15_000, 5_000, 20),
                 jobService, new BizAppConnectorSpecParser(), jobRepository,
-                installationRepository, manifestParser, mock(BizAppStorageRouter.class));
+                installationRepository, manifestParser, mock(BizAppStorageRouter.class),
+                mock(com.openvie.api.tenant.repository.TenantRepository.class));
 
         scheduler.scanSchedules();
 

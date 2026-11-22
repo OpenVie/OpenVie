@@ -86,6 +86,30 @@ export async function archiveWorkspaceApi(
   if (!response.ok) throw await parseApiError(response);
 }
 
+export async function restoreWorkspaceApi(
+  request: ApiRequest,
+  workspaceId: string,
+): Promise<WorkspaceView> {
+  return readJsonOrThrow<WorkspaceView>(
+    await request(`${getAdminApiBase()}/workspaces/${workspaceId}/restore`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function setWorkspaceLegalHoldApi(
+  request: ApiRequest,
+  workspaceId: string,
+  hold: boolean,
+): Promise<WorkspaceView> {
+  return readJsonOrThrow<WorkspaceView>(
+    await request(`${getAdminApiBase()}/workspaces/${workspaceId}/legal-hold`, {
+      method: "PATCH",
+      body: JSON.stringify({ hold }),
+    }),
+  );
+}
+
 export async function listWorkspaceMembersApi(
   request: ApiRequest,
   workspaceId: string,

@@ -109,6 +109,13 @@ class BizAppProjectionListenerTest {
     }
 
     @Test
+    void attributesARestoreToTheRestoringUser() {
+        listener.onBizAppEvent(event("record.restored", Map.of("restored_by", authorId.toString())));
+
+        verify(projector).projectRecord(eq(tenantId), eq(authorId), eq(installation), eq(manifest), any());
+    }
+
+    @Test
     void ignoresEventsWithoutASourceRecord() {
         listener.onBizAppEvent(new BizAppLifecycleEvent(this, orgId, tenantId,
                 "bizapp." + KIND + ".record.updated", null, Map.of()));

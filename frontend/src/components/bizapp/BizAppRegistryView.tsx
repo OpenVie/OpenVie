@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import toast from "react-hot-toast";
-import { Archive, Download, Loader2, Pencil, Plus, RefreshCw, Send } from "lucide-react";
+import { Archive, Download, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Send } from "lucide-react";
 
 import type { BizAppField, BizAppInstalledAppView, BizAppRecordPage, BizAppRecordView } from "@/types";
 import {
@@ -27,6 +27,7 @@ import {
   exportBizAppRecordsApi,
   listBizAppRecordsApi,
   manifestAllows,
+  restoreBizAppRecordApi,
   submitBizAppRecordApi,
 } from "@/lib/bizapp-api";
 import { downloadBlob } from "@/lib/download";
@@ -77,19 +78,21 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
   );
   const [busyRecordId, setBusyRecordId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   const load = useCallback(async () => {
     if (!entity) return;
     setLoading(true);
     setError(null);
     try {
-      setData(await listBizAppRecordsApi(request, app.kind, entityName, { page, size: 20 }));
+      setData(await listBizAppRecordsApi(request, app.kind, entityName,
+        { page, size: 20, includeArchived }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("fallback.load"));
     } finally {
       setLoading(false);
     }
-  }, [app.kind, entity, entityName, page, request, t]);
+  }, [app.kind, entity, entityName, page, request, t, includeArchived]);
 
   useEffect(() => {
     const task = window.setTimeout(() => { void load(); }, 0);
@@ -124,6 +127,19 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
     }
   };
 
+  const onRestore = async (record: BizAppRecordView) => {
+    setBusyRecordId(record.id);
+    try {
+      await restoreBizAppRecordApi(request, app.kind, entityName, record.id);
+      toast.success(t("record.restored"));
+      await load();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : t("fallback.restore"));
+    } finally {
+      setBusyRecordId(null);
+    }
+  };
+
   const onSubmit = async (record: BizAppRecordView) => {
     setBusyRecordId(record.id);
     try {
@@ -146,7 +162,8 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
   const onExport = async (format: "csv" | "xlsx") => {
     setExporting(true);
     try {
-      const file = await exportBizAppRecordsApi(request, app.kind, entityName, format, locale);
+      const file = await exportBizAppRecordsApi(request, app.kind, entityName, format, locale,
+        { includeArchived });
       downloadBlob(file.blob, file.fileName);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t("fallback.export"));
@@ -191,6 +208,13 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>{entityLabel}</CardTitle>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={includeArchived ? "default" : "outline"}
+            onClick={() => { setPage(0); setIncludeArchived(current => !current); }}
+          >
+            {t("record.showArchived")}
+          </Button>
           <Button size="icon" variant="ghost" onClick={() => { void load(); }} aria-label={t("refresh")}>
             <RefreshCw className="size-4" />
           </Button>
@@ -234,6 +258,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
               <tbody>
                 {records.map((record) => {
                   const status = approvalStatus(record);
+                  const archived = record.status === "ARCHIVED";
                   return (
                   <tr key={record.id} className="border-b last:border-0">
                     {columns.map((field) => (
@@ -246,6 +271,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1">
+                        {archived && <Badge variant="secondary">{t("record.archivedBadge")}</Badge>}
                         {status && (
                           <Badge
                             variant={
@@ -256,7 +282,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             {t(approvalKey[status])}
                           </Badge>
                         )}
-                        {canWrite && (
+                        {canWrite && !archived && (
                           <Button
                             size="icon" variant="ghost" className="size-8"
                             aria-label={t("record.edit")}
@@ -265,7 +291,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             <Pencil className="size-4" />
                           </Button>
                         )}
-                        {canSubmit && hasApproval && status !== "APPROVED" && (
+                        {canSubmit && hasApproval && !archived && status !== "APPROVED" && (
                           <Button
                             size="icon" variant="ghost" className="size-8"
                             aria-label={t("record.submit")}
@@ -275,7 +301,7 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             <Send className="size-4" />
                           </Button>
                         )}
-                        {canDelete && (
+                        {canDelete && !archived && (
                           <Button
                             size="icon" variant="ghost" className="size-8"
                             aria-label={t("record.archive")}
@@ -283,6 +309,16 @@ export function BizAppRegistryView({ app, entityName, openCreate = false }: {
                             onClick={() => { void onArchive(record); }}
                           >
                             <Archive className="size-4" />
+                          </Button>
+                        )}
+                        {canDelete && archived && (
+                          <Button
+                            size="icon" variant="ghost" className="size-8"
+                            aria-label={t("record.restore")}
+                            disabled={busyRecordId === record.id}
+                            onClick={() => { void onRestore(record); }}
+                          >
+                            <RotateCcw className="size-4" />
                           </Button>
                         )}
                       </div>

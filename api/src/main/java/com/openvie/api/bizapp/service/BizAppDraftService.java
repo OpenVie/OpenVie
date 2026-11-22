@@ -509,6 +509,10 @@ public class BizAppDraftService {
                             .replaceAll("[^a-z0-9_]", "_").replaceAll("_+", "_").replaceAll("^_|_$", "");
                     if (eName.length() < 2) eName = "entity_" + eName;
                     entityMap.put("name", eName);
+                    // `storage` is a manifest-level key. Small models
+                    // sometimes repeat it on entities/fields; keeping it makes
+                    // the installer reject the draft as an unknown key.
+                    entityMap.remove("storage");
 
                     Object lObj = entityMap.get("label");
                     if (lObj instanceof String s) {
@@ -536,6 +540,7 @@ public class BizAppDraftService {
                                 Map<String, Object> fieldMap = new LinkedHashMap<>((Map<String, Object>) fm);
                                 String fName = String.valueOf(fieldMap.getOrDefault("name", "field")).trim();
                                 fieldMap.put("name", fName);
+                                fieldMap.remove("storage");
                                 String fType = String.valueOf(fieldMap.getOrDefault("type", "string")).toLowerCase(java.util.Locale.ROOT);
                                 if (!Set.of("string", "number", "boolean", "enum", "date", "ref").contains(fType)) {
                                     fType = "string";

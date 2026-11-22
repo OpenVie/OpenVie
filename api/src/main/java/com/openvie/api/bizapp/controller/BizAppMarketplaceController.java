@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Marketplace: platform bundles plus this organization's custom templates.
+ * Marketplace: built-in platform bundles plus the company's custom templates.
  * Browsing is for every member; publishing ("Save as template"), deletion,
  * install, and uninstall are owner-authority surfaces.
  */
@@ -57,7 +57,7 @@ public class BizAppMarketplaceController extends BaseController {
     private final BizAppInstallService installService;
     private final BizAppDraftService draftService;
     @Operation(summary = "Browse the marketplace",
-            description = "Platform-bundled templates plus organization custom templates.")
+            description = "Built-in templates plus company custom templates.")
     @GetMapping("/marketplace/bizapps")
     public List<BizAppDtos.TemplateView> catalog(HttpServletRequest request) {
         return marketplaceService.catalog(getOrgId(request));
@@ -69,7 +69,7 @@ public class BizAppMarketplaceController extends BaseController {
         return marketplaceService.templateManifest(getOrgId(request), templateRef);
     }
 
-    @Operation(summary = "Save an installed app as an organization template (owner)")
+    @Operation(summary = "Save an installed app as a company template (owner)")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Template saved"),
             @ApiResponse(responseCode = "403", description = "Only the organization owner may publish templates")
@@ -83,7 +83,7 @@ public class BizAppMarketplaceController extends BaseController {
                 getOrgId(request), getTenantId(request), getUserId(request), body));
     }
 
-    @Operation(summary = "Delete an organization template (owner)")
+    @Operation(summary = "Delete a company template (owner)")
     @DeleteMapping("/marketplace/bizapps/{templateId}")
     public ResponseEntity<Void> deleteTemplate(@PathVariable UUID templateId, HttpServletRequest request) {
         requireOrgOwner(request);

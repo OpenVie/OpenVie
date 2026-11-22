@@ -61,6 +61,7 @@ class BizAppConnectorWorkerTest {
     private BizAppManifestParser manifestParser;
     private BizAppConnectorJobService jobService;
     private BizAppConnectorWorker worker;
+    private com.openvie.api.tenant.repository.TenantRepository tenantRepository;
 
     private final UUID orgId = UUID.randomUUID();
     private final UUID tenantId = UUID.randomUUID();
@@ -90,11 +91,14 @@ class BizAppConnectorWorkerTest {
         when(jobRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         jobService = new BizAppConnectorJobService(jobRepository, installationRepository,
                 manifestParser, new BizAppConnectorSpecParser(), InlineTransactions.create());
+        tenantRepository = mock(com.openvie.api.tenant.repository.TenantRepository.class);
+        when(tenantRepository.existsByIdAndStatus(tenantId,
+                com.openvie.api.tenant.api.TenantStatus.ACTIVE)).thenReturn(true);
         worker = new BizAppConnectorWorker(
                 new BizAppProperties(true, false, false, false, ""),
                 new BizAppConnectorProperties(true, 15_000, 5_000, 20),
                 jobService, executor, jobRepository, installationRepository, recordRepository,
-                manifestParser, InlineTransactions.create());
+                manifestParser, InlineTransactions.create(), tenantRepository);
     }
 
     private BizAppConnectorJob pendingJob(int attempt, int maxAttempts) {
@@ -246,12 +250,27 @@ class BizAppConnectorWorkerTest {
     }
 
     @Test
+    void archivedWorkspaceKillsTheJob() {
+        BizAppConnectorJob job = pendingJob(0, 3);
+        stubClaim(job);
+        stubInstallation(true);
+        stubRecord("ACTIVE");
+        when(tenantRepository.existsByIdAndStatus(tenantId,
+                com.openvie.api.tenant.api.TenantStatus.ACTIVE)).thenReturn(false);
+
+        worker.processDueJobs();
+
+        assertEquals("DEAD", job.getStatus());
+        verify(executor, never()).execute(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void disabledConnectorsDoNotClaimJobs() {
         worker = new BizAppConnectorWorker(
                 new BizAppProperties(true, false, false, false, ""),
                 new BizAppConnectorProperties(false, 15_000, 5_000, 20),
                 jobService, executor, jobRepository, installationRepository, recordRepository,
-                manifestParser, InlineTransactions.create());
+                manifestParser, InlineTransactions.create(), tenantRepository);
 
         worker.processDueJobs();
 

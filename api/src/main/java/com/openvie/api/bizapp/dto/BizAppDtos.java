@@ -33,7 +33,7 @@ public final class BizAppDtos {
     private BizAppDtos() {
     }
 
-    @Schema(description = "One marketplace entry (platform-bundled or org-crafted).")
+    @Schema(description = "One catalog entry: built-in (platform) or company-owned.")
     public record TemplateView(
             UUID id,
             @Schema(description = "`platform` for bundled templates, `org` for custom ones.") String source,
@@ -45,7 +45,7 @@ public final class BizAppDtos {
     ) {
     }
 
-    @Schema(description = "Save the request body as an organization template.")
+    @Schema(description = "Save the request body as a company template.")
     public record SaveTemplateRequest(
             @NotBlank @Size(max = 120) String name,
             @Size(max = 500) String summary,
@@ -55,7 +55,7 @@ public final class BizAppDtos {
 
     @Schema(description = "Install a BizApp from a template id or an inline manifest.")
     public record InstallRequest(
-            @Schema(description = "Template to install; `platform:<kind>` or an organization template UUID.") String templateRef,
+            @Schema(description = "Template to install; `platform:<kind>` or a company template UUID.") String templateRef,
             Map<String, Object> manifest,
             UUID draftId
     ) {
@@ -158,7 +158,9 @@ public final class BizAppDtos {
             String status,
             UUID createdBy,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            LocalDateTime archivedAt,
+            UUID archivedBy
     ) {
     }
 

@@ -192,7 +192,7 @@ POST `/api/v1/chat/sessions/{sessionId}/messages` retains its request body and J
 
 #### D. BizApp runtime (Tier 3 — installable apps)
 
-1. An `ORG_OWNER` installs a marketplace template (`platform:crm` or an org-crafted copy): the manifest validator gates first, the manifest freezes onto `bizapp_installations`, and the engine deploys the `bizapp-<kind>` BPMN when the app declares an approval block.
+1. An `ORG_OWNER` installs a marketplace template (`platform:crm` or a company-crafted copy): the manifest validator gates first, the manifest freezes onto `bizapp_installations`, and the engine deploys the `bizapp-<kind>` BPMN when the app declares an approval block.
 2. Users work through manifest-generated form/registry/timeline/report views; every record lands in the shared JSONB table `bizapp_records`, strictly validated against the schema with workspace RBAC re-resolved per request — the client is never trusted.
 3. Submitting for approval starts a Flowable process completed through the generic engine inbox; the terminal delegate writes the decision into `runtime` and raises the `bizapp.<kind>.record.decided` webhook after commit.
 4. Outbound HTTP pulls secrets from the AES-256-GCM credential vault (`BIZAPP_ENC_KEY`); every step is audited and pushed through the HMAC-signed webhook outbox. Details: [BIZAPPS.md](BIZAPPS.md).

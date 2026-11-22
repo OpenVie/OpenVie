@@ -423,6 +423,7 @@ const WEBHOOK_EVENTS: Array<{ value: string; label: string; description: string 
   { value: "record.created", label: "Record created", description: "A new record is saved." },
   { value: "record.updated", label: "Record updated", description: "An existing record is edited." },
   { value: "record.archived", label: "Record archived", description: "A record is removed from active use." },
+  { value: "record.restored", label: "Record restored", description: "An archived record is brought back." },
   { value: "record.submitted", label: "Submitted for approval", description: "A record enters the approval flow." },
   { value: "record.decided", label: "Approval decided", description: "A record is approved or rejected." },
 ];
