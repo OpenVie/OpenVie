@@ -51,7 +51,7 @@ export default async function BizAppsDocumentationPage({ params }: PageProps) {
         <ParameterTable
           parameters={[
             { name: "kind / name / version", type: "identifier + labels", required: true, description: t("topIdentity") },
-            { name: "storage", type: "jsonb | typed", required: false, description: t("topStorage") },
+            { name: "storage", type: "jsonb", required: false, description: t("topStorage") },
             { name: "rbac", type: "read/write/delete/approve/submit", required: false, description: t("topRbac") },
             { name: "entities", type: "1–20 × fields 1–40", required: true, description: t("topEntities") },
             { name: "blocks", type: "≤40", required: false, description: t("topBlocks") },

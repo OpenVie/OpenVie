@@ -109,13 +109,13 @@ class BizAppRedTeamTest {
     }
 
     @Test
-    void rejectsStorageTypedForOrgTemplates() throws Exception {
+    void rejectsStorageTypedBecauseNoTypedStoreShipsInThisBuild() throws Exception {
         Map<String, Object> raw = readFixture("storage_typed_org_template.json");
         Manifest manifest = parser.parse(raw);
-        // validate with isPlatformBundled=false (representing an org template, draft, or import)
+        // Every app uses bizapp_records; accepting typed would silently store JSONB.
         BadRequestException ex = assertThrows(BadRequestException.class,
-                () -> validator.validate(manifest, false));
-        assertTrue(ex.getMessage().contains("storage: typed is restricted"), ex.getMessage());
+                () -> validator.validate(manifest));
+        assertTrue(ex.getMessage().contains("storage: typed is not available"), ex.getMessage());
     }
 
     @Test

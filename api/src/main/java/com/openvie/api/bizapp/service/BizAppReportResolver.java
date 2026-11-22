@@ -39,7 +39,6 @@ public class BizAppReportResolver {
     private final BizAppReportCompiler compiler;
     private final BizAppRecordViewQuery query;
     private final com.openvie.api.document.api.AnalyticsRuntimeApi analyticsRuntimeApi;
-    private final com.openvie.api.bizapp.service.storage.BizAppStorageRouter storageRouter;
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> run(UUID tenantId, String appKind, String viewName,
@@ -65,9 +64,6 @@ public class BizAppReportResolver {
                         .findFirst()
                         .orElseThrow(() -> new BadRequestException("Entity " + entityName + " not found"));
 
-                boolean isTyped = storageRouter.isTyped(appKind, entityName);
-                String typedTableName = storageRouter.getTableName(appKind, entityName);
-
                 boolean isLakehouse = "lakehouse".equalsIgnoreCase(String.valueOf(viewSpec.get("engine")));
                 var compiled = compiler.compile(
                         isLakehouse ? BizAppReportCompiler.Dialect.DUCKDB : BizAppReportCompiler.Dialect.POSTGRES,
@@ -76,9 +72,7 @@ public class BizAppReportResolver {
                         appKind,
                         entityDef,
                         viewSpec,
-                        safeParams(params),
-                        isTyped,
-                        typedTableName
+                        safeParams(params)
                 );
 
                 if (isLakehouse) {

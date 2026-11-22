@@ -86,8 +86,7 @@ public class BizAppInstallService {
         requireEnabled();
         Manifest parsed = parser.parse(rawManifest);
         requireKnownKeys(rawManifest);
-        boolean isPlatform = isPlatformBundledTemplate(parsed.kind());
-        validator.validate(parsed, isPlatform);
+        validator.validate(parsed);
         BizAppInstallation installation = installationRepository.findByTenantIdAndKind(tenantId, parsed.kind())
                 .orElseGet(BizAppInstallation::new);
         if (installation.getId() != null && "ACTIVE".equalsIgnoreCase(installation.getStatus())) {
@@ -124,7 +123,7 @@ public class BizAppInstallService {
                 .orElseThrow(() -> new ResourceNotFoundException("App " + kind + " is not installed"));
         Manifest next = parser.parse(rawManifest);
         requireKnownKeys(rawManifest);
-        validator.validate(next, isPlatformBundledTemplate(next.kind()));
+        validator.validate(next);
         if (!kind.equals(next.kind())) {
             throw new BadRequestException("Upgrade manifest kind " + next.kind()
                     + " does not match the installed app " + kind);
@@ -306,15 +305,6 @@ public class BizAppInstallService {
             }
         } catch (Exception ignored) {
             return null;
-        }
-    }
-
-    private boolean isPlatformBundledTemplate(String kind) {
-        if (kind == null || kind.isBlank()) return false;
-        try {
-            return new ClassPathResource("marketplace/bizapps/" + kind + ".json").exists();
-        } catch (Exception ex) {
-            return false;
         }
     }
 

@@ -33,15 +33,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Sweeps active booking records every minute and sends reminders within 24 hours
- * of the scheduled appointment:
- * 1. In-app notification for the creator/staff on UI (bell).
- * 2. Email notification for the customer (customerEmail) and the creator.
+ * Reminder sweep for the <b>platform-bundled booking app</b>
+ * ({@code kind=booking}, entity {@code bookings}). This is an extension of the
+ * bundled template, not a generic runtime contract: the manifest does not
+ * declare reminders, so the payload field names below are the booking
+ * template's own schema.
+ *
+ * <p>Sweeps active booking records every minute and sends reminders within 24
+ * hours of the scheduled appointment:
+ * <ol>
+ *   <li>In-app notification for the creator/staff (bell).</li>
+ *   <li>Email to the customer ({@code customerEmail}) and the creator.</li>
+ * </ol>
  */
 @Service
 @Slf4j(topic = "BIZAPP-REMINDER")
 @RequiredArgsConstructor
 public class BizAppBookingReminderScheduler {
+
+    /** Bundled booking template coordinates (see marketplace/bizapps/booking.json). */
+    private static final String BOOKING_KIND = "booking";
+    private static final String BOOKING_ENTITY = "bookings";
+    private static final String BOOKING_DATE_FIELD = "bookingDate";
 
     private final BizAppRecordRepository recordRepository;
     private final NotificationRuntimeApi notificationRuntimeApi;
@@ -58,7 +71,7 @@ public class BizAppBookingReminderScheduler {
             return;
         }
         LocalDateTime now = LocalDateTime.now();
-        List<BizAppRecord> candidates = recordRepository.findDueBookingRemindersBatch(50);
+        List<BizAppRecord> candidates = recordRepository.findDueRemindersBatch(BOOKING_KIND, BOOKING_ENTITY, 50);
         for (BizAppRecord record : candidates) {
             try {
                 processRecord(record, now);
@@ -72,7 +85,7 @@ public class BizAppBookingReminderScheduler {
         Map<String, Object> payload = record.getPayload();
         if (payload == null || payload.isEmpty()) return;
 
-        Object rawDateObj = payload.get("bookingDate");
+        Object rawDateObj = payload.get(BOOKING_DATE_FIELD);
         if (rawDateObj == null) return;
         String rawDate = String.valueOf(rawDateObj).trim();
         if (rawDate.isEmpty()) return;

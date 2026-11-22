@@ -68,7 +68,7 @@ ngoài hợp đồng bị từ chối với gợi ý sửa (ví dụ `maxLength`
 | `name` | `{vi, en}` nhãn in được ≤200 ký tự | — | bắt buộc, dùng làm tiêu đề |
 | `version` | int ≥1 | 1 | khi nâng cấp: `max(cài đặt hiện tại+1, yêu cầu)` |
 | `icon` | chuỗi ≤64 | — | nhãn icon (fallback emoji ở `/apps`) |
-| `storage` | `jsonb` / `typed` | `jsonb` | `typed` chỉ dành cho template platform cốt lõi |
+| `storage` | `jsonb` | `jsonb` | `typed` bị từ chối trong bản build này (mọi app dùng `bizapp_records`) |
 | `rbac` | map `read/write/delete/approve/submit` → danh sách vai trò | xem §2.3 | |
 | `entities` | 1..20 đối tượng | — | bắt buộc |
 | `blocks` | ≤40 đối tượng | — | |
@@ -77,7 +77,7 @@ ngoài hợp đồng bị từ chối với gợi ý sửa (ví dụ `maxLength`
 
 #### 2.2 `entities` & `fields`
 
-**Entity**: `name` (`[a-z][a-z0-9_]{0,63}`, duy nhất), `label {vi,en}` (khuyến nghị; schema yêu cầu),
+**Entity**: `name` (`[a-z][a-z0-9_]{0,63}`, duy nhất), `label {vi,en}` (bắt buộc — validator từ chối entity thiếu label),
 `fields` (1..40), `knowledge`, `hooks`.
 
 **Field**:
@@ -219,7 +219,7 @@ khối trình bày (không thực thi). `report`/`knowledge_base`/`assistant` l�
 #### 3.2 `notify`
 
 - `params.to` (bắt buộc, list): `creator` (tác giả **bản ghi**, không phải người thực hiện hook) |
-  `record.<emailField>` (string field có sẵn trên bất kỳ entity) | `config.<key>` | địa chỉ email cụ thể.
+  `record.<emailField>` (string field phải khai báo trên **mọi entity chạy hook trỏ tới block này**) | `config.<key>` | địa chỉ email cụ thể.
 - `subject`/`title` dùng biến `{{record.<field>}}`/`{{<field>}}`.
 - Gửi HTML qua kênh thư của tổ chức; **lỗi gửi được audit nhưng không huỷ giao dịch**; nếu không phân giải
   được recipient, block log cảnh báo và bỏ qua.
@@ -279,7 +279,7 @@ Báo cáo là view khai báo bên trong block `report` (`params.views`). **Khôn
 | `fields[]` | danh sách trường cho **list view** (chỉ dùng khi không có `groupBy`/`metrics`) |
 | `groupBy[]` | cột group-by (chỉ field khai báo) |
 | `metrics[]` | `{fn: count\|sum\|avg\|min\|max, field?, as}` — `sum/avg` chỉ nhận field `number`; `count` có thể bỏ `field` |
-| `filters[]` | `{field, op, value? / values? / param?}` — `op`: `eq ne in gt gte lt lte contains isnull`; `param` gắn giá trị runtime |
+| `filters[]` | `{field, op, value? / values? / param?}` — `op`: `eq ne in gt gte lt lte contains isnull` (`contains` chỉ cho field `string`); `param` gắn giá trị runtime |
 | `orderBy[]` | `{by, dir: asc\|desc}`, `by` phải là field khai báo hoặc alias metric/groupBy |
 | `limit` | 1..500 (mặc định 100); SQL luôn `LIMIT` theo cap này |
 | `engine` | `postgres` (JSONB các trường qua `payload->>'field'`; `number` cast `::numeric`) hoặc `lakehouse` (DuckDB, cần cấu hình lakehouse) |
@@ -367,7 +367,8 @@ template (`Save template`) hiện chỉ có **API** (`POST /marketplace/bizapps`
 - **Digest:** `bizapp__<kind>__digest.md` tổng hợp toàn bộ view khai báo (mỗi view 1 bảng; `No active data
   recorded.` nếu không có row), rebuild dạng **debounce 30s** (`BIZAPPS_PROJECTION_DEBOUNCE_MS`) sau mỗi
   record lifecycle event (tạo/sửa/gửi/phán quyết), không chạy khi **cài đặt/gỡ cài đặt** (giữ `search_revision`
-  ổn định, tránh 409 cho chat đang stream).
+  ổn định, tránh 409 cho chat đang stream). Record event được phát **vô điều kiện** cho mọi write qua API bản
+  ghi; việc có block `webhook_out` hay không chỉ ảnh hưởng **giao webhook**, không ảnh hưởng projection/CDC.
 - **KB đích:** mặc định KB riêng `bizapp-<kind>` (tự tạo). Chat chỉ truy hồi KB gắn với chatbot phiên —
   tức **KB mặc định workspace**. Cài đặt cho app chiếu vào KB chat bằng `config.knowledgeBaseId` (PATCH
   `/bizapps/{kind}/config`, chỉ ORG_OWNER) rồi **touch một bản ghi** để chiếu lại.
@@ -434,11 +435,14 @@ Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
 | Triệu chứng / lỗi | Nguyên nhân & cách sửa |
 | --- | --- |
 | `unknown manifest key … "maxLength"` | dùng `maxLen` |
+| `storage: typed is not available in this build` | đổi `storage` sang `jsonb`; chưa có bảng typed nào được ship |
+| `entity <name> requires label.vi and label.en` | thêm `label` cho entity (schema bắt buộc) |
+| `filter op contains requires a string field, got …` | `contains` chỉ dùng cho field `string`; dùng `eq`/`in` cho enum/number |
 | `free-form sql in report view is forbidden` | chuyển sang `groupBy/metrics/filters` |
 | `metric sum requires numeric field` | metric chỉ nhận field `number` |
 | `orderBy target x is neither a declared field nor metric alias` | orderBy phải là field hoặc alias khai báo |
 | `entity knowledge projection requires rbac.read …` | thêm đủ 3 vai trò vào `rbac.read` |
-| `unsupported notify recipient` | chỉ `creator` / `record.<string field>` / `config.<key>` / email |
+| `unsupported notify recipient` | chỉ `creator` / `record.<string field trên entity chạy hook>` / `config.<key>` / email |
 | `hook target … cannot run as a lifecycle hook` | chỉ 4 loại khối hook được; `report`/`registry`… không |
 | `approval_workitem cannot run onDecide` | chuyển approval sang `onCreate`/`onUpdate` |
 | `external_call egress.allowedHosts does not include …` | thêm host (hoặc bỏ egress) + đảm bảo installation `config.allowedHosts` chứa host |
@@ -513,7 +517,7 @@ Unknown keys are rejected with corrective hints (`maxLength` → "the contract k
 | `name` | `{vi, en}` printable ≤200 chars | — | required |
 | `version` | int ≥1 | 1 | upgrade takes `max(current+1, requested)` |
 | `icon` | string ≤64 | — | label; `/apps` falls back to emoji |
-| `storage` | `jsonb` \| `typed` | `jsonb` | `typed` is platform-bundled templates only |
+| `storage` | `jsonb` | `jsonb` | `typed` is rejected in this build (every app uses `bizapp_records`) |
 | `rbac` | `read/write/delete/approve/submit` → role arrays | see §2.3 | |
 | `entities` | 1..20 | — | required |
 | `blocks` | ≤40 | — | |
@@ -522,7 +526,7 @@ Unknown keys are rejected with corrective hints (`maxLength` → "the contract k
 
 #### 2.2 `entities` & `fields`
 
-**Entity**: `name` (`[a-z][a-z0-9_]{0,63}`, unique), `label {vi,en}` (recommended; schema requires),
+**Entity**: `name` (`[a-z][a-z0-9_]{0,63}`, unique), `label {vi,en}` (required — the validator rejects an entity without one),
 `fields` 1..40, `knowledge`, `hooks`.
 
 **Field**:
@@ -659,7 +663,7 @@ Rules: block `id` unique; hooks target only `approval_workitem` / `notify` / `we
 #### 3.2 `notify`
 
 - `params.to` (required, list): `creator` (the **record's** author, not the acting user) |
-  `record.<emailField>` (a string field declared on any entity) | `config.<key>` | literal address.
+  `record.<emailField>` (the string field must be declared on **every entity whose hook targets this block**) | `config.<key>` | literal address.
 - `subject`/`title` support `{{record.<field>}}` / `{{<field>}}` placeholders.
 - Delivers HTML via the organization's email channel; delivery failures are audited and never roll the
   write back; unresolvable recipients are skipped with a warning.
@@ -719,7 +723,7 @@ View fields:
 | `fields[]` | column list for **list views** (only used when there is no `groupBy`/`metrics`) |
 | `groupBy[]` | declared columns to group by |
 | `metrics[]` | `{fn: count\|sum\|avg\|min\|max, field?, as}` — `sum/avg` require a `number` field; `count` may omit it |
-| `filters[]` | `{field, op, value? / values? / param?}` — `op`: `eq ne in gt gte lt lte contains isnull`; `param` binds a runtime value |
+| `filters[]` | `{field, op, value? / values? / param?}` — `op`: `eq ne in gt gte lt lte contains isnull` (`contains` only on `string` fields); `param` binds a runtime value |
 | `orderBy[]` | `{by, dir: asc\|desc}` — `by` must be a declared field or a groupBy/metric alias |
 | `limit` | 1..500 (default 100); SQL always `LIMIT`s to this cap |
 | `engine` | `postgres` (JSONB columns via `payload->>'field'`, numeric cast `::numeric`) or `lakehouse` (DuckDB) |
@@ -806,7 +810,9 @@ API-only (`POST /marketplace/bizapps`); there is no composer button yet.
   `bizapp__<kind>__<entity>__<recordId>.md` (declared non-`pii` fields only), `document_kind=BIZAPP_RECORD`,
   `source_ref = bizapp:<kind>:<entity>`.
 - **Digest:** `bizapp__<kind>__digest.md` renders every declared report view as a Markdown table and is
-  rebuilt with a 30-second debounce (`BIZAPPS_PROJECTION_DEBOUNCE_MS`) after record lifecycle events. Install
+  rebuilt with a 30-second debounce (`BIZAPPS_PROJECTION_DEBOUNCE_MS`) after record lifecycle events. Record
+  events are published **unconditionally** for every API record write; whether a `webhook_out` block exists
+  only affects **webhook delivery**, never projection/CDC. Install
   and uninstall write no documents, so they never bump `search_revision` (no `409 KNOWLEDGE_BASE_CHANGED`
   while a chat is streaming).
 - **Target KB:** the default is a dedicated `bizapp-<kind>` KB, but chat retrieves only the session chatbot's
@@ -875,11 +881,14 @@ For model selection, evaluation, and rollout for chat, intent, slots, and drafti
 | Symptom / message | Cause & fix |
 | --- | --- |
 | `unknown manifest key … "maxLength"` | use `maxLen` |
+| `storage: typed is not available in this build` | switch `storage` to `jsonb`; no typed table ships today |
+| `entity <name> requires label.vi and label.en` | add an entity `label` (schema requires it) |
+| `filter op contains requires a string field, got …` | `contains` is string-only; use `eq`/`in` for enum/number |
 | `free-form sql in report view is forbidden` | express it with `groupBy/metrics/filters` |
 | `metric sum requires numeric field` | metrics only accept `number` fields |
 | `orderBy target x is neither a declared field nor metric alias` | orderBy must be a declared field or alias |
 | `entity knowledge projection requires rbac.read …` | grant all three roles in `rbac.read` |
-| `unsupported notify recipient` | only `creator` / `record.<string field>` / `config.<key>` / an email |
+| `unsupported notify recipient` | only `creator` / `record.<string field on the hooking entity>` / `config.<key>` / an email |
 | `hook target … cannot run as a lifecycle hook` | only the four hookable block types |
 | `approval_workitem cannot run onDecide` | move approval to `onCreate`/`onUpdate` |
 | `external_call egress.allowedHosts does not include …` | add the host (or drop `egress`) and ensure the installation `config.allowedHosts` contains it |

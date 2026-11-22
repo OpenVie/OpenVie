@@ -19,10 +19,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * Routes BizApp records to either dedicated typed tables (for platform flagship apps)
- * or JSONB generic store (for org-custom and generic apps) (Workstream T).
- *
- * <p>Routing is determined strictly by the platform template registry, not by manifest content.
+ * Single entry point for BizApp record storage. Every app uses the JSONB
+ * {@code bizapp_records} store; {@code storage: typed} is rejected at manifest
+ * validation, so there is nothing to route.
  */
 @Component
 @RequiredArgsConstructor
@@ -33,15 +32,8 @@ public class BizAppStorageRouter {
         return jsonbStore;
     }
 
-    public boolean isTyped(String appKind, String entity) {
-        return false;
-    }
-
-    public String getTableName(String appKind, String entity) {
-        return "bizapp_records";
-    }
-
-    public Optional<com.openvie.api.bizapp.model.BizAppRecord> findAny(java.util.UUID recordId, String appKind) {
-        return jsonbStore.findById(null, appKind, recordId);
+    public Optional<com.openvie.api.bizapp.model.BizAppRecord> findAny(java.util.UUID tenantId,
+            java.util.UUID recordId, String appKind) {
+        return jsonbStore.findById(tenantId, appKind, recordId);
     }
 }

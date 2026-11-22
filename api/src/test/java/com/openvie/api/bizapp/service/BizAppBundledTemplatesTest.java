@@ -50,7 +50,7 @@ class BizAppBundledTemplatesTest {
                 raw = (Map<String, Object>) m;
             }
             validator.validate(mapper.convertValue(raw,
-                    com.openvie.api.bizapp.dto.BizAppManifest.Manifest.class), true);
+                    com.openvie.api.bizapp.dto.BizAppManifest.Manifest.class));
         }
     }
 }

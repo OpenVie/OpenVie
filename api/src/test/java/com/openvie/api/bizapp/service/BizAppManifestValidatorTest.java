@@ -153,7 +153,7 @@ class BizAppManifestValidatorTest {
         Map<String, Object> events = new HashMap<>();
         events.put("events", List.of("record.created"));
         Block webhook = new Block("pushEvents", "webhook_out", events);
-        Entity hooked = new Entity("leads", null,
+        Entity hooked = new Entity("leads", leads().label(),
                 List.of(new Field("name", "string", true, 100, null, null)),
                 Map.of("onCreate", List.of("noSuchBlock")));
         assertThrows(BadRequestException.class, () -> validator.validate(
@@ -181,7 +181,7 @@ class BizAppManifestValidatorTest {
 
     @Test
     void duplicateFieldsAreRejected() {
-        Entity dup = new Entity("leads", null, List.of(
+        Entity dup = new Entity("leads", leads().label(), List.of(
                 new Field("name", "string", true, 100, null, null),
                 new Field("name", "date", false, null, null, null)),
                 Map.of());
@@ -241,7 +241,7 @@ class BizAppManifestValidatorTest {
         Block approval = new Block("approval1", "approval_workitem", Map.of(
                 "bpmnTemplate", "processes/bizapp-single-approval.bpmn20.xml",
                 "candidateRole", "WORKSPACE_ADMIN"));
-        Entity hooked = new Entity("leads", null,
+        Entity hooked = new Entity("leads", leads().label(),
                 List.of(new Field("name", "string", true, 100, null, null)),
                 Map.of("onDecide", List.of("approval1")));
         BadRequestException exception = assertThrows(BadRequestException.class,
@@ -280,5 +280,53 @@ class BizAppManifestValidatorTest {
                 1, "briefcase", rbac, List.of(leads()), List.of(defaultCandidate), null);
         assertThrows(BadRequestException.class, () -> validator.validate(defaulted),
                 "candidateRole defaults to WORKSPACE_ADMIN, which this approve list does not grant");
+    }
+
+    @Test
+    void typedStorageIsRejectedBecauseNoTypedStoreExists() {
+        Manifest typed = new Manifest("bizapp.v1", "crm", new Localized("CRM", "CRM"), 1,
+                "briefcase", "typed", RBAC, List.of(leads()), List.of(), null);
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(typed));
+        assertTrue(exception.getMessage().contains("storage: typed is not available"),
+                exception.getMessage());
+    }
+
+    @Test
+    void entityLabelIsRequired() {
+        Entity unlabeled = new Entity("leads", null,
+                List.of(new Field("name", "string", true, 100, null, null)), Map.of());
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(unlabeled, List.of(), null)));
+        assertTrue(exception.getMessage().contains("requires label.vi and label.en"),
+                exception.getMessage());
+    }
+
+    @Test
+    void containsFilterRequiresAStringField() {
+        Map<String, Object> view = new HashMap<>();
+        view.put("name", "pipeline");
+        view.put("entity", "leads");
+        view.put("fields", List.of("name"));
+        view.put("filters", List.of(Map.of("field", "stage", "op", "contains", "value", "NEW")));
+        Block report = new Block("leadPipeline", "report", Map.of("views", List.of(view)));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(leads(), List.of(report), null)));
+        assertTrue(exception.getMessage().contains("contains requires a string field"),
+                exception.getMessage());
+    }
+
+    @Test
+    void notifyRecordFieldMustExistOnTheHookingEntity() {
+        Entity hooked = new Entity("leads", leads().label(), leads().fields(),
+                Map.of("onCreate", List.of("notifyOwner")));
+        Block accepted = new Block("notifyOwner", "notify", Map.of("to", List.of("record.email")));
+        assertDoesNotThrow(() -> validator.validate(crm(hooked, List.of(accepted), null)));
+
+        Block missing = new Block("notifyOwner", "notify", Map.of("to", List.of("record.nope")));
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> validator.validate(crm(hooked, List.of(missing), null)));
+        assertTrue(exception.getMessage().contains("unsupported notify recipient"),
+                exception.getMessage());
     }
 }

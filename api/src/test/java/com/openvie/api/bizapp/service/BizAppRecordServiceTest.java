@@ -159,11 +159,11 @@ class BizAppRecordServiceTest {
     @Test
     void onDecideInvokesTheNotifyHookAndKeepsTheDecision() {
         BizAppRecord record = pendingRecord("proc-1");
-        when(storageRouter.findAny(recordId, KIND)).thenReturn(Optional.of(record));
+        when(storageRouter.findAny(tenantId, recordId, KIND)).thenReturn(Optional.of(record));
         when(notifyExecutor.execute(any(BlockSpec.class), any(BlockContext.class)))
                 .thenReturn(new BlockResult("notify -> 1 email(s)"));
 
-        service.applyEngineDecision(recordId, KIND,
+        service.applyEngineDecision(tenantId, recordId, KIND,
                 Map.of("processId", "proc-1", "decision", "APPROVE", "decidedBy", adminId.toString()),
                 Map.of("recordId", recordId.toString()));
 
@@ -176,11 +176,11 @@ class BizAppRecordServiceTest {
     @Test
     void onDecideHookFailureNeverEscapes() {
         BizAppRecord record = pendingRecord("proc-1");
-        when(storageRouter.findAny(recordId, KIND)).thenReturn(Optional.of(record));
+        when(storageRouter.findAny(tenantId, recordId, KIND)).thenReturn(Optional.of(record));
         when(notifyExecutor.execute(any(BlockSpec.class), any(BlockContext.class)))
                 .thenThrow(new IllegalStateException("smtp down"));
 
-        service.applyEngineDecision(recordId, KIND,
+        service.applyEngineDecision(tenantId, recordId, KIND,
                 Map.of("processId", "proc-1", "decision", "APPROVE", "decidedBy", adminId.toString()),
                 Map.of());
 
@@ -190,22 +190,25 @@ class BizAppRecordServiceTest {
     }
 
     @Test
-    void createPublishesOnlyTheDeclaredWebhookEvent() {
+    void createAlwaysPublishesTheLifecycleEventAndOnlyTheDeclaredWebhook() {
         webhookManifest(List.of("record.created"));
 
         service.create(tenantId, memberId, "MEMBER", KIND, ENTITY, Map.of("reason", "new request"));
 
         verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.created"), any(), any());
         verify(runtime, never()).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.updated"), any(), any());
+        verify(runtime).webhook(eq(orgId), eq(tenantId), eq("bizapp.leave.record.created"), any(), any());
     }
 
     @Test
-    void createSkipsAWebhookEventThatWasNotSelected() {
+    void createStillPublishesTheLifecycleEventWhenNoWebhookIsSelected() {
         webhookManifest(List.of("record.updated"));
 
         service.create(tenantId, memberId, "MEMBER", KIND, ENTITY, Map.of("reason", "new request"));
 
-        verify(runtime, never()).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.created"), any(), any());
+        // Projection/CDC must see every write; only webhook delivery is opt-in.
+        verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.created"), any(), any());
+        verify(runtime, never()).webhook(eq(orgId), eq(tenantId), eq("bizapp.leave.record.created"), any(), any());
     }
 
     @Test
@@ -218,32 +221,35 @@ class BizAppRecordServiceTest {
         service.archive(tenantId, adminId, "WORKSPACE_ADMIN", KIND, ENTITY, recordId);
 
         verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.archived"), any(), any());
+        verify(runtime).webhook(eq(orgId), eq(tenantId), eq("bizapp.leave.record.archived"), any(), any());
     }
 
     @Test
     void decisionWebhookIsSkippedWhenNotSelected() {
         BizAppRecord record = pendingRecord("proc-1");
-        when(storageRouter.findAny(recordId, KIND)).thenReturn(Optional.of(record));
+        when(storageRouter.findAny(tenantId, recordId, KIND)).thenReturn(Optional.of(record));
         webhookManifest(List.of("record.created"));
 
-        service.applyEngineDecision(recordId, KIND,
+        service.applyEngineDecision(tenantId, recordId, KIND,
                 Map.of("processId", "proc-1", "decision", "APPROVE", "decidedBy", adminId.toString()),
                 Map.of());
 
-        verify(runtime, never()).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.decided"), any(), any());
+        verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.decided"), any(), any());
+        verify(runtime, never()).webhook(eq(orgId), eq(tenantId), eq("bizapp.leave.record.decided"), any(), any());
     }
 
     @Test
     void decisionWebhookIsPublishedWhenSelected() {
         BizAppRecord record = pendingRecord("proc-1");
-        when(storageRouter.findAny(recordId, KIND)).thenReturn(Optional.of(record));
+        when(storageRouter.findAny(tenantId, recordId, KIND)).thenReturn(Optional.of(record));
         webhookManifest(List.of("record.decided"));
 
-        service.applyEngineDecision(recordId, KIND,
+        service.applyEngineDecision(tenantId, recordId, KIND,
                 Map.of("processId", "proc-1", "decision", "APPROVE", "decidedBy", adminId.toString()),
                 Map.of());
 
         verify(runtime).lifecycle(eq(orgId), eq(tenantId), eq("bizapp.leave.record.decided"), any(), any());
+        verify(runtime).webhook(eq(orgId), eq(tenantId), eq("bizapp.leave.record.decided"), any(), any());
     }
 
     @Test

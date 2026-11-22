@@ -19,6 +19,7 @@ import com.openvie.api.bizapp.model.BizAppInstallation;
 import com.openvie.api.common.event.AuditLogEvent;
 import com.openvie.api.common.enums.LogAction;
 import com.openvie.api.common.event.BizAppLifecycleEvent;
+import com.openvie.api.common.event.BizAppWebhookEvent;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -61,9 +62,19 @@ public class BizAppRuntime {
                 .build());
     }
 
-    /** Lifecycle webhook event; delivered after commit through the bridge. */
+    /** Lifecycle event consumed by projection and CDC; always published. */
     public void lifecycle(UUID orgId, UUID tenantId, String eventType,
             UUID sourceId, Map<String, Object> data) {
         eventPublisher.publishEvent(new BizAppLifecycleEvent(this, orgId, tenantId, eventType, sourceId, data));
+    }
+
+    /**
+     * Webhook event delivered through the integration outbox. Raised only when
+     * the installed manifest's {@code webhook_out} block selects the event, so
+     * the bridge stays a pure translation step.
+     */
+    public void webhook(UUID orgId, UUID tenantId, String eventType,
+            UUID sourceId, Map<String, Object> data) {
+        eventPublisher.publishEvent(new BizAppWebhookEvent(this, orgId, tenantId, eventType, sourceId, data));
     }
 }

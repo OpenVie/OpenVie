@@ -72,15 +72,18 @@ public class BizAppProjectionListener {
                     UUID recordId = event.getSourceId();
                     UUID actorId = actorFor(event, installation);
 
-                    if (manifest.entities() != null) {
-                        for (var e : manifest.entities()) {
-                            storageRouter.route(appKind, e.name()).findById(event.getTenantId(), appKind, recordId)
-                                    .ifPresent(record -> {
-                                        projector.projectRecord(event.getTenantId(), actorId, installation, manifest, record);
-                                        projector.refreshDigest(event.getTenantId(), actorId, installation, manifest);
-                                    });
-                        }
+                    if (manifest.entities() == null) {
+                        return;
                     }
+                    // One tenant-scoped read; the record itself names its
+                    // entity (the old loop probed every entity).
+                    storageRouter.findAny(event.getTenantId(), recordId, appKind)
+                            .filter(record -> manifest.entities().stream()
+                                    .anyMatch(e -> e.name().equals(record.getEntity())))
+                            .ifPresent(record -> {
+                                projector.projectRecord(event.getTenantId(), actorId, installation, manifest, record);
+                                projector.refreshDigest(event.getTenantId(), actorId, installation, manifest);
+                            });
                 });
     }
 

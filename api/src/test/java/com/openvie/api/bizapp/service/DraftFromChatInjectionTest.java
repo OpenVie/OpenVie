@@ -44,7 +44,7 @@ class DraftFromChatInjectionTest {
                 "storage", "typed"
         );
         Manifest parsed = parser.parse(manifestMap);
-        assertThrows(BadRequestException.class, () -> validator.validate(parsed, false));
+        assertThrows(BadRequestException.class, () -> validator.validate(parsed));
     }
 
     @Test
@@ -63,6 +63,6 @@ class DraftFromChatInjectionTest {
                 )
         );
         Manifest parsed = parser.parse(manifestMap);
-        assertThrows(BadRequestException.class, () -> validator.validate(parsed, false));
+        assertThrows(BadRequestException.class, () -> validator.validate(parsed));
     }
 }

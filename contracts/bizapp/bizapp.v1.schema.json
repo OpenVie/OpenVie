@@ -29,6 +29,7 @@
     },
     "storage": {
       "type": "string",
+      "description": "jsonb is the only implemented storage; typed is reserved and rejected by the validator in this build.",
       "enum": ["jsonb", "typed"],
       "default": "jsonb"
     },

@@ -23,9 +23,10 @@ import java.util.UUID;
 /**
  * BizApp lifecycle/record event raised by the bizapp module.
  *
- * <p>The integration module subscribes after commit (the bridge pattern used
- * for workflow events) and turns this into a signed webhook delivery for every
- * matching endpoint — BizApp blocks never touch the webhook outbox themselves.
+ * <p>Published for <b>every</b> record lifecycle event, unconditionally: the
+ * knowledge projector and the lakehouse CDC listener consume it and must not
+ * depend on a manifest declaring a webhook. Webhook delivery is a separate,
+ * opt-in stream — see {@link BizAppWebhookEvent}.
  */
 @Getter
 public class BizAppLifecycleEvent extends ApplicationEvent {

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Knowledge projection and lakehouse CDC no longer depend on `webhook_out`**: record lifecycle events (`record.created/updated/archived/submitted/decided`) are published unconditionally as `BizAppLifecycleEvent`; webhook delivery is a separate opt-in `BizAppWebhookEvent` raised only when a `webhook_out` block selects the event. Apps without a webhook block (e.g. the bundled CRM) now project records and digests as documented. Regression tests cover create/archive/decision with and without a selected webhook.
+- **Engine decisions are tenant-scoped**: `BizAppRecordDecisionDelegate` passes the `workspaceId` process variable to `applyEngineDecision`, and the record lookup is keyed by `(tenant, appKind, recordId)` instead of an unscoped id.
+- **Projection listener reads the record once**: the per-entity probe loop (N+1) was replaced with one tenant-scoped lookup; the record's own `entity` is checked against the manifest.
+- **`contains` filter is string-only**: both the manifest validator and the report compiler reject `contains` on non-string fields instead of emitting `numeric ILIKE` (a 500 at query time).
+- **Entity labels are enforced**: the validator now rejects an entity without `label.vi`/`label.en`, matching the frozen schema.
+- **`record.<field>` notify recipients are checked against the hooking entities**: a notify block reached by entity hooks must declare the recipient field on every source entity, so a valid-looking manifest can no longer silently skip delivery.
+- **Booking reminders are scoped to the bundled app**: the due-reminder query is parameterized by `app_kind`/`entity` and the scheduler documents that it is a bundled booking extension, not a generic runtime contract.
+
+### Changed
+- **`storage: typed` is rejected**: no typed table ships in this build, so accepting it silently stored JSONB. The validator now returns `storage: typed is not available in this build`; the unused typed branches were removed from the report compiler, storage router and report resolver. The contract keeps the enum value reserved and documents the rejection.
+
+### Docs
+- Updated `docs/BIZAPPS.md` (VI + EN), `contracts/bizapp/bizapp.v1.schema.json`, and the in-app BizApp documentation for the event split, typed storage, required entity labels, string-only `contains`, and per-entity notify recipients.
+
 ## [v1.0.1] — 2026-11-18
 
 Bản vá lỗi cho workspace đã lưu trữ trong bộ chuyển workspace.

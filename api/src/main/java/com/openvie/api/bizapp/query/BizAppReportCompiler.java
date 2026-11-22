@@ -68,9 +68,7 @@ public class BizAppReportCompiler {
             String appKind,
             Entity entityDef,
             Map<String, Object> viewSpec,
-            Map<String, Object> runtimeParams,
-            boolean isTyped,
-            String typedTableName) {
+            Map<String, Object> runtimeParams) {
 
         if (viewSpec == null) {
             throw new BadRequestException("View spec cannot be null");
@@ -86,10 +84,8 @@ public class BizAppReportCompiler {
         Map<String, Object> params = new HashMap<>();
         params.put("orgId", orgId);
         params.put("tenantId", tenantId);
-        if (!isTyped) {
-            params.put("appKind", appKind);
-            params.put("entityName", entityDef == null ? "" : entityDef.name());
-        }
+        params.put("appKind", appKind);
+        params.put("entityName", entityDef == null ? "" : entityDef.name());
 
         @SuppressWarnings("unchecked")
         List<String> groupBy = (List<String>) viewSpec.get("groupBy");
@@ -115,7 +111,7 @@ public class BizAppReportCompiler {
                 if (!fieldsByName.containsKey(col)) {
                     throw new BadRequestException("Group-by field " + col + " not declared on entity");
                 }
-                String expr = fieldExpr(dialect, isTyped, col, fieldsByName.get(col));
+                String expr = textFieldExpr(col);
                 groupSelects.add(expr + " AS " + col);
                 groupExprs.add(expr);
                 validAliases.add(col);
@@ -148,7 +144,7 @@ public class BizAppReportCompiler {
                     if (("sum".equals(fn) || "avg".equals(fn)) && !"number".equals(field.type())) {
                         throw new BadRequestException("Metric " + fn + " requires numeric field, got " + field.type());
                     }
-                    String colExpr = numericFieldExpr(dialect, isTyped, fieldName, field);
+                    String colExpr = numericFieldExpr(dialect, fieldName);
                     metricExpr = fn.toUpperCase(Locale.ROOT) + "(" + colExpr + ")";
                 }
                 metricSelects.add(metricExpr + " AS " + as);
@@ -170,12 +166,12 @@ public class BizAppReportCompiler {
                     if (field == null) {
                         throw new BadRequestException("Selected field " + fieldName + " not declared on entity");
                     }
-                    allCols.add(fieldExpr(dialect, isTyped, fieldName, field) + " AS " + fieldName);
+                    allCols.add(textFieldExpr(fieldName) + " AS " + fieldName);
                     validAliases.add(fieldName);
                 }
             } else if (entityDef != null && entityDef.fields() != null) {
                 for (Field f : entityDef.fields()) {
-                    allCols.add(fieldExpr(dialect, isTyped, f.name(), f) + " AS " + f.name());
+                    allCols.add(textFieldExpr(f.name()) + " AS " + f.name());
                     validAliases.add(f.name());
                 }
             }
@@ -186,15 +182,8 @@ public class BizAppReportCompiler {
 
         // 3. FROM and WHERE
         StringBuilder whereClause = new StringBuilder();
-        String fromTable;
-        if (isTyped && typedTableName != null && !typedTableName.isBlank()) {
-            validateIdent(typedTableName);
-            fromTable = typedTableName;
-            whereClause.append("org_id = :orgId AND tenant_id = :tenantId AND status = 'ACTIVE'");
-        } else {
-            fromTable = "bizapp_records";
-            whereClause.append("org_id = :orgId AND tenant_id = :tenantId AND app_kind = :appKind AND entity = :entityName AND status = 'ACTIVE'");
-        }
+        String fromTable = "bizapp_records";
+        whereClause.append("org_id = :orgId AND tenant_id = :tenantId AND app_kind = :appKind AND entity = :entityName AND status = 'ACTIVE'");
 
         // 4. Filters
         if (filters != null && !filters.isEmpty()) {
@@ -209,6 +198,10 @@ public class BizAppReportCompiler {
                 String op = String.valueOf(f.get("op")).toLowerCase(Locale.ROOT);
                 if (!ALLOWED_FILTER_OPS.contains(op)) {
                     throw new BadRequestException("Unsupported filter op: " + op);
+                }
+                if ("contains".equals(op) && !"string".equals(field.type())) {
+                    throw new BadRequestException(
+                            "Filter op contains requires a string field, got " + field.type());
                 }
 
                 String paramKey = "f_" + filterIdx + "_" + fieldName;
@@ -225,8 +218,8 @@ public class BizAppReportCompiler {
                 }
 
                 String expr = "number".equals(field.type())
-                        ? numericFieldExpr(dialect, isTyped, fieldName, field)
-                        : fieldExpr(dialect, isTyped, fieldName, field);
+                        ? numericFieldExpr(dialect, fieldName)
+                        : textFieldExpr(fieldName);
 
                 whereClause.append(" AND ");
                 switch (op) {
@@ -301,36 +294,16 @@ public class BizAppReportCompiler {
         return new CompiledQuery(sql, params);
     }
 
-    private String fieldExpr(Dialect dialect, boolean isTyped, String fieldName, Field field) {
-        if (isTyped) {
-            return toColumnName(fieldName);
-        }
-        // In JSONB: payload ->> 'fieldName'
+    private String textFieldExpr(String fieldName) {
+        // JSONB column read; fieldName is validated as an identifier.
         return "(payload ->> '" + fieldName + "')";
     }
 
-    private String numericFieldExpr(Dialect dialect, boolean isTyped, String fieldName, Field field) {
-        if (isTyped) {
-            return toColumnName(fieldName);
-        }
+    private String numericFieldExpr(Dialect dialect, String fieldName) {
         if (dialect == Dialect.DUCKDB) {
             return "TRY_CAST(payload ->> '" + fieldName + "' AS DOUBLE)";
         }
         return "(payload ->> '" + fieldName + "')::numeric";
-    }
-
-    private String toColumnName(String fieldName) {
-        // e.g. dealValue -> deal_value if needed, or straight lowercase
-        validateName(fieldName);
-        StringBuilder sb = new StringBuilder();
-        for (char c : fieldName.toCharArray()) {
-            if (Character.isUpperCase(c)) {
-                sb.append('_').append(Character.toLowerCase(c));
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 
     private void validateIdent(String ident) {

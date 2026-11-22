@@ -14,7 +14,7 @@
 
 package com.openvie.api.integration.webhook;
 
-import com.openvie.api.common.event.BizAppLifecycleEvent;
+import com.openvie.api.common.event.BizAppWebhookEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,10 +25,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Bridges BizApp lifecycle events into the webhook outbox. Mirror of
+ * Bridges BizApp <b>webhook</b> events into the webhook outbox. Mirror of
  * {@link WebhookAuditBridge}: a pure translation step that subscribes after
- * the domain commit, so journaling hiccup-free delivery keeps BizApp
- * transactions clean.
+ * the domain commit. Domain lifecycle events (projection/CDC) are a different
+ * stream, so this bridge never has to consult the manifest.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,7 +38,7 @@ public class BizAppWebhookBridge {
     private final WebhookEventPublisher webhookEventPublisher;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-    public void onBizAppEvent(BizAppLifecycleEvent event) {
+    public void onBizAppEvent(BizAppWebhookEvent event) {
         if (event.getTenantId() == null) {
             return;
         }

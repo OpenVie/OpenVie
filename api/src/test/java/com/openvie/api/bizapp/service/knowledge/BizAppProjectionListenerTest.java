@@ -23,7 +23,6 @@ import com.openvie.api.bizapp.model.BizAppRecord;
 import com.openvie.api.bizapp.repository.BizAppInstallationRepository;
 import com.openvie.api.bizapp.service.BizAppManifestParser;
 import com.openvie.api.bizapp.service.storage.BizAppStorageRouter;
-import com.openvie.api.bizapp.service.storage.BizAppStorageStore;
 import com.openvie.api.common.event.BizAppLifecycleEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +66,6 @@ class BizAppProjectionListenerTest {
         BizAppInstallationRepository installations = mock(BizAppInstallationRepository.class);
         BizAppManifestParser parser = mock(BizAppManifestParser.class);
         BizAppStorageRouter router = mock(BizAppStorageRouter.class);
-        BizAppStorageStore store = mock(BizAppStorageStore.class);
 
         listener = new BizAppProjectionListener(projector, installations, parser, router);
 
@@ -93,8 +91,7 @@ class BizAppProjectionListenerTest {
         record.setTenantId(tenantId);
         record.setAppKind(KIND);
         record.setEntity(ENTITY);
-        when(router.route(KIND, ENTITY)).thenReturn(store);
-        when(store.findById(tenantId, KIND, recordId)).thenReturn(Optional.of(record));
+        when(router.findAny(tenantId, recordId, KIND)).thenReturn(Optional.of(record));
     }
 
     @Test

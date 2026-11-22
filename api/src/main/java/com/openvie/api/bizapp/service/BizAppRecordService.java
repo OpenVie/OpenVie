@@ -163,7 +163,7 @@ public class BizAppRecordService {
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_CREATED, "bizapp_record", saved.getId(),
                 Map.of("app", appKind, "entity", entity));
         runHooks(manifest, installation, saved, "onCreate", userId, role);
-        lifecycleWebhook(tenantId, installation, manifest, saved, "record.created",
+        publishRecordEvent(tenantId, installation, manifest, saved, "record.created",
                 Map.of("created_by", userId.toString()));
         return toView(saved, manifest);
     }
@@ -191,7 +191,7 @@ public class BizAppRecordService {
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_UPDATED, "bizapp_record", saved.getId(),
                 Map.of("app", appKind, "entity", entity, "fields", clean.keySet()));
         runHooks(manifest, installation, saved, "onUpdate", userId, role);
-        lifecycleWebhook(tenantId, installation, manifest, saved, "record.updated",
+        publishRecordEvent(tenantId, installation, manifest, saved, "record.updated",
                 Map.of("updated_by", userId.toString(), "fields", clean.keySet()));
         return toView(saved, manifest);
     }
@@ -207,7 +207,7 @@ public class BizAppRecordService {
         runtime.audit(tenantId, userId, LogAction.BIZAPP_RECORD_ARCHIVED, "bizapp_record", recordId,
                 Map.of("app", appKind, "entity", entity));
         Manifest manifest = manifestParser.parse(installation.getManifest());
-        lifecycleWebhook(tenantId, installation, manifest, saved, "record.archived",
+        publishRecordEvent(tenantId, installation, manifest, saved, "record.archived",
                 Map.of("archived_by", userId.toString()));
         return toView(saved, manifest);
     }
@@ -238,15 +238,21 @@ public class BizAppRecordService {
     /**
      * Called by {@code BizAppRecordDecisionDelegate} inside the process
      * transaction: persists the terminal decision and raises the decided
-     * webhook. Engine-provided values; tenant scoping comes from the process
-     * variables already verified at start.
+     * lifecycle event. The workspace id comes from the process variable set at
+     * start, so the lookup stays tenant-scoped instead of trusting a bare
+     * record id.
      */
     @Transactional
-    public void applyEngineDecision(UUID recordId, String appKind,
+    public void applyEngineDecision(UUID tenantId, UUID recordId, String appKind,
             Map<String, Object> decisionState, Map<String, Object> eventData) {
-        BizAppRecord record = findAny(recordId, appKind);
+        if (tenantId == null) {
+            log.warn("Engine decision for record {} (app {}) has no workspaceId process variable", recordId, appKind);
+            return;
+        }
+        BizAppRecord record = findAny(tenantId, recordId, appKind);
         if (record == null) {
-            log.warn("Engine decision for missing/foreign record {} (app {})", recordId, appKind);
+            log.warn("Engine decision for missing/foreign record {} (app {}, workspace {})",
+                    recordId, appKind, tenantId);
             return;
         }
         Map<String, Object> runtimeState = new LinkedHashMap<>(record.getRuntime() == null ? Map.of() : record.getRuntime());
@@ -261,17 +267,24 @@ public class BizAppRecordService {
         runtime.audit(record.getTenantId(), auditor, LogAction.BIZAPP_RECORD_DECIDED,
                 "bizapp_record", recordId, Map.of("app", appKind, "decision", decisionState.get("decision")));
 
-        // onDecide hooks and the decided webhook are best-effort: the decision
-        // is already final, so a failing notification must never roll it back.
+        Map<String, Object> decidedData = new LinkedHashMap<>(eventData == null ? Map.of() : eventData);
+        decidedData.putIfAbsent("entity", record.getEntity());
+        if (decidedBy != null) {
+            decidedData.put("decided_by", decidedBy.toString());
+        }
+        // Projection/CDC never depend on the webhook stream; webhook delivery
+        // and onDecide hooks stay best-effort because the decision is final.
         try {
+            runtime.lifecycle(record.getOrgId(), record.getTenantId(),
+                    "bizapp." + appKind + ".record.decided", recordId, decidedData);
             BizAppInstallation installation = installationRepository
                     .findByTenantIdAndKindAndStatus(record.getTenantId(), appKind, "ACTIVE")
                     .orElse(null);
             if (installation != null) {
                 Manifest manifest = manifestParser.parse(installation.getManifest());
                 if (webhookEventEnabled(manifest, "record.decided")) {
-                    runtime.lifecycle(record.getOrgId(), record.getTenantId(),
-                            "bizapp." + appKind + ".record.decided", recordId, eventData);
+                    runtime.webhook(record.getOrgId(), record.getTenantId(),
+                            "bizapp." + appKind + ".record.decided", recordId, decidedData);
                 }
                 runHooks(manifest, installation, record, "onDecide", auditor, null);
             }
@@ -467,18 +480,22 @@ public class BizAppRecordService {
                 record.getId(), Map.of("app", record.getAppKind(), "entity", record.getEntity(),
                         "process", String.valueOf(result == null ? null : result.summary()),
                         "automatic", automatic));
-        lifecycleWebhook(record.getTenantId(), installation, manifest, record, "record.submitted",
+        publishRecordEvent(record.getTenantId(), installation, manifest, record, "record.submitted",
                 Map.of("submitted_by", actorId.toString()));
     }
 
-    /** Publish only the lifecycle events that a webhook block explicitly selects. */
-    private void lifecycleWebhook(UUID tenantId, BizAppInstallation installation, Manifest manifest,
+    /**
+     * Every record lifecycle event is published for projection/CDC. Webhook
+     * delivery is a separate, opt-in event: only raised when a
+     * {@code webhook_out} block in the frozen manifest selects the suffix.
+     */
+    private void publishRecordEvent(UUID tenantId, BizAppInstallation installation, Manifest manifest,
             BizAppRecord record, String eventSuffix, Map<String, Object> extra) {
-        if (!webhookEventEnabled(manifest, eventSuffix)) {
-            return;
+        String eventType = "bizapp." + installation.getKind() + "." + eventSuffix;
+        runtime.lifecycle(installation.getOrgId(), tenantId, eventType, record.getId(), extra);
+        if (webhookEventEnabled(manifest, eventSuffix)) {
+            runtime.webhook(installation.getOrgId(), tenantId, eventType, record.getId(), extra);
         }
-        runtime.lifecycle(installation.getOrgId(), tenantId,
-                "bizapp." + installation.getKind() + "." + eventSuffix, record.getId(), extra);
     }
 
     private boolean webhookEventEnabled(Manifest manifest, String eventSuffix) {
@@ -541,8 +558,11 @@ public class BizAppRecordService {
                 .orElseThrow(() -> new ResourceNotFoundException("Record not found in this app"));
     }
 
-    private BizAppRecord findAny(UUID recordId, String appKind) {
-        return storageRouter.findAny(recordId, appKind).orElse(null);
+    private BizAppRecord findAny(UUID tenantId, UUID recordId, String appKind) {
+        if (tenantId == null) {
+            return null;
+        }
+        return storageRouter.findAny(tenantId, recordId, appKind).orElse(null);
     }
 
     private BizAppInstallation activeInstallation(UUID tenantId, String appKind, String entity,

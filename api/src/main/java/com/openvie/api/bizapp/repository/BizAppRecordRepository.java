@@ -50,13 +50,16 @@ public interface BizAppRecordRepository extends JpaRepository<BizAppRecord, UUID
 
     @org.springframework.data.jpa.repository.Query(value = """
             SELECT * FROM bizapp_records
-            WHERE app_kind = 'booking'
-              AND entity = 'bookings'
+            WHERE app_kind = :appKind
+              AND entity = :entity
               AND status = 'ACTIVE'
               AND (runtime ->> 'reminderSentAt') IS NULL
             ORDER BY created_at ASC
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    java.util.List<BizAppRecord> findDueBookingRemindersBatch(@org.springframework.data.repository.query.Param("limit") int limit);
+    java.util.List<BizAppRecord> findDueRemindersBatch(
+            @org.springframework.data.repository.query.Param("appKind") String appKind,
+            @org.springframework.data.repository.query.Param("entity") String entity,
+            @org.springframework.data.repository.query.Param("limit") int limit);
 }

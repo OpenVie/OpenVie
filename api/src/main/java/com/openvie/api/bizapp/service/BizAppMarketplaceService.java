@@ -94,7 +94,7 @@ public class BizAppMarketplaceService {
         requireEnabled();
         requireKnownKeys(request.manifest());
         var manifest = parser.parse(request.manifest());
-        validator.validate(manifest, false);
+        validator.validate(manifest);
         BizAppMarketplaceTemplate existing = templateRepository
                 .findByOrgIdAndKindAndName(orgId, manifest.kind(), request.name())
                 .orElse(null);
@@ -224,7 +224,7 @@ public class BizAppMarketplaceService {
         // Validate manifest (re-run full validator from scratch)
         requireKnownKeys(manifestMap);
         var parsed = parser.parse(manifestMap);
-        validator.validate(parsed, false);
+        validator.validate(parsed);
 
         // Store as draft ONLY (never auto-installs!)
         BizAppDraft draft = new BizAppDraft();

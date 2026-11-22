@@ -76,10 +76,6 @@ public class BizAppManifestValidator {
     public static final int MAX_VIEWS = 20;
 
     public void validate(Manifest manifest) {
-        validate(manifest, false);
-    }
-
-    public void validate(Manifest manifest, boolean isPlatformBundled) {
         require(manifest != null, "manifest body required");
         require(BizAppManifest.SCHEMA.equals(manifest.schema()), "schema must be " + BizAppManifest.SCHEMA);
         require(manifest.kind() != null && KIND.matcher(manifest.kind()).matches(),
@@ -90,7 +86,8 @@ public class BizAppManifestValidator {
         require(version >= 1, "version must be >= 1");
 
         if ("typed".equalsIgnoreCase(manifest.storage())) {
-            require(isPlatformBundled, "storage: typed is restricted to platform-bundled templates only");
+            throw new BadRequestException(
+                    "storage: typed is not available in this build; every app uses jsonb records");
         }
 
         validateRbac(manifest.rbac());
@@ -127,6 +124,7 @@ public class BizAppManifestValidator {
         require(approvalBlocks.size() <= 1, "only one approval_workitem block is supported");
         validateApprovalCandidate(manifest.rbac(), approvalBlocks);
         validateHooks(entities, blocks);
+        validateNotifyRecipients(blocks, entityMap, hookSourceEntities(entities));
         validateConnectors(entities, blocks);
         validateUi(manifest.ui(), entities, blocks);
     }
@@ -198,10 +196,10 @@ public class BizAppManifestValidator {
         require(entity.name() != null && IDENT.matcher(entity.name()).matches(),
                 "entity name must match [a-z][a-z0-9_]{0,63}");
         require(!seenEntities.containsKey(entity.name()), "duplicate entity name " + entity.name());
-        if (entity.label() != null) {
-            require(isPrintable(entity.label().en()) && isPrintable(entity.label().vi()),
-                    "entity label.vi and label.en must be printable labels");
-        }
+        require(entity.label() != null,
+                "entity " + entity.name() + " requires label.vi and label.en");
+        require(isPrintable(entity.label().en()) && isPrintable(entity.label().vi()),
+                "entity label.vi and label.en must be printable labels");
         List<Field> fields = requireList(entity.fields(), "entity " + entity.name() + " needs fields");
         require(fields.size() <= MAX_FIELDS_PER_ENTITY,
                 "entity " + entity.name() + " fields must be <= " + MAX_FIELDS_PER_ENTITY);
@@ -242,7 +240,6 @@ public class BizAppManifestValidator {
         if ("notify".equals(block.type())) {
             require(paramsHasList(block.params(), "to") && !listOf(block.params().get("to")).isEmpty(),
                     "notify block requires a `to` list (creator or explicit email)");
-            validateNotifyRecipients(block, entityMap);
         }
         if ("webhook_out".equals(block.type())) {
             require(paramsHasList(block.params(), "events") && !listOf(block.params().get("events")).isEmpty(),
@@ -346,6 +343,12 @@ public class BizAppManifestValidator {
                             "filter field " + fieldName + " not found on entity " + entityName);
                     String op = f.get("op") == null ? null : String.valueOf(f.get("op")).toLowerCase(Locale.ROOT);
                     require(op != null && ALLOWED_FILTER_OPS.contains(op), "unsupported filter op: " + op);
+                    if ("contains".equals(op)) {
+                        Field filterField = entityFields.get(fieldName);
+                        require(filterField != null && "string".equals(filterField.type()),
+                                "filter op contains requires a string field, got "
+                                        + (filterField == null ? "unknown" : filterField.type()));
+                    }
                 }
             }
 
@@ -380,15 +383,51 @@ public class BizAppManifestValidator {
         }
     }
 
-    private void validateNotifyRecipients(Block block, Map<String, Entity> entityMap) {
-        for (Object recipient : listOf(block.params().get("to"))) {
-            require(isValidNotifyRecipient(recipient, entityMap),
-                    "unsupported notify recipient " + recipient
-                            + " (use creator, record.<stringField>, config.<key> or a literal email)");
+    /**
+     * {@code record.<field>} is resolved from the payload of whichever entity
+     * ran the hook, so the field must exist on every entity that targets the
+     * notify block. A block no hook references keeps the legacy global check.
+     */
+    private void validateNotifyRecipients(List<Block> blocks, Map<String, Entity> entityMap,
+            Map<String, List<String>> hookSources) {
+        for (Block block : blocks) {
+            if (!"notify".equals(block.type())) {
+                continue;
+            }
+            List<String> sourceEntities = hookSources.getOrDefault(block.id(), List.of());
+            for (Object recipient : listOf(block.params().get("to"))) {
+                require(isValidNotifyRecipient(recipient, entityMap, sourceEntities),
+                        "unsupported notify recipient " + recipient
+                                + " (use creator, record.<stringField on the hooking entity>, "
+                                + "config.<key> or a literal email)");
+            }
         }
     }
 
-    private boolean isValidNotifyRecipient(Object value, Map<String, Entity> entityMap) {
+    /** Entity names whose hooks target each block id. */
+    private Map<String, List<String>> hookSourceEntities(List<Entity> entities) {
+        Map<String, List<String>> sources = new HashMap<>();
+        for (Entity entity : entities) {
+            if (entity.hooks() == null) {
+                continue;
+            }
+            for (List<String> targets : entity.hooks().values()) {
+                if (targets == null) {
+                    continue;
+                }
+                for (String target : targets) {
+                    if (target != null && !target.startsWith("webhook_out:")) {
+                        sources.computeIfAbsent(target, ignored -> new java.util.ArrayList<>())
+                                .add(entity.name());
+                    }
+                }
+            }
+        }
+        return sources;
+    }
+
+    private boolean isValidNotifyRecipient(Object value, Map<String, Entity> entityMap,
+            List<String> sourceEntities) {
         if (!(value instanceof String token) || token.isBlank()) {
             return false;
         }
@@ -397,11 +436,22 @@ public class BizAppManifestValidator {
         }
         if (token.startsWith("record.")) {
             String field = token.substring("record.".length());
-            return entityMap.values().stream()
-                    .filter(entity -> entity.fields() != null)
-                    .anyMatch(entity -> entity.fields().stream()
-                            .anyMatch(candidate -> field.equals(candidate.name())
-                                    && "string".equals(candidate.type())));
+            List<String> targets = sourceEntities.isEmpty()
+                    ? new java.util.ArrayList<>(entityMap.keySet())
+                    : sourceEntities;
+            for (String entityName : targets) {
+                Entity entity = entityMap.get(entityName);
+                if (entity == null || entity.fields() == null) {
+                    return false;
+                }
+                boolean declared = entity.fields().stream()
+                        .anyMatch(candidate -> field.equals(candidate.name())
+                                && "string".equals(candidate.type()));
+                if (!declared) {
+                    return false;
+                }
+            }
+            return true;
         }
         if (token.startsWith("config.")) {
             return CONFIG_KEY.matcher(token.substring("config.".length())).matches();

@@ -58,9 +58,21 @@ public class BizAppRecordDecisionDelegate implements JavaDelegate {
         event.put("entity", String.valueOf(entity));
         event.put("decision", decisionState.get("decision"));
         recordService.applyEngineDecision(
+                asUuid(execution.getVariable("workspaceId")),
                 UUID.fromString(String.valueOf(recordId)),
                 String.valueOf(appKind),
                 decisionState,
                 event);
+    }
+
+    private UUID asUuid(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(String.valueOf(value));
+        } catch (IllegalArgumentException invalid) {
+            return null;
+        }
     }
 }

@@ -128,7 +128,7 @@ public class BizAppDraftService {
         }
         try {
             var manifest = parser.parse(rawManifest);
-            validator.validate(manifest, false);
+            validator.validate(manifest);
             return new ValidationResult(true, List.of());
         } catch (BadRequestException ex) {
             return new ValidationResult(false, List.of(ex.getMessage()));
@@ -512,7 +512,19 @@ public class BizAppDraftService {
 
                     Object lObj = entityMap.get("label");
                     if (lObj instanceof String s) {
-                        entityMap.put("label", Map.of("vi", s, "en", s));
+                        String label = s.isBlank() ? eName : s;
+                        entityMap.put("label", Map.of("vi", label, "en", label));
+                    } else if (lObj instanceof Map<?, ?> labelMap) {
+                        // The contract requires both sides; fill the missing one
+                        // from the other, or from the entity name.
+                        String vi = labelMap.get("vi") instanceof String v && !v.isBlank() ? v : null;
+                        String en = labelMap.get("en") instanceof String e && !e.isBlank() ? e : null;
+                        String fallback = en != null ? en : (vi != null ? vi : eName);
+                        entityMap.put("label", Map.of(
+                                "vi", vi != null ? vi : fallback,
+                                "en", en != null ? en : fallback));
+                    } else {
+                        entityMap.put("label", Map.of("vi", eName, "en", eName));
                     }
 
                     // Normalize fields

@@ -37,23 +37,10 @@ class BizAppStorageParityTest {
         var jsonbStore = Mockito.mock(JsonbRecordStore.class);
         var router = new BizAppStorageRouter(jsonbStore);
 
-        // 1. CRM routes to jsonbStore
-        assertFalse(router.isTyped("crm", "leads"));
-        assertEquals("bizapp_records", router.getTableName("crm", "leads"));
+        // Every app — bundled or custom — resolves to the universal JSONB store.
         assertEquals(jsonbStore, router.route("crm", "leads"));
-
-        // 2. Booking routes to jsonbStore
-        assertFalse(router.isTyped("booking", "bookings"));
-        assertEquals("bizapp_records", router.getTableName("booking", "bookings"));
         assertEquals(jsonbStore, router.route("booking", "bookings"));
-
-        // 3. Custom apps route to jsonbStore
-        assertFalse(router.isTyped("custom-app", "orders"));
-        assertEquals("bizapp_records", router.getTableName("custom-app", "orders"));
         assertEquals(jsonbStore, router.route("custom-app", "orders"));
-
-        assertFalse(router.isTyped("warehouse", "items"));
-        assertEquals("bizapp_records", router.getTableName("warehouse", "items"));
         assertEquals(jsonbStore, router.route("warehouse", "items"));
     }
 
@@ -67,9 +54,10 @@ class BizAppStorageParityTest {
         expectedRecord.setId(recordId);
         expectedRecord.setAppKind("booking");
 
-        when(jsonbStore.findById(null, "booking", recordId)).thenReturn(Optional.of(expectedRecord));
+        UUID tenantId = UUID.randomUUID();
+        when(jsonbStore.findById(tenantId, "booking", recordId)).thenReturn(Optional.of(expectedRecord));
 
-        Optional<BizAppRecord> result = router.findAny(recordId, "booking");
+        Optional<BizAppRecord> result = router.findAny(tenantId, recordId, "booking");
         assertTrue(result.isPresent());
         assertEquals(recordId, result.get().getId());
     }

@@ -14,7 +14,7 @@
 
 package com.openvie.api.bizapp.service.block;
 
-import com.openvie.api.common.event.BizAppLifecycleEvent;
+import com.openvie.api.common.event.BizAppWebhookEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -60,7 +60,7 @@ public class WebhookOutBlock implements BizAppBlockExecutor {
         if (extra != null) {
             data.putAll(extra);
         }
-        eventPublisher.publishEvent(new BizAppLifecycleEvent(
+        eventPublisher.publishEvent(new BizAppWebhookEvent(
                 this, context.orgId(), context.tenantId(),
                 "bizapp." + appKind + "." + eventKind, context.recordId(), data));
     }

@@ -76,9 +76,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         );
 
         String sql = compiled.sql();
@@ -113,43 +111,10 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         );
 
         assertTrue(compiled.sql().contains("AVG(TRY_CAST(payload ->> 'dealValue' AS DOUBLE)) AS avg_val"));
-    }
-
-    @Test
-    void compilesTypedTableStorage() {
-        Map<String, Object> viewSpec = Map.of(
-                "name", "pipeline_typed",
-                "entity", "leads",
-                "groupBy", List.of("stage"),
-                "metrics", List.of(
-                        Map.of("fn", "count", "as", "cnt"),
-                        Map.of("fn", "sum", "field", "dealValue", "as", "total_val")
-                )
-        );
-
-        var compiled = compiler.compile(
-                BizAppReportCompiler.Dialect.POSTGRES,
-                orgId,
-                tenantId,
-                "crm",
-                sampleEntity(),
-                viewSpec,
-                Map.of(),
-                true,
-                "bizapp_crm_leads"
-        );
-
-        String sql = compiled.sql();
-        assertTrue(sql.contains("FROM bizapp_crm_leads WHERE org_id = :orgId AND tenant_id = :tenantId AND status = 'ACTIVE'"));
-        assertTrue(sql.contains("stage AS stage"));
-        assertTrue(sql.contains("SUM(deal_value) AS total_val"));
-        assertFalse(sql.contains("payload"));
     }
 
     @Test
@@ -168,9 +133,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         );
 
         String sql = compiled.sql();
@@ -193,9 +156,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         ));
     }
 
@@ -216,9 +177,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         ));
     }
 
@@ -239,9 +198,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         ));
     }
 
@@ -260,9 +217,7 @@ class BizAppReportCompilerTest {
                 "crm",
                 sampleEntity(),
                 viewSpec,
-                Map.of(),
-                false,
-                null
+                Map.of()
         );
 
         assertEquals(500, compiled.params().get("limit"));
