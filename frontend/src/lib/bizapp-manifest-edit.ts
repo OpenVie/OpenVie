@@ -73,7 +73,16 @@ export function removeBlockFromManifest(
   manifest: BizAppManifest,
   blockId: string,
 ): BizAppManifest {
-  const blocks = (manifest.blocks ?? []).filter((block) => block.id !== blockId);
+  const blocks = (manifest.blocks ?? [])
+    .filter((block) => block.id !== blockId)
+    .map((block) => {
+      if (block.type !== "assistant" || block.params?.knowledgeBaseBlock !== blockId) {
+        return block;
+      }
+      const params = { ...block.params };
+      delete params.knowledgeBaseBlock;
+      return { ...block, params };
+    });
 
   const entities = (manifest.entities ?? []).map((entity): BizAppEntity => {
     if (!entity.hooks) return entity;

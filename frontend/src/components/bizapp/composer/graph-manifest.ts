@@ -19,12 +19,10 @@ import { syncReportViews } from "@/lib/bizapp-report";
 
 export interface EntityNodeData extends Record<string, unknown> {
   entity: BizAppEntity;
-  error?: string;
 }
 
 export interface BlockNodeData extends Record<string, unknown> {
   block: BizAppBlock;
-  error?: string;
 }
 
 const NODE_WIDTH = 240;
@@ -37,8 +35,9 @@ function nodeHeight(node: Node): number {
     return Math.max(MIN_NODE_HEIGHT, 125 + fields * 22);
   }
   if (node.type === "blockNode") {
-    const params = Object.keys((node.data as BlockNodeData).block?.params ?? {}).length;
-    return Math.max(MIN_NODE_HEIGHT, 125 + params * 22);
+    // Block nodes render a fixed header plus one summary line; parameter count
+    // does not change their height and must not inflate Dagre spacing.
+    return MIN_NODE_HEIGHT;
   }
   return MIN_NODE_HEIGHT;
 }

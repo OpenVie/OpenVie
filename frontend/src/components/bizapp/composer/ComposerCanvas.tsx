@@ -50,7 +50,12 @@ import {
   Workflow,
 } from "lucide-react";
 
-import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
+import type {
+  BizAppManifest,
+  BizAppEntity,
+  BizAppBlock,
+  BizAppValidationIssue,
+} from "@/types";
 import { validateBizAppManifestApi } from "@/lib/bizapp-api";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/hooks/useApiClient";
@@ -88,9 +93,14 @@ import { reportViewsOf, syncReportViews } from "@/lib/bizapp-report";
 import { removeBlockFromManifest, removeEntityFromManifest } from "@/lib/bizapp-manifest-edit";
 import { composerShortcut } from "@/lib/composer-shortcuts";
 import { defaultBlockParams, isHookableBlockType } from "@/lib/bizapp-block";
+import { LIFECYCLE_HOOKS, nextHookLabel } from "@/lib/bizapp-hooks";
 import { ValidationPanel } from "./ValidationPanel";
 import { JsonTab } from "./JsonTab";
 import { ListView } from "./ListView";
+import {
+  ComposerValidationContext,
+  validationErrorsByNode,
+} from "./validation-context";
 import {
   manifestToGraph,
   graphToManifest,
@@ -149,8 +159,13 @@ export function ComposerCanvas({
 
   const [isValidating, setIsValidating] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationIssues, setValidationIssues] = useState<BizAppValidationIssue[]>([]);
   const [isValid, setIsValid] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const nodeErrors = useMemo(
+    () => validationErrorsByNode(manifest, validationIssues),
+    [manifest, validationIssues],
+  );
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameVi, setRenameVi] = useState("");
   const [renameEn, setRenameEn] = useState("");
@@ -219,10 +234,12 @@ export function ComposerCanvas({
         if (!active) return;
         setIsValid(Boolean(data.ok));
         setValidationErrors(Array.isArray(data.errors) ? data.errors : []);
+        setValidationIssues(Array.isArray(data.issues) ? data.issues : []);
       } catch (err) {
         if (!active) return;
         setIsValid(false);
         setValidationErrors([err instanceof Error ? err.message : "Validation failed"]);
+        setValidationIssues([]);
       } finally {
         if (active) setIsValidating(false);
       }
@@ -258,13 +275,15 @@ export function ComposerCanvas({
     const targetBlock = (target.data as BlockNodeData).block;
     if (!isHookableBlockType(targetBlock?.type)) return;
     setEdges((current) => {
-      if (current.some((edge) => edge.source === connection.source && edge.target === connection.target)) {
-        return current;
-      }
+      const existing = current.filter(
+        (edge) => edge.source === connection.source && edge.target === connection.target,
+      );
+      const hook = nextHookLabel(existing.map((edge) => String(edge.label)));
+      if (!hook) return current;
       const next = addEdge({
         ...connection,
-        id: `hook-${connection.source}-${connection.target}-${Date.now()}`,
-        label: "onCreate",
+        id: `hook-${connection.source}-${connection.target}-${hook}-${Date.now()}`,
+        label: hook,
         type: "smoothstep",
         data: { kind: "hook" },
       }, current);
@@ -276,6 +295,13 @@ export function ComposerCanvas({
   const updateEdgeHook = (hook: string) => {
     if (!edgeHook) return;
     setEdges((current) => {
+      const duplicate = current.some((edge) =>
+        edge.id !== edgeHook.id
+        && edge.source === edgeHook.source
+        && edge.target === edgeHook.target
+        && edge.label === hook
+      );
+      if (duplicate) return current;
       const updated = current.map((edge) =>
         edge.id === edgeHook.id
           ? { ...edge, label: hook, data: { ...edge.data, kind: "hook" } }
@@ -343,6 +369,17 @@ export function ComposerCanvas({
     && typeof edgeData.every === "string"
     ? edgeData.every
     : "";
+  const edgeUsedHooks = new Set(
+    edgeHook
+      ? edges
+        .filter((edge) =>
+          edge.id !== edgeHook.id
+          && edge.source === edgeHook.source
+          && edge.target === edgeHook.target
+        )
+        .map((edge) => String(edge.label))
+      : [],
+  );
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEdgeHook(null);
@@ -759,26 +796,28 @@ export function ComposerCanvas({
             <Palette onAddEntity={handleAddEntity} onAddBlock={handleAddBlock} />
 
             <div className="flex-1 h-full relative">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
-                  setSelectedNode(null);
-                  setEdgeHook(edge);
-                }}
-                onNodeClick={onNodeClick}
-                nodeTypes={nodeTypes}
-                colorMode={theme}
-                proOptions={{ hideAttribution: true }}
-                deleteKeyCode={null}
-                fitView
-              >
-                <Background />
-                <Controls />
-              </ReactFlow>
+              <ComposerValidationContext.Provider value={nodeErrors}>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onConnect={onConnect}
+                  onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
+                    setSelectedNode(null);
+                    setEdgeHook(edge);
+                  }}
+                  onNodeClick={onNodeClick}
+                  nodeTypes={nodeTypes}
+                  colorMode={theme}
+                  proOptions={{ hideAttribution: true }}
+                  deleteKeyCode={null}
+                  fitView
+                >
+                  <Background />
+                  <Controls />
+                </ReactFlow>
+              </ComposerValidationContext.Provider>
             </div>
 
             <Inspector
@@ -788,6 +827,7 @@ export function ComposerCanvas({
               onDeleteNode={handleDeleteSelected}
               onClose={() => setSelectedNode(null)}
               entities={manifest.entities}
+              blocks={manifest.blocks}
             />
           </>
         )}
@@ -865,11 +905,12 @@ export function ComposerCanvas({
           )}
           {edgeKind === "hook" && (
             <div className="flex flex-wrap gap-2">
-              {["onCreate", "onUpdate", "onDecide"].map((hook) => (
+              {LIFECYCLE_HOOKS.map((hook) => (
                 <Button
                   key={hook}
                   type="button"
                   variant={String(edgeHook?.label) === hook ? "default" : "outline"}
+                  disabled={edgeUsedHooks.has(hook)}
                   onClick={() => updateEdgeHook(hook)}
                 >
                   {hook}

@@ -20,8 +20,8 @@ import { Plus, Trash2, X } from "lucide-react";
 import type { BizAppEntity, BizAppBlock, BizAppField } from "@/types";
 import { Button } from "@/components/ui/button";
 import { reportViewsOf } from "@/lib/bizapp-report";
-import { blockDisplayName } from "@/lib/bizapp-block";
 import { ReportBuilder } from "./ReportBuilder";
+import { useBlockLabel } from "./use-block-label";
 
 interface InspectorProps {
   selectedNode: { type: "entity" | "block"; data: BizAppEntity | BizAppBlock } | null;
@@ -30,6 +30,7 @@ interface InspectorProps {
   onDeleteNode: () => void;
   onClose: () => void;
   entities?: BizAppEntity[];
+  blocks?: BizAppBlock[];
 }
 
 export function Inspector({
@@ -39,6 +40,7 @@ export function Inspector({
   onDeleteNode,
   onClose,
   entities = [],
+  blocks = [],
 }: InspectorProps) {
   const t = useTranslations("BizApps.composer");
 
@@ -54,13 +56,19 @@ export function Inspector({
     <div className="w-80 border-l bg-card p-4 space-y-4 overflow-y-auto text-xs shrink-0 flex flex-col">
       <div className="flex items-center justify-between border-b pb-2">
         <h3 className="font-semibold text-sm">
-          {selectedNode.type === "entity" ? "Entity Properties" : "Block Properties"}
+          {selectedNode.type === "entity" ? t("entityProperties") : t("blockProperties")}
         </h3>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={onDeleteNode} title="Delete (Delete / Backspace)" aria-keyshortcuts="Delete Backspace">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onDeleteNode}
+            title={`${t("delete")} (Delete / Backspace)`}
+            aria-keyshortcuts="Delete Backspace"
+          >
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} title="Close">
+          <Button variant="ghost" size="icon-sm" onClick={onClose} title={t("close")}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -76,6 +84,7 @@ export function Inspector({
           block={selectedNode.data as BizAppBlock}
           onChange={onUpdateBlock}
           entities={entities}
+          blocks={blocks}
         />
       )}
     </div>
@@ -224,28 +233,38 @@ function BlockInspector({
   block,
   onChange,
   entities = [],
+  blocks = [],
 }: {
   block: BizAppBlock;
   onChange: (b: BizAppBlock) => void;
   entities?: BizAppEntity[];
+  blocks?: BizAppBlock[];
 }) {
+  const t = useTranslations("BizApps.composer");
+  const labels = useBlockLabel();
   const updateParam = (key: string, value: unknown) => {
-    const updated = { ...(block.params || {}), [key]: value };
+    const updated = { ...(block.params || {}) };
+    if (value === undefined) {
+      delete updated[key];
+    } else {
+      updated[key] = value;
+    }
     onChange({ ...block, params: updated });
   };
+  const knowledgeBlocks = blocks.filter((candidate) => candidate.type === "knowledge_base");
 
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-muted/20 p-2.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="font-semibold text-sm">{blockDisplayName(block.type)}</p>
+          <p className="font-semibold text-sm">{labels.name(block.type)}</p>
           <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {block.type}
           </span>
         </div>
         <details className="mt-1 text-[10px] text-muted-foreground">
-          <summary className="cursor-pointer">Advanced</summary>
-          <p className="mt-1 break-all font-mono">Internal ID: {block.id}</p>
+          <summary className="cursor-pointer">{t("advanced")}</summary>
+          <p className="mt-1 break-all font-mono">{t("internalId")}: {block.id}</p>
         </details>
       </div>
 
@@ -393,13 +412,37 @@ function BlockInspector({
         />
       )}
 
+      {block.type === "assistant" && (
+        <div className="space-y-2 border-t pt-3">
+          <label className="font-medium text-muted-foreground" htmlFor={`kb-${block.id}`}>
+            {t("node.knowledgeBase")}
+          </label>
+          <select
+            id={`kb-${block.id}`}
+            value={typeof block.params?.knowledgeBaseBlock === "string"
+              ? block.params.knowledgeBaseBlock
+              : ""}
+            onChange={(event) => updateParam("knowledgeBaseBlock", event.target.value || undefined)}
+            className="w-full border rounded px-2 py-1 bg-background text-xs"
+          >
+            <option value="">{t("node.noKnowledgeBase")}</option>
+            {knowledgeBlocks.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.id}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-muted-foreground">{t("node.knowledgeBaseHint")}</p>
+          {knowledgeBlocks.length === 0 && (
+            <p className="text-[10px] text-amber-600">{t("node.knowledgeBaseMissing")}</p>
+          )}
+        </div>
+      )}
+
       {block.type === "knowledge_base" && (
         <div className="rounded-lg border bg-muted/20 p-3 space-y-1 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">Knowledge base is automatic</p>
-          <p>
-            OpenVie creates a dedicated knowledge base for this app when records are projected
-            or the assistant is used. There is nothing technical to configure here.
-          </p>
+          <p className="font-medium text-foreground">{t("node.knowledgeBaseAutomaticTitle")}</p>
+          <p>{t("node.knowledgeBaseAutomaticBody")}</p>
         </div>
       )}
 
@@ -412,7 +455,7 @@ const HANDLED_PARAMS: Record<string, Set<string>> = {
   approval_workitem: new Set(["bpmnTemplate", "candidateRole"]),
   notify: new Set(["to", "title", "subject"]),
   external_call: new Set(["url", "credentialRef"]),
-  assistant: new Set(["instructions"]),
+  assistant: new Set(["instructions", "knowledgeBaseBlock"]),
   report: new Set(["views"]),
   webhook_out: new Set(["events"]),
   knowledge_base: new Set(["graphExtraction", "ocrEnabled"]),

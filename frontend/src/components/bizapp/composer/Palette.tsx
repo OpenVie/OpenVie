@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import {
   BarChart3,
   Bell,
+  BookOpen,
   Bot,
   CheckCircle2,
   Database,
@@ -25,6 +26,7 @@ import {
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useBlockLabel } from "./use-block-label";
 
 interface PaletteProps {
   onAddEntity: () => void;
@@ -32,16 +34,18 @@ interface PaletteProps {
 }
 
 const AVAILABLE_BLOCKS = [
-  { type: "approval_workitem", label: "Approval", icon: CheckCircle2 },
-  { type: "assistant", label: "Assistant", icon: Bot },
-  { type: "report", label: "Report", icon: BarChart3 },
-  { type: "notify", label: "Notify", icon: Bell },
-  { type: "webhook_out", label: "Webhook Out", icon: Send },
-  { type: "external_call", label: "External Call", icon: Globe },
+  { type: "approval_workitem", icon: CheckCircle2 },
+  { type: "assistant", icon: Bot },
+  { type: "knowledge_base", icon: BookOpen },
+  { type: "report", icon: BarChart3 },
+  { type: "notify", icon: Bell },
+  { type: "webhook_out", icon: Send },
+  { type: "external_call", icon: Globe },
 ];
 
 export function Palette({ onAddEntity, onAddBlock }: PaletteProps) {
   const t = useTranslations("BizApps.composer");
+  const labels = useBlockLabel();
 
   return (
     <div className="w-56 border-r bg-muted/20 p-3 space-y-4 shrink-0 flex flex-col">
@@ -56,7 +60,7 @@ export function Palette({ onAddEntity, onAddBlock }: PaletteProps) {
           className="w-full justify-start gap-2 text-xs"
         >
           <Database className="h-4 w-4 text-primary" />
-          <span>New Entity</span>
+          <span>{t("addEntity")}</span>
         </Button>
       </div>
 
@@ -76,7 +80,7 @@ export function Palette({ onAddEntity, onAddBlock }: PaletteProps) {
                 className="w-full justify-start gap-2 text-xs hover:bg-muted font-normal"
               >
                 <Icon className="h-4 w-4 text-muted-foreground" />
-                <span>{item.label}</span>
+                <span>{labels.name(item.type)}</span>
               </Button>
             );
           })}

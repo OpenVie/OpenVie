@@ -103,6 +103,19 @@ describe("bizapp manifest deletion", () => {
     expect(next.ui?.views).toContain("assistant:assistant1");
   });
 
+  it("clears an assistant knowledge-base link when that block is deleted", () => {
+    const linked = manifest();
+    linked.blocks?.push({ id: "knowledge1", type: "knowledge_base", params: {} });
+    const assistant = linked.blocks?.find((block) => block.id === "assistant1");
+    if (assistant) assistant.params = { ...assistant.params, knowledgeBaseBlock: "knowledge1" };
+
+    const next = removeBlockFromManifest(linked, "knowledge1");
+
+    expect(next.blocks?.some((block) => block.id === "knowledge1")).toBe(false);
+    expect(next.blocks?.find((block) => block.id === "assistant1")?.params)
+      .not.toHaveProperty("knowledgeBaseBlock");
+  });
+
   it("drops the report block when its last view is removed with an entity", () => {
     const reportOnly = manifest();
     reportOnly.blocks = reportOnly.blocks?.filter((block) => block.id !== "report1");

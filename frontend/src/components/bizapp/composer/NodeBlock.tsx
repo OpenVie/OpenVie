@@ -15,6 +15,7 @@
 "use client";
 
 import { memo } from "react";
+import { useTranslations } from "next-intl";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
   AlertCircle,
@@ -28,7 +29,8 @@ import {
   Sliders,
 } from "lucide-react";
 import type { BlockNodeData } from "./graph-manifest";
-import { blockDisplayName, blockSummary } from "@/lib/bizapp-block";
+import { useBlockLabel } from "./use-block-label";
+import { useNodeValidationError } from "./validation-context";
 
 function blockIcon(type: string) {
   switch (type) {
@@ -51,38 +53,49 @@ function blockIcon(type: string) {
   }
 }
 
-export const NodeBlock = memo(function NodeBlock({ data, selected }: NodeProps) {
+export const NodeBlock = memo(function NodeBlock({ id, data, selected }: NodeProps) {
+  const t = useTranslations("BizApps.composer");
+  const labels = useBlockLabel();
   const nodeData = data as BlockNodeData;
   const block = nodeData.block;
+  const error = useNodeValidationError(id);
 
   return (
     <div
       className={`rounded-xl border bg-card text-card-foreground shadow-md transition-all w-[240px] ${
-        selected ? "ring-2 ring-primary border-primary" : "border-border"
-      } ${nodeData.error ? "border-destructive ring-1 ring-destructive" : ""}`}
+        error
+          ? "border-destructive ring-2 ring-destructive"
+          : selected
+            ? "ring-2 ring-primary border-primary"
+            : "border-border"
+      }`}
     >
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-primary" />
 
       <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2 rounded-t-xl">
         {blockIcon(block?.type || "")}
         <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold text-xs">
-            {block ? blockDisplayName(block.type) : "Block"}
+          <div className="truncate font-semibold text-xs" title={block ? labels.name(block.type) : t("node.blockFallback")}>
+            {block ? labels.name(block.type) : t("node.blockFallback")}
           </div>
-          <div className="truncate text-[10px] text-muted-foreground">{block?.id || "block"}</div>
+          <div className="truncate text-[10px] text-muted-foreground" title={block?.id}>
+            {block?.id || t("node.blockFallback")}
+          </div>
         </div>
         <span className="text-[10px] text-muted-foreground uppercase font-mono px-1 py-0.5 bg-muted rounded">
           {block?.type}
         </span>
-        {nodeData.error && (
-          <span title={nodeData.error} className="inline-flex shrink-0">
+        {error && (
+          <span title={error} className="inline-flex shrink-0">
             <AlertCircle className="h-4 w-4 text-destructive" />
           </span>
         )}
       </div>
 
       <div className="p-3 space-y-1 text-xs">
-        <div className="text-[11px] text-muted-foreground">{block ? blockSummary(block) : "Block"}</div>
+        <div className="text-[11px] text-muted-foreground">
+          {block ? labels.summary(block) : t("node.blockFallback")}
+        </div>
       </div>
 
       <Handle type="source" position={Position.Right} className="w-3 h-3 bg-primary" />

@@ -521,9 +521,15 @@ export interface BizAppInstallResult {
 }
 
 /** Stateless manifest validation result (`POST /bizapps/validate`). */
+export interface BizAppValidationIssue {
+  path: string;
+  message: string;
+}
+
 export interface BizAppValidationResult {
   ok: boolean;
   errors: string[];
+  issues?: BizAppValidationIssue[];
 }
 
 /** One draft entry — AI-generated, canvas-edited, imported or remixed. */

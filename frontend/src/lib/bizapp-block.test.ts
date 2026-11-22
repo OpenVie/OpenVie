@@ -14,7 +14,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { BizAppBlock } from "@/types";
-import { blockSummary, isHookableBlockType } from "@/lib/bizapp-block";
+import {
+  blockNameKey,
+  blockSummary,
+  isHookableBlockType,
+} from "@/lib/bizapp-block";
 
 function block(params: Record<string, unknown>, type = "external_call"): BizAppBlock {
   return { id: "pollSensor", type, params };
@@ -36,26 +40,47 @@ describe("isHookableBlockType", () => {
   });
 });
 
+describe("blockNameKey", () => {
+  it("maps every allowed block type and leaves unknown types unstyled", () => {
+    for (const type of [
+      "approval_workitem", "assistant", "knowledge_base", "report", "notify",
+      "webhook_out", "external_call", "registry", "form", "timeline",
+    ]) {
+      expect(blockNameKey(type)).toBe(`blockNames.${type}`);
+    }
+    expect(blockNameKey("unknown_block")).toBeNull();
+  });
+});
+
 describe("blockSummary external_call", () => {
   it("recognises an MQTT block by brokerUrl and topic", () => {
     expect(blockSummary(block({
       protocol: "mqtt",
       brokerUrl: "tcp://localhost:1883",
       topic: "openvie/aq/aq-01/telemetry",
-    }))).toBe("MQTT topic configured");
+    }))).toEqual({ key: "blockSummary.mqttConfigured" });
   });
 
   it("asks for the MQTT addressing a valid block still needs", () => {
     expect(blockSummary(block({ protocol: "mqtt", brokerUrl: "tcp://localhost:1883" })))
-      .toBe("Needs a broker URL and topic");
+      .toEqual({ key: "blockSummary.mqttMissing" });
     expect(blockSummary(block({ protocol: "mqtt", topic: " openvie/aq/+/telemetry " })))
-      .toBe("Needs a broker URL and topic");
+      .toEqual({ key: "blockSummary.mqttMissing" });
   });
 
   it("keeps the HTTP wording for url-based calls", () => {
     expect(blockSummary(block({ url: "https://gateway.test/readings" })))
-      .toBe("API call configured");
-    expect(blockSummary(block({}))).toBe("Needs an API URL");
-    expect(blockSummary(block({ protocol: "http" }))).toBe("Needs an API URL");
+      .toEqual({ key: "blockSummary.httpConfigured" });
+    expect(blockSummary(block({}))).toEqual({ key: "blockSummary.httpMissing" });
+    expect(blockSummary(block({ protocol: "http" }))).toEqual({ key: "blockSummary.httpMissing" });
+  });
+
+  it("returns count-bearing keys for reports and notifications", () => {
+    expect(blockSummary(block({ views: [{ name: "a" }, { name: "b" }] }, "report")))
+      .toEqual({ key: "blockSummary.reportCount", values: { count: 2 } });
+    expect(blockSummary(block({ views: [] }, "report")))
+      .toEqual({ key: "blockSummary.reportMissing" });
+    expect(blockSummary(block({ to: ["creator", "a@b.co"] }, "notify")))
+      .toEqual({ key: "blockSummary.notifyCount", values: { count: 2 } });
   });
 });

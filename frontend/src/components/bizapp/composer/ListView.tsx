@@ -14,10 +14,11 @@
 
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
 import { Database, Sliders, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { blockDisplayName, blockSummary } from "@/lib/bizapp-block";
+import { useBlockLabel } from "./use-block-label";
 
 interface ListViewProps {
   manifest: BizAppManifest;
@@ -36,6 +37,8 @@ export function ListView({
   onDeleteBlock,
   onAddEntity,
 }: ListViewProps) {
+  const t = useTranslations("BizApps.composer");
+  const labels = useBlockLabel();
   const entities = manifest.entities || [];
   const blocks = manifest.blocks || [];
 
@@ -47,17 +50,17 @@ export function ListView({
           <div className="flex items-center gap-2">
             <Database className="h-5 w-5 text-primary" />
             <h2 id="entities-heading" className="text-base font-semibold">
-              Entities ({entities.length})
+              {t("entitiesTitle", { count: entities.length })}
             </h2>
           </div>
           <Button size="sm" onClick={onAddEntity} className="gap-1.5 text-xs h-8">
             <Plus className="h-3.5 w-3.5" />
-            <span>Add Entity</span>
+            <span>{t("addEntity")}</span>
           </Button>
         </div>
 
         {entities.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No entities defined yet.</p>
+          <p className="text-xs text-muted-foreground italic">{t("noEntities")}</p>
         ) : (
           <div className="grid gap-3">
             {entities.map((entity) => (
@@ -80,11 +83,11 @@ export function ListView({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">
-                      {(entity.fields || []).length} fields
+                      {t("node.fieldCount", { count: (entity.fields || []).length })}
                     </span>
                     <button
                       type="button"
-                      aria-label={`Delete entity ${entity.name}`}
+                      aria-label={t("deleteEntity", { name: entity.name })}
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteEntity(entity.name);
@@ -117,12 +120,12 @@ export function ListView({
         <div className="flex items-center gap-2 border-b pb-2">
           <Sliders className="h-5 w-5 text-primary" />
           <h2 id="blocks-heading" className="text-base font-semibold">
-            Executable Blocks ({blocks.length})
+            {t("blocksTitle", { count: blocks.length })}
           </h2>
         </div>
 
         {blocks.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No blocks configured.</p>
+          <p className="text-xs text-muted-foreground italic">{t("noBlocks")}</p>
         ) : (
           <div className="grid gap-3">
             {blocks.map((block) => (
@@ -141,12 +144,12 @@ export function ListView({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">{blockDisplayName(block.type)}</span>
+                    <span className="font-semibold text-sm">{labels.name(block.type)}</span>
                     <span className="font-mono text-[10px] text-muted-foreground">{block.id}</span>
                   </div>
                   <button
                     type="button"
-                    aria-label={`Delete block ${block.id}`}
+                    aria-label={t("deleteBlock", { id: block.id })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteBlock(block.id);
@@ -158,7 +161,7 @@ export function ListView({
                 </div>
 
                 <div className="text-xs text-muted-foreground">
-                  {blockSummary(block)}
+                  {labels.summary(block)}
                 </div>
               </div>
             ))}

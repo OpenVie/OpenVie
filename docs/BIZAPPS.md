@@ -338,13 +338,14 @@ và `/admin/apps/compose/{draftId}`.
 | Edge | Ý nghĩa |
 | --- | --- |
 | entity → entity (ref field) | derived, chỉ đọc (di chuyển không xoá) |
-| entity → block (`hook`) | kéo từ entity sang block; label mặc định `onCreate`; bấm edge đổi hook hoặc xoá |
+| entity → block (`hook`) | kéo từ entity sang block; mỗi lần kéo thêm event kế tiếp (`onCreate` → `onUpdate` → `onDecide`); bấm edge đổi hook hoặc xoá |
 | block `report` → entity | derived từ views; xoá edge/Xoá view cũng xoá view thật (Không chỉ edge) |
 | block `external_call` → entity (`schedule`) | dashed, chỉ đọc; chỉnh schedule trong Inspector |
 | assistant → knowledge_base | derived khi `params.knowledgeBaseBlock` trỏ khối |
 
-**Palette**: New Entity + 6 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu; webhook
-`record.created`/`record.updated`; notify `["creator"]`; approval single + `WORKSPACE_ADMIN`).
+**Palette**: New Entity + 7 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu; webhook
+`record.created`/`record.updated`; notify `["creator"]`; approval single + `WORKSPACE_ADMIN`;
+knowledge_base để trống, assistant chọn KB trong Inspector).
 
 **Inspector:**
 
@@ -360,6 +361,8 @@ và `/admin/apps/compose/{draftId}`.
 - Knowledge base: ghi chú "tự động".
 
 **Panel kiểm tra hợp lệ:** debounce 400ms gọi `POST /bizapps/validate`; nút Install disable khi không hợp lệ.
+Response trả thêm `issues: [{path, message}]`; composer map `entities[n]`/`blocks[n]` lên node tương ứng để
+hiện viền đỏ + tooltip, còn panel vẫn liệt kê toàn bộ lỗi.
 Chuyển đổi palette language/theme ngay trên header.
 
 **Hành động:** Save draft (`PUT /drafts/{id}` hoặc `PUT /drafts/new` khi tạo mới), Save as Template (mở dialog
@@ -819,14 +822,15 @@ Canvas edges:
 | Edge | Meaning |
 | --- | --- |
 | entity → entity (`ref` field) | derived, read-only |
-| entity → block (`hook`) | drag to create; label defaults to `onCreate`; click to change/delete |
+| entity → block (`hook`) | drag to create; each repeated drag adds the next event (`onCreate` → `onUpdate` → `onDecide`); click to change/delete |
 | `report` block → entity | derived from views; removing a view from the edge dialog **deletes the view** |
 | `external_call` → entity (`schedule`) | dashed, read-only; edit the schedule in the inspector |
 | assistant → knowledge base | derived when `params.knowledgeBaseBlock` points at a block |
 
-Palette adds one entity or one of six blocks with safe defaults (report creates a first view for the first
+Palette adds one entity or one of seven blocks with safe defaults (report creates a first view for the first
 entity, webhook selects `record.created`/`record.updated`, notify defaults to `["creator"]`, approval uses
-the single-process preset with `WORKSPACE_ADMIN`).
+the single-process preset with `WORKSPACE_ADMIN`, knowledge_base needs no setup and is selectable from the
+assistant inspector).
 
 Inspector highlights:
 
@@ -840,7 +844,9 @@ Inspector highlights:
   sort, limit 1..500; slug name from title; changing the entity resets grouping).
 - Webhook: checkbox list of standard events; Knowledge base: "automatic" note.
 
-Validation panel: debounced 400ms `POST /bizapps/validate`; Install stays disabled while red.
+Validation panel: debounced 400ms `POST /bizapps/validate`; Install stays disabled while red. The response
+also carries `issues: [{path, message}]`; the canvas maps `entities[n]`/`blocks[n]` to a red node badge and
+tooltip while the panel keeps the full list.
 
 Actions: Save draft (`PUT /drafts/{id}`, or `PUT /drafts/new` for the first save), Save as Template (dialog
 for name/summary → `POST /marketplace/bizapps`), Install — an already active kind **upgrades in place**

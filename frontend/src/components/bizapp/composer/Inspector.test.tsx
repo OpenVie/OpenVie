@@ -23,6 +23,7 @@ function renderInspector(
   block: BizAppBlock,
   onUpdateBlock = vi.fn(),
   entities: BizAppEntity[] = [],
+  blocks: BizAppBlock[] = [],
 ) {
   render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -33,6 +34,7 @@ function renderInspector(
         onDeleteNode={vi.fn()}
         onClose={vi.fn()}
         entities={entities}
+        blocks={blocks}
       />
     </NextIntlClientProvider>,
   );
@@ -153,6 +155,23 @@ describe("Inspector empty and automatic blocks", () => {
 
     expect(screen.getByText("Knowledge base is automatic")).toBeInTheDocument();
     expect(screen.queryByText("No parameters")).not.toBeInTheDocument();
+  });
+
+  it("links an assistant to a knowledge base block", () => {
+    const onUpdateBlock = renderInspector(
+      { id: "assistant1", type: "assistant", params: { instructions: "Help" } },
+      vi.fn(),
+      [],
+      [{ id: "knowledge1", type: "knowledge_base", params: {} }],
+    );
+
+    fireEvent.change(screen.getByLabelText("Knowledge base"), {
+      target: { value: "knowledge1" },
+    });
+
+    expect(onUpdateBlock).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({ knowledgeBaseBlock: "knowledge1" }),
+    }));
   });
 });
 

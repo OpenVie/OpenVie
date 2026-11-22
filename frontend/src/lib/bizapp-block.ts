@@ -27,57 +27,79 @@ export function isHookableBlockType(type: string | undefined): boolean {
   return type !== undefined && HOOKABLE_BLOCK_TYPES[type] === true;
 }
 
-const BLOCK_LABELS: Record<string, string> = {
-  approval_workitem: "Approval",
-  assistant: "Assistant",
-  knowledge_base: "Knowledge base",
-  report: "Report",
-  notify: "Notifications",
-  webhook_out: "Webhook",
-  external_call: "External API",
-  registry: "Registry view",
-  form: "Form view",
-  timeline: "Timeline view",
+const BLOCK_NAME_KEYS: Record<string, string> = {
+  approval_workitem: "blockNames.approval_workitem",
+  assistant: "blockNames.assistant",
+  knowledge_base: "blockNames.knowledge_base",
+  report: "blockNames.report",
+  notify: "blockNames.notify",
+  webhook_out: "blockNames.webhook_out",
+  external_call: "blockNames.external_call",
+  registry: "blockNames.registry",
+  form: "blockNames.form",
+  timeline: "blockNames.timeline",
 };
 
-export function blockDisplayName(type: string): string {
-  return BLOCK_LABELS[type] || type.replace(/[_-]+/g, " ");
+export function blockNameKey(type: string): string | null {
+  return BLOCK_NAME_KEYS[type] ?? null;
 }
 
-export function blockSummary(block: BizAppBlock): string {
+export interface BlockSummaryMessage {
+  key: string;
+  values?: Record<string, string | number>;
+}
+
+/** Translation descriptor; components resolve it against `BizApps.composer`. */
+export function blockSummary(block: BizAppBlock): BlockSummaryMessage {
   const params = block.params || {};
   switch (block.type) {
     case "approval_workitem":
-      return String(params.bpmnTemplate || "").includes("two-level")
-        ? "Two-level approval"
-        : "Single-level approval";
+      return {
+        key: String(params.bpmnTemplate || "").includes("two-level")
+          ? "blockSummary.approvalTwo"
+          : "blockSummary.approvalSingle",
+      };
     case "report": {
       const count = reportViewsOf(block).length;
-      return count === 0 ? "Needs a report" : `${count} report${count === 1 ? "" : "s"}`;
+      return count === 0
+        ? { key: "blockSummary.reportMissing" }
+        : { key: "blockSummary.reportCount", values: { count } };
     }
     case "webhook_out": {
-      const events = Array.isArray(params.events) ? params.events.length : 0;
-      return events === 0 ? "Choose events" : `${events} event${events === 1 ? "" : "s"}`;
+      const count = Array.isArray(params.events) ? params.events.length : 0;
+      return count === 0
+        ? { key: "blockSummary.webhookMissing" }
+        : { key: "blockSummary.webhookCount", values: { count } };
     }
     case "knowledge_base":
-      return "Created automatically";
+      return { key: "blockSummary.knowledgeCreated" };
     case "notify": {
-      const recipients = Array.isArray(params.to) ? params.to.length : 0;
-      return recipients === 0 ? "Needs recipients" : `${recipients} recipient${recipients === 1 ? "" : "s"}`;
+      const count = Array.isArray(params.to) ? params.to.length : 0;
+      return count === 0
+        ? { key: "blockSummary.notifyMissing" }
+        : { key: "blockSummary.notifyCount", values: { count } };
     }
     case "external_call": {
       const protocol = typeof params.protocol === "string" ? params.protocol : "http";
       if (protocol === "mqtt") {
         const hasBroker = typeof params.brokerUrl === "string" && params.brokerUrl.trim().length > 0;
         const hasTopic = typeof params.topic === "string" && params.topic.trim().length > 0;
-        return hasBroker && hasTopic ? "MQTT topic configured" : "Needs a broker URL and topic";
+        return hasBroker && hasTopic
+          ? { key: "blockSummary.mqttConfigured" }
+          : { key: "blockSummary.mqttMissing" };
       }
-      return params.url ? "API call configured" : "Needs an API URL";
+      return params.url
+        ? { key: "blockSummary.httpConfigured" }
+        : { key: "blockSummary.httpMissing" };
     }
     case "assistant":
-      return params.instructions ? "Assistant configured" : "Assistant";
+      return params.instructions
+        ? { key: "blockSummary.assistantConfigured" }
+        : { key: "blockSummary.assistantDefault" };
     default:
-      return Object.keys(params).length ? "Configured" : "No setup needed";
+      return Object.keys(params).length
+        ? { key: "blockSummary.configured" }
+        : { key: "blockSummary.noSetup" };
   }
 }
 

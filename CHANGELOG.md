@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Composer validation feedback**: `POST /bizapps/validate` now returns `issues: [{path, message}]`; the composer maps `entities[n]`/`blocks[n]` paths to the affected node and shows the red badge/tooltip instead of only the bottom panel.
+- **Composer knowledge base and multi-hook authoring**: the palette adds `knowledge_base`, the assistant inspector selects `knowledgeBaseBlock`, repeated entity → block drags add `onCreate`/`onUpdate`/`onDecide`, and deleting a knowledge base clears the assistant link.
+- **Composer labels are localized**: node, palette, list and block summary strings now use `BizApps.composer` in English and Vietnamese; entity nodes show the localized label, technical name, `ref` target and name tooltips.
 - **Composer keyboard shortcuts**: `Ctrl/Cmd+S` saves the draft, `Delete`/`Backspace` removes the selected node or edge, `Esc` closes the inspector/edge dialog. Deletion now prunes `ui.views`, report views, layouts and entity hooks instead of leaving dangling references; React Flow's built-in Backspace handler is disabled so graph and manifest stay in sync.
 - **Save as Template is now in the UI**: the composer button (previously rendered only when a handler was passed, which never happened) and each installed-app card in `/admin/apps` open a name/summary dialog and call `POST /marketplace/bizapps` with the current/frozen manifest. The draft and installed app are unchanged.
 - **Workspace restore**: `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) flips `ARCHIVED` back to `ACTIVE`; memberships, slug, documents, BizApp data and index rows are retained by archive, so no provisioning/re-index runs. The admin Workspaces page gains a Restore action and archive timestamps.

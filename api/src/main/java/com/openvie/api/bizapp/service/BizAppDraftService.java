@@ -22,6 +22,7 @@ import com.openvie.api.bizapp.dto.BizAppDtos.DraftView;
 import com.openvie.api.bizapp.dto.BizAppDtos.GenerateDraftRequest;
 import com.openvie.api.bizapp.dto.BizAppDtos.GenerateDraftResponse;
 import com.openvie.api.bizapp.dto.BizAppDtos.SaveDraftRequest;
+import com.openvie.api.bizapp.dto.BizAppDtos.ValidationIssue;
 import com.openvie.api.bizapp.dto.BizAppDtos.ValidationResult;
 import com.openvie.api.bizapp.model.BizAppDraft;
 import com.openvie.api.bizapp.model.BizAppInstallation;
@@ -118,22 +119,31 @@ public class BizAppDraftService {
 
     public ValidationResult validateStateless(Map<String, Object> rawManifest) {
         if (rawManifest == null) {
-            return new ValidationResult(false, List.of("Manifest cannot be null"));
+            String message = "Manifest cannot be null";
+            return new ValidationResult(false, List.of(message),
+                    List.of(new ValidationIssue("manifest", message)));
         }
         // Unknown keys are dropped by Jackson, so surface them before the typed
         // validator sees a manifest that no longer contains the author's intent.
         List<String> unknownKeys = BizAppManifestKeys.unknownKeys(rawManifest);
         if (!unknownKeys.isEmpty()) {
-            return new ValidationResult(false, unknownKeys);
+            return new ValidationResult(false, unknownKeys,
+                    unknownKeys.stream()
+                            .map(message -> new ValidationIssue("manifest", message))
+                            .toList());
         }
         try {
             var manifest = parser.parse(rawManifest);
             validator.validate(manifest);
-            return new ValidationResult(true, List.of());
+            return new ValidationResult(true, List.of(), List.of());
         } catch (BadRequestException ex) {
-            return new ValidationResult(false, List.of(ex.getMessage()));
+            String message = ex.getMessage();
+            return new ValidationResult(false, List.of(message),
+                    List.of(new ValidationIssue(validator.currentPath(), message)));
         } catch (Exception ex) {
-            return new ValidationResult(false, List.of("Invalid manifest syntax: " + ex.getMessage()));
+            String message = "Invalid manifest syntax: " + ex.getMessage();
+            return new ValidationResult(false, List.of(message),
+                    List.of(new ValidationIssue("manifest", message)));
         }
     }
 

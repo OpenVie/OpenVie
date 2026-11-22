@@ -117,6 +117,24 @@ describe("Composer graph-manifest conversions (Workstream B)", () => {
     expect(withNewHook.entities[0].hooks).toEqual({ onDecide: ["notifyOwner"] });
   });
 
+  it("keeps multiple lifecycle events on one entity/block pair", () => {
+    const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
+    const withBoth = graphToManifest(nodes, [
+      ...edges,
+      {
+        id: "hook-second-event",
+        source: "entity-leads",
+        target: "block-notifyOwner",
+        label: "onUpdate",
+      },
+    ], SAMPLE_MANIFEST);
+
+    expect(withBoth.entities[0].hooks).toEqual({
+      onCreate: ["notifyOwner"],
+      onUpdate: ["notifyOwner"],
+    });
+  });
+
   it("tags edge kinds so the inspector can tell hooks from derived links", () => {
     const { nodes, edges } = manifestToGraph(SAMPLE_MANIFEST);
     const hookEdge = edges.find((e) => e.source === "entity-leads" && e.target === "block-notifyOwner");

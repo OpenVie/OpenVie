@@ -75,7 +75,23 @@ public class BizAppManifestValidator {
     public static final int MAX_BLOCKS = 40;
     public static final int MAX_VIEWS = 20;
 
+    /**
+     * Last manifest path reached by a failed validation. The composer maps it
+     * back to a node; the validator still throws on the first error so install
+     * and draft writes stay fail-fast.
+     */
+    private final ThreadLocal<String> issuePath = ThreadLocal.withInitial(() -> "manifest");
+
+    public String currentPath() {
+        return issuePath.get();
+    }
+
+    private void path(String path) {
+        issuePath.set(path);
+    }
+
     public void validate(Manifest manifest) {
+        path("manifest");
         require(manifest != null, "manifest body required");
         require(BizAppManifest.SCHEMA.equals(manifest.schema()), "schema must be " + BizAppManifest.SCHEMA);
         require(manifest.kind() != null && KIND.matcher(manifest.kind()).matches(),
@@ -90,18 +106,24 @@ public class BizAppManifestValidator {
                     "storage: typed is not available in this build; every app uses jsonb records");
         }
 
+        path("rbac");
         validateRbac(manifest.rbac());
+        path("entities");
         List<Entity> entities = requireList(manifest.entities(), "entities must not be empty");
         require(entities.size() <= MAX_ENTITIES, "manifest entities must be <= " + MAX_ENTITIES);
 
         Map<String, Entity> entityMap = new HashMap<>();
-        for (Entity entity : entities) {
-            validateEntity(entity, entityMap);
+        for (int i = 0; i < entities.size(); i++) {
+            Entity entity = entities.get(i);
+            path("entities[" + i + "]");
+            validateEntity(entity, entityMap, i);
             entityMap.put(entity.name(), entity);
         }
 
         // Validate references across entities
-        for (Entity entity : entities) {
+        for (int i = 0; i < entities.size(); i++) {
+            Entity entity = entities.get(i);
+            path("entities[" + i + "]");
             if (entity.fields() != null) {
                 for (Field field : entity.fields()) {
                     if ("ref".equals(field.type())) {
@@ -114,13 +136,22 @@ public class BizAppManifestValidator {
         }
 
         List<Block> blocks = manifest.blocks() == null ? List.of() : manifest.blocks();
+        path("blocks");
         require(blocks.size() <= MAX_BLOCKS, "manifest blocks must be <= " + MAX_BLOCKS);
-        for (Block block : blocks) {
-            validateBlock(block, entityMap);
+        for (int i = 0; i < blocks.size(); i++) {
+            path("blocks[" + i + "]");
+            validateBlock(blocks.get(i), entityMap, i);
         }
         List<Block> approvalBlocks = blocks.stream()
                 .filter(block -> "approval_workitem".equals(block.type()))
                 .toList();
+        int approvalIndex = -1;
+        for (int i = 0; i < blocks.size() && approvalIndex < 0; i++) {
+            if ("approval_workitem".equals(blocks.get(i).type())) {
+                approvalIndex = i;
+            }
+        }
+        path(approvalIndex >= 0 ? "blocks[" + approvalIndex + "]" : "blocks");
         require(approvalBlocks.size() <= 1, "only one approval_workitem block is supported");
         validateApprovalCandidate(manifest.rbac(), approvalBlocks);
         validateHooks(entities, blocks);
@@ -191,7 +222,7 @@ public class BizAppManifestValidator {
         }
     }
 
-    private void validateEntity(Entity entity, Map<String, Entity> seenEntities) {
+    private void validateEntity(Entity entity, Map<String, Entity> seenEntities, int entityIndex) {
         require(entity != null, "entity required");
         require(entity.name() != null && IDENT.matcher(entity.name()).matches(),
                 "entity name must match [a-z][a-z0-9_]{0,63}");
@@ -204,7 +235,9 @@ public class BizAppManifestValidator {
         require(fields.size() <= MAX_FIELDS_PER_ENTITY,
                 "entity " + entity.name() + " fields must be <= " + MAX_FIELDS_PER_ENTITY);
         Set<String> seen = new HashSet<>();
-        for (Field field : fields) {
+        for (int fieldIndex = 0; fieldIndex < fields.size(); fieldIndex++) {
+            Field field = fields.get(fieldIndex);
+            path("entities[" + entityIndex + "].fields[" + fieldIndex + "]");
             require(field.name() != null && NAME.matcher(field.name()).matches(),
                     "field name must match [A-Za-z][A-Za-z0-9_]{0,63}");
 
@@ -222,7 +255,7 @@ public class BizAppManifestValidator {
         }
     }
 
-    private void validateBlock(Block block, Map<String, Entity> entityMap) {
+    private void validateBlock(Block block, Map<String, Entity> entityMap, int blockIndex) {
         require(block != null && block.id() != null && NAME.matcher(block.id()).matches(),
                 "block id must match [A-Za-z][A-Za-z0-9_]{0,63}");
         require(block.type() != null && BLOCK_TYPES.contains(block.type()),
@@ -235,7 +268,7 @@ public class BizAppManifestValidator {
             require(role == null || APPROVABLE_ROLES.contains(role), "unsupported candidateRole " + role);
         }
         if ("report".equals(block.type())) {
-            validateReportBlock(block, entityMap);
+            validateReportBlock(block, entityMap, blockIndex);
         }
         if ("notify".equals(block.type())) {
             require(paramsHasList(block.params(), "to") && !listOf(block.params().get("to")).isEmpty(),
@@ -251,10 +284,13 @@ public class BizAppManifestValidator {
         }
     }
 
-    private void validateReportBlock(Block block, Map<String, Entity> entityMap) {
+    private void validateReportBlock(Block block, Map<String, Entity> entityMap, int blockIndex) {
         require(paramsHasList(block.params(), "views") && !listOf(block.params().get("views")).isEmpty(),
                 "report block requires a non-empty views list");
-        for (Object view : listOf(block.params().get("views"))) {
+        List<?> reportViews = listOf(block.params().get("views"));
+        for (int viewIndex = 0; viewIndex < reportViews.size(); viewIndex++) {
+            path("blocks[" + blockIndex + "].params.views[" + viewIndex + "]");
+            Object view = reportViews.get(viewIndex);
             require(view instanceof Map<?, ?>, "each report view must be an object");
             @SuppressWarnings("unchecked")
             Map<String, Object> viewMap = (Map<String, Object>) view;
@@ -390,10 +426,12 @@ public class BizAppManifestValidator {
      */
     private void validateNotifyRecipients(List<Block> blocks, Map<String, Entity> entityMap,
             Map<String, List<String>> hookSources) {
-        for (Block block : blocks) {
+        for (int blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
+            Block block = blocks.get(blockIndex);
             if (!"notify".equals(block.type())) {
                 continue;
             }
+            path("blocks[" + blockIndex + "].params.to");
             List<String> sourceEntities = hookSources.getOrDefault(block.id(), List.of());
             for (Object recipient : listOf(block.params().get("to"))) {
                 require(isValidNotifyRecipient(recipient, entityMap, sourceEntities),
@@ -463,18 +501,22 @@ public class BizAppManifestValidator {
         Set<String> blockIds = new HashSet<>();
         Map<String, String> blockTypes = new HashMap<>();
         Set<String> webhookEvents = new HashSet<>();
-        for (Block block : blocks) {
+        for (int blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
+            Block block = blocks.get(blockIndex);
+            path("blocks[" + blockIndex + "]");
             require(blockIds.add(block.id()), "duplicate block id " + block.id());
             blockTypes.put(block.id(), block.type());
             if ("webhook_out".equals(block.type()) && paramsHasList(block.params(), "events")) {
                 listOf(block.params().get("events")).forEach(event -> webhookEvents.add((String) event));
             }
         }
-        for (Entity entity : entities) {
+        for (int entityIndex = 0; entityIndex < entities.size(); entityIndex++) {
+            Entity entity = entities.get(entityIndex);
             if (entity.hooks() == null) {
                 continue;
             }
             for (Map.Entry<String, List<String>> hook : entity.hooks().entrySet()) {
+                path("entities[" + entityIndex + "].hooks." + hook.getKey());
                 require(HOOK_KEYS.contains(hook.getKey()), "unknown hook " + hook.getKey());
                 requireList(hook.getValue(), hook.getKey() + " must not be empty")
                         .forEach(target -> {
@@ -502,6 +544,7 @@ public class BizAppManifestValidator {
         if (ui == null || ui.views() == null) {
             return;
         }
+        path("ui.views");
         require(ui.views().size() <= MAX_VIEWS, "manifest ui.views must be <= " + MAX_VIEWS);
         Set<String> entityNames = new HashSet<>();
         for (Entity entity : entities) {
@@ -519,7 +562,9 @@ public class BizAppManifestValidator {
                 }
             }
         }
-        for (String view : ui.views()) {
+        for (int viewIndex = 0; viewIndex < ui.views().size(); viewIndex++) {
+            String view = ui.views().get(viewIndex);
+            path("ui.views[" + viewIndex + "]");
             require(VIEW_PREFIXES.stream().anyMatch(view::startsWith), "unknown ui view " + view);
             String[] parts = view.split(":", 2);
             require(parts.length == 2 && !parts[1].isBlank(), "ui view " + view + " needs a target");
@@ -563,10 +608,12 @@ public class BizAppManifestValidator {
                 }
             }
         }
-        for (Block block : blocks) {
+        for (int blockIndex = 0; blockIndex < blocks.size(); blockIndex++) {
+            Block block = blocks.get(blockIndex);
             if (!"external_call".equals(block.type())) {
                 continue;
             }
+            path("blocks[" + blockIndex + "]");
             BizAppConnectorSpec spec = parser.parse(block);
             validateConnectorAuth(spec);
             requireNoInlineSecrets(block.params());

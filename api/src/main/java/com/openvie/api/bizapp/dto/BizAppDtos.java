@@ -67,10 +67,21 @@ public final class BizAppDtos {
             String baseTemplateRef
     ) {}
 
+    /** Machine-readable pointer into the manifest, used to mark composer nodes. */
+    @Schema(description = "Validation failure with a manifest path such as `entities[0]` or `blocks[1].params`.")
+    public record ValidationIssue(String path, String message) {
+    }
+
     public record ValidationResult(
             boolean ok,
-            List<String> errors
-    ) {}
+            List<String> errors,
+            List<ValidationIssue> issues
+    ) {
+        /** Keep existing two-argument callers source-compatible. */
+        public ValidationResult(boolean ok, List<String> errors) {
+            this(ok, errors, List.of());
+        }
+    }
 
     public record GenerateDraftResponse(
             UUID draftId,
