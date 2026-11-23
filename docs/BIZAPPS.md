@@ -347,7 +347,7 @@ và `/admin/apps/compose/{draftId}`.
 
 **Palette**: New Entity + 7 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu; webhook
 `record.created`/`record.updated`; notify `["creator"]`; approval single + `WORKSPACE_ADMIN`;
-knowledge_base để trống, assistant chọn KB trong Inspector).
+knowledge_base để trống, assistant chọn KB trong Inspector; thêm/sửa assistant tự thêm tab `assistant:<id>` vào `ui.views`).
 
 **Inspector:**
 
@@ -834,7 +834,7 @@ Canvas edges:
 Palette adds one entity or one of seven blocks with safe defaults (report creates a first view for the first
 entity, webhook selects `record.created`/`record.updated`, notify defaults to `["creator"]`, approval uses
 the single-process preset with `WORKSPACE_ADMIN`, knowledge_base needs no setup and is selectable from the
-assistant inspector).
+assistant inspector; adding/editing an assistant ensures its `assistant:<id>` tab in `ui.views`).
 
 Inspector highlights:
 

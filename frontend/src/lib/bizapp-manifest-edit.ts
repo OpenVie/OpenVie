@@ -65,6 +65,23 @@ export function removeEntityFromManifest(
   });
 }
 
+/** Assistant blocks only get a runtime tab when `ui.views` names them. */
+export function ensureAssistantView(
+  manifest: BizAppManifest,
+  blockId: string,
+): BizAppManifest {
+  const view = `assistant:${blockId}`;
+  const views = manifest.ui?.views ?? [];
+  if (views.includes(view)) return manifest;
+  return {
+    ...manifest,
+    ui: {
+      ...manifest.ui,
+      views: [...views, view],
+    },
+  };
+}
+
 /**
  * Remove one block, its layout/assistant tab, and any entity hook that targets
  * it. Report tabs are pruned by syncReportViews.

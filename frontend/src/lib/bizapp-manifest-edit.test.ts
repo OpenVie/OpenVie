@@ -14,7 +14,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { BizAppManifest } from "@/types";
-import { removeBlockFromManifest, removeEntityFromManifest } from "./bizapp-manifest-edit";
+import {
+  ensureAssistantView,
+  removeBlockFromManifest,
+  removeEntityFromManifest,
+} from "./bizapp-manifest-edit";
 
 function manifest(): BizAppManifest {
   return {
@@ -101,6 +105,15 @@ describe("bizapp manifest deletion", () => {
     expect(next.entities?.[0].hooks).toEqual({ onCreate: ["notify1"] });
     expect(next.ui?.layout).not.toHaveProperty("approval1");
     expect(next.ui?.views).toContain("assistant:assistant1");
+  });
+
+  it("adds an assistant runtime tab once and keeps it idempotent", () => {
+    const first = ensureAssistantView(manifest(), "assistant2");
+    const second = ensureAssistantView(first, "assistant2");
+
+    expect(first.ui?.views).toContain("assistant:assistant2");
+    expect(second.ui?.views.filter((view) => view === "assistant:assistant2"))
+      .toHaveLength(1);
   });
 
   it("clears an assistant knowledge-base link when that block is deleted", () => {

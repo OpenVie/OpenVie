@@ -84,7 +84,11 @@ import { NodeBlock } from "./NodeBlock";
 import { Palette } from "./Palette";
 import { Inspector } from "./Inspector";
 import { reportViewsOf, syncReportViews } from "@/lib/bizapp-report";
-import { removeBlockFromManifest, removeEntityFromManifest } from "@/lib/bizapp-manifest-edit";
+import {
+  ensureAssistantView,
+  removeBlockFromManifest,
+  removeEntityFromManifest,
+} from "@/lib/bizapp-manifest-edit";
 import { composerShortcut } from "@/lib/composer-shortcuts";
 import { defaultBlockParams, isHookableBlockType } from "@/lib/bizapp-block";
 import { LIFECYCLE_HOOKS, nextHookLabel } from "@/lib/bizapp-hooks";
@@ -452,10 +456,13 @@ export function ComposerCanvas({
       type,
       params,
     };
-    const updated = syncReportViews({
+    const synced = syncReportViews({
       ...manifest,
       blocks: [...(manifest.blocks || []), newBlock],
     });
+    const updated = type === "assistant"
+      ? ensureAssistantView(synced, newBlock.id)
+      : synced;
     setManifest(updated);
     const graph = manifestToGraph(updated);
     setNodes(graph.nodes);
@@ -479,7 +486,10 @@ export function ComposerCanvas({
     const updatedBlocks = (manifest.blocks || []).map((b) =>
       b.id === block.id ? block : b
     );
-    const updated = syncReportViews({ ...manifest, blocks: updatedBlocks });
+    const synced = syncReportViews({ ...manifest, blocks: updatedBlocks });
+    const updated = block.type === "assistant"
+      ? ensureAssistantView(synced, block.id)
+      : synced;
     setManifest(updated);
     const graph = manifestToGraph(updated);
     setNodes(graph.nodes);
