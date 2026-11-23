@@ -16,6 +16,16 @@ import { useTranslations } from "next-intl";
 import type { BizAppBlock } from "@/types";
 import { blockNameKey, blockSummary } from "@/lib/bizapp-block";
 
+/** Footnote labels for arbitrary block parameters, with a raw-key fallback. */
+export function useParamLabel() {
+  const t = useTranslations("BizApps.composer");
+  type MessageKey = Parameters<typeof t>[0];
+
+  return (key: string): string | null => {
+    const messageKey = `inspector.params.${key}` as MessageKey;
+    return t.has(messageKey) ? t(messageKey) : null;
+  };
+}
 /** Shared composer labels so nodes, lists and inspectors agree on blocks. */
 export function useBlockLabel() {
   const t = useTranslations("BizApps.composer");

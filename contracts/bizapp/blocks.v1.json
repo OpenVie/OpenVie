@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema": "bizapp.blocks.v1",
+  "blocks": [
+    {
+      "type": "approval_workitem",
+      "hookable": true,
+      "palette": true,
+      "defaults": {
+        "bpmnTemplate": "processes/bizapp-single-approval.bpmn20.xml",
+        "candidateRole": "WORKSPACE_ADMIN"
+      },
+      "paramSchema": "blocks/approval_workitem.schema.json"
+    },
+    {
+      "type": "assistant",
+      "hookable": false,
+      "palette": true,
+      "defaults": {},
+      "paramSchema": "blocks/assistant.schema.json"
+    },
+    {
+      "type": "knowledge_base",
+      "hookable": false,
+      "palette": true,
+      "defaults": {},
+      "paramSchema": "blocks/knowledge_base.schema.json"
+    },
+    {
+      "type": "report",
+      "hookable": false,
+      "palette": true,
+      "defaults": {},
+      "paramSchema": "blocks/report.schema.json"
+    },
+    {
+      "type": "notify",
+      "hookable": true,
+      "palette": true,
+      "defaults": {
+        "to": ["creator"]
+      },
+      "paramSchema": "blocks/notify.schema.json"
+    },
+    {
+      "type": "webhook_out",
+      "hookable": true,
+      "palette": true,
+      "defaults": {
+        "events": ["record.created", "record.updated"]
+      },
+      "paramSchema": "blocks/webhook_out.schema.json"
+    },
+    {
+      "type": "external_call",
+      "hookable": true,
+      "palette": true,
+      "defaults": {},
+      "paramSchema": "blocks/external_call.schema.json"
+    },
+    {
+      "type": "registry",
+      "hookable": false,
+      "palette": false,
+      "defaults": {},
+      "paramSchema": null
+    },
+    {
+      "type": "form",
+      "hookable": false,
+      "palette": false,
+      "defaults": {},
+      "paramSchema": null
+    },
+    {
+      "type": "timeline",
+      "hookable": false,
+      "palette": false,
+      "defaults": {},
+      "paramSchema": null
+    }
+  ]
+}

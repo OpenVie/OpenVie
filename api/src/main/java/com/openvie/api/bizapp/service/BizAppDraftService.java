@@ -134,12 +134,13 @@ public class BizAppDraftService {
         }
         try {
             var manifest = parser.parse(rawManifest);
-            validator.validate(manifest);
+            List<ValidationIssue> issues = validator.validateCollecting(manifest);
+            if (!issues.isEmpty()) {
+                return new ValidationResult(false,
+                        issues.stream().map(ValidationIssue::message).toList(),
+                        issues);
+            }
             return new ValidationResult(true, List.of(), List.of());
-        } catch (BadRequestException ex) {
-            String message = ex.getMessage();
-            return new ValidationResult(false, List.of(message),
-                    List.of(new ValidationIssue(validator.currentPath(), message)));
         } catch (Exception ex) {
             String message = "Invalid manifest syntax: " + ex.getMessage();
             return new ValidationResult(false, List.of(message),

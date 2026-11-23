@@ -138,7 +138,7 @@ class BizAppDraftServiceTest {
         var result = service.validateStateless(manifest);
 
         assertFalse(result.ok());
-        assertEquals("entities[0]", result.issues().get(0).path());
+        assertEquals("entities.items", result.issues().get(0).path());
         assertTrue(result.issues().get(0).message().contains("label"));
     }
 
@@ -169,8 +169,40 @@ class BizAppDraftServiceTest {
         var result = service.validateStateless(manifest);
 
         assertFalse(result.ok());
-        assertEquals("blocks[0]", result.issues().get(0).path());
+        assertEquals("blocks.notify1", result.issues().get(0).path());
         assertTrue(result.issues().get(0).message().contains("notify"));
+    }
+
+    @Test
+    void statelessValidationCollectsIndependentIssues() {
+        var service = new BizAppDraftService(
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
+                new BizAppProperties(true, false, false, false, ""),
+                runtime, objectMapper
+        );
+        Map<String, Object> manifest = Map.of(
+                "schema", "bizapp.v1",
+                "kind", "inventory",
+                "name", Map.of("en", "Inventory", "vi", "Kho"),
+                "version", 1,
+                "entities", List.of(Map.of(
+                        "name", "items",
+                        "label", Map.of("en", "Items", "vi", "San pham"),
+                        "fields", List.of(Map.of("name", "sku", "type", "string"))
+                )),
+                "blocks", List.of(
+                        Map.of("id", "notify1", "type", "notify", "params", Map.of()),
+                        Map.of("id", "notify2", "type", "notify", "params", Map.of())
+                )
+        );
+
+        var result = service.validateStateless(manifest);
+
+        assertFalse(result.ok());
+        assertEquals(2, result.issues().size());
+        assertEquals(
+                List.of("blocks.notify1", "blocks.notify2"),
+                result.issues().stream().map(issue -> issue.path()).toList());
     }
 
     @Test

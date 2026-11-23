@@ -28,6 +28,10 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored third-party assets (e.g. pdf.worker.min.mjs) must not be linted.
     "public/**",
+    // Playwright output is generated JavaScript, not application source.
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
   ]),
 ]);
 

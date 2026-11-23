@@ -15,6 +15,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { BarChart3, Plus, Trash2 } from "lucide-react";
 import type { BizAppEntity, BizAppField } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -34,23 +35,23 @@ import {
   type ReportView,
 } from "@/lib/bizapp-report";
 
-const METRIC_OPTIONS: Array<{ value: ReportMetricFunction; label: string }> = [
-  { value: "count", label: "Count rows" },
-  { value: "sum", label: "Sum" },
-  { value: "avg", label: "Average" },
-  { value: "min", label: "Minimum" },
-  { value: "max", label: "Maximum" },
+const METRIC_OPTIONS: Array<{ value: ReportMetricFunction; labelKey: string }> = [
+  { value: "count", labelKey: "report.metricCount" },
+  { value: "sum", labelKey: "report.metricSum" },
+  { value: "avg", labelKey: "report.metricAverage" },
+  { value: "min", labelKey: "report.metricMinimum" },
+  { value: "max", labelKey: "report.metricMaximum" },
 ];
 
-const FILTER_OPTIONS: Array<{ value: ReportFilterOperator; label: string }> = [
-  { value: "eq", label: "is" },
-  { value: "ne", label: "is not" },
-  { value: "contains", label: "contains" },
-  { value: "gt", label: "greater than" },
-  { value: "gte", label: "at least" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "at most" },
-  { value: "isnull", label: "is empty" },
+const FILTER_OPTIONS: Array<{ value: ReportFilterOperator; labelKey: string }> = [
+  { value: "eq", labelKey: "report.filterIs" },
+  { value: "ne", labelKey: "report.filterIsNot" },
+  { value: "contains", labelKey: "report.filterContains" },
+  { value: "gt", labelKey: "report.filterGreater" },
+  { value: "gte", labelKey: "report.filterAtLeast" },
+  { value: "lt", labelKey: "report.filterLess" },
+  { value: "lte", labelKey: "report.filterAtMost" },
+  { value: "isnull", labelKey: "report.filterEmpty" },
 ];
 
 interface ReportBuilderProps {
@@ -65,6 +66,8 @@ interface ReportBuilderProps {
  * declarative manifest view contract; no SQL or raw JSON reaches the UI.
  */
 export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps) {
+  const t = useTranslations("BizApps.composer");
+  type MessageKey = Parameters<typeof t>[0];
   const [selected, setSelected] = useState(0);
 
   const addView = () => {
@@ -78,14 +81,12 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
     return (
       <div className="rounded-lg border bg-muted/20 p-3 text-center space-y-2">
         <BarChart3 className="mx-auto h-5 w-5 text-muted-foreground" />
-        <p className="font-medium text-muted-foreground">No report configured yet</p>
+        <p className="font-medium text-muted-foreground">{t("report.emptyTitle")}</p>
         <p className="text-[11px] text-muted-foreground">
-          {entities.length === 0
-            ? "Create an entity first, then add a report."
-            : "Turn your records into a simple table or summary."}
+          {entities.length === 0 ? t("report.emptyNoEntity") : t("report.emptyBody")}
         </p>
         <Button type="button" size="sm" onClick={addView} disabled={entities.length === 0}>
-          <Plus className="h-3.5 w-3.5" /> Create report
+          <Plus className="h-3.5 w-3.5" /> {t("report.createReport")}
         </Button>
       </div>
     );
@@ -240,14 +241,14 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
           variant="outline"
           size="icon-sm"
           onClick={() => onChange(views.filter((_, i) => i !== index))}
-          title="Delete report"
+          title={t("report.deleteReport")}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       <div>
-        <label className="font-medium text-muted-foreground">Report title</label>
+        <label className="font-medium text-muted-foreground">{t("report.reportTitle")}</label>
         <input
           type="text"
           value={title}
@@ -257,7 +258,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
       </div>
 
       <div>
-        <label className="font-medium text-muted-foreground">Data source</label>
+        <label className="font-medium text-muted-foreground">{t("report.dataSource")}</label>
         <select
           value={entity?.name || ""}
           onChange={(event) => changeEntity(event.target.value)}
@@ -272,20 +273,20 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
       </div>
 
       <div>
-        <label className="font-medium text-muted-foreground">Show as</label>
+        <label className="font-medium text-muted-foreground">{t("report.showAs")}</label>
         <select
           value={summary ? "summary" : "list"}
           onChange={(event) => changeMode(event.target.value as "list" | "summary")}
           className="w-full mt-1 border rounded px-2 py-1 bg-background text-xs"
         >
-          <option value="list">List of records</option>
-          <option value="summary">Grouped summary</option>
+          <option value="list">{t("report.listMode")}</option>
+          <option value="summary">{t("report.summaryMode")}</option>
         </select>
       </div>
 
       {!summary && (
         <div className="space-y-1.5">
-          <label className="font-medium text-muted-foreground">Columns</label>
+          <label className="font-medium text-muted-foreground">{t("report.columns")}</label>
           <div className="grid grid-cols-2 gap-1">
             {fields.map((field) => {
               const selectedFields = view.fields?.length
@@ -318,7 +319,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
       {summary && (
         <>
           <div>
-            <label className="font-medium text-muted-foreground">Group by</label>
+            <label className="font-medium text-muted-foreground">{t("report.groupBy")}</label>
             <select
               value={view.groupBy?.[0] || ""}
               onChange={(event) =>
@@ -326,7 +327,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
               }
               className="w-full mt-1 border rounded px-2 py-1 bg-background text-xs"
             >
-              <option value="">Choose a field</option>
+              <option value="">{t("report.chooseField")}</option>
               {fields.map((field) => (
                 <option key={field.name} value={field.name}>
                   {fieldLabel(field)}
@@ -337,8 +338,8 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="font-medium text-muted-foreground">Summary values</label>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={addMetric} title="Add summary value">
+              <label className="font-medium text-muted-foreground">{t("report.summaryValues")}</label>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={addMetric} title={t("report.addSummaryValue")}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -357,7 +358,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
                   >
                     {METRIC_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey as MessageKey)}
                       </option>
                     ))}
                   </select>
@@ -365,7 +366,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
                     type="button"
                     onClick={() => removeMetric(metricIndex)}
                     className="shrink-0 text-muted-foreground hover:text-destructive"
-                    title="Remove summary value"
+                    title={t("report.removeSummaryValue")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -391,8 +392,8 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="font-medium text-muted-foreground">Filters</label>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={addFilter} disabled={!fields.length} title="Add filter">
+          <label className="font-medium text-muted-foreground">{t("report.filters")}</label>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={addFilter} disabled={!fields.length} title={t("report.addFilter")}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -423,7 +424,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
                 >
                   {FILTER_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label}
+                      {t(option.labelKey as MessageKey)}
                     </option>
                   ))}
                 </select>
@@ -431,7 +432,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
                   type="button"
                   onClick={() => removeFilter(filterIndex)}
                   className="shrink-0 text-muted-foreground hover:text-destructive"
-                  title="Remove filter"
+                  title={t("report.removeFilter")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -450,8 +451,8 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="font-medium text-muted-foreground">Sort</label>
-          <Button type="button" variant="ghost" size="icon-sm" onClick={addSort} disabled={!sortOptions.length} title="Add sort">
+          <label className="font-medium text-muted-foreground">{t("report.sort")}</label>
+          <Button type="button" variant="ghost" size="icon-sm" onClick={addSort} disabled={!sortOptions.length} title={t("report.addSort")}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -473,14 +474,14 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
               onChange={(event) => updateSort(sortIndex, { dir: event.target.value as "asc" | "desc" })}
               className="w-20 shrink-0 border rounded px-1.5 py-0.5 bg-background text-[11px]"
             >
-              <option value="asc">A → Z</option>
-              <option value="desc">Z → A</option>
+              <option value="asc">{t("report.asc")}</option>
+              <option value="desc">{t("report.desc")}</option>
             </select>
             <button
               type="button"
               onClick={() => removeSort(sortIndex)}
               className="shrink-0 text-muted-foreground hover:text-destructive"
-              title="Remove sort"
+              title={t("report.removeSort")}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -489,7 +490,7 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
       </div>
 
       <div>
-        <label className="font-medium text-muted-foreground">Maximum rows</label>
+        <label className="font-medium text-muted-foreground">{t("report.maximumRows")}</label>
         <input
           type="number"
           min={1}
@@ -502,14 +503,24 @@ export function ReportBuilder({ views, entities, onChange }: ReportBuilderProps)
 
       <div className="rounded border bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground">
         {summary
-          ? `Summary of ${entityLabel(entity)}${view.groupBy?.[0] ? ` by ${fieldLabelOf(fields, view.groupBy[0])}` : ""}.`
-          : `Table of ${entityLabel(entity)} records${view.fields?.length ? ` with ${view.fields.length} selected column(s)` : ""}.`}{" "}
-        This report will appear as a tab in the app.
+          ? t("report.summaryText", {
+            entity: entityLabel(entity),
+            group: view.groupBy?.[0]
+              ? t("report.groupSuffix", { field: fieldLabelOf(fields, view.groupBy[0]) })
+              : "",
+          })
+          : t("report.tableText", {
+            entity: entityLabel(entity),
+            columns: view.fields?.length
+              ? t("report.columnsSuffix", { count: view.fields.length })
+              : "",
+          })}{" "}
+        {t("report.appearsAsTab")}
       </div>
 
       <details className="text-[10px] text-muted-foreground">
-        <summary className="cursor-pointer">Advanced</summary>
-        <p className="mt-1 break-all font-mono">Internal view name: {view.name}</p>
+        <summary className="cursor-pointer">{t("report.advanced")}</summary>
+        <p className="mt-1 break-all font-mono">{t("report.internalViewName")}: {view.name}</p>
       </details>
     </div>
   );
@@ -524,6 +535,7 @@ function FilterValueInput({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
   if (field?.type === "boolean") {
     return (
       <select
@@ -531,9 +543,9 @@ function FilterValueInput({
         onChange={(event) => onChange(event.target.value === "" ? "" : event.target.value === "true")}
         className="w-full border rounded px-1.5 py-0.5 bg-background text-[11px]"
       >
-        <option value="">Choose a value</option>
-        <option value="true">Yes</option>
-        <option value="false">No</option>
+        <option value="">{t("report.chooseValue")}</option>
+        <option value="true">{t("report.yes")}</option>
+        <option value="false">{t("report.no")}</option>
       </select>
     );
   }
@@ -544,7 +556,7 @@ function FilterValueInput({
         onChange={(event) => onChange(event.target.value)}
         className="w-full border rounded px-1.5 py-0.5 bg-background text-[11px]"
       >
-        <option value="">Choose a value</option>
+        <option value="">{t("report.chooseValue")}</option>
         {(field.options || []).map((option) => (
           <option key={option} value={option}>
             {option}

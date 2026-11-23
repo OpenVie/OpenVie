@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type ComposerShortcut = "save" | "delete" | "escape" | null;
+export type ComposerShortcut = "save" | "delete" | "escape" | "undo" | "redo" | null;
 
 interface KeyboardLike {
   key: string;
   ctrlKey: boolean;
   metaKey: boolean;
   altKey: boolean;
+  shiftKey?: boolean;
   defaultPrevented: boolean;
 }
 
@@ -37,6 +38,12 @@ export function composerShortcut(
   }
 
   if (editable) return null;
+
+  if (event.ctrlKey || event.metaKey) {
+    const key = event.key.toLowerCase();
+    if (key === "z") return event.shiftKey ? "redo" : "undo";
+    if (key === "y") return "redo";
+  }
 
   if (event.key === "Delete" || event.key === "Backspace") {
     return hasSelection ? "delete" : null;

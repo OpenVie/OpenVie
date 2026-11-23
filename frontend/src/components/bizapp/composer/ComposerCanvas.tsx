@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ReactFlow,
@@ -50,13 +50,7 @@ import {
   Workflow,
 } from "lucide-react";
 
-import type {
-  BizAppManifest,
-  BizAppEntity,
-  BizAppBlock,
-  BizAppValidationIssue,
-} from "@/types";
-import { validateBizAppManifestApi } from "@/lib/bizapp-api";
+import type { BizAppManifest, BizAppEntity, BizAppBlock } from "@/types";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
@@ -88,12 +82,14 @@ import { cn } from "@/lib/utils";
 import { NodeEntity } from "./NodeEntity";
 import { NodeBlock } from "./NodeBlock";
 import { Palette } from "./Palette";
-import { DEFAULT_APPROVAL_TEMPLATE, Inspector } from "./Inspector";
+import { Inspector } from "./Inspector";
 import { reportViewsOf, syncReportViews } from "@/lib/bizapp-report";
 import { removeBlockFromManifest, removeEntityFromManifest } from "@/lib/bizapp-manifest-edit";
 import { composerShortcut } from "@/lib/composer-shortcuts";
 import { defaultBlockParams, isHookableBlockType } from "@/lib/bizapp-block";
 import { LIFECYCLE_HOOKS, nextHookLabel } from "@/lib/bizapp-hooks";
+import { useComposerHistory } from "./use-composer-history";
+import { useManifestValidation } from "./use-manifest-validation";
 import { ValidationPanel } from "./ValidationPanel";
 import { JsonTab } from "./JsonTab";
 import { ListView } from "./ListView";
@@ -146,7 +142,19 @@ export function ComposerCanvas({
     }
   };
   const [activeTab, setActiveTab] = useState<"canvas" | "list" | "json">("canvas");
-  const [manifest, setManifest] = useState<BizAppManifest>(initialManifest);
+  const {
+    manifest,
+    revision: historyRevision,
+    setManifest,
+    replaceManifest,
+    commitSnapshot,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useComposerHistory<BizAppManifest>(initialManifest);
+  const dragStartManifest = useRef<BizAppManifest | null>(null);
+  const appliedHistoryRevision = useRef(0);
 
   const [nodes, setNodes] = useState<Node[]>(() => manifestToGraph(initialManifest).nodes);
   const [edges, setEdges] = useState<Edge[]>(() => manifestToGraph(initialManifest).edges);
@@ -157,10 +165,22 @@ export function ComposerCanvas({
   } | null>(null);
   const [edgeHook, setEdgeHook] = useState<Edge | null>(null);
 
-  const [isValidating, setIsValidating] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [validationIssues, setValidationIssues] = useState<BizAppValidationIssue[]>([]);
-  const [isValid, setIsValid] = useState(true);
+  useEffect(() => {
+    if (historyRevision === appliedHistoryRevision.current || historyRevision === 0) return;
+    appliedHistoryRevision.current = historyRevision;
+    const graph = manifestToGraph(manifest);
+    setNodes(graph.nodes);
+    setEdges(graph.edges);
+    setSelectedNode(null);
+    setEdgeHook(null);
+  }, [historyRevision, manifest]);
+
+  const {
+    isValid,
+    isValidating,
+    errors: validationErrors,
+    issues: validationIssues,
+  } = useManifestValidation(manifest);
   const [isSaving, setIsSaving] = useState(false);
   const nodeErrors = useMemo(
     () => validationErrorsByNode(manifest, validationIssues),
@@ -218,43 +238,30 @@ export function ComposerCanvas({
   ];
   const currentView = viewOptions.find((view) => view.id === activeTab) ?? viewOptions[0];
 
-  // Synchronize graph to manifest
-  const syncToManifest = useCallback((currentNodes: Node[], currentEdges: Edge[]) => {
+  // Synchronize graph to manifest. Layout-only changes replace the present
+  // snapshot; discrete edits pass `record` so undo has a useful step.
+  const syncToManifest = useCallback((
+    currentNodes: Node[],
+    currentEdges: Edge[],
+    record = false,
+  ) => {
     const updated = graphToManifest(currentNodes, currentEdges, manifest);
-    setManifest(updated);
-  }, [manifest]);
-
-  // Debounced server-side validation against POST /api/v1/bizapps/validate
-  useEffect(() => {
-    let active = true;
-    const timer = setTimeout(async () => {
-      setIsValidating(true);
-      try {
-        const data = await validateBizAppManifestApi(request, manifest);
-        if (!active) return;
-        setIsValid(Boolean(data.ok));
-        setValidationErrors(Array.isArray(data.errors) ? data.errors : []);
-        setValidationIssues(Array.isArray(data.issues) ? data.issues : []);
-      } catch (err) {
-        if (!active) return;
-        setIsValid(false);
-        setValidationErrors([err instanceof Error ? err.message : "Validation failed"]);
-        setValidationIssues([]);
-      } finally {
-        if (active) setIsValidating(false);
-      }
-    }, 400);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [manifest, request]);
+    if (record) {
+      setManifest(updated);
+    } else {
+      replaceManifest(updated);
+    }
+  }, [manifest, replaceManifest, setManifest]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((nds) => {
       const updated = applyNodeChanges(changes, nds);
-      syncToManifest(updated, edges);
+      if (changes.some((change) =>
+        change.type === "position" || change.type === "remove" || change.type === "add"
+        || change.type === "replace"
+      )) {
+        syncToManifest(updated, edges);
+      }
       return updated;
     });
   }, [edges, syncToManifest]);
@@ -262,10 +269,24 @@ export function ComposerCanvas({
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setEdges((eds) => {
       const updated = applyEdgeChanges(changes, eds);
-      syncToManifest(nodes, updated);
+      if (changes.some((change) => change.type === "remove" || change.type === "add"
+        || change.type === "replace")) {
+        syncToManifest(nodes, updated);
+      }
       return updated;
     });
   }, [nodes, syncToManifest]);
+
+  const onNodeDragStart = useCallback(() => {
+    dragStartManifest.current = manifest;
+  }, [manifest]);
+
+  const onNodeDragStop = useCallback(() => {
+    if (dragStartManifest.current) {
+      commitSnapshot(dragStartManifest.current);
+      dragStartManifest.current = null;
+    }
+  }, [commitSnapshot]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -287,7 +308,7 @@ export function ComposerCanvas({
         type: "smoothstep",
         data: { kind: "hook" },
       }, current);
-      syncToManifest(nodes, next);
+      syncToManifest(nodes, next, true);
       return next;
     });
   }, [nodes, syncToManifest]);
@@ -307,7 +328,7 @@ export function ComposerCanvas({
           ? { ...edge, label: hook, data: { ...edge.data, kind: "hook" } }
           : edge
       );
-      syncToManifest(nodes, updated);
+      syncToManifest(nodes, updated, true);
       return updated;
     });
     setEdgeHook(null);
@@ -317,7 +338,7 @@ export function ComposerCanvas({
     if (!edgeHook) return;
     setEdges((current) => {
       const updated = current.filter((edge) => edge.id !== edgeHook.id);
-      syncToManifest(nodes, updated);
+      syncToManifest(nodes, updated, true);
       return updated;
     });
     setEdgeHook(null);
@@ -396,7 +417,7 @@ export function ComposerCanvas({
     const layouted = layoutGraph(nodes, edges);
     setNodes([...layouted.nodes]);
     setEdges([...layouted.edges]);
-    syncToManifest(layouted.nodes, layouted.edges);
+    syncToManifest(layouted.nodes, layouted.edges, true);
   };
 
   const handleAddEntity = () => {
@@ -422,15 +443,10 @@ export function ComposerCanvas({
 
   const handleAddBlock = (type: string) => {
     const nextIndex = (manifest.blocks || []).length + 1;
-    let params: Record<string, unknown> = {};
-    if (type === "approval_workitem") {
-      params = { bpmnTemplate: DEFAULT_APPROVAL_TEMPLATE, candidateRole: "WORKSPACE_ADMIN" };
-    } else if (type === "report" || type === "webhook_out" || type === "notify") {
-      const existingViews = (manifest.blocks || [])
-        .filter((block) => block.type === "report")
-        .flatMap((block) => reportViewsOf(block));
-      params = defaultBlockParams(type, manifest.entities || [], existingViews);
-    }
+    const existingViews = (manifest.blocks || [])
+      .filter((block) => block.type === "report")
+      .flatMap((block) => reportViewsOf(block));
+    const params = defaultBlockParams(type, manifest.entities || [], existingViews);
     const newBlock: BizAppBlock = {
       id: `${type}${nextIndex}`,
       type,
@@ -477,7 +493,7 @@ export function ComposerCanvas({
     setNodes(graph.nodes);
     setEdges(graph.edges);
     setSelectedNode(null);
-  }, []);
+  }, [setManifest]);
 
   const handleDeleteSelected = useCallback(() => {
     if (!selectedNode) return;
@@ -494,9 +510,9 @@ export function ComposerCanvas({
     }
   }, [applyManifestEdit, manifest, selectedNode]);
 
-  // Ctrl/Cmd+S saves the draft; Delete/Backspace removes the selected node or
-  // edge; Escape closes the inspector/edge dialog. React Flow's built-in
-  // Backspace handler is disabled so both paths cannot delete different things.
+  // Ctrl/Cmd+S saves; Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z undo/redo (Ctrl+Y too);
+  // Delete/Backspace removes the selection; Escape closes the inspector/dialog.
+  // React Flow's Backspace handler stays disabled so both paths cannot diverge.
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false;
@@ -512,6 +528,14 @@ export function ComposerCanvas({
         hasSelection: Boolean(edgeHook || selectedNode),
       });
       if (!action) return;
+
+      if (action === "undo" || action === "redo") {
+        if (action === "undo" ? !canUndo : !canRedo) return;
+        event.preventDefault();
+        if (action === "undo") undo();
+        else redo();
+        return;
+      }
 
       if (action === "save") {
         if (!onSaveDraft) return;
@@ -538,7 +562,10 @@ export function ComposerCanvas({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [manifest, onSaveDraft, isSaving, edgeHook, selectedNode, handleDeleteSelected, deleteEdge]);
+  }, [
+    manifest, onSaveDraft, isSaving, edgeHook, selectedNode, handleDeleteSelected, deleteEdge,
+    canUndo, canRedo, undo, redo,
+  ]);
 
   const handleManifestJsonChange = (newManifest: BizAppManifest) => {
     const synced = syncReportViews(newManifest);
@@ -802,6 +829,8 @@ export function ComposerCanvas({
                   edges={edges}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
+                  onNodeDragStart={onNodeDragStart}
+                  onNodeDragStop={onNodeDragStop}
                   onConnect={onConnect}
                   onEdgeClick={(_: React.MouseEvent, edge: Edge) => {
                     setSelectedNode(null);
@@ -866,21 +895,27 @@ export function ComposerCanvas({
           <DialogHeader>
             <DialogTitle>
               {edgeKind === "report"
-                ? "Report view"
+                ? t("edge.reportTitle")
                 : edgeKind === "schedule"
-                  ? "Schedule"
+                  ? t("edge.scheduleTitle")
                   : edgeKind === "hook"
-                    ? "Hook"
-                    : "Edge"}
+                    ? t("edge.hookTitle")
+                    : t("edge.title")}
             </DialogTitle>
             <DialogDescription>
               {edgeKind === "report"
-                ? `Views reading from ${String(edgeHook?.target ?? "").replace("entity-", "")}. Removing a view deletes it from the report block.`
+                ? t("edge.reportDescription", {
+                  entity: String(edgeHook?.target ?? "").replace("entity-", ""),
+                })
                 : edgeKind === "schedule"
-                  ? `${String(edgeHook?.source ?? "").replace("block-", "")} polls ${String(edgeHook?.target ?? "").replace("entity-", "")}${edgeScheduleEvery ? ` every ${edgeScheduleEvery}` : " on a timer"}. Change the interval, record selection and limit in the block inspector.`
+                  ? t(edgeScheduleEvery ? "edge.scheduleEvery" : "edge.scheduleTimer", {
+                    block: String(edgeHook?.source ?? "").replace("block-", ""),
+                    entity: String(edgeHook?.target ?? "").replace("entity-", ""),
+                    every: edgeScheduleEvery,
+                  })
                   : edgeKind === "hook"
-                    ? "Choose when this block runs for the entity."
-                    : "This link is derived from the manifest and cannot be edited here."}
+                    ? t("edge.hookDescription")
+                    : t("edge.derivedDescription")}
             </DialogDescription>
           </DialogHeader>
           {edgeKind === "report" && (
@@ -897,7 +932,7 @@ export function ComposerCanvas({
                     size="sm"
                     onClick={() => removeReportView(viewName)}
                   >
-                    Remove
+                    {t("inspector.remove")}
                   </Button>
                 </div>
               ))}
@@ -921,7 +956,7 @@ export function ComposerCanvas({
           <DialogFooter>
             {edgeKind === "hook" && (
               <Button type="button" variant="destructive" onClick={deleteEdge}>
-                Delete edge
+                {t("edge.delete")}
               </Button>
             )}
           </DialogFooter>

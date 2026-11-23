@@ -343,6 +343,8 @@ và `/admin/apps/compose/{draftId}`.
 | block `external_call` → entity (`schedule`) | dashed, chỉ đọc; chỉnh schedule trong Inspector |
 | assistant → knowledge_base | derived khi `params.knowledgeBaseBlock` trỏ khối |
 
+**Block registry:** `contracts/bizapp/blocks.v1.json` là nguồn duy nhất cho type/hookable/palette/defaults; backend và composer cùng đọc file này. Thêm block type bắt đầu ở registry, không sửa danh sách rời.
+
 **Palette**: New Entity + 7 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu; webhook
 `record.created`/`record.updated`; notify `["creator"]`; approval single + `WORKSPACE_ADMIN`;
 knowledge_base để trống, assistant chọn KB trong Inspector).
@@ -361,7 +363,7 @@ knowledge_base để trống, assistant chọn KB trong Inspector).
 - Knowledge base: ghi chú "tự động".
 
 **Panel kiểm tra hợp lệ:** debounce 400ms gọi `POST /bizapps/validate`; nút Install disable khi không hợp lệ.
-Response trả thêm `issues: [{path, message}]`; composer map `entities[n]`/`blocks[n]` lên node tương ứng để
+Response trả thêm `issues: [{path, message}]`; composer map `entities.<name>`/`blocks.<id>` lên node tương ứng để
 hiện viền đỏ + tooltip, còn panel vẫn liệt kê toàn bộ lỗi.
 Chuyển đổi palette language/theme ngay trên header.
 
@@ -370,7 +372,7 @@ name/summary rồi `POST /marketplace/bizapps`), Install — nếu kind đã cà
 auto-bump, giữ bản ghi) thay vì báo "already installed". Card app đã cài trong `/admin/apps` cũng có
 **Save as template** dùng manifest đóng băng hiện tại.
 
-**Phím tắt composer:** `Ctrl/Cmd+S` lưu draft, `Delete`/`Backspace` xoá node/edge đang chọn (kèm dọn view/report/hook liên quan), `Esc` đóng Inspector hoặc dialog edge.
+**Phím tắt composer:** `Ctrl/Cmd+S` lưu draft, `Ctrl/Cmd+Z` undo, `Shift+Ctrl/Cmd+Z`/`Ctrl+Y` redo, `Delete`/`Backspace` xoá node/edge đang chọn (kèm dọn view/report/hook liên quan), `Esc` đóng Inspector hoặc dialog edge.
 
 ### 7. Chiếu tri thức & trợ lý AI
 
@@ -827,6 +829,8 @@ Canvas edges:
 | `external_call` → entity (`schedule`) | dashed, read-only; edit the schedule in the inspector |
 | assistant → knowledge base | derived when `params.knowledgeBaseBlock` points at a block |
 
+**Block registry:** `contracts/bizapp/blocks.v1.json` is the single source for types, hookability, palette order and defaults; the backend and composer read the same file. Add a block type there first.
+
 Palette adds one entity or one of seven blocks with safe defaults (report creates a first view for the first
 entity, webhook selects `record.created`/`record.updated`, notify defaults to `["creator"]`, approval uses
 the single-process preset with `WORKSPACE_ADMIN`, knowledge_base needs no setup and is selectable from the
@@ -845,7 +849,7 @@ Inspector highlights:
 - Webhook: checkbox list of standard events; Knowledge base: "automatic" note.
 
 Validation panel: debounced 400ms `POST /bizapps/validate`; Install stays disabled while red. The response
-also carries `issues: [{path, message}]`; the canvas maps `entities[n]`/`blocks[n]` to a red node badge and
+also carries `issues: [{path, message}]`; the canvas maps `entities.<name>`/`blocks.<id>` to a red node badge and
 tooltip while the panel keeps the full list.
 
 Actions: Save draft (`PUT /drafts/{id}`, or `PUT /drafts/new` for the first save), Save as Template (dialog
@@ -853,7 +857,7 @@ for name/summary → `POST /marketplace/bizapps`), Install — an already active
 (version bumped, records preserved). Installed-app cards in `/admin/apps` also offer **Save as template**
 using the frozen manifest.
 
-**Composer shortcuts:** `Ctrl/Cmd+S` saves the draft, `Delete`/`Backspace` removes the selected node/edge (and prunes dependent views/reports/hooks), `Esc` closes the inspector or edge dialog.
+**Composer shortcuts:** `Ctrl/Cmd+S` saves the draft, `Ctrl/Cmd+Z` undoes, `Shift+Ctrl/Cmd+Z`/`Ctrl+Y` redoes, `Delete`/`Backspace` removes the selected node/edge (and prunes dependent views/reports/hooks), `Esc` closes the inspector or edge dialog.
 
 ### 7. Knowledge projection & assistant
 

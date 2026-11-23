@@ -15,6 +15,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Check, Copy, Wand2 } from "lucide-react";
 import type { BizAppManifest } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ interface JsonTabProps {
 }
 
 export function JsonTab({ manifest, onChange }: JsonTabProps) {
+  const t = useTranslations("BizApps.composer");
   const [text, setText] = useState(() => JSON.stringify(manifest, null, 2));
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -42,7 +44,7 @@ export function JsonTab({ manifest, onChange }: JsonTabProps) {
       setError(null);
       onChange(parsed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid JSON syntax");
+      setError(err instanceof Error ? err.message : t("json.invalidSyntax"));
     }
   };
 
@@ -52,7 +54,7 @@ export function JsonTab({ manifest, onChange }: JsonTabProps) {
       setText(JSON.stringify(parsed, null, 2));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Cannot format invalid JSON");
+      setError(err instanceof Error ? err.message : t("json.cannotFormat"));
     }
   };
 
@@ -65,17 +67,15 @@ export function JsonTab({ manifest, onChange }: JsonTabProps) {
   return (
     <div className="flex-1 flex flex-col h-full bg-background p-4 space-y-2">
       <div className="flex items-center justify-between pb-2 border-b">
-        <span className="text-xs text-muted-foreground font-mono">
-          Canonical bizapp.v1 manifest JSON
-        </span>
+        <span className="text-xs text-muted-foreground font-mono">{t("json.title")}</span>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={formatJson} className="h-7 text-xs gap-1.5">
             <Wand2 className="h-3.5 w-3.5" />
-            <span>Format</span>
+            <span>{t("json.format")}</span>
           </Button>
           <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-7 text-xs gap-1.5">
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-            <span>{copied ? "Copied" : "Copy"}</span>
+            <span>{copied ? t("json.copied") : t("json.copy")}</span>
           </Button>
         </div>
       </div>

@@ -53,6 +53,25 @@ describe("composerShortcut", () => {
     })).toBeNull();
   });
 
+  it("maps Ctrl/Cmd+Z to undo, Shift+Z and Ctrl+Y to redo outside fields", () => {
+    expect(composerShortcut({ ...base, key: "z", ctrlKey: true }, {
+      editable: false,
+      hasSelection: false,
+    })).toBe("undo");
+    expect(composerShortcut({ ...base, key: "z", metaKey: true, shiftKey: true }, {
+      editable: false,
+      hasSelection: false,
+    })).toBe("redo");
+    expect(composerShortcut({ ...base, key: "y", ctrlKey: true }, {
+      editable: false,
+      hasSelection: false,
+    })).toBe("redo");
+    expect(composerShortcut({ ...base, key: "z", ctrlKey: true }, {
+      editable: true,
+      hasSelection: false,
+    })).toBeNull();
+  });
+
   it("maps Escape to escape only with a selection and ignores modified/prevented events", () => {
     expect(composerShortcut({ ...base, key: "Escape" }, {
       editable: false,

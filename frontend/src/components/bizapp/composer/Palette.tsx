@@ -24,8 +24,11 @@ import {
   Database,
   Globe,
   Send,
+  Sliders,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { paletteBlockTypes } from "@/lib/bizapp-block-registry";
 import { useBlockLabel } from "./use-block-label";
 
 interface PaletteProps {
@@ -33,15 +36,20 @@ interface PaletteProps {
   onAddBlock: (type: string) => void;
 }
 
-const AVAILABLE_BLOCKS = [
-  { type: "approval_workitem", icon: CheckCircle2 },
-  { type: "assistant", icon: Bot },
-  { type: "knowledge_base", icon: BookOpen },
-  { type: "report", icon: BarChart3 },
-  { type: "notify", icon: Bell },
-  { type: "webhook_out", icon: Send },
-  { type: "external_call", icon: Globe },
-];
+const BLOCK_ICONS: Record<string, LucideIcon> = {
+  approval_workitem: CheckCircle2,
+  assistant: Bot,
+  knowledge_base: BookOpen,
+  report: BarChart3,
+  notify: Bell,
+  webhook_out: Send,
+  external_call: Globe,
+};
+
+const AVAILABLE_BLOCKS = paletteBlockTypes().map((type) => ({
+  type,
+  icon: BLOCK_ICONS[type] ?? Sliders,
+}));
 
 export function Palette({ onAddEntity, onAddBlock }: PaletteProps) {
   const t = useTranslations("BizApps.composer");

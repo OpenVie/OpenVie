@@ -37,13 +37,15 @@ export function validationErrorsByNode(
 ): Readonly<Record<string, string>> {
   const errors: Record<string, string> = {};
   for (const issue of issues) {
-    const match = /^(entities|blocks)\[(\d+)\]/.exec(issue.path);
+    // Paths carry stable names, not array indexes, so reordering nodes cannot
+    // move an error onto the wrong card.
+    const match = /^(entities|blocks)\.([^.[\]]+)/.exec(issue.path);
     if (!match) continue;
-    const index = Number(match[2]);
-    const nodeId = match[1] === "entities"
-      ? manifest.entities[index] && `entity-${manifest.entities[index].name}`
-      : manifest.blocks?.[index] && `block-${manifest.blocks[index].id}`;
-    if (!nodeId) continue;
+    const exists = match[1] === "entities"
+      ? manifest.entities.some((entity) => entity.name === match[2])
+      : manifest.blocks?.some((block) => block.id === match[2]);
+    if (!exists) continue;
+    const nodeId = match[1] === "entities" ? `entity-${match[2]}` : `block-${match[2]}`;
     errors[nodeId] = errors[nodeId] ? `${errors[nodeId]}; ${issue.message}` : issue.message;
   }
   return errors;

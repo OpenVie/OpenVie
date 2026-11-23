@@ -373,6 +373,7 @@ limitations under the License.
 				<filtering>false</filtering>
 				<includes>
 					<include>bizapp.v1.schema.json</include>
+					<include>blocks.v1.json</include>
 				</includes>
 			</resource>
 		</resources>

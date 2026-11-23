@@ -14,7 +14,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import toast from "react-hot-toast";
 import { Loader2, Share2 } from "lucide-react";
@@ -40,35 +40,39 @@ import { Textarea } from "@/components/ui/textarea";
  * (`POST /marketplace/bizapps`, ORG_OWNER). Used by the composer and by the
  * admin installed-app cards; the original draft/installation is untouched.
  */
-export function BizAppTemplateSaveDialog({
-  open,
-  onOpenChange,
-  manifest,
-  defaultName,
-  onSaved,
-}: {
+interface BizAppTemplateSaveDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   manifest: BizAppManifest;
   defaultName?: string;
   onSaved?: () => void | Promise<void>;
-}) {
+}
+
+/**
+ * Mount the form only while open so its initial name/summary come from a fresh
+ * state, without a setState-in-effect reset.
+ */
+export function BizAppTemplateSaveDialog(props: BizAppTemplateSaveDialogProps) {
+  if (!props.open) return null;
+  return <TemplateSaveDialogBody {...props} />;
+}
+
+function TemplateSaveDialogBody({
+  open,
+  onOpenChange,
+  manifest,
+  defaultName,
+  onSaved,
+}: BizAppTemplateSaveDialogProps) {
   const t = useTranslations("BizApps.templateDialog");
   const { request } = useApiClient();
-  const [name, setName] = useState("");
-  const [summary, setSummary] = useState("");
-  const [saving, setSaving] = useState(false);
-
   const fallbackName = defaultName
     || manifest.name?.en
     || manifest.name?.vi
     || manifest.kind;
-
-  useEffect(() => {
-    if (!open) return;
-    setName(fallbackName ?? "");
-    setSummary("");
-  }, [open, fallbackName]);
+  const [name, setName] = useState(fallbackName);
+  const [summary, setSummary] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     const trimmed = name.trim();

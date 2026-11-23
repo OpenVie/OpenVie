@@ -14,18 +14,9 @@
 
 import type { BizAppBlock } from "@/types";
 import { defaultReportView, reportViewsOf, type ReportView } from "@/lib/bizapp-report";
+import { blockDefaults } from "@/lib/bizapp-block-registry";
 
-/** Mirrors BizAppManifestValidator.HOOKABLE_BLOCK_TYPES. */
-const HOOKABLE_BLOCK_TYPES: Record<string, true> = {
-  approval_workitem: true,
-  notify: true,
-  webhook_out: true,
-  external_call: true,
-};
-
-export function isHookableBlockType(type: string | undefined): boolean {
-  return type !== undefined && HOOKABLE_BLOCK_TYPES[type] === true;
-}
+export { isHookableBlockType } from "@/lib/bizapp-block-registry";
 
 const BLOCK_NAME_KEYS: Record<string, string> = {
   approval_workitem: "blockNames.approval_workitem",
@@ -113,11 +104,5 @@ export function defaultBlockParams(
     const view = defaultReportView(entities, existingViews);
     return { views: view ? [view] : [] };
   }
-  if (type === "webhook_out") {
-    return { events: ["record.created", "record.updated"] };
-  }
-  if (type === "notify") {
-    return { to: ["creator"] };
-  }
-  return {};
+  return blockDefaults(type);
 }

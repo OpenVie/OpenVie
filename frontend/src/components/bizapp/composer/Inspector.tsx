@@ -21,7 +21,7 @@ import type { BizAppEntity, BizAppBlock, BizAppField } from "@/types";
 import { Button } from "@/components/ui/button";
 import { reportViewsOf } from "@/lib/bizapp-report";
 import { ReportBuilder } from "./ReportBuilder";
-import { useBlockLabel } from "./use-block-label";
+import { useBlockLabel, useParamLabel } from "./use-block-label";
 
 interface InspectorProps {
   selectedNode: { type: "entity" | "block"; data: BizAppEntity | BizAppBlock } | null;
@@ -98,6 +98,7 @@ function EntityInspector({
   entity: BizAppEntity;
   onChange: (e: BizAppEntity) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
   const updateField = (idx: number, patch: Partial<BizAppField>) => {
     const updated = [...(entity.fields || [])];
     updated[idx] = { ...updated[idx], ...patch };
@@ -121,7 +122,7 @@ function EntityInspector({
   return (
     <div className="space-y-4">
       <div>
-        <label className="font-medium text-muted-foreground">Entity Name</label>
+        <label className="font-medium text-muted-foreground">{t("inspector.entityName")}</label>
         <input
           type="text"
           value={entity.name}
@@ -131,7 +132,7 @@ function EntityInspector({
       </div>
 
       <div>
-        <label className="font-medium text-muted-foreground">Label (EN)</label>
+        <label className="font-medium text-muted-foreground">{t("inspector.labelEn")}</label>
         <input
           type="text"
           value={entity.label?.en || ""}
@@ -147,7 +148,7 @@ function EntityInspector({
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="font-medium text-muted-foreground">Fields</label>
+          <label className="font-medium text-muted-foreground">{t("inspector.fields")}</label>
           <Button variant="ghost" size="icon-sm" onClick={addField}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
@@ -160,7 +161,7 @@ function EntityInspector({
                   type="text"
                   value={f.name}
                   onChange={(e) => updateField(i, { name: e.target.value })}
-                  placeholder="name"
+                  placeholder={t("inspector.fieldName")}
                   className="min-w-0 flex-1 border rounded px-1.5 py-0.5 bg-background font-mono text-[11px]"
                 />
                 <select
@@ -186,7 +187,7 @@ function EntityInspector({
                     checked={Boolean(f.required)}
                     onChange={(e) => updateField(i, { required: e.target.checked })}
                   />
-                  <span>Required</span>
+                  <span>{t("inspector.required")}</span>
                 </label>
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
@@ -194,7 +195,7 @@ function EntityInspector({
                     checked={Boolean(f.pii)}
                     onChange={(e) => updateField(i, { pii: e.target.checked })}
                   />
-                  <span>PII</span>
+                  <span>{t("inspector.pii")}</span>
                 </label>
               </div>
             </div>
@@ -207,24 +208,12 @@ function EntityInspector({
 
 type ApprovalPreset = {
   template: string;
-  label: string;
-  description: string;
   levels: 1 | 2;
 };
 
 const APPROVAL_PRESETS: ApprovalPreset[] = [
-  {
-    template: "processes/bizapp-single-approval.bpmn20.xml",
-    label: "Single-level approval",
-    description: "One approver group reviews the record and makes the final decision.",
-    levels: 1,
-  },
-  {
-    template: "processes/bizapp-two-level-approval.bpmn20.xml",
-    label: "Two-level approval",
-    description: "First-level review, then the organization owner gives the final decision.",
-    levels: 2,
-  },
+  { template: "processes/bizapp-single-approval.bpmn20.xml", levels: 1 },
+  { template: "processes/bizapp-two-level-approval.bpmn20.xml", levels: 2 },
 ];
 
 export const DEFAULT_APPROVAL_TEMPLATE = APPROVAL_PRESETS[0].template;
@@ -283,7 +272,7 @@ function BlockInspector({
         return (
           <div className="space-y-3 border-t pt-3">
             <div>
-              <label className="font-medium text-muted-foreground">Approval process</label>
+              <label className="font-medium text-muted-foreground">{t("inspector.approvalProcess")}</label>
               <select
                 value={currentTemplate}
                 onChange={(e) => selectPreset(e.target.value)}
@@ -291,39 +280,45 @@ function BlockInspector({
               >
                 {APPROVAL_PRESETS.map((preset) => (
                   <option key={preset.template} value={preset.template}>
-                    {preset.label}
+                    {preset.levels === 2
+                      ? t("inspector.approvalTwo")
+                      : t("inspector.approvalSingle")}
                   </option>
                 ))}
                 {!activePreset && (
-                  <option value={currentTemplate}>Custom process (existing)</option>
+                  <option value={currentTemplate}>{t("inspector.customProcess")}</option>
                 )}
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {activePreset?.description || "This block uses a custom approval process."}
+                {activePreset
+                  ? t(activePreset.levels === 2
+                    ? "inspector.approvalTwoDesc"
+                    : "inspector.approvalSingleDesc")
+                  : t("inspector.customProcessDesc")}
               </p>
             </div>
             <div>
               <label className="font-medium text-muted-foreground">
-                {twoLevel ? "First-level approver" : "Approver role"}
+                {twoLevel ? t("inspector.firstLevelApprover") : t("inspector.approverRole")}
               </label>
               <select
                 value={String(block.params?.candidateRole || "WORKSPACE_ADMIN")}
                 onChange={(e) => updateParam("candidateRole", e.target.value)}
                 className="w-full mt-1 border rounded px-2 py-1 bg-background text-xs"
               >
-                <option value="WORKSPACE_ADMIN">Workspace admin</option>
-                <option value="ORG_OWNER">Organization owner</option>
-                <option value="MEMBER">Member</option>
+                <option value="WORKSPACE_ADMIN">{t("inspector.workspaceAdmin")}</option>
+                <option value="ORG_OWNER">{t("inspector.orgOwner")}</option>
+                <option value="MEMBER">{t("inspector.member")}</option>
               </select>
               {twoLevel && (
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Second level: Organization owner (final approval).
+                  {t("inspector.secondLevel")}
                 </p>
               )}
             </div>
             {twoLevel && (
               <p className="rounded border bg-muted/20 px-2 py-1.5 text-[11px] text-muted-foreground">
-                Submitted → first-level approver → organization owner → decision recorded
+                {t("inspector.approvalFlow")}
               </p>
             )}
           </div>
@@ -333,7 +328,7 @@ function BlockInspector({
       {block.type === "external_call" && (
         <div className="space-y-3 border-t pt-3">
           <div>
-            <label className="font-medium text-muted-foreground">API URL</label>
+            <label className="font-medium text-muted-foreground">{t("inspector.apiUrl")}</label>
             <input
               type="text"
               value={String(block.params?.url || "")}
@@ -343,7 +338,7 @@ function BlockInspector({
             />
           </div>
           <div>
-            <label className="font-medium text-muted-foreground">Credential name</label>
+            <label className="font-medium text-muted-foreground">{t("inspector.credentialName")}</label>
             <input
               type="text"
               value={String(block.params?.credentialRef || "")}
@@ -363,7 +358,7 @@ function BlockInspector({
             onChange={(value) => updateParam("to", value)}
           />
           <div>
-            <label className="font-medium text-muted-foreground">Title</label>
+            <label className="font-medium text-muted-foreground">{t("inspector.title")}</label>
             <input
               type="text"
               value={String(block.params?.title || "")}
@@ -372,7 +367,7 @@ function BlockInspector({
             />
           </div>
           <div>
-            <label className="font-medium text-muted-foreground">Subject</label>
+            <label className="font-medium text-muted-foreground">{t("inspector.subject")}</label>
             <input
               type="text"
               value={String(block.params?.subject || "")}
@@ -386,7 +381,7 @@ function BlockInspector({
       {block.type === "assistant" && (
         <div className="space-y-3 border-t pt-3">
           <div>
-            <label className="font-medium text-muted-foreground">Instructions</label>
+            <label className="font-medium text-muted-foreground">{t("inspector.instructions")}</label>
             <textarea
               rows={3}
               value={String(block.params?.instructions || "")}
@@ -462,13 +457,13 @@ const HANDLED_PARAMS: Record<string, Set<string>> = {
 };
 
 
-const WEBHOOK_EVENTS: Array<{ value: string; label: string; description: string }> = [
-  { value: "record.created", label: "Record created", description: "A new record is saved." },
-  { value: "record.updated", label: "Record updated", description: "An existing record is edited." },
-  { value: "record.archived", label: "Record archived", description: "A record is removed from active use." },
-  { value: "record.restored", label: "Record restored", description: "An archived record is brought back." },
-  { value: "record.submitted", label: "Submitted for approval", description: "A record enters the approval flow." },
-  { value: "record.decided", label: "Approval decided", description: "A record is approved or rejected." },
+const WEBHOOK_EVENTS: Array<{ value: string; labelKey: string; descriptionKey: string }> = [
+  { value: "record.created", labelKey: "inspector.eventCreated", descriptionKey: "inspector.eventCreatedDesc" },
+  { value: "record.updated", labelKey: "inspector.eventUpdated", descriptionKey: "inspector.eventUpdatedDesc" },
+  { value: "record.archived", labelKey: "inspector.eventArchived", descriptionKey: "inspector.eventArchivedDesc" },
+  { value: "record.restored", labelKey: "inspector.eventRestored", descriptionKey: "inspector.eventRestoredDesc" },
+  { value: "record.submitted", labelKey: "inspector.eventSubmitted", descriptionKey: "inspector.eventSubmittedDesc" },
+  { value: "record.decided", labelKey: "inspector.eventDecided", descriptionKey: "inspector.eventDecidedDesc" },
 ];
 
 function WebhookEventsField({
@@ -478,12 +473,13 @@ function WebhookEventsField({
   value: string[];
   onChange: (events: string[]) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
   const toggle = (event: string, checked: boolean) => {
     onChange(checked ? [...value, event] : value.filter((candidate) => candidate !== event));
   };
   return (
     <div className="space-y-2 border-t pt-3">
-      <label className="font-medium text-muted-foreground">Events to send</label>
+      <label className="font-medium text-muted-foreground">{t("inspector.eventsToSend")}</label>
       <div className="space-y-1.5">
         {WEBHOOK_EVENTS.map((event) => (
           <label
@@ -497,60 +493,31 @@ function WebhookEventsField({
               onChange={(changeEvent) => toggle(event.value, changeEvent.target.checked)}
             />
             <span>
-              <span className="block text-[11px] font-medium">{event.label}</span>
-              <span className="block text-[10px] text-muted-foreground">{event.description}</span>
+              <span className="block text-[11px] font-medium">
+                {t(event.labelKey as Parameters<typeof t>[0])}
+              </span>
+              <span className="block text-[10px] text-muted-foreground">
+                {t(event.descriptionKey as Parameters<typeof t>[0])}
+              </span>
             </span>
           </label>
         ))}
       </div>
       {value.length === 0 && (
         <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[10px] text-amber-700 dark:text-amber-300">
-          Choose at least one event. The webhook block is not valid without one.
+          {t("inspector.chooseEvent")}
         </p>
       )}
-      <p className="text-[10px] text-muted-foreground">
-        Your organization owner configures the delivery destination and signing secret. This block
-        chooses which app events are published.
-      </p>
+      <p className="text-[10px] text-muted-foreground">{t("inspector.webhookHint")}</p>
     </div>
   );
 }
 
-const FRIENDLY_LABELS: Record<string, string> = {
-  bpmnTemplate: "Approval flow",
-  candidateRole: "Approver role",
-  to: "Recipients",
-  title: "Title",
-  subject: "Email subject",
-  url: "API URL",
-  method: "HTTP method",
-  credentialRef: "Credential",
-  bodyTemplate: "Request body",
-  responseMap: "Response mapping",
-  sink: "Store result in",
-  schedule: "Polling schedule",
-  protocol: "Protocol",
-  brokerUrl: "Broker URL",
-  topic: "MQTT topic",
-  events: "Webhook events",
-  views: "Report views",
-  instructions: "Instructions",
-  sla: "SLA",
-  reminder: "Reminder after",
-  escalation: "Escalate after",
-  allowedHosts: "Allowed hosts",
-  auth: "Authentication",
-  mapping: "Field mapping",
-  entity: "Entity",
-  dedupeKey: "Deduplication key",
-  timeout: "Timeout",
-  retry: "Retry policy",
-  qos: "QoS",
-  maxMessages: "Maximum messages",
-};
+type ParamTranslator = (key: string) => string | null;
 
-function friendlyLabel(key: string): string {
-  if (FRIENDLY_LABELS[key]) return FRIENDLY_LABELS[key];
+function friendlyLabel(key: string, translate: ParamTranslator): string {
+  const translated = translate(key);
+  if (translated) return translated;
   return key
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
@@ -564,6 +531,7 @@ function AdditionalParamsEditor({
   block: BizAppBlock;
   onChange: (b: BizAppBlock) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
   const handled = HANDLED_PARAMS[block.type] ?? new Set<string>();
   const entries = Object.entries(block.params || {}).filter(([key]) => !handled.has(key));
   if (entries.length === 0) return null;
@@ -574,7 +542,7 @@ function AdditionalParamsEditor({
 
   return (
     <div className="space-y-3 border-t pt-3">
-      <label className="font-medium text-muted-foreground">Additional settings</label>
+      <label className="font-medium text-muted-foreground">{t("inspector.additionalSettings")}</label>
       {entries.map(([key, value]) => (
         <ParamField key={key} name={key} value={value} onChange={(next) => update(key, next)} />
       ))}
@@ -591,18 +559,19 @@ function ParamField({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const translate = useParamLabel();
   if (typeof value === "boolean") {
     return (
       <label className="flex items-center gap-2 text-[11px]">
         <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
-        <span>{friendlyLabel(name)}</span>
+        <span>{friendlyLabel(name, translate)}</span>
       </label>
     );
   }
   if (typeof value === "number") {
     return (
       <div>
-        <label className="font-medium text-muted-foreground">{friendlyLabel(name)}</label>
+        <label className="font-medium text-muted-foreground">{friendlyLabel(name, translate)}</label>
         <input
           type="number"
           value={value}
@@ -621,7 +590,7 @@ function ParamField({
   if (value && typeof value === "object") {
     return (
       <div className="rounded border bg-muted/10 p-2 space-y-2">
-        <p className="font-medium text-muted-foreground">{friendlyLabel(name)}</p>
+        <p className="font-medium text-muted-foreground">{friendlyLabel(name, translate)}</p>
         <ObjectFields value={value as Record<string, unknown>} onChange={onChange} />
       </div>
     );
@@ -630,7 +599,7 @@ function ParamField({
   const multiline = /body|template|instructions|subject|reason/i.test(name) || text.length > 80;
   return (
     <div>
-      <label className="font-medium text-muted-foreground">{friendlyLabel(name)}</label>
+      <label className="font-medium text-muted-foreground">{friendlyLabel(name, translate)}</label>
       {multiline ? (
         <textarea
           rows={3}
@@ -676,16 +645,18 @@ function RecipientListField({
   entities: BizAppEntity[];
   onChange: (value: string[]) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
+  const translate = useParamLabel();
   const [draft, setDraft] = useState("");
   const suggestions = [
-    { value: "creator", label: "Record creator" },
+    { value: "creator", label: t("inspector.recordCreator") },
     ...entities.flatMap((entity) =>
       (entity.fields || [])
         .filter((field) => /email|mail/i.test(field.name) || /email/i.test(field.format || ""))
         .map((field) => ({
           value: `record.${field.name}`,
           label: `${entity.label?.en || entity.label?.vi || entity.name} · ${
-            field.label?.en || field.label?.vi || friendlyLabel(field.name)
+            field.label?.en || field.label?.vi || friendlyLabel(field.name, translate)
           }`,
         })),
     ),
@@ -700,7 +671,7 @@ function RecipientListField({
 
   return (
     <div className="space-y-2">
-      <label className="font-medium text-muted-foreground">Recipients</label>
+      <label className="font-medium text-muted-foreground">{t("inspector.recipients")}</label>
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map((recipient, index) => (
@@ -709,12 +680,12 @@ function RecipientListField({
               title={recipient}
               className="inline-flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-[11px]"
             >
-              {recipientLabel(recipient, entities)}
+              {recipientLabel(recipient, entities, t("inspector.recordCreator"), translate)}
               <button
                 type="button"
                 onClick={() => onChange(value.filter((_, i) => i !== index))}
                 className="text-muted-foreground hover:text-destructive"
-                title="Remove recipient"
+                title={t("inspector.removeRecipient")}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -734,7 +705,7 @@ function RecipientListField({
               add();
             }
           }}
-          placeholder="Choose a person or enter an email"
+          placeholder={t("inspector.recipientPlaceholder")}
           className="min-w-0 flex-1 border rounded px-2 py-1 bg-background text-[11px]"
         />
         <datalist id="recipient-suggestions">
@@ -745,29 +716,34 @@ function RecipientListField({
           ))}
         </datalist>
         <Button type="button" variant="outline" size="sm" onClick={add} disabled={!draft.trim()}>
-          <Plus className="h-3.5 w-3.5" /> Add
+          <Plus className="h-3.5 w-3.5" /> {t("inspector.add")}
         </Button>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        Pick “Record creator”, an email field from the app, or type an email address.
-      </p>
+      <p className="text-[10px] text-muted-foreground">{t("inspector.recipientHint")}</p>
     </div>
   );
 }
 
-function recipientLabel(value: string, entities: BizAppEntity[]): string {
-  if (value === "creator") return "Record creator";
+function recipientLabel(
+  value: string,
+  entities: BizAppEntity[],
+  creatorLabel: string,
+  translate: ParamTranslator,
+): string {
+  if (value === "creator") return creatorLabel;
   if (value.startsWith("record.")) {
     const fieldName = value.slice("record.".length);
     for (const entity of entities) {
       const field = (entity.fields || []).find((candidate) => candidate.name === fieldName);
       if (field) {
-        return field.label?.en || field.label?.vi || friendlyLabel(field.name);
+        return field.label?.en || field.label?.vi || friendlyLabel(field.name, translate);
       }
     }
-    return friendlyLabel(fieldName);
+    return friendlyLabel(fieldName, translate);
   }
-  if (value.startsWith("config.")) return `Config · ${friendlyLabel(value.slice("config.".length))}`;
+  if (value.startsWith("config.")) {
+    return `Config · ${friendlyLabel(value.slice("config.".length), translate)}`;
+  }
   return value;
 }
 
@@ -780,6 +756,8 @@ function StringListField({
   value: string[];
   onChange: (value: string[]) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
+  const translate = useParamLabel();
   const update = (index: number, next: string) => {
     const copy = [...value];
     copy[index] = next;
@@ -787,7 +765,7 @@ function StringListField({
   };
   return (
     <div className="space-y-1.5">
-      <label className="font-medium text-muted-foreground">{friendlyLabel(name)}</label>
+      <label className="font-medium text-muted-foreground">{friendlyLabel(name, translate)}</label>
       {value.map((item, index) => (
         <div key={index} className="flex min-w-0 gap-1.5">
           <input
@@ -800,14 +778,14 @@ function StringListField({
             type="button"
             onClick={() => onChange(value.filter((_, i) => i !== index))}
             className="shrink-0 text-muted-foreground hover:text-destructive"
-            title="Remove"
+            title={t("inspector.remove")}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={() => onChange([...value, ""])}>
-        <Plus className="h-3.5 w-3.5" /> Add
+        <Plus className="h-3.5 w-3.5" /> {t("inspector.add")}
       </Button>
     </div>
   );
@@ -822,18 +800,22 @@ function ObjectListField({
   value: unknown[];
   onChange: (value: unknown[]) => void;
 }) {
+  const t = useTranslations("BizApps.composer");
+  const translate = useParamLabel();
   return (
     <div className="space-y-2">
-      <label className="font-medium text-muted-foreground">{friendlyLabel(name)}</label>
+      <label className="font-medium text-muted-foreground">{friendlyLabel(name, translate)}</label>
       {value.map((item, index) => (
         <div key={index} className="rounded border bg-muted/10 p-2 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Item {index + 1}</span>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t("inspector.item", { index: index + 1 })}
+            </span>
             <button
               type="button"
               onClick={() => onChange(value.filter((_, i) => i !== index))}
               className="text-muted-foreground hover:text-destructive"
-              title="Remove"
+              title={t("inspector.remove")}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -862,7 +844,7 @@ function ObjectListField({
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={() => onChange([...value, newObjectLike(value)])}>
-        <Plus className="h-3.5 w-3.5" /> Add
+        <Plus className="h-3.5 w-3.5" /> {t("inspector.add")}
       </Button>
     </div>
   );

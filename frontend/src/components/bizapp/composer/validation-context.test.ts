@@ -30,8 +30,8 @@ describe("validationErrorsByNode", () => {
     const errors = validationErrorsByNode(
       { entities, blocks },
       [
-        { path: "entities[0]", message: "entity label missing" },
-        { path: "blocks[1].params.to", message: "notify needs recipients" },
+        { path: "entities.devices", message: "entity label missing" },
+        { path: "blocks.notify1.params.to", message: "notify needs recipients" },
       ],
     );
 
@@ -45,9 +45,9 @@ describe("validationErrorsByNode", () => {
     const errors = validationErrorsByNode(
       { entities, blocks },
       [
-        { path: "entities[1]", message: "first" },
-        { path: "entities[1].fields[0]", message: "second" },
-        { path: "ui.views[0]", message: "panel only" },
+        { path: "entities.sites", message: "first" },
+        { path: "entities.sites.fields.code", message: "second" },
+        { path: "ui.views.0", message: "panel only" },
         { path: "manifest", message: "panel only" },
       ],
     );
@@ -56,10 +56,10 @@ describe("validationErrorsByNode", () => {
     expect(Object.keys(errors)).toEqual(["entity-sites"]);
   });
 
-  it("ignores out-of-range indexes", () => {
+  it("maps names even when the node order changes", () => {
     expect(validationErrorsByNode(
-      { entities, blocks },
-      [{ path: "blocks[4]", message: "stale" }],
-    )).toEqual({});
+      { entities: [...entities].reverse(), blocks: [...blocks].reverse() },
+      [{ path: "blocks.report1.params.views.x", message: "stale report" }],
+    )).toEqual({ "block-report1": "stale report" });
   });
 });
