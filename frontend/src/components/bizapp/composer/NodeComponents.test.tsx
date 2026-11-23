@@ -26,7 +26,7 @@ import { ComposerValidationContext } from "./validation-context";
 
 const BLOCK_TYPES = [
   "approval_workitem", "assistant", "knowledge_base", "report", "notify",
-  "webhook_out", "external_call", "registry", "form", "timeline",
+  "webhook_out", "external_call",
 ] as const;
 
 function renderNode(

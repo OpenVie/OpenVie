@@ -26,9 +26,6 @@ const BLOCK_NAME_KEYS: Record<string, string> = {
   notify: "blockNames.notify",
   webhook_out: "blockNames.webhook_out",
   external_call: "blockNames.external_call",
-  registry: "blockNames.registry",
-  form: "blockNames.form",
-  timeline: "blockNames.timeline",
 };
 
 export function blockNameKey(type: string): string | null {

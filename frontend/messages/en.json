@@ -146,10 +146,7 @@
         "report": "Report",
         "notify": "Notifications",
         "webhook_out": "Webhook",
-        "external_call": "External API",
-        "registry": "Registry view",
-        "form": "Form view",
-        "timeline": "Timeline view"
+        "external_call": "External API"
       },
       "blockSummary": {
         "approvalSingle": "Single-level approval",
@@ -632,7 +629,7 @@
       "topStorage": "jsonb is the only storage in this build: every app writes to bizapp_records. The contract still reserves typed, but the validator rejects it until typed tables ship.",
       "topRbac": "Capability → workspace role lists. Defaults keep reading open, restrict writes/deletes/approvals to admins, and let submit fall back to write.",
       "topEntities": "Data models: fields with types string, number, boolean, enum, date, ref; optional knowledge projection and lifecycle hooks.",
-      "topBlocks": "Executable or functional pieces: approval_workitem, notify, webhook_out, external_call, report, knowledge_base, assistant (plus inert registry/form/timeline presentation views).",
+      "topBlocks": "Executable or functional pieces: approval_workitem, notify, webhook_out, external_call, report, knowledge_base, assistant. The registry/form/timeline tabs live in ui.views.",
       "topUi": "Runtime view order (registry:/form:/timeline:/report:/assistant:) and canvas layout coordinates.",
       "topConversational": "Trigger phrases and a short description that help the assistant route messages to this app when the message does not name it.",
       "unknownKeysTitle": "Unknown keys are rejected",

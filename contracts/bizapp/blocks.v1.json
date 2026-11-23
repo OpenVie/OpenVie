@@ -57,27 +57,6 @@
       "palette": true,
       "defaults": {},
       "paramSchema": "blocks/external_call.schema.json"
-    },
-    {
-      "type": "registry",
-      "hookable": false,
-      "palette": false,
-      "defaults": {},
-      "paramSchema": null
-    },
-    {
-      "type": "form",
-      "hookable": false,
-      "palette": false,
-      "defaults": {},
-      "paramSchema": null
-    },
-    {
-      "type": "timeline",
-      "hookable": false,
-      "palette": false,
-      "defaults": {},
-      "paramSchema": null
     }
   ]
 }

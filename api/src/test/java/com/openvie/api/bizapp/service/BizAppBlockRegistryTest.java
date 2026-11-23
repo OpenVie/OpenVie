@@ -26,7 +26,7 @@ class BizAppBlockRegistryTest {
 
     @Test
     void exposesTheCanonicalBlockCatalog() {
-        assertEquals(10, registry.types().size());
+        assertEquals(7, registry.types().size());
         assertEquals(7, registry.paletteBlocks().size());
         assertTrue(registry.types().contains("knowledge_base"));
         assertFalse(registry.types().contains("unknown_block"));

@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retention metadata, legal hold and sweep**: `tenants` and `bizapp_records` now carry `archived_at`/`archived_by` (V24); `tenants.legal_hold` blocks both the workspace report and record purge. `PATCH /admin/workspaces/{id}/legal-hold` toggles the hold. A daily `RetentionSweepService` audits purge-eligible workspaces (never deletes them) and purges archived BizApp records, including connector jobs, only for ACTIVE non-held workspaces when `app.retention.bizapp-record-purge-enabled=true`.
 - **Workspace archive/restore audit + cache invalidation**: `WORKSPACE_ARCHIVED` now stores timestamp metadata; restore and legal-hold changes are audited and invalidate the cached tenant workspace snapshot.
 
+### Removed
+- **Inert presentation block types**: `registry`, `form` and `timeline` are no longer valid entries in `manifest.blocks`; V26 strips them from drafts, installations and templates while preserving the corresponding `ui.views` tabs (`registry:<entity>`, `form:<entity>`, `timeline:<entity>`).
+
 ### Fixed
 - **Composer hook integrity**: canvas connections now only create lifecycle hooks for `approval_workitem`, `notify`, `webhook_out` and `external_call`; removing a report's last view removes the now-invalid report block, and auto-layout uses the rendered 240px node width.
 - **Background jobs skip archived workspaces**: the connector scheduler and worker check tenant status before enqueuing/running, and the booking reminder query joins `tenants` so an archived workspace cannot keep calling external systems or sending reminders.

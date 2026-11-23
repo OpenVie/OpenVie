@@ -174,6 +174,34 @@ class BizAppDraftServiceTest {
     }
 
     @Test
+    void statelessValidationRejectsRemovedPresentationBlockTypes() {
+        var service = new BizAppDraftService(
+                draftRepository, installationRepository, validator, parser, aiInferenceApi,
+                new BizAppProperties(true, false, false, false, ""),
+                runtime, objectMapper
+        );
+        Map<String, Object> manifest = Map.of(
+                "schema", "bizapp.v1",
+                "kind", "inventory",
+                "name", Map.of("en", "Inventory", "vi", "Kho"),
+                "version", 1,
+                "entities", List.of(Map.of(
+                        "name", "items",
+                        "label", Map.of("en", "Items", "vi", "San pham"),
+                        "fields", List.of(Map.of("name", "sku", "type", "string"))
+                )),
+                "blocks", List.of(Map.of("id", "registry1", "type", "registry")),
+                "ui", Map.of("views", List.of("registry:items"))
+        );
+
+        var result = service.validateStateless(manifest);
+
+        assertFalse(result.ok());
+        assertEquals("blocks.registry1", result.issues().get(0).path());
+        assertTrue(result.issues().get(0).message().contains("unknown block type"));
+    }
+
+    @Test
     void statelessValidationCollectsIndependentIssues() {
         var service = new BizAppDraftService(
                 draftRepository, installationRepository, validator, parser, aiInferenceApi,

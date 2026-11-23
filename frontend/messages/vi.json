@@ -146,10 +146,7 @@
         "report": "Báo cáo",
         "notify": "Thông báo",
         "webhook_out": "Webhook",
-        "external_call": "API ngoài",
-        "registry": "Khung danh sách",
-        "form": "Khung biểu mẫu",
-        "timeline": "Dòng thời gian"
+        "external_call": "API ngoài"
       },
       "blockSummary": {
         "approvalSingle": "Phê duyệt một cấp",
@@ -632,7 +629,7 @@
       "topStorage": "jsonb là kho duy nhất trong bản build này: mọi app ghi vào bizapp_records. Contract vẫn giữ chỗ cho typed nhưng validator từ chối cho tới khi có bảng typed.",
       "topRbac": "Map khả năng → danh sách vai trò. Mặc định: đọc mở cho mọi vai trò, ghi/xoá/phê duyệt chỉ admin, submit rơi về write.",
       "topEntities": "Mô hình dữ liệu: các trường string, number, boolean, enum, date, ref; kèm cài đặt chiếu tri thức và hook lifecycle.",
-      "topBlocks": "Các khối thực thi/chức năng: approval_workitem, notify, webhook_out, external_call, report, knowledge_base, assistant (cộng khối trình bày registry/form/timeline).",
+      "topBlocks": "Các khối thực thi/chức năng: approval_workitem, notify, webhook_out, external_call, report, knowledge_base, assistant. Các tab registry/form/timeline nằm trong ui.views.",
       "topUi": "Thứ tự khung xem runtime (registry:/form:/timeline:/report:/assistant:) và toạ độ layout canvas.",
       "topConversational": "Cụm từ gợi ý + mô tả giúp trợ lý chọn đúng app khi tin nhắn không nhắc tên kind.",
       "unknownKeysTitle": "Key ngoài hợp đồng bị từ chối",

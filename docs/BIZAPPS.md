@@ -201,9 +201,9 @@ khi message không nhắc tên kind (ví dụ "tạo phiếu xin mua"). Tránh t
 ### 3. Danh mục khối (blocks)
 
 Quy tắc chung: `id` duy nhất `[A-Za-z][A-Za-z0-9_]{0,63}`; hook chỉ chạy được
-`approval_workitem` / `notify` / `webhook_out` / `external_call`; `registry` / `form` / `timeline` là
-khối trình bày (không thực thi). `report`/`knowledge_base`/`assistant` là khối chức năng nhưng **không
-được target bởi lifecycle hook**.
+`approval_workitem` / `notify` / `webhook_out` / `external_call`. `report`/`knowledge_base`/`assistant`
+là khối chức năng nhưng **không được target bởi lifecycle hook**. Các tab runtime `registry:`/`form:`/
+`timeline:` nằm trong `ui.views`, không phải block type.
 
 #### 3.1 `approval_workitem` (tối đa 1 khối/app)
 
@@ -686,8 +686,8 @@ Avoid generic phrases such as "manage".
 ### 3. Blocks catalog
 
 Rules: block `id` unique; hooks target only `approval_workitem` / `notify` / `webhook_out` /
-`external_call`. `registry`/`form`/`timeline` are inert presentation blocks; `report`/`knowledge_base`/
-`assistant` are functional but **not** hook-targetable.
+`external_call`. `report`/`knowledge_base`/`assistant` are functional but **not** hook-targetable.
+The runtime tabs `registry:`/`form:`/`timeline:` live in `ui.views`, not in the block list.
 
 #### 3.1 `approval_workitem` (at most 1 per manifest)
 

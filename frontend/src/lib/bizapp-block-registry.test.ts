@@ -24,7 +24,7 @@ describe("bizapp block registry", () => {
   it("is the single source for all allowed block types", () => {
     expect(blockTypes()).toEqual([
       "approval_workitem", "assistant", "knowledge_base", "report", "notify",
-      "webhook_out", "external_call", "registry", "form", "timeline",
+      "webhook_out", "external_call",
     ]);
     expect(paletteBlockTypes()).toEqual([
       "approval_workitem", "assistant", "knowledge_base", "report", "notify",
@@ -36,7 +36,7 @@ describe("bizapp block registry", () => {
     for (const type of ["approval_workitem", "notify", "webhook_out", "external_call"]) {
       expect(isHookableBlockType(type)).toBe(true);
     }
-    for (const type of ["assistant", "knowledge_base", "report", "registry", "form", "timeline"]) {
+    for (const type of ["assistant", "knowledge_base", "report"]) {
       expect(isHookableBlockType(type)).toBe(false);
     }
   });

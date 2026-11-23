@@ -31,8 +31,8 @@ describe("isHookableBlockType", () => {
     }
   });
 
-  it("rejects report, assistant, knowledge_base and presentation blocks", () => {
-    for (const type of ["report", "assistant", "knowledge_base", "registry", "form", "timeline"]) {
+  it("rejects non-hookable functional blocks and removed presentation types", () => {
+    for (const type of ["report", "assistant", "knowledge_base"]) {
       expect(isHookableBlockType(type)).toBe(false);
     }
     expect(isHookableBlockType(undefined)).toBe(false);
@@ -44,9 +44,12 @@ describe("blockNameKey", () => {
   it("maps every allowed block type and leaves unknown types unstyled", () => {
     for (const type of [
       "approval_workitem", "assistant", "knowledge_base", "report", "notify",
-      "webhook_out", "external_call", "registry", "form", "timeline",
+      "webhook_out", "external_call",
     ]) {
       expect(blockNameKey(type)).toBe(`blockNames.${type}`);
+    }
+    for (const type of ["registry", "form", "timeline"]) {
+      expect(blockNameKey(type)).toBeNull();
     }
     expect(blockNameKey("unknown_block")).toBeNull();
   });

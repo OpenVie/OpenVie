@@ -269,10 +269,7 @@
             "report",
             "notify",
             "webhook_out",
-            "external_call",
-            "registry",
-            "form",
-            "timeline"
+            "external_call"
           ]
         },
         "params": {
