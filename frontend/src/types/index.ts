@@ -63,13 +63,13 @@ export interface WorkspaceTasks {
 
 export interface WorkflowProcess {
   processInstanceId: string;
-  documentId: string;
-  documentFileName: string;
+  documentId: string | null;
+  documentFileName: string | null;
   sensitive: boolean;
   approvalLevel: number;
   policyVersion: string | null;
   publishTarget: PublishTarget | null;
-  documentStatus: string;
+  documentStatus: string | null;
   escalated: boolean;
   startedAt: string;
   endedAt: string | null;
@@ -77,6 +77,8 @@ export interface WorkflowProcess {
   summary?: string | null;
   appKind?: string | null;
   entity?: string | null;
+  recordId?: string | null;
+  recordFields?: Record<string, string> | null;
 }
 
 export interface StartProcessResponse {

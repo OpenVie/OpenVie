@@ -523,6 +523,37 @@ class WorkflowServiceTest {
     }
 
     @Test
+    void processListExposesTheBackingRecordAndDerivesItsTerminalStatus() {
+        member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
+        UUID recordId = UUID.randomUUID();
+        com.openvie.api.workflow.api.WorkflowTaskContextApi context =
+                mock(com.openvie.api.workflow.api.WorkflowTaskContextApi.class);
+        when(context.describe(workspaceId, "booking", "bookings", recordId)).thenReturn(
+                new com.openvie.api.workflow.api.WorkflowTaskContextApi.TaskContext(
+                        "Anh Binz", "Tên khách: Anh Binz", Map.of("Tên khách", "Anh Binz")));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "taskContextApi", context);
+
+        HistoricProcessInstance historic = mock(HistoricProcessInstance.class);
+        when(historic.getId()).thenReturn(processInstanceId.toString());
+        when(historic.getStartTime()).thenReturn(toJavaDate(LocalDateTime.now().minusMinutes(5)));
+        when(historic.getEndTime()).thenReturn(toJavaDate(LocalDateTime.now()));
+        when(historic.getProcessVariables()).thenReturn(Map.of(
+                "workspaceId", workspaceId.toString(), "initiatorId", userId.toString(),
+                "appKind", "booking", "entity", "bookings", "recordId", recordId.toString(),
+                "decision", "APPROVE", "approvalLevel", 1));
+        HistoricProcessInstanceQuery query = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(query);
+        when(query.list()).thenReturn(List.of(historic));
+
+        var view = service.listProcesses(workspaceId, userId, true).get(0);
+
+        assertEquals(recordId, view.recordId());
+        assertEquals(Map.of("Tên khách", "Anh Binz"), view.recordFields());
+        assertEquals("Anh Binz", view.title());
+        assertEquals("APPROVED", view.documentStatus());
+    }
+
+    @Test
     void processListPagingKeepsTheUnfinishedFilterAndDefaultWindow() {
         member(WorkspaceRole.MEMBER, OrgRole.MEMBER);
         HistoricProcessInstanceQuery countQuery = mock(HistoricProcessInstanceQuery.class, RETURNS_SELF);

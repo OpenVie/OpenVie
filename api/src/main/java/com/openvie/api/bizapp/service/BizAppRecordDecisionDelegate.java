@@ -47,6 +47,12 @@ public class BizAppRecordDecisionDelegate implements JavaDelegate {
         if (recordId == null || appKind == null || entity == null) {
             return;
         }
+        // Mirror the document flow: the journal reads this variable, so a
+        // record approval must expose its verdict there too.
+        if (decision != null) {
+            execution.setVariable("documentStatus",
+                    "APPROVE".equals(String.valueOf(decision)) ? "APPROVED" : "REJECTED");
+        }
         Map<String, Object> decisionState = new LinkedHashMap<>();
         decisionState.put("processId", execution.getProcessInstanceId());
         decisionState.put("decision", decision == null ? null : String.valueOf(decision));

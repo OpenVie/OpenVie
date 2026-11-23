@@ -1282,6 +1282,10 @@
       "log": "Could not load the approval log"
     },
     "viewLog": "View log",
+    "viewRecord": "View record",
+    "recordTitle": "Record details",
+    "recordEmpty": "This record has no displayable fields.",
+    "close": "Close",
     "logTitle": "Approval log",
     "logEmpty": "No approval events yet.",
     "reasonLabel": "Reason",

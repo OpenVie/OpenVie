@@ -1282,6 +1282,10 @@
       "log": "Không thể tải nhật ký phê duyệt"
     },
     "viewLog": "Xem nhật ký",
+    "viewRecord": "Xem bản ghi",
+    "recordTitle": "Thông tin bản ghi",
+    "recordEmpty": "Bản ghi không có trường nào để hiển thị.",
+    "close": "Đóng",
     "logTitle": "Nhật ký phê duyệt",
     "logEmpty": "Chưa có sự kiện phê duyệt nào.",
     "reasonLabel": "Lý do",

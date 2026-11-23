@@ -87,7 +87,11 @@ public final class WorkflowDtos {
             String title,
             String summary,
             String appKind,
-            String entity) {
+            String entity,
+            /** BizApp record backing this process; null for document approvals. */
+            UUID recordId,
+            /** Labeled manifest fields of the backing record; empty for documents. */
+            Map<String, String> recordFields) {
     }
 
     /** One page of the workspace approval journal; totalCount backs X-Total-Count. */

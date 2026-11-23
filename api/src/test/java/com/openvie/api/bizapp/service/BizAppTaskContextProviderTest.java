@@ -70,4 +70,41 @@ class BizAppTaskContextProviderTest {
         assertTrue(context.summary().contains("Món hàng"));
         assertEquals("Màn hình", context.fields().get("Món hàng"));
     }
+
+    @Test
+    void keepsHistoricalRecordContextForDisabledApps() throws Exception {
+        UUID workspace = UUID.randomUUID();
+        UUID recordId = UUID.randomUUID();
+        String manifest = """
+                {"schema":"bizapp.v1","kind":"inventory",
+                 "name":{"en":"Shopping","vi":"Mua sắm"},
+                 "entities":[{"name":"shopping_requests","label":{"en":"Requests","vi":"Yêu cầu"},
+                   "fields":[{"name":"request_code","type":"string","label":{"vi":"Mã yêu cầu","en":"Code"}}]}]}
+                """;
+        BizAppInstallation installation = new BizAppInstallation();
+        installation.setKind("inventory");
+        installation.setStatus("DISABLED");
+        installation.setManifest(new ObjectMapper().readValue(manifest, Map.class));
+        BizAppRecord record = new BizAppRecord();
+        record.setTenantId(workspace);
+        record.setAppKind("inventory");
+        record.setEntity("shopping_requests");
+        record.setPayload(Map.of("request_code", "REQ-OLD"));
+
+        BizAppInstallationRepository installations = mock(BizAppInstallationRepository.class);
+        BizAppRecordRepository records = mock(BizAppRecordRepository.class);
+        when(installations.findByTenantIdAndKindAndStatus(workspace, "inventory", "ACTIVE"))
+                .thenReturn(Optional.empty());
+        when(installations.findByTenantIdAndKind(workspace, "inventory"))
+                .thenReturn(Optional.of(installation));
+        when(records.findByIdAndTenantIdAndAppKind(recordId, workspace, "inventory"))
+                .thenReturn(Optional.of(record));
+
+        BizAppTaskContextProvider provider = new BizAppTaskContextProvider(
+                installations, records, new BizAppManifestParser(new ObjectMapper()));
+
+        var context = provider.describe(workspace, "inventory", "shopping_requests", recordId);
+        assertEquals("REQ-OLD", context.title());
+        assertEquals("REQ-OLD", context.fields().get("Mã yêu cầu"));
+    }
 }

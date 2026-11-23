@@ -167,8 +167,10 @@ export default function DocumentsPage() {
   const refreshing = !loading && loadedKey !== requestKey;
   const isAdmin = user?.workspaceRole === "WORKSPACE_ADMIN" || user?.orgRole === "ORG_OWNER";
   const approvalByDoc = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const process of approvals) map.set(process.documentId, process.documentStatus);
+    const map = new Map<string, string | null>();
+    for (const process of approvals) {
+      if (process.documentId) map.set(process.documentId, process.documentStatus);
+    }
     return map;
   }, [approvals]);
 

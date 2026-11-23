@@ -678,14 +678,40 @@ public class WorkflowService {
                 ((Number) variables.getOrDefault("approvalLevel", 1)).intValue(),
                 nullableString(variables.get("policyVersion")),
                 nullableString(variables.get("publishTarget")),
-                ended ? nullableString(variables.get("documentStatus")) : "IN_REVIEW",
+                processStatus(variables, ended),
                 Boolean.TRUE.equals(variables.get("escalated")),
                 toLocalDateTime(historic.getStartTime()),
                 toLocalDateTime(historic.getEndTime()),
                 title,
                 context == null ? null : context.summary(),
                 appKind,
-                entity);
+                entity,
+                recordId,
+                context == null ? Map.of() : context.fields());
+    }
+
+    /**
+     * Document approvals persist {@code documentStatus} when the process ends.
+     * BizApp record approvals are settled by their terminal delegate, which
+     * historically only wrote the record, so an ended process can carry no
+     * status; its last decision is the reliable fallback.
+     */
+    private static String processStatus(Map<String, Object> variables, boolean ended) {
+        if (!ended) {
+            return "IN_REVIEW";
+        }
+        String status = nullableString(variables.get("documentStatus"));
+        if (status != null) {
+            return status;
+        }
+        String decision = nullableString(variables.get("decision"));
+        if ("APPROVE".equalsIgnoreCase(decision)) {
+            return "APPROVED";
+        }
+        if ("REJECT".equalsIgnoreCase(decision)) {
+            return "REJECTED";
+        }
+        return null;
     }
 
     private static String nullableString(Object value) {

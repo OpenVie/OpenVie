@@ -25,7 +25,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useApiClient } from "@/hooks/useApiClient";
 import { useAuthStore } from "@/components/providers/StoreProvider";
 import DocumentPreview from "@/components/documents/DocumentPreview";
-import { ListPager, usePagedList } from "@/components/ui/list-pager";
+import { PaginationControls } from "@/components/list/ListControls";
+import { usePagedList } from "@/components/ui/list-pager";
 import { safePage, safeSize, useUrlListState } from "@/hooks/useUrlListState";
 import {
   claimApprovalTaskApi,
@@ -44,6 +45,7 @@ import type {
 type DecisionDialog = { task: WorkflowTask; decision: "REJECT" | "ESCALATE" } | null;
 type LogDialog = { process: WorkflowProcess } | null;
 type PreviewDialog = { documentId: string; fileName: string } | null;
+type RecordDialog = { title: string; summary: string | null; fields: Record<string, string> } | null;
 
 function taskRole(task: WorkflowTask, t: ReturnType<typeof useTranslations<"Approval">>) {
   return task.approvalLevel === 2 ? t("levelTwo") : t("levelOne");
@@ -70,6 +72,7 @@ export default function ApprovalsPage() {
   const [log, setLog] = useState<ProcessLog | null>(null);
   const [logLoading, setLogLoading] = useState(false);
   const [preview, setPreview] = useState<PreviewDialog>(null);
+  const [record, setRecord] = useState<RecordDialog>(null);
 
   const load = useCallback(async () => {
     const requestKey = `${page}/${size}`;
@@ -143,11 +146,19 @@ export default function ApprovalsPage() {
     }
   }
 
+  function openRecord(process: WorkflowProcess) {
+    setRecord({
+      title: process.title || process.documentFileName || process.entity || t("recordTitle"),
+      summary: process.summary ?? null,
+      fields: process.recordFields ?? {},
+    });
+  }
+
   const tasks = [...assigned, ...groupTasks.filter((task) => !assigned.some((item) => item.taskId === task.taskId))];
   const pagedTasks = usePagedList(tasks);
-  const journalPageCount = Math.max(1, Math.ceil(processTotal / size));
 
-  function statusLabel(status: string): string {
+  function statusLabel(status: string | null | undefined): string {
+    if (!status) return "";
     const key: Record<string, Parameters<typeof t>[0]> = {
       IN_REVIEW: "status.inReview",
       APPROVED: "status.approved",
@@ -250,22 +261,26 @@ export default function ApprovalsPage() {
                 </div>
                 );
               })}
-              <ListPager
-                page={pagedTasks.page}
-                pageCount={pagedTasks.pageCount}
-                size={pagedTasks.size}
-                total={pagedTasks.total}
-                onPageChange={pagedTasks.setPage}
-                onSizeChange={(nextSize) => { pagedTasks.setSize(nextSize); pagedTasks.setPage(1); }}
-                className="-mx-2"
-              />
+              {tasks.length > 0 && (
+                <div className="-mx-2 border-t border-border/70">
+                  <PaginationControls
+                    page={pagedTasks.page}
+                    size={pagedTasks.size}
+                    total={pagedTasks.total}
+                    onPageChange={pagedTasks.setPage}
+                    onSizeChange={(nextSize) => { pagedTasks.setSize(nextSize); pagedTasks.setPage(1); }}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>{t("submissionsTitle")}</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {processes.length === 0 ? <p className="text-sm text-muted-foreground">{t("emptySubmissions")}</p> : processes.map((process) => (
+              {processes.length === 0 ? <p className="text-sm text-muted-foreground">{t("emptySubmissions")}</p> : processes.map((process) => {
+                const status = statusLabel(process.documentStatus);
+                return (
                 <div key={process.processInstanceId} className="flex items-center justify-between gap-3 rounded-xl border p-4">
                   <div className="min-w-0">
                     <p className="truncate font-medium">{process.title || process.documentFileName || process.processInstanceId}</p>
@@ -273,33 +288,43 @@ export default function ApprovalsPage() {
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{process.summary}</p>
                     )}
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {statusLabel(process.documentStatus)} · {format.dateTime(new Date(process.startedAt), { dateStyle: "medium", timeStyle: "short" })}
+                      {status ? `${status} · ` : ""}{format.dateTime(new Date(process.startedAt), { dateStyle: "medium", timeStyle: "short" })}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={process.documentStatus === "APPROVED" ? "default" : process.documentStatus === "REJECTED" ? "destructive" : "secondary"}>
-                      {statusLabel(process.documentStatus)}
-                    </Badge>
+                    {status && (
+                      <Badge variant={process.documentStatus === "APPROVED" ? "default" : process.documentStatus === "REJECTED" ? "destructive" : "secondary"}>
+                        {status}
+                      </Badge>
+                    )}
                     {process.documentId && (
                       <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewDocument")} title={t("viewDocument")} onClick={() => setPreview({ documentId: process.documentId!, fileName: process.documentFileName || process.title || process.processInstanceId })}>
                         <Eye className="size-4" />
                       </Button>
                     )}
-                    <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewLog")} onClick={() => openLog(process)}>
+                    {process.recordId && (
+                      <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewRecord")} title={t("viewRecord")} onClick={() => openRecord(process)}>
+                        <Eye className="size-4" />
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" className="size-8" aria-label={t("viewLog")} title={t("viewLog")} onClick={() => openLog(process)}>
                       <History className="size-4" />
                     </Button>
                   </div>
                 </div>
-              ))}
-              <ListPager
-                page={page}
-                pageCount={journalPageCount}
-                size={size}
-                total={processTotal}
-                onPageChange={(value) => update({ page: value === 1 ? null : value }, false)}
-                onSizeChange={(value) => update({ size: value === 20 ? null : value })}
-                className="-mx-2"
-              />
+                );
+              })}
+              {processes.length > 0 && (
+                <div className="-mx-2 border-t border-border/70">
+                  <PaginationControls
+                    page={page}
+                    size={size}
+                    total={processTotal}
+                    onPageChange={(value) => update({ page: value === 1 ? null : value }, false)}
+                    onSizeChange={(value) => update({ size: value === 20 ? null : value })}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -388,6 +413,33 @@ export default function ApprovalsPage() {
               className="h-[65vh] min-h-0 flex-1"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={record !== null} onOpenChange={(open) => !open && setRecord(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("recordTitle")}</DialogTitle>
+            <DialogDescription>{record?.title}</DialogDescription>
+          </DialogHeader>
+          {record?.summary && (
+            <p className="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">{record.summary}</p>
+          )}
+          {record && Object.keys(record.fields).length > 0 ? (
+            <dl className="grid gap-x-4 gap-y-2 rounded-xl border p-3 text-sm sm:grid-cols-2">
+              {Object.entries(record.fields).map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="break-words text-foreground">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("recordEmpty")}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecord(null)}>{t("close")}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </main>

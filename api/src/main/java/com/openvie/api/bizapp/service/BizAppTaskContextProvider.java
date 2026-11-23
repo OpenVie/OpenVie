@@ -61,6 +61,7 @@ public class BizAppTaskContextProvider implements WorkflowTaskContextApi {
         try {
             BizAppInstallation installation = installationRepository
                     .findByTenantIdAndKindAndStatus(workspaceId, appKind, "ACTIVE")
+                    .or(() -> installationRepository.findByTenantIdAndKind(workspaceId, appKind))
                     .orElse(null);
             if (installation == null) {
                 return null;
