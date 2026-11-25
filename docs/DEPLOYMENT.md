@@ -2,88 +2,88 @@
 
 [Documentation index](README.md) · [Development](DEVELOPMENT.md) · [Architecture](ARCHITECTURE.md)
 
-> **Ngôn ngữ / Language:** [Tiếng Việt](#hướng-dẫn-triển-khai-tự-lưu-trữ--tiếng-việt) · [English](#self-hosted-installation-guide)
+> **Ngôn ngữ / Language:** [Tiếng Việt](#hướng-dẫn-tự-triển-khai--tiếng-việt) · [English](#self-hosted-installation-guide)
 
 ---
 
-## Hướng dẫn triển khai tự lưu trữ — Tiếng Việt
+## Hướng dẫn tự triển khai — Tiếng Việt
 
-Tài liệu này hướng dẫn người vận hành cài đặt và vận hành OpenVie trên máy chủ production độc lập.
+Tài liệu này hướng dẫn người vận hành cài đặt và vận hành OpenVie trên một máy chủ production độc lập.
 
-### 1. Phân định phạm vi cung cấp
+### 1. Phạm vi có sẵn
 
-- **Được cung cấp:**
-  - `docker-compose.prod.yml`: Triển khai sản xuất trọn gói toàn bộ nền tảng (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Spring Boot API, Python AI Service, Next.js Web Console, và Apache APISIX Gateway).
-  - `docker-compose.yml`: Chỉ chạy các dịch vụ dữ liệu nền tảng (dùng cho phát triển hoặc mô hình hybrid chạy app trên host).
-  - File cấu hình mẫu `.env.production.example` và route gateway `apisix/routes.prod.yaml`.
-  - Bộ công cụ sao lưu và phục hồi tự động kiểm chứng toàn vẹn SHA-256 (`scripts/ops/backup.sh` & `restore.sh`).
-  - Stack giám sát hệ thống và AI toàn diện (Prometheus, Alertmanager, Grafana kèm 2 dashboard) qua profile `monitoring`.
-  - Hồ dữ liệu phân tích Lakehouse Parquet nén Snappy và cỗ máy DuckDB OLAP trực tiếp trên S3.
-- **Trách nhiệm của người vận hành:** Cấu hình chứng chỉ SSL/TLS (HTTPS) phía trước Gateway, đặt lịch chạy định kỳ (crontab/systemd timer) cho công cụ sao lưu, tường lửa WAF bên ngoài và kiểm dịch mã độc tệp tải lên.
+- **Có sẵn:**
+  - `docker-compose.prod.yml`: stack production trọn gói cho toàn bộ nền tảng (Postgres, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu Graph, Spring Boot API, Python AI Service, Next.js Web Console và Apache APISIX Gateway).
+  - `docker-compose.yml`: chỉ chạy hạ tầng dữ liệu (dùng cho phát triển hoặc mô hình hybrid chạy app trên host).
+  - Tệp cấu hình mẫu `.env.production.example` và route gateway `apisix/routes.prod.yaml`.
+  - Bộ công cụ sao lưu/phục hồi có kiểm tra toàn vẹn SHA-256 (`scripts/ops/backup.sh` & `restore.sh`).
+  - Stack giám sát hệ thống và AI (Prometheus, Alertmanager, Grafana kèm 2 dashboard) qua profile `monitoring`.
+  - Lakehouse Parquet nén Snappy và engine DuckDB OLAP chạy trực tiếp trên S3.
+- **Trách nhiệm của người vận hành:** cấu hình chứng chỉ SSL/TLS (HTTPS) phía trước gateway, đặt lịch chạy sao lưu định kỳ (crontab/systemd timer), WAF bên ngoài và kiểm dịch mã độc cho tệp tải lên.
+
 ### 2. Yêu cầu tiên quyết
 
-- Máy chủ Linux (Ubuntu 22.04+ khuyến nghị) hoặc macOS. Trên **Windows 10/11**: dùng Docker
+- Máy chủ Linux (khuyến nghị Ubuntu 22.04+) hoặc macOS. Trên **Windows 10/11**: dùng Docker
   Desktop với backend WSL2 và chạy mọi lệnh compose/make/openssl từ terminal Ubuntu WSL2;
-  deployment quy mô lớn nên chạy trên máy Linux native (Docker Desktop giới hạn I/O và tài
+  triển khai quy mô lớn nên chạy trên máy Linux native (Docker Desktop giới hạn I/O và tài
   nguyên cho workload nặng).
-- Docker kèm Compose plugin, JDK 21, Python 3.11/3.12, Node.js 22 LTS, Make, OpenSSL. Trên
-  Windows, các công cụ CLI (Make, OpenSSL) giữ như vậy **trong distro WSL2** — PowerShell không
-  có sẵn.
-- Dung lượng đĩa đủ chứa các checkpoint model Ollama (`bge-m3`, `vylinh`) và chỉ mục vector.
+- Docker kèm Compose plugin, JDK 21, Python 3.11/3.12, Node.js 22 LTS, Make và OpenSSL. Trên
+  Windows, các công cụ CLI này phải nằm **trong distro WSL2** — PowerShell không có sẵn.
+- Đủ dung lượng đĩa cho checkpoint model Ollama (`bge-m3`, `vylinh`) và chỉ mục vector.
 
 ### 3. Chuẩn bị cấu hình sản xuất
 
-Tạo file `.env.production` bảo mật từ mẫu có sẵn:
+Tạo tệp `.env.production` từ mẫu và giới hạn quyền đọc:
 ```bash
 cp .env.production.example .env.production
 chmod 600 .env.production
 ```
 *(Trên Windows, chạy bước này trong terminal Ubuntu WSL2 — PowerShell không có sẵn `openssl`
 và `chmod`.)*
-Tạo các khóa bí mật ngẫu nhiên bằng `openssl rand -hex 32` cho:
+Tạo secret ngẫu nhiên bằng `openssl rand -hex 32` cho:
 `TOKEN_KEY`, `NOTIFICATION_ENC_KEY` (base64: `openssl rand -base64 32`), `GRAPH_INTERNAL_TOKEN`, `POSTGRES_PASSWORD`, `RABBITMQ_DEFAULT_PASS`, `KEYCLOAK_ADMIN_PASSWORD`, `KEYCLOAK_DB_PASSWORD`.
 
-*Khóa bí mật và thiết lập SSO / Keycloak:*
-- `KEYCLOAK_ADMIN_PASSWORD`: Mật khẩu quản trị Keycloak console (tối thiểu 16 ký tự ngẫu nhiên).
-- `KEYCLOAK_DB_PASSWORD`: Mật khẩu cơ sở dữ liệu PostgreSQL độc lập của Keycloak.
-- `SSO_BACKEND_CLIENT_SECRET`: Lấy mã bí mật của confidential client `openvie-backend` từ Keycloak Admin Console (tab *Credentials*) sau lần import realm đầu tiên, cấu hình vào `.env.production`. Tuyệt đối không commit mã này.
-- `KEYCLOAK_PUBLIC_URL` và `SSO_ISSUER_URI`: URL HTTPS công khai (ví dụ: `https://auth.example.com` hoặc `https://app.example.com/realms/openvie`).
-- **Kiến trúc TLS & Reverse Proxy cho Keycloak:** Keycloak trong container chỉ lắng nghe trên cổng nội bộ `127.0.0.1:${KEYCLOAK_PORT:-18080}:8080` (hoặc thông qua APISIX edge gateway trên các route `/realms/*`, `/resources/*`, `/js/*`). Tuyệt đối không mở HTTP trực tiếp ra internet công cộng; việc chấm dứt mã hóa TLS (TLS termination, HTTPS) bắt buộc do reverse proxy phía trước đảm nhận. Proxy phải chuyển tiếp đầy đủ `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port` (`KC_PROXY_HEADERS: xforwarded` đã được bật sẵn). Trước khi khởi chạy lần đầu trên production, mở `keycloak/realm/openvie-realm.json` và thay thế URL giữ chỗ `https://example.com*` trong redirect URIs và web origins của `openvie-frontend` và `openvie-admin` bằng tên miền production thực tế.
-*Các thiết lập quan trọng:*
-- `CORS_ORIGINS`, `INVITATION_LINK`, và các biến `NEXT_PUBLIC_*` phải trỏ đúng domain/IP người dùng truy cập.
-- Ngân sách phản hồi: `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction có ngân sách độc lập `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
-- OCR và ASR/video tắt mặc định (ingest vẫn đầy đủ cho text layer). Bật bằng khối `INGESTION_OCR_*` và `INGESTION_ASR_*` / `INGESTION_VIDEO_*` trong `.env.production` — biến được truyền thẳng vào container `ai-api` (image đã cài tesseract với gói `vie`/`eng` và ffmpeg) và các cổng upload đi kèm `OCR_UPLOADS_ENABLED`, `ASR_UPLOADS_ENABLED`, `VIDEO_UPLOADS_ENABLED`, `DOCUMENT_MAX_SIZE_MB` trên container `api`; nguyên tắc chiếm dụng tài nguyên xem `docs/RETRIEVAL.md` §7 và §8.
-- Triển khai Spring và Python cùng phiên bản proto: `GenerateAnswer` đã chuyển từ unary sang server-streaming, không có đường tương thích unary. Proxy phải giữ `text/event-stream`, `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no`; không gom/nén luồng chat. Next.js same-origin rewrite đã được kiểm chứng với các header này.
-- Kiểm tra tính hợp lệ của compose:
+*Secret và cấu hình SSO/Keycloak:*
+- `KEYCLOAK_ADMIN_PASSWORD`: Mật khẩu admin console của Keycloak (tối thiểu 16 ký tự ngẫu nhiên).
+- `KEYCLOAK_DB_PASSWORD`: Mật khẩu database PostgreSQL riêng của Keycloak.
+- `SSO_BACKEND_CLIENT_SECRET`: Lấy secret của confidential client `openvie-backend` trong Keycloak Admin Console (tab *Credentials*) sau lần import realm đầu tiên rồi điền vào `.env.production`. Tuyệt đối không commit secret này.
+- `KEYCLOAK_PUBLIC_URL` và `SSO_ISSUER_URI`: URL HTTPS công khai (ví dụ `https://auth.example.com` hoặc `https://app.example.com/realms/openvie`).
+- **TLS và reverse proxy cho Keycloak:** Keycloak trong container chỉ lắng nghe trên cổng nội bộ `127.0.0.1:${KEYCLOAK_PORT:-18080}:8080` (hoặc đi qua APISIX gateway ở các route `/realms/*`, `/resources/*`, `/js/*`). Tuyệt đối không mở cổng HTTP trực tiếp ra Internet; việc kết thúc TLS (HTTPS) bắt buộc do reverse proxy phía trước đảm nhận. Proxy phải chuyển tiếp đầy đủ `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Port` (`KC_PROXY_HEADERS: xforwarded` đã bật sẵn). Trước lần chạy đầu tiên trên production, mở `keycloak/realm/openvie-realm.json` và thay URL giữ chỗ `https://example.com*` trong redirect URI và web origin của `openvie-frontend` và `openvie-admin` bằng tên miền production thật.
+*Các thiết lập cần lưu ý:*
+- `CORS_ORIGINS`, `INVITATION_LINK` và các biến `NEXT_PUBLIC_*` phải trỏ đúng domain/IP mà người dùng truy cập.
+- Giới hạn token câu trả lời: `LLM_MAX_OUTPUT_TOKENS=1024`; trích xuất đồ thị có giới hạn riêng `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS=512`.
+- OCR và ASR/video mặc định tắt (nạp tài liệu vẫn đầy đủ với lớp text). Bật bằng các khối `INGESTION_OCR_*`, `INGESTION_ASR_*`/`INGESTION_VIDEO_*` trong `.env.production`; các biến này được truyền thẳng vào container `ai-api` (image đã cài tesseract với gói `vie`/`eng` và ffmpeg), còn cổng upload đi kèm các biến `OCR_UPLOADS_ENABLED`, `ASR_UPLOADS_ENABLED`, `VIDEO_UPLOADS_ENABLED`, `DOCUMENT_MAX_SIZE_MB` trên container `api`. Hướng dẫn về mức tiêu thụ tài nguyên nằm ở `docs/RETRIEVAL.md` §7 và §8.
+- Triển khai Spring và Python cùng phiên bản proto: `GenerateAnswer` đã chuyển từ unary sang server-streaming và không có đường tương thích unary. Proxy phải giữ `text/event-stream`, `Cache-Control: no-cache, no-transform` và `X-Accel-Buffering: no`, không gom hay nén luồng chat. Next.js same-origin rewrite đã được kiểm chứng với các header này.
+- Kiểm tra cấu hình compose:
 ```bash
 # Kiểm tra cấu hình stack sản xuất đầy đủ:
 docker compose -f docker-compose.prod.yml --env-file .env.production config --quiet
 ```
 
-### 4. Triển khai toàn bộ bằng Docker Compose (Khuyến nghị cho Production)
+### 4. Triển khai toàn bộ bằng Docker Compose (khuyến nghị cho production)
 
-Chỉ với một lệnh, toàn bộ stack ứng dụng và hạ tầng dữ liệu được khởi chạy khép kín trong container:
+Một lệnh khởi chạy toàn bộ ứng dụng và hạ tầng dữ liệu trong container:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Lệnh trên tự động khởi chạy:
+Lệnh trên khởi chạy:
 1. Hạ tầng dữ liệu: Postgres 16, Redis 7, RabbitMQ, Qdrant, SeaweedFS (S3), Kuzu Graph.
-2. Dịch vụ AI & Ingestion: Python FastAPI + gRPC (:50051) + worker tài liệu.
-3. Dịch vụ Nghiệp vụ: Spring Boot API (:8080) tự động migrate Flyway database khi khởi động.
-4. Giao diện người dùng: Next.js Web Console (:3000) + mặt quản trị `frontend-admin` (`/admin/*`, OIDC client `openvie-admin`).
-5. Cổng biên: Apache APISIX Gateway (:8088 hoặc `APISIX_PORT` cấu hình) định tuyến tới API, Web và mặt quản trị.
+2. Dịch vụ AI và nạp tài liệu: Python FastAPI + gRPC (`:50051`) + worker xử lý tài liệu.
+3. Dịch vụ nghiệp vụ: Spring Boot API (`:8080`), tự động chạy Flyway migration khi khởi động.
+4. Giao diện: Next.js web console (`:3000`) và giao diện quản trị `frontend-admin` (`/admin/*`, OIDC client `openvie-admin`).
+5. Cổng biên: Apache APISIX (`:8088` hoặc `APISIX_PORT`) định tuyến tới API, web và giao diện quản trị.
 
-> Ghi chú về tài liệu API: worker AI (`rag-chatbot-fastapi`) cố ý tắt FastAPI docs/OpenAPI (`docs_url=None, openapi_url=None`) vì đó là service nội bộ, chỉ nói chuyện gRPC có mTLS với API Spring. Tài liệu API công khai duy nhất là Swagger UI của API Spring tại `/swagger-ui` — và chỉ bật ở profile dev/test; production trả 404 cho `/v3/api-docs` và `/swagger-ui`.
+> Ghi chú về tài liệu API: worker AI (`rag-chatbot-fastapi`) cố ý tắt FastAPI docs/OpenAPI (`docs_url=None, openapi_url=None`) vì đây là service nội bộ, chỉ trao đổi với API Spring qua gRPC có mTLS. Tài liệu API công khai duy nhất là Swagger UI của API Spring tại `/swagger-ui`, và chỉ bật ở profile dev/test; production trả 404 cho `/v3/api-docs` và `/swagger-ui`.
 
-Cài đặt Ollama trực tiếp trên host (để tận dụng GPU/Metal) **trước** khi tải mô hình:
+Cài Ollama trực tiếp trên host (để dùng GPU/Metal) **trước** khi tải model:
 - **Linux:** `curl -fsSL https://ollama.com/install.sh | sh`, chạy như service systemd.
 - **macOS:** tải tại `https://ollama.com/download` (hoặc `brew install --cask ollama`), chạy như LaunchAgent qua launchd.
 - **Windows:** tải installer tại `https://ollama.com/download` (hoặc `winget install Ollama.Ollama`).
 Kiểm tra `ollama --version` và `http://127.0.0.1:11434`.
 
-Cấu hình song song trong service manager của OS:
+Cấu hình song song trong service manager của hệ điều hành:
 - **Linux (systemd):** drop-in qua `systemctl edit ollama`:
   ```ini
   Environment="OLLAMA_NUM_PARALLEL=4"
@@ -91,12 +91,12 @@ Cấu hình song song trong service manager của OS:
   ```
 - **macOS (launchd):** `launchctl setenv OLLAMA_NUM_PARALLEL 4` và
   `launchctl setenv OLLAMA_MAX_LOADED_MODELS 3`, rồi khởi động lại Ollama.
-- **Windows:** biến hệ thống rồi khởi động lại Ollama (thoát icon system tray trước):
+- **Windows:** đặt biến hệ thống rồi khởi động lại Ollama (thoát icon system tray trước):
   ```powershell
   setx OLLAMA_NUM_PARALLEL 4
   setx OLLAMA_MAX_LOADED_MODELS 3
   ```
-Tải và ghim mô hình trong bộ nhớ:
+Tải model và giữ thường trú trong bộ nhớ:
 ```bash
 ollama pull bge-m3
 ollama pull hf.co/QuantFactory/Arcee-VyLinh-GGUF:Q4_K_M
@@ -111,10 +111,10 @@ CPU và checkpoint `Alibaba-NLP/gte-multilingual-reranker-base` ~1 GB ở lần 
 docker compose -f docker-compose.prod.yml --env-file .env.production --profile reranker up -d reranker-service
 ```
 
-### 5. Phương án triển khai Hybrid (Chạy ứng dụng trực tiếp trên Host)
+### 5. Phương án hybrid (chạy ứng dụng trực tiếp trên host)
 
-Nếu bạn chọn chạy các ứng dụng trực tiếp trên host thay vì container *(phương án này cần POSIX
-shell kèm supervisor tương đương systemd — trên Windows hãy chạy trong WSL2)*:
+Nếu chạy ứng dụng trực tiếp trên host thay vì container *(cần POSIX shell với supervisor tương
+đương systemd — trên Windows hãy chạy trong WSL2)*:
 ```bash
 # 1. Chỉ khởi động hạ tầng trong Docker:
 docker compose --env-file .env.production up -d --wait
@@ -128,13 +128,13 @@ npm --prefix frontend ci && npm --prefix frontend run build && npm --prefix fron
 ### 6. Thiết lập lần đầu và khôi phục chủ sở hữu
 
 1. Mở `http://your-domain` (hoặc cổng APISIX 8088). Hệ thống chuyển hướng tới `/setup`.
-2. Tạo tài khoản `ORG_OWNER` ban đầu và workspace mặc định. Sau khi tạo, `/setup` tự động đóng (HTTP 404).
-3. Đặt lại mật khẩu owner khẩn cấp không cần can thiệp SQL:
+2. Tạo tài khoản `ORG_OWNER` đầu tiên và workspace mặc định. Sau khi tạo, `/setup` tự đóng (HTTP 404).
+3. Đặt lại mật khẩu owner khi khẩn cấp, không cần can thiệp SQL:
 ```bash
 make -C api recover-owner ENV_FILE=../.env.production RECOVER_ARGS="--recover-owner-email=owner@example.com --recover-owner-password=MatKhauMoi123456"
 ```
 
-### 7. Kiểm tra xác minh trạng thái (Health Checks)
+### 7. Kiểm tra tình trạng dịch vụ (health checks)
 
 ```bash
 docker compose --env-file .env.production ps
@@ -146,7 +146,7 @@ curl --fail http://127.0.0.1:8088/apisix/status
 
 ## 8. Chạy demo Workflow BPMN (PoC)
 
-Demo nằm tại `spikes/eoffice-approval`, dùng Flowable và PostgreSQL riêng; không khởi chạy runtime production của OpenVie.
+Demo nằm ở `spikes/eoffice-approval`, dùng Flowable và PostgreSQL riêng; không khởi chạy runtime production của OpenVie.
 
 ```bash
 cd spikes/eoffice-approval
@@ -155,48 +155,48 @@ export FLOWABLE_DB_PASSWORD='change-this-local-db-password'
 docker compose -f compose.yaml up -d
 ```
 
-Chờ Flowable sẵn sàng tại `http://localhost:18081/flowable-rest/service`, sau đó mở terminal thứ nhất để triển khai BPMN và tạo process instance:
+Chờ Flowable sẵn sàng tại `http://localhost:18081/flowable-rest/service`, rồi mở terminal thứ nhất để triển khai BPMN và tạo process instance:
 
 ```bash
 python scripts/seed_demo.py
 ```
 
-Mở terminal thứ hai, từ cùng thư mục, đặt lại cùng biến môi trường và chạy worker:
+Mở terminal thứ hai trong cùng thư mục, đặt lại các biến môi trường đó và chạy worker:
 
 ```bash
 python scripts/worker.py
 ```
 
-Dùng Flowable REST để xem task và trạng thái process; xem `spikes/eoffice-approval/README.md` để biết cách claim/complete task và các endpoint cụ thể. Kết quả demo được xác minh qua process variables và log worker.
+Dùng Flowable REST để xem task và trạng thái process; xem `spikes/eoffice-approval/README.md` để biết cách claim/complete task và các endpoint cụ thể. Kiểm chứng kết quả demo qua process variables và log của worker.
 
-**Giới hạn:** `publish-document` là stub, không thực hiện ingestion production. Chỉ bind cổng vào loopback như cấu hình Compose mặc định; không công khai Flowable REST ra Internet. Dừng demo bằng `docker compose -f compose.yaml down`. Không dùng `down -v` nếu cần giữ database demo.
+**Giới hạn:** `publish-document` là stub, không chạy nạp tài liệu production. Cổng chỉ bind vào loopback theo cấu hình Compose mặc định; không công khai Flowable REST ra Internet. Dừng demo bằng `docker compose -f compose.yaml down`. Không dùng `down -v` nếu cần giữ database demo.
 
-**Phân biệt:** Đây chỉ là demo đánh giá engine độc lập (PoC). Luồng phê duyệt dùng trong sản phẩm chạy nhúng trong API runtime chính — không cần compose riêng; SLA cấu hình qua `openvie.workflow.*` bên phía api, luồng runtime mô tả tại [Kiến trúc](ARCHITECTURE.md).
+**Phân biệt:** đây chỉ là demo độc lập để đánh giá engine (PoC). Luồng phê duyệt dùng trong sản phẩm chạy nhúng trong API runtime chính, không cần compose riêng; SLA cấu hình qua `openvie.workflow.*` phía api, luồng runtime mô tả tại [Kiến trúc](ARCHITECTURE.md).
 
 ### 9. Vận hành, sao lưu và cập nhật
 
-- **Công cụ sao lưu/phục hồi:** `scripts/ops/backup.sh` tạo thư mục sao lưu có dấu thời gian UTC gồm `postgres.dump` (pg_dump), `seaweedfs.tar.gz`, `.env.production.bak` và `MANIFEST.txt` chứa kích thước cùng sha256 từng tệp; `scripts/ops/restore.sh` phục hồi (`pg_restore --clean --if-exists`, giải nén volumes, khôi phục tệp env) và bắt buộc có `--yes`.
-- **Kiểm chứng tính toàn vẹn:** `restore.sh` đối chiếu sha256 trong `MANIFEST.txt` trước khi phục hồi và hủy bỏ nếu sai lệch; quy trình diễn tập định kỳ (phục hồi vào database tạm và đối chiếu số bảng/cột, số dòng `flyway_schema_history`) nằm trong `scripts/ops/README.md`.
-- **Lịch chạy thuộc về người vận hành:** nền tảng không tự chạy sao lưu. Runbook có sẵn dòng crontab và systemd timer mẫu; cờ `--keep N` giữ N bản mới nhất và chỉ xóa các thư mục do script tự tạo theo đúng mẫu tên của nó (không truyền cờ thì không xóa gì).
-- **Cập nhật & Tái lập chỉ mục:** Khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ qua `DocumentReindexCommand` của Spring Boot với cấu hình `app.maintenance.reindex.enabled=true`.
+- **Công cụ sao lưu/phục hồi:** `scripts/ops/backup.sh` tạo thư mục có timestamp UTC gồm `postgres.dump` (pg_dump), `seaweedfs.tar.gz`, `.env.production.bak` và `MANIFEST.txt` ghi kích thước cùng sha256 của từng tệp; `scripts/ops/restore.sh` phục hồi (`pg_restore --clean --if-exists`, giải nén volume, khôi phục tệp env) và bắt buộc có `--yes`.
+- **Kiểm tra toàn vẹn:** `restore.sh` đối chiếu từng sha256 trong `MANIFEST.txt` trước khi phục hồi và dừng nếu sai lệch; quy trình diễn tập định kỳ (phục hồi vào database tạm rồi đối chiếu số bảng/cột và số dòng `flyway_schema_history`) nằm trong `scripts/ops/README.md`.
+- **Lịch chạy do người vận hành quyết định:** nền tảng không tự sao lưu. Runbook có sẵn dòng crontab và systemd timer mẫu; cờ `--keep N` giữ N bản mới nhất và chỉ xóa các thư mục do script tự tạo đúng theo mẫu tên của nó (không truyền cờ thì không xóa gì).
+- **Cập nhật và đánh chỉ mục lại:** khi logic trích xuất đồ thị thay đổi, kích hoạt đánh chỉ mục lại toàn bộ bằng `DocumentReindexCommand` của Spring Boot với `app.maintenance.reindex.enabled=true`.
 
-### 10. Cổng biên Apache APISIX (Edge Gateway)
+### 10. Cổng biên Apache APISIX
 
-APISIX chạy ở chế độ standalone trên cổng `8088`:
-- `/apisix/status`: Probe sức khỏe nội bộ.
-- `/realms/*`: Trỏ tới Keycloak OIDC realm authentication, giới hạn 10 r/s (burst 20) bảo vệ chống brute-force.
-- `/resources/*`, `/js/*`: Trỏ tới Keycloak static theme và client JS assets.
-- `/api/v1/auth/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 5 r/s (burst 10).
-- `/api/v1/admin/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 20 r/s (burst 40); Spring vẫn enforce `ORG_OWNER` trên từng request.
-- `/api/v1/*`: Trỏ tới Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
-- `/admin/*`: Trỏ tới mặt quản trị `frontend-admin` (OIDC client `openvie-admin`).
-- `/*`: Trỏ tới Web client Next.js (`:3000`).
-- `/apisix/prometheus/metrics`: Endpoint metric Prometheus (chỉ cho phép truy cập từ loopback/mạng nội bộ).
-*Lưu ý:* Các cổng gRPC (`:50051`), Qdrant, Redis, Postgres không được định tuyến qua gateway này. Khi sửa file cấu hình route, cần chạy `docker compose restart apisix` để tải lại.
+APISIX chạy standalone trên cổng `8088`:
+- `/apisix/status`: probe sức khỏe nội bộ.
+- `/realms/*`: chuyển tới Keycloak để xác thực realm OIDC, giới hạn 10 r/s (burst 20) để chống brute-force.
+- `/resources/*`, `/js/*`: tài nguyên theme tĩnh và JS client của Keycloak.
+- `/api/v1/auth/*`: Spring Boot (`:8080`), giới hạn 5 r/s (burst 10).
+- `/api/v1/admin/*`: Spring Boot (`:8080`), giới hạn 20 r/s (burst 40); Spring vẫn kiểm tra `ORG_OWNER` trên từng request.
+- `/api/v1/*`: Spring Boot (`:8080`), giới hạn 50 r/s (burst 100).
+- `/admin/*`: giao diện quản trị `frontend-admin` (OIDC client `openvie-admin`).
+- `/*`: web client Next.js (`:3000`).
+- `/apisix/prometheus/metrics`: endpoint metric Prometheus (chỉ cho phép từ loopback/mạng nội bộ).
+*Lưu ý:* các cổng gRPC (`:50051`), Qdrant, Redis và Postgres không đi qua gateway này. Sau khi sửa tệp cấu hình route, chạy `docker compose restart apisix` để nạp lại.
 
 ### 11. Giám sát (Prometheus · Alertmanager · Grafana)
 
-Stack giám sát là **tuỳ chọn** và nằm trong profile `monitoring`, nên mặc định `docker compose up` giữ nguyên hành vi cũ. Bật bằng:
+Stack giám sát là **tùy chọn**, nằm trong profile `monitoring`, nên `docker compose up` mặc định vẫn giữ hành vi cũ. Bật bằng:
 
 ```bash
 # Production (full stack):
@@ -206,50 +206,50 @@ docker compose -f docker-compose.prod.yml --env-file .env.production --profile m
 docker compose --profile monitoring up -d
 ```
 
-- **Prometheus** (`127.0.0.1:${PROMETHEUS_PORT:-9090}`) scrape:
+- **Prometheus** (`127.0.0.1:${PROMETHEUS_PORT:-9090}`) thu thập metric từ:
   - `openvie-api` → `http://api:8080/actuator/prometheus` (prod) hoặc `http://host.docker.internal:8080/actuator/prometheus` (dev, app trên host).
   - `openvie-ai` → `http://ai-api:18000/metrics` (prod) hoặc `http://host.docker.internal:18000/metrics` (dev).
-  - job `prometheus` tự scrape chính nó.
+  - job `prometheus` tự thu thập metric của chính nó.
   - `openvie-gateway` → `http://apisix:9080/apisix/prometheus/metrics` (route data-plane được bảo vệ; không dùng exporter `:9091` đã bỏ).
-  Cấu hình: `monitoring/prometheus/prometheus.yml` (prod) và `monitoring/prometheus/prometheus.dev.yml` (dev); chu kỳ scrape 15 giây.
-- **Alert rules**: `monitoring/prometheus/rules/openvie-alerts.yml` (target down, tỉ lệ lỗi 5xx, heap JVM, tỉ lệ lỗi cache, lỗi Redis, timeout chat model, fallback retrieval).
+  Cấu hình: `monitoring/prometheus/prometheus.yml` (prod) và `monitoring/prometheus/prometheus.dev.yml` (dev); chu kỳ thu thập 15 giây.
+- **Quy tắc cảnh báo**: `monitoring/prometheus/rules/openvie-alerts.yml` (target down, tỷ lệ lỗi 5xx, heap JVM, tỷ lệ lỗi cache, lỗi Redis, timeout model chat, fallback truy hồi).
 - **Alertmanager** (`127.0.0.1:${ALERTMANAGER_PORT:-9093}`): cấu hình `monitoring/alertmanager/alertmanager.yml` chỉ có route `default`. **Bước thuộc về người vận hành:** receiver `default` cố tình chưa gắn địa chỉ gửi — thêm webhook/email/Slack vào đây để cảnh báo rời khỏi host. Quy tắc `inhibit_rules` cho phép cảnh báo `critical` chặn cảnh báo `warning` cùng `alertname` cho tới khi hết.
-- **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): datasource Prometheus (`http://prometheus:9090`) và hai dashboard (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) được provision từ file trong `monitoring/grafana/`. Đăng nhập bằng `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; truy cập ẩn danh đã bị tắt.
-- **Bảo mật:** cả ba cổng chỉ bind `127.0.0.1`. Muốn truy cập từ xa, đặt sau reverse proxy TLS của bạn (như với APISIX); không mở trực tiếp ra Internet.
+- **Grafana** (`127.0.0.1:${GRAFANA_PORT:-3002}`): nguồn dữ liệu Prometheus (`http://prometheus:9090`) và hai dashboard (`OpenVie Platform Overview`, `OpenVie AI & Ingestion`) được nạp sẵn từ tệp trong `monitoring/grafana/`. Đăng nhập bằng `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`; truy cập ẩn danh đã bị tắt.
+- **Bảo mật:** cả ba cổng chỉ lắng nghe trên `127.0.0.1`. Muốn truy cập từ xa, đặt sau reverse proxy TLS của bạn (như với APISIX); không mở trực tiếp ra Internet.
 
-### 12. Hướng dẫn Nâng cấp lên v1.0.0 & Cấu hình An toàn Truy hồi
+### 12. Nâng cấp lên v1.0.0 và cấu hình an toàn cho truy hồi
 
-#### A. Quy trình nâng cấp bắt buộc theo thứ tự
-1. **Sao lưu toàn bộ dữ liệu:** Chạy `scripts/ops/backup.sh` (Postgres, Qdrant, Kuzu, SeaweedFS).
-2. **Cảnh báo Checksum Flyway:** Tuyệt đối không chỉnh sửa các tệp migration từ `V1` đến `V17`. Khởi chạy API để Flyway áp dụng tự động `V18__document_provenance.sql` và `V19__chat_turn_intent.sql`.
-3. **Cập nhật Node Table Kuzu:** Chạy lệnh DDL bổ sung cột nguồn gốc trên bảng `Source` của Kuzu:
+#### A. Trình tự nâng cấp bắt buộc
+1. **Sao lưu toàn bộ dữ liệu:** chạy `scripts/ops/backup.sh` (Postgres, Qdrant, Kuzu, SeaweedFS).
+2. **Lưu ý checksum Flyway:** tuyệt đối không sửa các migration từ `V1` đến `V17`. Khởi động API để Flyway tự áp dụng `V18__document_provenance.sql` và `V19__chat_turn_intent.sql`.
+3. **Cập nhật bảng node trong Kuzu:** chạy DDL bổ sung cột nguồn gốc trên bảng `Source` của Kuzu:
    ```cypher
    ALTER TABLE Source ADD document_kind STRING DEFAULT 'USER';
    ALTER TABLE Source ADD source_ref STRING DEFAULT '';
    ```
-4. **Phân loại lại dữ liệu cũ (W0.7 Backfill):** Chạy lệnh chuẩn hóa tài liệu hệ thống (chạy dry-run trước để kiểm tra, sau đó chạy chính thức ngoài giờ cao điểm):
+4. **Phân loại lại dữ liệu cũ (W0.7 backfill):** chạy lệnh chuẩn hóa tài liệu hệ thống (dry-run trước, sau đó chạy thật ngoài giờ cao điểm):
    ```bash
    # Dry-run:
    java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill --dry-run
    # Chạy thật:
    java -jar api/target/openvie-api-1.0.0.jar --app.command.mode=bizapp-provenance-backfill
    ```
-5. **Kiểm tra sau nâng cấp:** Xác nhận tài liệu hệ thống không bị lộ trong UI và không xuất hiện trong citation câu hỏi tài liệu thường.
+5. **Kiểm tra sau nâng cấp:** xác nhận tài liệu hệ thống không lộ trong UI và không xuất hiện trong trích dẫn của câu hỏi tài liệu thông thường.
 
-#### B. Ma trận cấu hình Graph Ingest & Retrieval
-Hệ thống cung cấp hai công tắc độc lập cho kênh đồ thị:
+#### B. Ma trận cấu hình trích xuất và truy hồi đồ thị
+Hệ thống có hai công tắc độc lập cho kênh đồ thị:
 
 | `GRAPH_EXTRACTION_ENABLED` | `GRAPH_RETRIEVAL_ENABLED` | Kết quả vận hành |
 |---|---|---|
-| `true` (mặc định) | `true` (mặc định) | Chuẩn v1.0.0: trích xuất lúc ingest + truy hồi đồ thị kết hợp dense/sparse. |
-| `true` | `false` | Đồ thị vẫn được trích xuất nhưng không dùng để truy hồi (lãng phí compute lúc ingest — chỉ dùng khi muốn chuẩn bị dữ liệu đồ thị trước). |
-| `false` | `true` | Ingest nhanh (không gọi LLM trích xuất đồ thị); truy hồi graph chạy nhưng trả về ít/không có kết quả. |
-| `false` | `false` | Thuần Dense + Sparse (nhanh nhất, tiết kiệm tài nguyên compute tối đa). |
+| `true` (mặc định) | `true` (mặc định) | Chuẩn v1.0.0: trích xuất khi nạp tài liệu + truy hồi đồ thị kết hợp dense/sparse. |
+| `true` | `false` | Đồ thị vẫn được trích xuất nhưng không dùng để truy hồi (tốn compute lúc nạp — chỉ dùng khi muốn chuẩn bị dữ liệu đồ thị trước). |
+| `false` | `true` | Nạp nhanh (không gọi LLM trích xuất đồ thị); truy hồi graph vẫn chạy nhưng trả về ít hoặc không có kết quả. |
+| `false` | `false` | Chỉ dense + sparse (nhanh nhất, tốn ít compute nhất). |
 
-#### C. Chính sách bộ đệm & Cache Policy Version
-- Cờ `GRAPH_RETRIEVAL_ENABLED` và hằng số `document_kind_policy_version` (hiện tại `document-kind-v1`) được đưa vào `retrieval_configuration_fingerprint`.
-- Mọi thay đổi về chính sách loại trừ hoặc chuyển đổi công tắc graph sẽ tự động tách khóa bộ đệm retrieval và semantic answer cache, tránh phục vụ kết quả của chế độ cũ.
-- Tham số `include_system=true` trên `/api/v1/documents` chỉ khả dụng cho vai trò `ORG_OWNER` phục vụ kiểm tra vận hành.
+#### C. Chính sách cache và phiên bản policy
+- Cờ `GRAPH_RETRIEVAL_ENABLED` và hằng số `document_kind_policy_version` (hiện tại `document-kind-v1`) nằm trong `retrieval_configuration_fingerprint`.
+- Mọi thay đổi về chính sách loại trừ hoặc công tắc graph đều tự động tách khóa cache truy hồi và cache câu trả lời ngữ nghĩa, tránh trả kết quả của chế độ cũ.
+- Tham số `include_system=true` trên `/api/v1/documents` chỉ dành cho `ORG_OWNER` để kiểm tra vận hành.
 
 ---
 

@@ -10,76 +10,75 @@
 
 [Project overview](../README.md) · [Phát triển cục bộ](DEVELOPMENT.md)
 
-Bắt đầu từ guide đúng với việc bạn cần làm.
+Chọn hướng dẫn phù hợp với việc bạn cần làm.
 
-## Lộ trình đọc cho người mới
+## Lộ trình cho người mới
 
 1. Đọc [tổng quan dự án và sơ đồ repo](../README.md).
-2. Làm theo [phát triển cục bộ](DEVELOPMENT.md) để cấu hình, khởi động và kiểm tra stack.
-3. Đọc [kiến trúc](ARCHITECTURE.md) để hiểu quyền sở hữu service và ranh giới liên service.
-4. Đọc guide cho phần code bạn sẽ sửa:
-   - [Java module guide](../api/GUIDE.md): hợp đồng module công khai, sự kiện, quyền sở hữu bảng.
-   - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): module năng lực, transport, vai trò runtime.
+2. Làm theo [phát triển cục bộ](DEVELOPMENT.md) để cấu hình, khởi động và kiểm tra toàn bộ stack.
+3. Đọc [kiến trúc](ARCHITECTURE.md) để hiểu service nào sở hữu dữ liệu gì và ranh giới giữa các service.
+4. Đọc hướng dẫn cho phần mã bạn sẽ sửa:
+   - [Hướng dẫn module Java](../api/GUIDE.md): hợp đồng module công khai, sự kiện và quyền sở hữu bảng.
+   - [Hướng dẫn module Python](../rag-chatbot-fastapi/GUIDE.md): các module năng lực, transport và vai trò runtime.
    - [Phát triển web và kiểm tra](DEVELOPMENT.md#2-các-bước-thiết-lập).
-5. Chỉ tra tài liệu tính năng khi thay đổi của bạn cần đến nó.
+5. Chỉ tra tài liệu tính năng khi thay đổi của bạn thực sự cần.
 6. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi đóng góp.
 
-## Guide theo việc
+## Hướng dẫn theo việc
 
 | Tôi muốn... | Đọc |
 | --- | --- |
-| Chạy cục bộ, hiểu cấu hình, chạy kiểm tra | [Phát triển cục bộ](DEVELOPMENT.md) |
-| Hiểu quyền sở hữu service, lưu trữ, bảo mật, chuỗi runtime | [Kiến trúc](ARCHITECTURE.md) |
-| Hiểu luồng phê duyệt tài liệu, SLA và ghi kết quả | [Workflow](WORKFLOW.md) |
-| Sửa parsing tài liệu, đánh chỉ mục, model, truy hồi | [Hấp thụ và truy hồi](RETRIEVAL.md) |
-| Cấu hình bản self-hosted hoặc lập kế hoạch kiểm chứng và phục hồi | [Triển khai](DEPLOYMENT.md) |
-| Mở một điểm vào HTTP duy nhất hoặc giới hạn lưu lượng ở biên | [Triển khai §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
-| Self-host, đánh giá giấy phép, hay xuất bản nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
+| Chạy cục bộ, nắm cấu hình, chạy kiểm tra | [Phát triển cục bộ](DEVELOPMENT.md) |
+| Hiểu service nào sở hữu gì, lưu trữ, bảo mật và các chuỗi runtime | [Kiến trúc](ARCHITECTURE.md) |
+| Hiểu luồng phê duyệt tài liệu, SLA và việc ghi kết quả | [Workflow](WORKFLOW.md) |
+| Sửa phần parse tài liệu, đánh chỉ mục, model hoặc truy hồi | [Nạp và truy hồi](RETRIEVAL.md) |
+| Cấu hình bản tự triển khai hoặc lập kế hoạch kiểm chứng, phục hồi | [Triển khai](DEPLOYMENT.md) |
+| Gom về một điểm vào HTTP hoặc giới hạn lưu lượng ở biên | [Triển khai §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
+| Tự triển khai, đánh giá giấy phép hoặc xuất bản mã nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
-| Chọn hoặc đánh giá model cho chat, intent, slot và BizApp drafting | [Định tuyến model AI](AI_MODEL_ROUTING.md) |
-| Tự tích hợp ứng dụng vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
-| Xây dựng/tùy biến ứng dụng BizApp, composer trực quan, báo cáo, chiếu tri thức | [BizApps](BIZAPPS.md) |
+| Chọn hoặc đánh giá model cho chat, phân loại ý định, trích slot và soạn thảo BizApp | [Định tuyến model AI](AI_MODEL_ROUTING.md) |
+| Tích hợp ứng dụng của bạn vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
+| Xây dựng/tùy biến BizApp, composer trực quan, báo cáo và đồng bộ tri thức | [BizApps](BIZAPPS.md) |
 
-## Cái gì nằm ở đâu
+## Mỗi tài liệu dành cho việc gì
 
-- **README gốc:** định hướng, phạm vi hiện tại, sơ đồ repo, và liên kết. Không phải tài liệu API đầy đủ.
-- **Service guide:** quy tắc triển khai và quyền sở hữu module theo ngôn ngữ, đặt cạnh code.
-- **Development guide:** thiết lập, nguồn cấu hình, điểm vào lệnh, xử lý sự cố cục bộ.
-- **Tài liệu chủ đề:** hành vi hiện tại chi tiết, ví dụ, ranh giới, liên kết triển khai.
+- **README gốc:** định hướng, phạm vi hiện tại, sơ đồ repo và liên kết; không phải cẩm nang API đầy đủ.
+- **Hướng dẫn service:** quy tắc triển khai và quyền sở hữu module theo từng ngôn ngữ, đặt ngay cạnh mã nguồn.
+- **Hướng dẫn phát triển:** thiết lập, nguồn cấu hình, các lệnh chính và xử lý sự cố cục bộ.
+- **Tài liệu chuyên đề:** hành vi hiện tại, ví dụ, ranh giới và liên kết tới phần triển khai.
 
 ## Trạng thái triển khai và bằng chứng
 
-"Đã triển khai" nghĩa là repo có đường mã, chưa chắc tính năng đã được bật, cấu hình, đo tải
-hay duyệt cho production. Cụ thể:
+"Đã triển khai" chỉ có nghĩa là trong repo đã có đường mã; không có nghĩa tính năng đã được bật,
+đã cấu hình, đã đo tải hay đã được duyệt cho production. Cụ thể:
 
-- Bộ đệm tùy chọn yêu cầu cấu hình tường minh và bằng chứng rollout.
-- OCR (ảnh/PDF scan) và ASR (âm thanh/video) là các stage tùy chọn, tắt theo mặc định.
-- Fine-tuning/thích ứng model là đề xuất, không phải pipeline huấn luyện hiện có.
-- Health response, fixture hay artifact smoke cũ không phải bằng chứng workflow đúng toàn trình.
+- Bộ đệm tùy chọn cần được bật rõ ràng và có bằng chứng rollout.
+- OCR (ảnh/PDF scan) và ASR (âm thanh/video) là các bước tùy chọn, mặc định tắt.
+- Một health response, fixture hay artifact smoke cũ không chứng minh toàn bộ workflow chạy đúng.
 
-Dùng [RETRIEVAL.md](RETRIEVAL.md) cho hành vi hấp thụ đã cung cấp so với kế hoạch, và
-[DEPLOYMENT.md](DEPLOYMENT.md) cho yêu cầu kiểm chứng trên bản tự triển khai.
+Xem [RETRIEVAL.md](RETRIEVAL.md) để biết chi tiết hành vi nạp tài liệu, và
+[DEPLOYMENT.md](DEPLOYMENT.md) để biết yêu cầu kiểm chứng khi tự triển khai.
 
 ## Đặt tên và thương hiệu
 
 OpenVie là tên sản phẩm và định danh thống nhất của toàn bộ hệ thống. Các package (`com.openvie.api`),
 hợp đồng protobuf (`openvie.ai.v1`), tài nguyên triển khai, hàng đợi RabbitMQ và cấu hình hệ thống
-đều sử dụng định danh `openvie`.
-Mã nguồn ứng dụng OpenVie là Apache-2.0 theo bản quyền LinkedNodeDigital; xem
-[LICENSE](../LICENSE), [NOTICE](../NOTICE), và [publication gate](OPEN_SOURCE.md#publication-gate).
+đều dùng định danh `openvie`.
+Mã nguồn ứng dụng OpenVie theo giấy phép Apache-2.0, bản quyền thuộc LinkedNodeDigital; xem
+[LICENSE](../LICENSE), [NOTICE](../NOTICE) và [publication gate](OPEN_SOURCE.md#publication-gate).
 
-## Bảo trì tài liệu này
+## Cách bảo trì tài liệu
 
-1. Mỗi chủ đề chỉ có một nơi chuẩn; liên kết tới nó thay vì sao chép danh mục cấu hình.
-2. Kiểm chứng phát biểu về hành vi hiện tại với mã nguồn, schema, Makefile, package script,
-   cấu hình triển khai.
-3. Tách rõ hành vi đã triển khai, tính năng đang tắt, yêu cầu vận hành, và đề xuất tương lai.
-4. Khi di chuyển một mục, cập nhật liên kết tương đối, heading, điều hướng, và liên kết tới.
-5. Kiểm tra Markdown, sơ đồ, điểm vào lệnh hiển thị đúng; ghi rõ check runtime/provider chưa chạy.
+1. Mỗi chủ đề chỉ có một nơi duy nhất làm nguồn chuẩn; hãy liên kết tới đó thay vì sao chép danh mục cấu hình.
+2. Đối chiếu các phát biểu về hành vi hiện tại với mã nguồn, schema, Makefile, script trong
+   package.json và cấu hình triển khai.
+3. Tách rõ hành vi đã có, tính năng đang tắt và yêu cầu vận hành.
+4. Khi chuyển một mục, cập nhật liên kết tương đối, heading, điều hướng và các liên kết trỏ tới mục đó.
+5. Kiểm tra Markdown, sơ đồ và các lệnh hiển thị đúng; ghi rõ những bước kiểm tra runtime/provider chưa chạy.
 
-Định dạng dây truyền dùng chung nằm ở [`contracts/`](../contracts/) (schema và fixture JSON)
-và [`proto/`](../proto/) (gRPC). Tài liệu giải thích các ranh giới đó; nó không thay thế định
-nghĩa máy đọc được hay check tương thích.
+Định dạng trao đổi dùng chung nằm ở [`contracts/`](../contracts/) (schema và fixture JSON)
+và [`proto/`](../proto/) (gRPC). Tài liệu chỉ giải thích các ranh giới đó, không thay thế định
+nghĩa máy đọc được hay các kiểm tra tương thích.
 
 ---
 
@@ -131,10 +130,9 @@ configured, load-tested, or approved for production. In particular:
 
 - Optional caches require explicit configuration and rollout evidence.
 - OCR (images/scanned PDFs) and ASR (audio/video) are optional stages, disabled by default.
-- Model fine-tuning/adaptation is proposed work, not an existing training pipeline.
 - A health response, fixture, or historical smoke artifact is not proof of full workflow correctness.
 
-Use [RETRIEVAL.md](RETRIEVAL.md) for delivered versus planned ingestion behavior, and
+Use [RETRIEVAL.md](RETRIEVAL.md) for detailed ingestion behavior, and
 [DEPLOYMENT.md](DEPLOYMENT.md) for verification requirements on a self-hosted install.
 
 ## Naming and branding
@@ -149,7 +147,7 @@ OpenVie application source is Apache-2.0 under LinkedNodeDigital copyright; see
 
 1. Give a topic one canonical home and link to it instead of copying configuration catalogs.
 2. Verify current-behavior statements against source, schemas, Makefiles, package scripts, and deployment configuration.
-3. Separate implemented behavior, disabled features, operational requirements, and future proposals.
+3. Separate implemented behavior, disabled features, and operational requirements.
 4. When moving a section, update relative source links, headings, navigation, and inbound links.
 5. Verify rendered Markdown, diagrams, and command entry points; report any runtime/provider checks not exercised.
 

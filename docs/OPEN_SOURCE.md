@@ -10,65 +10,63 @@
 
 [Project overview](../README.md) · [Kiến trúc](ARCHITECTURE.md) · [Phát triển cục bộ](DEVELOPMENT.md)
 
-**Trạng thái xuất bản:** bản cắt commit đầu (đóng băng hợp đồng, loại bỏ ngoài phạm vi, baseline
-cài đặt mới, và các cổng end-to-end, bảo mật, alignment, an toàn xuất bản) đã hoàn tất và được
-ghi nhận trong lịch sử commit ban đầu. Ranh giới dưới đây mô tả việc cấp phép và phân chia repo
-dự kiến.
+**Trạng thái xuất bản:** bản chốt cho commit đầu tiên (chốt hợp đồng, loại bỏ phần ngoài phạm vi,
+mốc cài mới, cùng các bước kiểm tra end-to-end, bảo mật, alignment và an toàn xuất bản) đã hoàn tất và
+được ghi trong lịch sử commit ban đầu. Phần dưới mô tả cách cấp phép và cách tách repo dự kiến.
 
 ## Ranh giới repo
 
-Thư mục này là **repo ứng dụng nguồn mở**. Mã nguồn ứng dụng được cấp phép
-[Apache License 2.0](../LICENSE), ghi nhận trong [NOTICE](../NOTICE). Ai cũng có thể tự triển
-khai, fork hay cung cấp hosting theo giấy phép đó; không có gì trong repo này phụ thuộc vào một
-service, subscription hay thỏa thuận riêng. Repo không cấp bất kỳ dịch vụ lưu trữ hay SLA nào,
-và không chứa mã enterprise độc quyền riêng.
+Thư mục này là **repo ứng dụng nguồn mở**. Mã nguồn ứng dụng theo giấy phép
+[Apache License 2.0](../LICENSE), ghi nhận trong [NOTICE](../NOTICE). Bất kỳ ai cũng có thể tự triển
+khai, fork hoặc cung cấp dịch vụ hosting theo giấy phép này; không phần nào trong repo phụ thuộc vào
+một service, subscription hay thỏa thuận riêng. Repo không kèm dịch vụ lưu trữ hay SLA nào, và
+không chứa mã enterprise độc quyền.
 
-Giấy phép Apache không cấp quyền sử dụng tên hay logo OpenVie như một trademark ngoài ghi nhận
+Giấy phép Apache không cấp quyền dùng tên hay logo OpenVie như một trademark ngoài việc ghi nhận
 nguồn gốc thông thường. Dependency, container image, dịch vụ lưu trữ, model weights và dataset
-giữ giấy phép riêng của chúng. Model ID trong cấu hình không bundle hay cấp phép weights.
+vẫn theo giấy phép riêng của chúng. Model ID trong cấu hình không đi kèm hay cấp phép weights.
 
 ## Ranh giới self-hosting
 
-Bắt đầu từ [phát triển cục bộ](DEVELOPMENT.md) cho stack phi production. Spring Boot sở hữu
-định danh tổ chức/workspace có tính chính thống, phân quyền, chat và trạng thái PostgreSQL.
-FastAPI sở hữu truy hồi và chỉ mục phái sinh; RabbitMQ, SeaweedFS, Qdrant, Kuzu, Redis và dịch
-vụ model cấu hình sẵn cung cấp các dependency runtime còn lại. [Triển khai](DEPLOYMENT.md) mô
-tả cài đặt self-host một host; đó là hướng dẫn cho người vận hành, không phải chứng nhận gì cả.
-Quy trình triển khai riêng của người vận hành cố ý **không** nằm trong repo này;
-`.github/workflows/ci.yml` chỉ chạy kiểm tra. Tự cấu hình secret manager, phê duyệt triển khai,
-backup, phục hồi, tên miền và thỏa thuận provider.
+Bắt đầu từ [phát triển cục bộ](DEVELOPMENT.md) cho stack phi production. Spring Boot quản lý định
+danh tổ chức/workspace chuẩn, phân quyền, chat và trạng thái PostgreSQL. FastAPI phụ trách truy hồi
+và các chỉ mục phái sinh; RabbitMQ, SeaweedFS, Qdrant, Kuzu, Redis và các dịch vụ model đã cấu hình
+cung cấp những dependency runtime còn lại. [Triển khai](DEPLOYMENT.md) mô tả cách cài self-host trên
+một máy chủ; đó là hướng dẫn cho người vận hành, không phải chứng nhận gì cả. Quy trình triển khai
+riêng của người vận hành cố ý **không** nằm trong repo này; `.github/workflows/ci.yml` chỉ chạy kiểm
+tra. Hãy tự cấu hình secret manager, phê duyệt triển khai, backup, phục hồi, tên miền và thỏa thuận
+provider.
 
-Cấu hình ví dụ đi kèm dùng Ollama cục bộ cho sinh văn bản và embedding. Trỏ model adapter tới
-endpoint tương thích OpenAI bên ngoài là lựa chọn của người vận hành, và các đoạn trích nội dung
-tenant khi đó sẽ vượt ranh giới provider đó. Với workload được quy định chặt, xem xét residency,
-retention, procurement, threat model và cơ sở pháp lý. Repo không kèm ngữ liệu luật Việt Nam,
-model chính sách Dream-RSI đã huấn luyện, hay checkpoint fine-tuned đã đánh giá.
+Cấu hình mẫu đi kèm dùng Ollama cục bộ để sinh văn bản và embedding. Trỏ model adapter tới một
+endpoint tương thích OpenAI bên ngoài là lựa chọn của người vận hành, và khi đó các đoạn trích nội
+dung tenant sẽ đi qua ranh giới của provider đó. Với workload bị quản lý chặt, hãy xem xét residency,
+retention, procurement, threat model và cơ sở pháp lý.
 
-## File vendored và phái sinh
+## Tệp vendored và tệp dẫn xuất
 
 | Đường dẫn file | Nguồn gốc | Giấy phép | Ghi chú thay đổi |
 | --- | --- | --- | --- |
-| `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Giữ nguyên header của Mozilla Foundation; phục vụ render tài liệu PDF trực tiếp trên trình duyệt. |
+| `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Giữ nguyên header của Mozilla Foundation; dùng để render tài liệu PDF ngay trên trình duyệt. |
 
-## Cổng xuất bản
+## Điều kiện xuất bản
 
 Bản xuất nguồn cục bộ này không có lịch sử Git riêng tư hay remote. Trước khi xuất bản, người
 giữ quyền và người phụ trách bảo mật phải:
 
 1. Duyệt quyền phân phối cho từng thành phần, đóng góp, bản dịch, logo, artifact sinh ra, tài
    sản vendored, model và dataset; giữ nguyên third-party notices.
-2. Review toàn bộ cây xuất bản và mọi tài liệu, fixture, ảnh, ví dụ cấu hình, file sinh ra để
-   tìm thông tin khách hàng, credential, địa chỉ nội bộ, thỏa thuận riêng tư. Xoay bất kỳ secret
-   nào bị lộ; không bao giờ sao chép lịch sử repo riêng tư, Actions secrets, hay file `.env`
+2. Rà soát toàn bộ cây xuất bản cùng mọi tài liệu, fixture, ảnh, ví dụ cấu hình và tệp sinh ra để
+   tìm thông tin khách hàng, credential, địa chỉ nội bộ, thỏa thuận riêng tư. Xoay mọi secret
+   bị lộ; không bao giờ sao chép lịch sử repo riêng tư, Actions secrets hay tệp `.env`
    production.
-3. Cấu hình kênh báo cáo lỗ hổng riêng tư có giám sát, chính sách maintainer/review, và quyền sở
-   hữu repo; xem [SECURITY.md](../SECURITY.md).
-4. Kiểm chứng từ bản clone mới: sample stack cài được, hấp thụ được một tài liệu có quyền, thực
-   thi phân tách tenant, hiển thị trích dẫn, và từ chối trả lời khi thiếu bằng chứng. Cấu hình
-   phát triển có các giá trị mặc định đã biết và không bao giờ dùng cho production. Kiểm chứng
-   exposure production, egress provider, và backup riêng.
+3. Cấu hình kênh báo cáo lỗ hổng riêng tư có người theo dõi, chính sách maintainer/review và quyền
+   sở hữu repo; xem [SECURITY.md](../SECURITY.md).
+4. Kiểm chứng từ một bản clone mới: stack mẫu cài được, nạp được một tài liệu có quyền, thực
+   thi cách ly tenant, hiển thị trích dẫn và từ chối trả lời khi thiếu bằng chứng. Cấu hình
+   phát triển có các giá trị mặc định đã biết và không bao giờ dùng cho production. Hãy kiểm chứng
+   riêng phần lộ diện của production, egress tới provider và backup.
 
-Chưa có GitHub repository nào được xuất bản bởi các thay đổi file này; checklist này không khẳng
+Chưa có GitHub repository nào được xuất bản bởi các thay đổi tệp này; checklist này không khẳng
 định các review pháp lý, bảo mật hay vận hành đã thông qua.
 
 ---
@@ -110,8 +108,7 @@ approvals, backups, recovery, domain, and provider agreements.
 The delivered example configuration uses local Ollama generation and embedding. Pointing the
 model adapter at an external OpenAI-compatible endpoint is an operator choice, and tenant
 excerpts would then cross that provider boundary. For regulated workloads review residency,
-retention, procurement, threat models, and legal basis. No Vietnamese-law corpus, trained
-Dream-RSI policy model, or evaluated fine-tuned checkpoint is bundled.
+retention, procurement, threat models, and legal basis.
 
 ## Vendored and derived files
 

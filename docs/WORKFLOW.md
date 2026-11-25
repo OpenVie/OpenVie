@@ -9,50 +9,50 @@
 ## Workflow — phê duyệt tài liệu và engine BPMN — tiếng Việt
 
 Luồng phê duyệt chạy **nhúng trong API runtime chính** (`api/`, module `workflow`): engine
-Flowable (BPMN 2.0) cùng runtime Spring, dữ liệu trong cùng PostgreSQL, phạm vi hóa theo
-tenant. Đây là luồng sản phẩm; stack demo độc lập trong `spikes/eoffice-approval` chỉ dành
-cho PoC (xem [DEPLOYMENT §8](DEPLOYMENT.md#8-run-the-bpmn-workflow-demo-poc)).
+Flowable (BPMN 2.0) dùng chung runtime Spring, cùng database PostgreSQL và cùng quy tắc tách theo
+tenant. Đây là luồng dùng trong sản phẩm; stack demo độc lập trong `spikes/eoffice-approval` chỉ
+dành cho PoC (xem [DEPLOYMENT §8](DEPLOYMENT.md#8-run-the-bpmn-workflow-demo-poc)).
 
 ### 1. Luồng phê duyệt tài liệu
 
-Quy trình: **nộp → duyệt/từ chối/chuyển tiếp (cấp 1) → duyệt/từ chối (cấp 2)** với external task
-cho mỗi cấp, exclusive gateway, timer nhắc nhở/chuyển tiếp.
+Quy trình: **nộp → duyệt/từ chối/chuyển tiếp (cấp 1) → duyệt/từ chối (cấp 2)**, mỗi cấp là một
+external task, có exclusive gateway và timer nhắc nhở/chuyển tiếp.
 
 | Việc                                              | Route                                                                                 |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Nộp tài liệu vào luồng phê duyệt                  | `POST /api/v1/workflow/processes`                                                     |
 | Danh sách process (phân trang) + log từng process | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log`          |
-| Inbox tác vụ; nhận / hoàn tất                     | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
+| Inbox task; nhận / hoàn tất                       | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
 | Cấu hình SLA của tổ chức                          | `GET /api/v1/workflow/sla-config`                                                     |
 
 Kết quả quyết định (APPROVE/REJECT/ESCALATE ở cấp 1; APPROVE/REJECT ở cấp 2) được ghi thẳng
 vào trạng thái tài liệu: cột `approval_status` (`PENDING → APPROVED | REJECTED`, Flyway V8)
-trong cùng transaction với quyết định, kèm nhật ký kiểm toán đầy đủ. Frontend và API đọc
-trạng thái phê duyệt từ chính bảng `documents` — không cần đồng bộ song song.
+được cập nhật trong cùng transaction với quyết định, kèm nhật ký kiểm toán đầy đủ. Frontend và API
+đọc trạng thái phê duyệt từ chính bảng `documents`, không cần đồng bộ song song.
 
 ### 2. Độ nhạy cảm và SLA
 
-- Chính sách độ nhạy dùng chung `SensitivityPolicyService` (một nguồn chân lý, worker demo của
-  PoC cũng tái dùng nó thay vì duy trì danh sách từ khóa riêng).
-- SLA ghi trong bảng `workflow_sla_configs` theo tổ chức; mặc định reminder `PT24H`, chuyển tiếp
-  `PT48H`, giới hạn trên `maxSlaMinutes = 20160` phút (14 ngày) để tổ chức không cấu hình giá
-  trị vô lý. Timer → `WorkflowReminderDelegate` / `WorkflowTimerEscalationDelegate`.
+- Chính sách độ nhạy dùng chung `SensitivityPolicyService` (một nguồn chuẩn duy nhất; worker demo của
+  PoC cũng dùng lại thay vì giữ danh sách từ khóa riêng).
+- SLA lưu trong bảng `workflow_sla_configs` theo tổ chức; mặc định nhắc nhở `PT24H`, chuyển tiếp
+  `PT48H`, giới hạn trên `maxSlaMinutes = 20160` phút (14 ngày) để tổ chức không đặt giá trị vô lý.
+  Timer gọi `WorkflowReminderDelegate` / `WorkflowTimerEscalationDelegate`.
 
-### 3. Tác vụ kèm quyết định
+### 3. Các tác động kèm theo quyết định
 
 - Thông báo `WORKFLOW_DECIDED` qua kênh SMTP đã cấu hình (`notification` module).
 - Webhook có chữ ký: `workflow.started`, `workflow.approved`, `workflow.rejected`,
-  `workflow.escalated` (phong bì JSON, HMAC-SHA256, outbox + retry — xem
+  `workflow.escalated` (envelope JSON, HMAC-SHA256, outbox + retry — xem
   [INTEGRATION §4](INTEGRATION.md#4-webhook-đẩy-sự-kiện-có-chữ-ký)).
-- Audit log cho mọi hành động claim/complete/escalate.
+- Audit log cho mọi thao tác claim/complete/escalate.
 
 ### 4. Engine BPMN tổng quát (cho ứng dụng khác)
 
-Ngoài luồng tài liệu, engine mở API tổng quát `/api/v1/workflow/engine` để triển khai định nghĩa
-BPMN bất kỳ, khởi động process, inbox/claim/complete tác vụ tổng quát và xem lịch sử — bảng route
-đầy đủ ở [Tích hợp §5](INTEGRATION.md#5-workflow-engine-bpmn-tổng-quát). Tác vụ thuộc
-luồng phê duyệt tài liệu bị **từ chối** claim/complete thô qua route tổng quát (`409`) để không
-bỏ qua nhật ký quy trình tài liệu.
+Ngoài luồng tài liệu, engine mở API tổng quát `/api/v1/workflow/engine` để triển khai bất kỳ định nghĩa
+BPMN nào, khởi động process, dùng inbox/claim/complete task chung và xem lịch sử; bảng route
+đầy đủ ở [Tích hợp §5](INTEGRATION.md#5-workflow-engine-bpmn-tổng-quát). Task thuộc
+luồng phê duyệt tài liệu bị **từ chối** claim/complete qua route tổng quát (`409`) để không thể
+bỏ qua nhật ký của quy trình tài liệu.
 
 ---
 

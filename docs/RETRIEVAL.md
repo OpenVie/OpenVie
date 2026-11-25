@@ -2,42 +2,42 @@
 
 [Documentation index](README.md) · [Development](DEVELOPMENT.md) · [Architecture](ARCHITECTURE.md)
 
-> **Ngôn ngữ / Language:** [Tiếng Việt](#hấp-thụ-và-truy-hồi--tiếng-việt) · [English](#ingestion-and-retrieval-1)
+> **Ngôn ngữ / Language:** [Tiếng Việt](#nạp-và-truy-hồi--tiếng-việt) · [English](#ingestion-and-retrieval-1)
 
 ---
 
-## Hấp thụ và truy hồi — Tiếng Việt
+## Nạp và truy hồi — Tiếng Việt
 
-Tài liệu này mô tả pipeline RAG xử lý tài liệu kỹ thuật số của OpenVie. OCR (PDF scan và ảnh đơn lẻ) và ASR (âm thanh và video) là các **stage tùy chọn, tắt theo mặc định**.
+Tài liệu này mô tả pipeline RAG xử lý tài liệu số của OpenVie. OCR (PDF scan và ảnh đơn lẻ) và ASR (âm thanh, video) là các **bước tùy chọn, mặc định tắt**.
 
-### 1. Ngăn xếp mô hình và lưu trữ
+### 1. Thành phần model và lưu trữ
 
 | Năng lực | Triển khai | Ghi chú |
 |---|---|---|
-| Sinh văn bản, trích xuất đồ thị, lập kế hoạch tính toán | Chat model adapter: `ollama` | Mặc định là Ollama với `vylinh` (3.09B). |
-| Vector dày (Dense embeddings) | Adapter Ollama `/api/embed` | Mặc định là `bge-m3` (1024 chiều). |
-| Truy hồi từ vựng (Lexical/Sparse) | FastEmbed `Qdrant/bm25` | Bổ sung cho ngữ nghĩa đối với từ ngữ chính xác, mã hiệu, ngày tháng. |
-| Xếp hạng lại (Reranking - tùy chọn) | TEI cross-encoder endpoint | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt, cơ chế fail-open khi lỗi. |
-| Phân tích tài liệu số | Parser chuyên biệt: `pypdf`, `python-docx`... | Trích xuất văn bản có cấu trúc kèm nguồn gốc (provenance). |
-| OCR tùy chọn (PDF scan, ảnh, ảnh lồng trong PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) hoặc VLM qua Ollama; `pypdfium2` + Pillow | Chỉ hoạt động khi `INGESTION_OCR_ENABLED=true` (ảnh lồng cần thêm `INGESTION_OCR_EMBEDDED_IMAGES=true`); phụ thuộc Apache-2.0. |
-| Phiên âm ASR tùy chọn (âm thanh, video, OCR khung hình video) | `transcription.py`: faster-whisper (PyAV nội bộ) hoặc endpoint HTTP `/v1/audio/transcriptions`; `ffmpeg` | Chỉ hoạt động khi `INGESTION_ASR_ENABLED=true` (video cần thêm `INGESTION_VIDEO_ENABLED=true`, OCR khung hình cần `INGESTION_VIDEO_KEYFRAME_OCR=true`); phụ thuộc Apache-2.0 / MIT. |
-| Chỉ mục vector | Qdrant named vectors (dense + sparse) | Giới hạn theo tenant, knowledge base và document. |
-| Đồ thị tri thức (Graph) | Kuzu chạy ngầm sau graph-service | Thực thể và quan hệ được neo bằng bằng chứng trong tài liệu. |
+| Sinh văn bản, trích xuất đồ thị, lập kế hoạch tính toán | Adapter chat model: `ollama` | Mặc định là Ollama với `vylinh` (3.09B). |
+| Vector dense (embedding) | Adapter Ollama `/api/embed` | Mặc định là `bge-m3` (1024 chiều). |
+| Truy hồi từ vựng (lexical/sparse) | FastEmbed `Qdrant/bm25` | Bổ sung cho tìm kiếm ngữ nghĩa khi cần khớp chính xác từ khóa, mã hiệu và ngày tháng. |
+| Xếp hạng lại (rerank, tùy chọn) | Endpoint TEI cross-encoder | Mặc định `Alibaba-NLP/gte-multilingual-reranker-base`. Hỗ trợ tiếng Việt; fail-open khi lỗi. |
+| Parse tài liệu số | Các parser chuyên dụng: `pypdf`, `python-docx`... | Trích xuất văn bản có cấu trúc kèm nguồn gốc (provenance). |
+| OCR tùy chọn (PDF scan, ảnh, ảnh nhúng trong PDF/DOCX/XLSX) | `ocr.py`: Tesseract (TSV + confidence) hoặc VLM qua Ollama; `pypdfium2` + Pillow | Chỉ chạy khi `INGESTION_OCR_ENABLED=true` (ảnh nhúng cần thêm `INGESTION_OCR_EMBEDDED_IMAGES=true`); dependency Apache-2.0. |
+| Chuyển giọng nói thành văn bản (ASR) tùy chọn (âm thanh, video, OCR keyframe) | `transcription.py`: faster-whisper (PyAV đi kèm) hoặc endpoint HTTP `/v1/audio/transcriptions`; `ffmpeg` | Chỉ chạy khi `INGESTION_ASR_ENABLED=true` (video cần thêm `INGESTION_VIDEO_ENABLED=true`, OCR keyframe cần `INGESTION_VIDEO_KEYFRAME_OCR=true`); dependency Apache-2.0 / MIT. |
+| Chỉ mục vector | Qdrant named vectors (dense + sparse) | Lọc theo tenant, knowledge base và document. |
+| Đồ thị tri thức | Kuzu chạy phía sau graph-service | Thực thể và quan hệ đều gắn với bằng chứng trong tài liệu. |
 
 ### 2. Nguồn tài liệu được chấp nhận
 
-- **Định dạng hỗ trợ:** PDF có text (`.pdf`), Word (`.docx`), Văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), Bảng tính (`.xlsx`, `.csv`) — ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) khi OCR bật; âm thanh (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) và video (`.mp4`, `.mkv`, `.mov`, `.webm`) khi ASR bật. Giới hạn kích thước tệp có thể cấu hình qua `app.documents.max-file-size-mb` (mặc định **20 MB/tệp**).
-- **Không hỗ trợ:** PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), file nén độc hại/hư hỏng. PDF scan và ảnh thuần được hấp thụ qua stage OCR tùy chọn (§7), tắt theo mặc định.
+- **Định dạng hỗ trợ:** PDF có lớp text (`.pdf`), Word (`.docx`), văn bản thuần (`.txt`), Markdown (`.md`), HTML (`.html`), bảng tính (`.xlsx`, `.csv`) — ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) khi OCR bật; âm thanh (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) và video (`.mp4`, `.mkv`, `.mov`, `.webm`) khi ASR bật. Giới hạn kích thước tệp cấu hình qua `app.documents.max-file-size-mb` (mặc định **20 MB/tệp**).
+- **Không hỗ trợ:** PDF mã hóa, định dạng nhị phân cũ (`.doc`, `.xls`), tệp nén hỏng. PDF scan và ảnh thuần được nạp qua bước OCR tùy chọn (§7), mặc định tắt.
 
-### 3. Quy trình hấp thụ bất đồng bộ
+### 3. Quy trình nạp tài liệu bất đồng bộ
 
 ```mermaid
 flowchart LR
-    Upload[Lưu file gốc] --> Job[Tác vụ bất đồng bộ]
-    Job --> Parse[Phân tích cấu trúc]
-    Parse --> Chunk[Phân đoạn tri thức]
-    Chunk --> Dense[Mã hóa BGE-M3]
-    Chunk --> Sparse[Mã hóa FastEmbed BM25]
+    Upload[Lưu tệp gốc] --> Job[Job bất đồng bộ]
+    Job --> Parse[Parse cấu trúc]
+    Parse --> Chunk[Chia đơn vị tri thức]
+    Chunk --> Dense[Embed BGE-M3]
+    Chunk --> Sparse[Embed FastEmbed BM25]
     Chunk --> Extract[Trích xuất thực thể đồ thị]
     Dense --> Qdrant[(Qdrant)]
     Sparse --> Qdrant
@@ -46,79 +46,79 @@ flowchart LR
 
 - **Trạng thái:** `PENDING` → `PROCESSING` → `COMPLETED` (hoặc `FAILED`).
 - **Idempotency:**
-  - File trùng SHA-256 trong cùng KB: trả về tài liệu hiện có, bỏ qua xử lý lại.
-  - File cùng tên nhưng nội dung thay đổi: cập nhật tại chỗ, chuyển lại `PENDING`, ghi đè nguồn và thay thế vector/graph tương ứng.
-- **Giới hạn tài nguyên:** `INGESTION_WORKER_CONCURRENCY` (mặc định 4) điều tiết số tài liệu xử lý đồng thời. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) giới hạn token sinh ra mỗi batch trích xuất đồ thị (tối đa 2 thực thể, 2 quan hệ mỗi đơn vị tri thức).
-- **OCR tùy chọn:** Khi `INGESTION_OCR_ENABLED=true`, trang thiếu text được raster hóa và nhận dạng ngay trong bước parse; kết quả cache theo fingerprint (§7). Sự kiện `COMPLETED` mang thêm `text_source` và `page_count` khi OCR tham gia.
+  - Tệp trùng SHA-256 trong cùng KB: trả về tài liệu đã có, không xử lý lại.
+  - Tệp cùng tên nhưng nội dung đổi: cập nhật tại chỗ, đưa về `PENDING`, ghi đè nguồn và thay vector/graph tương ứng.
+- **Giới hạn tài nguyên:** `INGESTION_WORKER_CONCURRENCY` (mặc định 4) điều tiết số tài liệu xử lý đồng thời. `GRAPH_EXTRACTION_MAX_OUTPUT_TOKENS` (512) giới hạn token sinh ra cho mỗi batch trích xuất đồ thị (tối đa 2 thực thể và 2 quan hệ cho mỗi đơn vị tri thức).
+- **OCR tùy chọn:** khi `INGESTION_OCR_ENABLED=true`, trang không có text được raster hóa và nhận dạng ngay trong bước parse; kết quả cache theo fingerprint (§7). Sự kiện `COMPLETED` mang thêm `text_source` và `page_count` khi OCR tham gia.
 
 ### 4. Xử lý cấu trúc và bảng tính
 
-- **Phân đoạn (Chunking):** Đoạn văn thông thường cắt ở **800 ký tự với 120 ký tự gối đầu (overlap)**. Bảng biểu, tiêu đề, danh sách dùng overlap bằng 0 và tôn trọng ranh giới dòng. Bảng bị cắt sẽ lặp lại dòng tiêu đề (header) để giữ ngữ cảnh.
-- **Bảng tính (Spreadsheet):**
-  - *Ngữ nghĩa:* Mỗi dòng được chuẩn hóa thành văn bản kèm metadata (Sheet, Range, Cột, Giá trị).
-  - *Tính toán tiền kiểm định:* Với câu hỏi tính toán, mô hình lập kế hoạch JSON (`count`, `sum`, `average`, `min`, `max`, `sort`, `top`, `bottom`) và Polars thực thi an toàn trên dữ liệu Parquet. Không chạy code tùy ý.
+- **Chunking:** Đoạn văn thường được cắt ở **800 ký tự, chồng lấn 120 ký tự**. Bảng, tiêu đề và danh sách dùng overlap 0, tôn trọng ranh giới dòng. Bảng bị cắt sẽ lặp lại dòng header để giữ ngữ cảnh.
+- **Bảng tính:**
+  - *Ngữ nghĩa:* mỗi dòng được chuẩn hóa thành văn bản kèm metadata (sheet, range, cột, giá trị).
+  - *Tính toán tất định:* với câu hỏi tính toán, model lập kế hoạch bằng JSON (`count`, `sum`, `average`, `min`, `max`, `sort`, `top`, `bottom`) rồi Polars thực thi an toàn trên dữ liệu Parquet; không chạy code tùy ý.
 
-### 5. Xử lý truy vấn lai (Hybrid Retrieval)
+### 5. Truy vấn kết hợp (hybrid retrieval)
 
 ```mermaid
 flowchart TD
     Query[Truy vấn người dùng] --> Gate{Chào hỏi / nhiễu rõ ràng?}
-    Gate -->|Có và không nhạy cảm| Polite[Phản hồi theo lịch sử, không citation]
+    Gate -->|Có và không nhạy cảm| Polite[Trả lời theo lịch sử, không trích dẫn]
     Gate -->|Không / chưa chắc| Plan[Viết lại câu hỏi nối tiếp]
     Plan --> Route[Định tuyến: Tính toán -> Quan hệ -> Chính xác -> Ngữ nghĩa]
-    Route --> Dense[Xếp hạng Dense]
+    Route --> Dense[Xếp hạng dense]
     Route --> Sparse[Xếp hạng BM25]
-    Route --> Graph[Truy vết thực thể Đồ thị]
-    Dense --> Fusion[Dung hợp RRF có trọng số]
+    Route --> Graph[Truy vết thực thể đồ thị]
+    Dense --> Fusion[Hợp nhất RRF có trọng số]
     Sparse --> Fusion
     Graph --> Fusion
     Fusion --> Rerank[Xếp hạng lại TEI - nếu bật]
-    Rerank --> Select[Chọn 5 đơn vị sơ cấp]
+    Rerank --> Select[Chọn 5 đơn vị chính]
     Select --> Neighbors[Mở rộng lân cận & hoàn chỉnh bảng]
-    Neighbors --> Generate[Sinh câu trả lời có kiểm chứng]
+    Neighbors --> Generate[Sinh câu trả lời có căn cứ]
 ```
 
-**Bộ lọc ý định:** Quy tắc Việt/Anh bảo thủ chỉ chặn lời chào, hội thoại xã giao hoặc nhiễu rõ ràng; bỏ qua cả cache câu trả lời, embedding, query planning, truy hồi và LLM. Phản hồi nhắc chủ đề gần nhất khi phù hợp, không citation. Câu hỏi nhạy cảm, mã/định danh và câu nối tiếp có nội dung vẫn đi qua RAG; khi chưa chắc, ưu tiên truy hồi. Đây không phải bộ phân loại ngữ nghĩa đã huấn luyện.
+**Bộ lọc ý định:** Các quy tắc tiếng Việt/tiếng Anh bảo thủ chỉ chặn lời chào, câu xã giao hoặc nhiễu rõ ràng; những câu này bỏ qua cả cache câu trả lời, embedding, query planning, truy hồi và LLM. Khi phù hợp, phản hồi nhắc lại chủ đề gần nhất và không kèm trích dẫn. Câu hỏi nhạy cảm, mã/định danh và câu nối tiếp có nội dung vẫn đi qua RAG; khi chưa chắc, mặc định vẫn truy hồi. Đây không phải bộ phân loại ngữ nghĩa đã huấn luyện.
 
-1. **Viết lại truy vấn theo ngữ cảnh (Query Planning):** Câu hỏi nối tiếp (follow-up) được viết lại thành truy vấn độc lập trước khi tìm kiếm dựa trên lịch sử hội thoại gần nhất.
-2. **Định tuyến:** `calculation` → `relational` → `exact` → `semantic` với trọng số kênh tương ứng.
-3. **Khai thác ứng viên:** Thu thập tối đa 40 dense, 40 sparse, 20 graph song song.
-4. **Dung hợp (Fusion):** RRF với $k=30$, giữ lại 30 ứng viên tốt nhất.
-5. **Reranking:** Tùy chọn xếp hạng lại bằng mô hình cross-encoder.
-6. **Lựa chọn & Mở rộng:** Lấy 5 đơn vị sơ cấp (tối đa 2 đơn vị/tài liệu). Tự động kéo thêm các dòng lân cận cùng bảng (`table_id`) và ngữ cảnh lân cận, tối đa 8 đơn vị tri thức đưa vào prompt.
+1. **Query planning theo ngữ cảnh:** câu hỏi nối tiếp được viết lại thành truy vấn độc lập dựa trên lịch sử hội thoại gần nhất trước khi tìm kiếm.
+2. **Định tuyến:** `calculation` → `relational` → `exact` → `semantic`, với trọng số kênh tương ứng.
+3. **Lấy ứng viên:** thu thập song song tối đa 40 dense, 40 sparse và 20 graph.
+4. **Hợp nhất:** RRF với $k=30$, giữ 30 ứng viên tốt nhất.
+5. **Rerank:** tùy chọn xếp hạng lại bằng cross-encoder.
+6. **Chọn và mở rộng:** lấy 5 đơn vị chính (tối đa 2 đơn vị mỗi tài liệu), tự động kéo thêm các dòng lân cận cùng bảng (`table_id`) và ngữ cảnh xung quanh, tối đa 8 đơn vị tri thức đưa vào prompt.
 
-### 6. Nguyên tắc sinh phản hồi và đối soát
+### 6. Nguyên tắc sinh phản hồi và đối chiếu
 
-- **Liệt kê đầy đủ:** Prompt yêu cầu toàn bộ các mục, nhãn và thông số trong nguồn. Ngân sách câu trả lời mặc định là `LLM_MAX_OUTPUT_TOKENS=1024`; graph extraction giữ ngân sách riêng 512 token.
-- **Trích dẫn có cấu trúc:** Câu trả lời dẫn nguồn `[S1]`, `[S2]`. Control plane kiểm tra tính hợp lệ và quyền truy cập tài liệu trước khi phát phản hồi cuối và thẻ nguồn.
-- **Không tìm thấy:** Khi không có bằng chứng liên quan, mô hình từ chối suy đoán và thông báo thiếu thông tin.
-- **Streaming thật:** Ollama NDJSON hoặc SSE từ endpoint tương thích OpenAI → gRPC server-streaming → SSE tới client. Bản nháp tích lũy thay thế snapshot cũ; giữ lại đuôi và token/placeholder chưa đủ để làm sạch trước khi hiển thị. Bản nháp không có link/thẻ nguồn và không được lưu.
-- **Câu hỏi nhạy cảm:** Chờ toàn bộ kết quả, kiểm tra citation và cắt cụt trước khi hiển thị; câu trả lời bị cắt hoặc thiếu nguồn hợp lệ không lộ bản nháp.
+- **Liệt kê đầy đủ:** prompt yêu cầu nêu hết các mục, nhãn và thông số có trong nguồn. Câu trả lời mặc định giới hạn ở `LLM_MAX_OUTPUT_TOKENS=1024` token; trích xuất đồ thị giữ giới hạn riêng 512 token.
+- **Trích dẫn có cấu trúc:** câu trả lời đánh dấu nguồn bằng `[S1]`, `[S2]`. Lớp điều khiển kiểm tra tính hợp lệ và quyền xem tài liệu trước khi phát phản hồi cuối và các thẻ nguồn.
+- **Không tìm thấy:** khi không có bằng chứng liên quan, mô hình từ chối suy đoán và thông báo thiếu thông tin.
+- **Streaming thật:** Ollama NDJSON hoặc SSE từ endpoint tương thích OpenAI → gRPC server-streaming → SSE tới client. Các snapshot tích lũy thay thế bản nháp cũ; phần đuôi chưa đủ, token hoặc placeholder được giữ lại cho tới khi làm sạch an toàn rồi mới hiển thị. Bản nháp không có link/thẻ nguồn và không được lưu.
+- **Câu hỏi nhạy cảm:** chờ sinh xong, kiểm tra trích dẫn và cắt bớt trước khi hiển thị; câu trả lời bị cắt hoặc thiếu nguồn hợp lệ sẽ không lộ bản nháp.
 
 ### 7. OCR tùy chọn — PDF scan và ảnh
 
-Stage OCR **tắt theo mặc định** (`INGESTION_OCR_ENABLED=false`): khi tắt, pipeline hành xử y như bản chỉ-text và PDF không có text trả ngay lỗi cũ "PDF document contains no extractable text; scanned PDFs are not supported".
+Bước OCR **mặc định tắt** (`INGESTION_OCR_ENABLED=false`). Khi tắt, pipeline chạy giống hệt bản chỉ xử lý text và PDF không có text trả ngay lỗi cũ "PDF document contains no extractable text; scanned PDFs are not supported".
 
-- **Bật:** `INGESTION_OCR_ENABLED=true` ở worker; upload ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`) cần thêm `OCR_UPLOADS_ENABLED=true` ở API (Spring). Phụ thuộc Apache-2.0: `pypdfium2` (raster hóa) và Pillow; Docker image cài sẵn `tesseract-ocr` kèm gói `vie`/`eng`.
-- **Cổng từng trang:** Trang PDF có ít hơn `INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE` (mặc định 32) ký tự hiển thị sẽ được raster hóa ở `INGESTION_OCR_DPI` (300) rồi nhận dạng; trang có text giữ nguyên fast-path (không OCR).
-- **Ảnh lồng trong tài liệu:** Bật thêm `INGESTION_OCR_EMBEDDED_IMAGES=true` để quét **ảnh nhúng**: các trang PDF *có* text (trang thiếu text đã được OCR toàn trang) được lấy từng ảnh XObject ra nhận dạng; `.docx` (`word/media/`) và `.xlsx` (`xl/media/`) quét media trong package. Best-effort, không nhân bản text layer: ảnh nhỏ hơn 32px hoặc không giải mã được bị bỏ qua, tối đa 64 ảnh/tài liệu, kết quả dưới 8 ký tự (logo, icon) bị lọc; block OCR mang nguồn `ocr-v1` kèm `ocr_source=embedded-image`, tham gia chung cache fingerprint §7. **Vị trí trích dẫn:** DOCX đánh số trang ước tính bằng dấu ngắt trang trong file (`w:lastRenderedPageBreak`, `w:br[@w:type="page"]`) — best-effort, file không có dấu ngắt thì coi là trang 1; block OCR được chèn đúng vị trí ảnh trong tài liệu kèm `section_path` từ heading trước đó. XLSX gán `sheet_name` về sheet chứa ảnh (đọc theo chuỗi relationship của package, không giải mã được thì bỏ trống). `parser_version` được lộ đến ngoài cùng: payload index KEYWORD trên Qdrant (lọc được `parser_version=ocr-v1`), DTO retrieval (`RetrievedKnowledgeUnit`), gRPC `Citation`, Spring và frontend (thẻ OCR badge trên citation). Cache retrieval (codec chunk, schema v2) và cache semantic-answer (schema v2) tự vô hiệu hóa mục cũ — các mục schema v1 bị từ chối, tính lại bình thường (fail-open). Ảnh hỏng vẫn im lặng bỏ qua, nhưng **3 lần lỗi provider liên tiếp** (thiếu tesseract, VLM sập, timeout dồn dập) sẽ fail tài liệu và giữ đúng loại lỗi gốc (transient → retry).
-- **Giới hạn:** Tối đa `INGESTION_OCR_MAX_PAGES` (300) trang/tài liệu; giới hạn megapixel mỗi trang (`INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE=25`) tự thu nhỏ ảnh thay vì từ chối; timeout mỗi trang (`INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE=60`) thành lỗi vĩnh viễn (không tái thử); nhận dạng chạy song song `INGESTION_OCR_PAGE_CONCURRENCY=2` trang.
-- **Provider:** `INGESTION_OCR_PROVIDER=tesseract` (mặc định; đọc TSV kèm độ tin cậy; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) hoặc `ollama-vlm` (bắt buộc `OCR_VLM_MODEL_ID`; gọi `/api/chat` của Ollama với ảnh base64).
-- **Cache kết quả:** Parse OCR được cache JSON tại `<document>/ocr/<fingerprint>.json`; fingerprint bó SHA-256 của file gốc với cấu hình OCR (provider, DPI). Trùng fingerprint khi reindex → bỏ qua nhận dạng; artifact hỏng/lệch → parse lại toàn phần; lỗi ghi cache chỉ ghi log, không chặn hấp thụ.
-- **Siêu dữ liệu:** Sự kiện `COMPLETED` và API tài liệu mang `text_source` (`text`/`ocr`/`mixed`) và `page_count`; frontend hiển thị badge OCR và xem trước ảnh trực tiếp.
+- **Bật:** `INGESTION_OCR_ENABLED=true` ở worker; muốn tải ảnh lên (`.png`, `.jpg`, `.jpeg`, `.webp`) cần thêm `OCR_UPLOADS_ENABLED=true` ở API (Spring). Dependency Apache-2.0: `pypdfium2` (raster hóa) và Pillow; Docker image cài sẵn `tesseract-ocr` kèm gói `vie`/`eng`.
+- **Điều kiện từng trang:** trang PDF có ít hơn `INGESTION_OCR_MIN_TEXT_CHARS_PER_PAGE` (mặc định 32) ký tự hiển thị sẽ được raster hóa ở `INGESTION_OCR_DPI` (300) rồi nhận dạng; trang có text giữ nguyên đường xử lý nhanh (không OCR).
+- **Ảnh nhúng trong tài liệu:** bật thêm `INGESTION_OCR_EMBEDDED_IMAGES=true` để quét **ảnh nhúng**: với trang PDF *có* text (trang thiếu text đã được OCR toàn trang), từng ảnh XObject được lấy ra nhận dạng; với `.docx` (`word/media/`) và `.xlsx` (`xl/media/`), quét media trong package. Cách làm là best-effort, không nhân bản text layer: ảnh nhỏ hơn 32px hoặc không giải mã được bị bỏ qua, tối đa 64 ảnh mỗi tài liệu, kết quả dưới 8 ký tự (logo, icon) bị lọc; block OCR mang nguồn `ocr-v1` với `ocr_source=embedded-image` và dùng chung cache fingerprint ở §7. **Vị trí trích dẫn:** DOCX ước lượng số trang từ dấu ngắt trang trong tệp (`w:lastRenderedPageBreak`, `w:br[@w:type="page"]`) — best-effort, tệp không có dấu ngắt thì coi là trang 1; block OCR được chèn đúng vị trí ảnh trong tài liệu kèm `section_path` từ heading trước đó. XLSX gán `sheet_name` theo sheet chứa ảnh (đọc theo chuỗi relationship của package, không giải mã được thì bỏ trống). `parser_version` được đưa ra tận cùng: payload index KEYWORD trên Qdrant (lọc được `parser_version=ocr-v1`), DTO retrieval (`RetrievedKnowledgeUnit`), gRPC `Citation`, Spring và frontend (badge OCR trên citation). Cache retrieval (codec chunk, schema v2) và cache semantic-answer (schema v2) tự vô hiệu hóa mục cũ — mục schema v1 bị từ chối và tính lại bình thường (fail-open). Ảnh hỏng vẫn được bỏ qua im lặng, nhưng **3 lỗi provider liên tiếp** (thiếu tesseract, VLM sập, timeout dồn dập) sẽ làm tài liệu fail và giữ đúng loại lỗi gốc (transient → retry).
+- **Giới hạn:** tối đa `INGESTION_OCR_MAX_PAGES` (300) trang mỗi tài liệu; giới hạn megapixel mỗi trang (`INGESTION_OCR_MAX_MEGAPIXELS_PER_PAGE=25`) sẽ thu nhỏ ảnh quá lớn thay vì từ chối; timeout mỗi trang (`INGESTION_OCR_TIMEOUT_SECONDS_PER_PAGE=60`) được coi là lỗi vĩnh viễn (không retry); nhận dạng chạy song song `INGESTION_OCR_PAGE_CONCURRENCY=2` trang.
+- **Provider:** `INGESTION_OCR_PROVIDER=tesseract` (mặc định; đọc TSV kèm confidence; `INGESTION_OCR_LANGUAGES=vie+eng`; PSM=3) hoặc `ollama-vlm` (bắt buộc `OCR_VLM_MODEL_ID`; gọi `/api/chat` của Ollama với ảnh base64).
+- **Cache kết quả:** kết quả parse OCR được cache dạng JSON tại `<document>/ocr/<fingerprint>.json`; fingerprint gắn SHA-256 của tệp gốc với cấu hình OCR (provider, DPI). Fingerprint trùng khi reindex thì bỏ qua nhận dạng; artifact hỏng hoặc lệch thì parse lại toàn bộ; lỗi ghi cache chỉ được ghi log, không chặn nạp tài liệu.
+- **Metadata:** sự kiện `COMPLETED` và API tài liệu mang `text_source` (`text`/`ocr`/`mixed`) và `page_count`; frontend hiển thị badge OCR và xem trước ảnh trực tiếp.
 
-### 8. Phiên âm ASR tùy chọn — Âm thanh và video
+### 8. ASR tùy chọn — chuyển giọng nói thành văn bản
 
-Stage ASR **tắt theo mặc định** (`INGESTION_ASR_ENABLED=false`, `INGESTION_VIDEO_ENABLED=false`): khi tắt, các định dạng media bị từ chối ngay từ cổng upload API hoặc trả lỗi không hỗ trợ.
+Bước ASR **mặc định tắt** (`INGESTION_ASR_ENABLED=false`, `INGESTION_VIDEO_ENABLED=false`). Khi tắt, tệp media bị từ chối ngay ở cổng upload của API hoặc trả lỗi định dạng không hỗ trợ.
 
-- **Bật:** `INGESTION_ASR_ENABLED=true` ở worker; upload âm thanh (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) cần `ASR_UPLOADS_ENABLED=true` ở API (Spring); video (`.mp4`, `.mkv`, `.mov`, `.webm`) cần thêm `INGESTION_VIDEO_ENABLED=true` ở worker và `VIDEO_UPLOADS_ENABLED=true` ở API.
-- **Provider kép:**
-  - `faster-whisper` (mặc định, MIT): giải mã container trực tiếp qua PyAV/FFmpeg nhúng trong thư viện, không cần cài ffmpeg hệ thống cho file âm thanh độc lập.
-  - `openai-compat`: gửi tới endpoint `/v1/audio/transcriptions` (Speaches, whisper.cpp server...); chuẩn hóa audio thành WAV 16 kHz mono bằng ffmpeg trước khi gửi.
-- **Xử lý video:** Demux track âm thanh qua ffmpeg thành 16 kHz mono để phiên âm ASR. Khi bật thêm `INGESTION_VIDEO_KEYFRAME_OCR=true` (yêu cầu bật cả stage OCR §7), ffmpeg trích xuất các khung hình mẫu (`fps=1/{interval}`) kèm timestamp từ bộ lọc `showinfo`; các khung hình được nhận dạng OCR tốt nhất có thể, chuỗi 3 lỗi liên tiếp từ provider sẽ dừng tài liệu bảo toàn loại lỗi; sinh ra các block `ocr-v1` mang `ocr_source=video-keyframe`, tài liệu mang `text_source=mixed`.
-- **Timestamp bucket:** Thời gian âm thanh (giây) được chia thành các bucket (`INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS`, mặc định 60 giây, 1-based) đóng vai trò số trang tương đương (`page_number`) để tái sử dụng toàn bộ cơ chế trích dẫn hiện có; mốc thời gian chi tiết bắt đầu/kết thúc được lưu trong metadata của block.
-- **Giới hạn & Cache:** Giới hạn thời lượng tối đa (`INGESTION_ASR_MAX_DURATION_SECONDS`, mặc định 3600s, kiểm tra qua ffprobe nếu có) và timeout phiên âm (`INGESTION_ASR_TIMEOUT_SECONDS=3600`). Parse được cache tại `<document>/asr/<fingerprint>.json` (schema `asr-artifact-v1`), fingerprint gắn kết SHA-256 file gốc, provider tag và độ dài bucket.
-- **Siêu dữ liệu & Giao diện:** Sự kiện mang `text_source="asr"` (hoặc `"mixed"` nếu có OCR khung hình); giao diện hiển thị badge ASR và trình phát `<audio>` / `<video>` nguyên bản.
+- **Bật:** `INGESTION_ASR_ENABLED=true` ở worker; tải âm thanh lên (`.mp3`, `.wav`, `.m4a`, `.oga`, `.ogg`, `.opus`, `.flac`) cần `ASR_UPLOADS_ENABLED=true` ở API (Spring); video (`.mp4`, `.mkv`, `.mov`, `.webm`) cần thêm `INGESTION_VIDEO_ENABLED=true` ở worker và `VIDEO_UPLOADS_ENABLED=true` ở API.
+- **Hai provider:**
+  - `faster-whisper` (mặc định, MIT): tự giải mã container qua PyAV/FFmpeg đi kèm thư viện, không cần ffmpeg hệ thống với tệp âm thanh độc lập.
+  - `openai-compat`: gửi tới endpoint `/v1/audio/transcriptions` đã cấu hình (Speaches, whisper.cpp server...); chuẩn hóa audio về WAV 16 kHz mono bằng ffmpeg trước khi gửi.
+- **Xử lý video:** tách track âm thanh bằng ffmpeg thành 16 kHz mono để ASR. Khi bật thêm `INGESTION_VIDEO_KEYFRAME_OCR=true` (yêu cầu bật cả bước OCR §7), ffmpeg lấy các keyframe mẫu (`fps=1/{interval}`) kèm timestamp từ filter `showinfo`; các khung hình được OCR best-effort, 3 lỗi provider liên tiếp sẽ khiến tài liệu thất bại và giữ nguyên loại lỗi; sinh ra các block `ocr-v1` với `ocr_source=video-keyframe`, tài liệu mang `text_source=mixed`.
+- **Bucket thời gian:** mốc thời gian (giây) được chia thành các bucket (`INGESTION_ASR_TIMESTAMP_BUCKET_SECONDS`, mặc định 60 giây, bắt đầu từ 1), dùng làm số trang tương đương (`page_number`) để tận dụng nguyên cơ chế trích dẫn hiện có; mốc bắt đầu/kết thúc chi tiết của từng đoạn nằm trong metadata của block.
+- **Giới hạn và cache:** giới hạn thời lượng tối đa (`INGESTION_ASR_MAX_DURATION_SECONDS`, mặc định 3600s, kiểm tra bằng ffprobe nếu có) và timeout chuyển giọng nói (`INGESTION_ASR_TIMEOUT_SECONDS=3600`). Kết quả parse được cache tại `<document>/asr/<fingerprint>.json` (schema `asr-artifact-v1`); fingerprint gắn SHA-256 tệp gốc, provider tag và độ dài bucket.
+- **Metadata và giao diện:** sự kiện trạng thái mang `text_source="asr"` (hoặc `"mixed"` nếu có OCR keyframe); giao diện hiển thị badge ASR và trình phát `<audio>` / `<video>` gốc.
 
 
 ---

@@ -4,141 +4,141 @@
 
 > **Ngôn ngữ / Language:** [Tiếng Việt](#bizapps--nền-tảng-ứng-dụng-kinh-doanh-cài-được) · [English](#bizapps--the-installable-business-app-platform)
 >
-> Tài liệu này là tham chiếu đầy đủ cho manifest `bizapp.v1`, các khối thực thi, composer trực quan,
-> báo cáo khai báo, chiếu tri thức cho trợ lý AI, API runtime và các giới hạn báo lỗi thật của bản
+> Tài liệu tham chiếu đầy đủ cho manifest `bizapp.v1`: các khối thực thi, composer trực quan,
+> báo cáo khai báo, đồng bộ tri thức cho trợ lý AI, API runtime và các giới hạn/lỗi thực tế của bản
 > cài hiện tại. Nguồn chuẩn: `contracts/bizapp/bizapp.v1.schema.json`, `api/src/main/java/com/openvie/api/bizapp/`
 > (validator/executor/composer) và `frontend/src/components/bizapp/composer/`.
 
 ## BizApps — nền tảng ứng dụng kinh doanh cài được
 
-### 0. Mô hình tư duy (TL;DR)
+### 0. Mô hình tổng quát (TL;DR)
 
-BizApp là **ứng dụng kinh doanh khai báo** chạy trực tiếp trên các headless service của nền tảng:
-không cần backend riêng. Toàn bộ hành vi của ứng dụng được mô tả bằng **một JSON duy nhất** theo
-hợp đồng `bizapp.v1` — gọi tắt là **manifest**:
+BizApp là **ứng dụng kinh doanh khai báo** chạy trực tiếp trên các service headless của nền tảng:
+không cần backend riêng. Toàn bộ hành vi của ứng dụng nằm trong **một tệp JSON** theo hợp đồng
+`bizapp.v1`, gọi là **manifest**:
 
 ```mermaid
 flowchart LR
-    M[Manifest bizapp.v1<br/>entities · blocks · reports · rbac · ui] -->|install| I[Đóng băng manifest<br/>+ deploy quy trình BPMN]
+    M[Manifest bizapp.v1<br/>entities · blocks · reports · rbac · ui] -->|install| I[Chốt manifest<br/>+ deploy quy trình BPMN]
     I --> R[Runtime<br/>registry / form / timeline / report / assistant]
     R -->|hooks after commit| H[Phê duyệt Flowable · Notify · Webhook · Connector]
-    R -->|projection| K[KB `bizapp-&lt;kind&gt;`<br/>doc bản ghi + digest]
+    R -->|projection| K[KB `bizapp-&lt;kind&gt;`<br/>tài liệu bản ghi + digest]
     K --> C[Chat có trích dẫn]
 ```
 
-Ba bề mặt người dùng:
+Ba giao diện người dùng:
 
-| Bề mặt | Đường dẫn | Ai dùng |
+| Giao diện | Đường dẫn | Ai dùng |
 | --- | --- | --- |
-| Kho ứng dụng + console quản trị (cài/gỡ/template/credential/bản thảo AI) | `/admin/apps`, `/admin/apps/compose` | Chủ tổ chức |
-| Ứng dụng runtime (registry, form, timeline, report, assistant) | `/apps`, `/apps/{kind}` | Theo `rbac` manifest |
-| Trợ lý hội thoại (Liệt kê/Cài đặt/Gợi ý/Tạo app/Bản ghi) | Chat workspace | Theo vai trò |
+| Kho ứng dụng và console quản trị (cài/gỡ, template, credential, bản thảo AI) | `/admin/apps`, `/admin/apps/compose` | Chủ tổ chức |
+| Ứng dụng runtime (registry, form, timeline, report, assistant) | `/apps`, `/apps/{kind}` | Theo `rbac` trong manifest |
+| Trợ lý hội thoại (liệt kê, cài đặt, gợi ý, tạo app, bản ghi) | Chat workspace | Theo vai trò |
 
-> **Mô hình triển khai:** bản OSS self-host có **một organization** cho mỗi installation; `org` trong schema/API là tenant ngầm định, không phải multi-org UI. Catalog template gồm **built-in** (JSON trong codebase) và **company** (DB của organization đó).
+> **Mô hình triển khai:** bản OSS self-host có **một organization** cho mỗi lần cài; `org` trong schema/API là tenant mặc định, không phải giao diện nhiều tổ chức. Catalog template gồm **built-in** (JSON trong codebase) và **company** (DB của tổ chức đó).
 
 ### 1. Bắt đầu nhanh (10 phút)
 
-1. `/admin/apps/compose`: đặt tên (Vi/En), chỉnh thực thể mặc định `records` (thêm trường, kiểu,
-   required, PII), đổi tên thực thể.
+1. `/admin/apps/compose`: đặt tên (Vi/En), chỉnh entity mặc định `records` (thêm field, kiểu,
+   required, PII) và đổi tên entity.
 
-   > Composer chỉ mở vài thuộc tính thân thiện: tên, nhãn, kiểu, required, PII. Các cấu hình sâu hơn
-   > (`maxLen`, `format`, `options`, `optionLabels`, `knowledge`, lớn nhất là các tham số đặc thù của
+   > Composer chỉ hiện một số thuộc tính thân thiện: tên, nhãn, kiểu, required, PII. Các cấu hình sâu hơn
+   > (`maxLen`, `format`, `options`, `optionLabels`, `knowledge`, và nhiều nhất là tham số riêng của
    > từng khối) đặt qua **tab JSON** hoặc **Additional settings** trong inspector.
 
-2. Thêm khối chạy được: ví dụ **Approval** (quy trình 1/2 cấp + vai trò duyệt) hoặc **Report**.
-   Kết nối thực thể → khối để tạo hook `onCreate`/`onUpdate`/`onDecide` (biểu tượng chú thích trên edge).
+2. Thêm khối thực thi, ví dụ **Approval** (quy trình 1/2 cấp và vai trò duyệt) hoặc **Report**.
+   Nối entity → khối để tạo hook `onCreate`/`onUpdate`/`onDecide` (biểu tượng ghi chú trên edge).
 
-3. Kiểm tra Panel kiểm tra hợp lệ (debounce 400ms, gọi `POST /api/v1/bizapps/validate`) lúc nhỏ màu
-   xanh, lúc đỏ (hiện lỗi dễ hiểu).
+3. Xem panel kiểm tra hợp lệ (debounce 400 ms, gọi `POST /api/v1/bizapps/validate`): chấm xanh khi
+   hợp lệ, đỏ khi lỗi kèm thông báo dễ hiểu.
 
-4. **Lưu bản thảo** (draft) hoặc **Cài đặt** (tự nâng cấp nếu app cùng kind đã cài). Cài đặt sẽ đóng băng
-   manifest, deploy BPMN, rồi chuyển tới `/apps/{kind}`.
+4. **Lưu bản thảo** hoặc **Cài đặt** (tự nâng cấp nếu app cùng kind đã cài). Khi cài, manifest được chốt,
+   BPMN được triển khai rồi chuyển tới `/apps/{kind}`.
 
-5. Thêm bản ghi bằng form, gửi duyệt, xem report, trao đổi qua assistant.
+5. Thêm bản ghi bằng form, gửi duyệt, xem report và trao đổi qua assistant.
 
 ### 2. Tham chiếu manifest `bizapp.v1`
 
 Schema máy đọc được: `contracts/bizapp/bizapp.v1.schema.json` (`additionalProperties: false`). Mọi key
-ngoài hợp đồng bị từ chối với gợi ý sửa (ví dụ `maxLength` → "key đúng là `maxLen`").
+ngoài hợp đồng đều bị từ chối kèm gợi ý sửa (ví dụ `maxLength` → "key đúng là `maxLen`").
 
-#### 2.1 Top level
+#### 2.1 Cấu trúc cấp cao nhất
 
-| Key | Kiểu/Shell | Mặc định | Ghi chú |
+| Key | Kiểu/giá trị | Mặc định | Ghi chú |
 | --- | --- | --- | --- |
 | `schema` | `"bizapp.v1"` (const) | — | bắt buộc |
-| `kind` | `[a-z][a-z0-9-]{1,31}` | — | duy nhất mỗi cài đặt; trùng kind khi cài → `409` |
-| `name` | `{vi, en}` nhãn in được ≤200 ký tự | — | bắt buộc, dùng làm tiêu đề |
-| `version` | int ≥1 | 1 | khi nâng cấp: `max(cài đặt hiện tại+1, yêu cầu)` |
-| `icon` | chuỗi ≤64 | — | nhãn icon (fallback emoji ở `/apps`) |
+| `kind` | `[a-z][a-z0-9-]{1,31}` | — | duy nhất trong mỗi lần cài; trùng kind khi cài → `409` |
+| `name` | `{vi, en}` nhãn hiển thị ≤200 ký tự | — | bắt buộc, dùng làm tiêu đề |
+| `version` | int ≥1 | 1 | khi nâng cấp: `max(bản đang cài + 1, yêu cầu)` |
+| `icon` | chuỗi ≤64 | — | tên icon (fallback emoji ở `/apps`) |
 | `storage` | `jsonb` | `jsonb` | `typed` bị từ chối trong bản build này (mọi app dùng `bizapp_records`) |
 | `rbac` | map `read/write/delete/approve/submit` → danh sách vai trò | xem §2.3 | |
 | `entities` | 1..20 đối tượng | — | bắt buộc |
 | `blocks` | ≤40 đối tượng | — | |
-| `conversational` | `{triggers[≤50], description≤2000}` | — | từ khoá dùng cho router ngữ nghĩa |
-| `ui` | `{views[≤20], layout}` | — | thứ tự view + toạ độ canvas |
+| `conversational` | `{triggers[≤50], description≤2000}` | — | từ khóa cho router ngữ nghĩa |
+| `ui` | `{views[≤20], layout}` | — | thứ tự view và tọa độ canvas |
 
-#### 2.2 `entities` & `fields`
+#### 2.2 `entities` và `fields`
 
-**Entity**: `name` (`[a-z][a-z0-9_]{0,63}`, duy nhất), `label {vi,en}` (bắt buộc — validator từ chối entity thiếu label),
+**Entity:** `name` (`[a-z][a-z0-9_]{0,63}`, duy nhất), `label {vi,en}` (bắt buộc — validator từ chối entity thiếu label),
 `fields` (1..40), `knowledge`, `hooks`.
 
-**Field**:
+**Field:**
 
 | Key | Giá trị | Mặc định | Ghi chú |
 | --- | --- | --- | --- |
-| `name` | `[a-z][a-z0-9_]{0,63}` (chuẩn hoá chữ thường) | — | duy nhất trong entity |
+| `name` | `[a-z][a-z0-9_]{0,63}` (tự chuẩn hóa về chữ thường) | — | duy nhất trong entity |
 | `type` | `string` `number` `boolean` `enum` `date` `ref` | — | |
-| `entity` | tên entity | — | bắt buộc/không được trỏ tới entity chưa khai báo khi `type=ref` |
-| `required` | bool | false | chặn tạo mới khi thiếu; cập nhật chỉ chặn khi trường có mặt nhưng rỗng |
+| `entity` | tên entity | — | bắt buộc khi `type=ref`; không được trỏ tới entity chưa khai báo |
+| `required` | bool | false | chặn tạo mới khi thiếu; khi cập nhật chỉ chặn nếu field có mặt nhưng rỗng |
 | `maxLen` | int 1..2000 | 1024 cho `string` | KHÔNG phải `maxLength` |
-| `format` | `email` `uri` `phone` | — | hiện tại chỉ `email` mới được kiểm chứng server-side |
-| `options` | danh sách chuỗi | — | bắt buộc cho `enum`; khớp không phân biệt hoa/thường khi ghi |
-| `optionLabels` | map option → `{label, aliases}` | — | nhãn/mẹo dùng cho slot-extraction của chat |
-| `pii` | bool | false | trường không bao giờ được chiếu lên KB |
-| `label` | `{vi,en}` | fallback tên trường | dùng ở form/registry/export/assistant |
+| `format` | `email` `uri` `phone` | — | hiện chỉ `email` được kiểm tra ở server |
+| `options` | danh sách chuỗi | — | bắt buộc với `enum`; khi ghi, so khớp không phân biệt hoa/thường |
+| `optionLabels` | map option → `{label, aliases}` | — | nhãn/alias dùng cho trích slot trong chat |
+| `pii` | bool | false | field không bao giờ được đưa lên KB |
+| `label` | `{vi,en}` | fallback tên field | dùng ở form/registry/export/assistant |
 
-`date` nhận ISO (`2026-01-31`, `2026-01-31T10:30`), `d/m/y`, và ngôn ngữ tự nhiên ("hôm nay", "mai",
-"thứ 4", "next Friday"); thời gian bị chuẩn hoá về `HH:mm`.
+`date` nhận ISO (`2026-01-31`, `2026-01-31T10:30`), `d/m/y` và ngôn ngữ tự nhiên ("hôm nay", "mai",
+"thứ 4", "next Friday"); phần giờ được chuẩn hóa về `HH:mm`.
 
-#### 2.3 `rbac` thực thi thế nào
+#### 2.3 `rbac` được thực thi thế nào
 
 | Khả năng | Mặc định khi không khai báo | Ghi chú |
 | --- | --- | --- |
 | `read` | mọi vai trò workspace | `ORG_OWNER` luôn đọc được |
-| `write` | chỉ admin workspace | list `MEMBER` để cho member ghi |
+| `write` | chỉ admin workspace | thêm `MEMBER` để cho member ghi |
 | `delete` | chỉ admin workspace | |
-| `approve` | chỉ admin workspace | `candidateRole` của khối duyệt phải nằm trong list này khi khai báo |
-| `submit` | fallback = `write` | hoặc list riêng |
+| `approve` | chỉ admin workspace | `candidateRole` của khối duyệt phải nằm trong danh sách này nếu có khai báo |
+| `submit` | mặc định theo `write` | hoặc danh sách riêng |
 
-Runtime **không tin vai trò do client gửi**; vai trò manifest được suy lại từ phiên + org mỗi request.
-Runtime cũng tôn trọng `entities[].rbac.write/submit` (cấp theo thực thể, thường do AI draft sinh ra),
-nhưng **`rbac` top-level là chuẩn** — schema đóng băng không khai báo key theo thực thể.
+Runtime **không tin vai trò do client gửi**; vai trò manifest được xác định lại từ phiên và org ở mỗi request.
+Runtime cũng tôn trọng `entities[].rbac.write/submit` (cấp theo entity, thường do AI draft sinh ra),
+nhưng **`rbac` ở top-level là chuẩn** — schema đã chốt không khai báo key theo entity.
 
-#### 2.4 `knowledge` (chiếu tri thức)
+#### 2.4 `knowledge` (đồng bộ tri thức)
 
 ```json
 "knowledge": { "project": true, "titleField": "name", "fields": ["name", "amount", "stage"] }
 ```
 
 Chỉ bật khi `rbac.read` chứa **cả ba** vai trò (nguyên tắc fail-closed); `titleField`/`fields` phải tồn tại
-trong entity; trường `pii: true` bị chặn chiếu. Chi tiết §7.
+trong entity; field `pii: true` không được đưa lên KB. Chi tiết ở §7.
 
 #### 2.5 `hooks` (lifecycle → khối)
 
 | Hook | Khi nào chạy | Ghi chú |
 | --- | --- | --- |
-| `onCreate` | sau khi bản ghi tạo thành công | approval → **tự gửi duyệt** |
+| `onCreate` | sau khi tạo bản ghi thành công | approval → **tự gửi duyệt** |
 | `onUpdate` | sau khi patch bản ghi | như trên; bản ghi đang `PENDING` không khởi động lại quy trình |
-| `onDecide` | sau phán quyết duyệt | luôn best-effort, không target `approval_workitem` |
+| `onDecide` | sau khi có quyết định duyệt | luôn best-effort, không target `approval_workitem` |
 
-Target là **block id** của khối hook được (`approval_workitem`, `notify`, `webhook_out`, `external_call`)
-hoặc `webhook_out:<event>` (event phải được một khối `webhook_out` khai báo). Thứ tự chạy mỗi event:
-**approval → external_call → notify/webhook/custom** — phần có rollback được chạy trước, để một thông báo
-không bao giờ "kêu trước" về bản ghi mà transaction sẽ roll back. Nói rõ: `external_call` chỉ **enqueue**
-job trong transaction — lỗi provider thuộc worker retry, không rollback bản ghi; `notify`/`webhook_out`
-lỗi cũng chỉ bị audit, không phá write.
+Target là **block id** của khối hook hợp lệ (`approval_workitem`, `notify`, `webhook_out`, `external_call`)
+hoặc `webhook_out:<event>` (event phải do một khối `webhook_out` khai báo). Thứ tự chạy cho mỗi event:
+**approval → external_call → notify/webhook/custom** — phần có thể rollback chạy trước, để thông báo
+không bao giờ báo trước về một bản ghi mà transaction sẽ rollback. Cụ thể: `external_call` chỉ **enqueue**
+job trong transaction — lỗi provider do worker retry, không rollback bản ghi; lỗi `notify`/`webhook_out`
+cũng chỉ được audit, không làm hỏng write.
 
-Decision về hook → audit `BIZAPP_HOOK_EXECUTED`/`BIZAPP_HOOK_FAILED` + metric.
+Kết quả hook được audit (`BIZAPP_HOOK_EXECUTED`/`BIZAPP_HOOK_FAILED`) và ghi metric.
 
 #### 2.6 `ui`
 
@@ -146,19 +146,19 @@ Decision về hook → audit `BIZAPP_HOOK_EXECUTED`/`BIZAPP_HOOK_FAILED` + metri
 
 | Prefix | Target | Render |
 | --- | --- | --- |
-| `registry:` | entity | bảng bản ghi có phân trang/sửa/lưu trữ/gửi duyệt/export |
+| `registry:` | entity | bảng bản ghi có phân trang, sửa, lưu trữ, gửi duyệt, export |
 | `form:` | entity | registry + hộp thoại tạo bản ghi mở sẵn |
 | `timeline:` | entity | feed thẻ bản ghi theo thời gian |
-| `report:` | view | bảng dữ liệu view (admin workspace) |
+| `report:` | view | bảng dữ liệu của view (admin workspace) |
 | `assistant:` | block id `assistant` | khung chat trong app |
 
-Validator từ chối view tham chiếu entity/view/block không tồn tại (`unknown ui view`). Composer tự thêm
-`report:<name>` rồi xoá khi bị xoá view. `layout` lưu toạ độ `{x,y}` (±10000) cho canvas.
+Validator từ chối view trỏ tới entity/view/block không tồn tại (`unknown ui view`). Composer tự thêm
+`report:<name>` và xóa khi view bị xóa. `layout` lưu tọa độ `{x,y}` (±10000) cho canvas.
 
 #### 2.7 `conversational`
 
 `triggers` (≤50, mỗi mục ≤200) và `description` (≤2000) được router ngữ nghĩa dùng để **chọn đúng app**
-khi message không nhắc tên kind (ví dụ "tạo phiếu xin mua"). Tránh từ khoá chung chung ("quản lý").
+khi tin nhắn không nhắc tên kind (ví dụ "tạo phiếu xin mua"). Tránh từ khóa chung chung như "quản lý".
 
 #### 2.8 Ví dụ tối thiểu
 
@@ -200,309 +200,308 @@ khi message không nhắc tên kind (ví dụ "tạo phiếu xin mua"). Tránh t
 
 ### 3. Danh mục khối (blocks)
 
-Quy tắc chung: `id` duy nhất `[A-Za-z][A-Za-z0-9_]{0,63}`; hook chỉ chạy được
+Quy tắc chung: `id` duy nhất theo `[A-Za-z][A-Za-z0-9_]{0,63}`; hook chỉ chạy được với
 `approval_workitem` / `notify` / `webhook_out` / `external_call`. `report`/`knowledge_base`/`assistant`
 là khối chức năng nhưng **không được target bởi lifecycle hook**. Các tab runtime `registry:`/`form:`/
 `timeline:` nằm trong `ui.views`, không phải block type.
 
 #### 3.1 `approval_workitem` (tối đa 1 khối/app)
 
-- `params.bpmnTemplate` phải theo `processes/<name>.bpmn20.xml` (chống traversal). Bundled:
+- `params.bpmnTemplate` phải theo dạng `processes/<name>.bpmn20.xml` (chống path traversal). Template đi kèm:
   `bizapp-single-approval.bpmn20.xml`,
-  `bizapp-two-level-approval.bpmn20.xml`, `eoffice-document-approval.bpmn20.xml`. Template không tồn tại
-  → **fallback** về generic single-approval (KHÔNG abort cài đặt).
-- `candidateRole` (mặc định `WORKSPACE_ADMIN`) phải ∈ vai trò trong `rbac.approve` nếu `rbac.approve` khai báo.
+  `bizapp-two-level-approval.bpmn20.xml`, `eoffice-document-approval.bpmn20.xml`. Nếu template không tồn tại
+  → **fallback** về single-approval chung (KHÔNG abort cài đặt).
+- `candidateRole` (mặc định `WORKSPACE_ADMIN`) phải nằm trong `rbac.approve` nếu `rbac.approve` được khai báo.
 - `sla.reminder` (mặc định `PT24H`) / `sla.escalation` (mặc định `PT48H`): chuỗi ISO-8601.
-- Cài đặt deploy Flowable process key `bizapp-<kind>` per workspace; biến task gồm `recordId`, `entity`,
+- Khi cài, Flowable triển khai process key `bizapp-<kind>` cho từng workspace; biến task gồm `recordId`, `entity`,
   `appKind`, `workspaceId`, `initiatorId`, `candidateRole`, `reminderDuration`, `escalationDuration`.
-- Claim/complete dùng **task inbox chung của engine** (không phải API riêng); phán quyết ghi về bản ghi qua
-  delegate: `runtime.approvalStatus = APPROVED | REJECTED`, `runtime.processId`.
+- Claim/complete dùng **task inbox chung của engine** (không phải API riêng); delegate ghi quyết định về
+  bản ghi: `runtime.approvalStatus = APPROVED | REJECTED`, `runtime.processId`.
 
 #### 3.2 `notify`
 
-- `params.to` (bắt buộc, list): `creator` (tác giả **bản ghi**, không phải người thực hiện hook) |
-  `record.<emailField>` (string field phải khai báo trên **mọi entity chạy hook trỏ tới block này**) | `config.<key>` | địa chỉ email cụ thể.
+- `params.to` (bắt buộc, dạng list): `creator` (tác giả **bản ghi**, không phải người chạy hook) |
+  `record.<emailField>` (field string phải được khai báo trên **mọi entity có hook trỏ tới block này**) | `config.<key>` | một địa chỉ email cụ thể.
 - `subject`/`title` dùng biến `{{record.<field>}}`/`{{<field>}}`.
-- Gửi HTML qua kênh thư của tổ chức; **lỗi gửi được audit nhưng không huỷ giao dịch**; nếu không phân giải
-  được recipient, block log cảnh báo và bỏ qua.
+- Gửi HTML qua kênh email của tổ chức; **lỗi gửi được audit nhưng không hủy giao dịch**; nếu không xác định
+  được người nhận, block ghi cảnh báo rồi bỏ qua.
 
 #### 3.3 `webhook_out`
 
 - `params.events` (bắt buộc): các sự kiện đã biết `record.created|updated|archived|restored|submitted|decided`
-  (hoặc tuỳ ý pattern `[a-z0-9][a-z0-9._-]{1,62}`).
+  (hoặc pattern tùy ý `[a-z0-9][a-z0-9._-]{1,62}`).
 - Record service chỉ đẩy event mà **một khối nào đó khai báo**. `hook: ["webhook_out:custom.event"]`
-  đẩy sự kiện tuỳ ý `bizapp.<kind>.custom.event` ngay tại thời điểm hook chạy (best-effort).
-- Định danh ký HMAC + fan-out qua module tích hợp (webhook dispatcher), không chạy trong transaction.
+  đẩy sự kiện tùy ý `bizapp.<kind>.custom.event` ngay khi hook chạy (best-effort).
+- Sự kiện được ký HMAC và fan-out qua module tích hợp (webhook dispatcher), không chạy trong transaction.
 
 #### 3.4 `external_call` (connector khai báo)
 
-| Param | Domain | Mặc định | Ghi chú |
+| Param | Miền giá trị | Mặc định | Ghi chú |
 | --- | --- | --- | --- |
 | `protocol` | `http` \| `mqtt` | `http` | |
-| `url` | URL tuyệt đối | — | bắt buộc khi `http`; HTTPS (trừ `allow-http`) |
-| `method` | `GET` `HEAD` `POST` `PUT` `PATCH` `DELETE` | `POST` | `GET/HEAD` **không gửi body** (API GET-only sẽ không nhận POST ngầm) |
-| `bodyTemplate` | JSON string | — | chỉ hợp lệ cho POST/PUT/PATCH; `{{record.<field>}}` |
+| `url` | URL tuyệt đối | — | bắt buộc với `http`; phải là HTTPS (trừ khi bật `allow-http`) |
+| `method` | `GET` `HEAD` `POST` `PUT` `PATCH` `DELETE` | `POST` | `GET/HEAD` **không gửi body** (API chỉ nhận GET sẽ không nhận POST ngầm) |
+| `bodyTemplate` | chuỗi JSON | — | chỉ hợp lệ với POST/PUT/PATCH; hỗ trợ `{{record.<field>}}` |
 | `responseMap` | map → JSON pointer `/path` | — | ≤8 mục; kết quả ghi vào `runtime.external.<blockId>` |
-| `credentialRef` | tên/id vault entry | — | bắt buộc với `header`/`oauth2` auth (HTTP) / dùng cho MQTT credential |
-| `auth` | `{type: header|hmac|oauth2, ...}` | `header` | `hmac` cần `secretRef` + `header`/`timestampHeader` tuỳ chọn; `oauth2` cần `tokenUrl` https + `credentialRef` (`client_id:client_secret`), token cache ~80% TTL |
-| `sink` | `{type: field\|record, entity, mapping, dedupeKey}` | `field` | `field` nói lên chính bản ghi gốc; `record` yêu cầu `sink.entity` khai báo và `dedupeKey` 1..5 ⊆ `mapping` keys (idempotent upsert) |
-| `mapping` | `"<entity field>": "/path"` | — | mọi field đích phải khai báo trên entity |
-| `schedule` | `{every, entity, select, limit}` | — | `every` PT30S..P7D; `select` ≤5 field khai báo; `limit` 1..500 (50) |
+| `credentialRef` | tên/id của vault entry | — | bắt buộc với auth `header`/`oauth2` (HTTP); dùng cho credential MQTT |
+| `auth` | `{type: header|hmac|oauth2, ...}` | `header` | `hmac` cần `secretRef` và tùy chọn `header`/`timestampHeader`; `oauth2` cần `tokenUrl` HTTPS + `credentialRef` (`client_id:client_secret`), token được cache khoảng 80% TTL |
+| `sink` | `{type: field\|record, entity, mapping, dedupeKey}` | `field` | `field`: ghi ngược vào chính bản ghi gốc; `record`: yêu cầu khai báo `sink.entity`, và `dedupeKey` (1..5 phần tử) phải nằm trong các key của `mapping` (upsert idempotent) |
+| `mapping` | `"<entity field>": "/path"` | — | mọi field đích phải được khai báo trên entity |
+| `schedule` | `{every, entity, select, limit}` | — | `every` từ PT30S đến P7D; `select` tối đa 5 field đã khai báo; `limit` 1..500 (mặc định 50) |
 | `timeout` | `{connectMs, readMs}` | 10000/15000 | 100..60000 ms |
-| `retry` | `{maxAttempts, backoff}` | 3 / PT10S | 1..10, PT1S..PT10M; exponential ×2 cap 10 phút |
-| `egress.allowedHosts` | list host | — | phải chứa host của target; chỉ **thu hẹp** list của installation |
+| `retry` | `{maxAttempts, backoff}` | 3 / PT10S | 1..10, PT1S..PT10M; exponential ×2, tối đa 10 phút |
+| `egress.allowedHosts` | danh sách host | — | phải chứa host đích; chỉ được **thu hẹp** danh sách của bản cài |
 
-Ranh giới bảo mật: cài đặt phải có `config.allowedHosts` (PATCH app config) — thiếu nó connector từ chối
-kêu. Inline secret (key tựa `password/secret/token/api_key`) bị validator từ chối; PEM private key bị từ
-chối ở vault; phản hồi cap 256 KiB; không redirect; DNS/SSRF block (loopback/private/link-local/metadata).
-Mỗi lần chạy là job bền vững (`PENDING/RUNNING/SUCCEEDED/DEAD`), run được audit + đo metric; lỗi lib
-`4xx/5xx` / timeout được retry exponential (cap 10 phút) tới `maxAttempts` rồi DEAD.
+Ranh giới bảo mật: bản cài phải có `config.allowedHosts` (PATCH app config); thiếu nó thì connector từ chối
+gọi. Secret inline (key dạng `password`/`secret`/`token`/`api_key`) bị validator từ chối; PEM private key bị từ
+chối ở vault; response tối đa 256 KiB; không redirect; chặn DNS/SSRF (loopback/private/link-local/metadata).
+Mỗi lần chạy là một job bền vững (`PENDING/RUNNING/SUCCEEDED/DEAD`), được audit và đo metric; lỗi
+`4xx/5xx`/timeout được retry exponential (tối đa 10 phút) tới `maxAttempts` rồi chuyển `DEAD`.
 
-MQTT: subscribe một lần per job (`qos`, `maxMessages`, `readMs`), luôn disconnect; credential dạng
+MQTT: subscribe một lần cho mỗi job (`qos`, `maxMessages`, `readMs`), luôn disconnect; credential dạng
 `mqtt` → `username:password`.
 
-#### 3.5 `knowledge_base` & `assistant`
+#### 3.5 `knowledge_base` và `assistant`
 
-- `knowledge_base`: `params.graphExtraction` tuỳ chọn; thực thi tạo/lấy KB `bizapp-<kind>`. **Không cần
+- `knowledge_base`: `params.graphExtraction` tùy chọn; khi chạy sẽ tạo/lấy KB `bizapp-<kind>`. **Không cần
   cấu hình thủ công.**
-- `assistant`: `params.instructions` hiển thị như lời chào/khung chỉ dẫn trên tab assistant. Thực thi là
-  no-op (tab dùng chat session workspace thường). `params.knowledgeBaseBlock` chỉ dùng để **vẽ edge**
-  knowledge base trên canvas — không ảnh hưởng runtime.
+- `assistant`: `params.instructions` hiện như lời chào/hướng dẫn trên tab assistant. Khi chạy là
+  no-op (tab dùng chat session workspace bình thường). `params.knowledgeBaseBlock` chỉ để **vẽ edge**
+  tới knowledge base trên canvas — không ảnh hưởng runtime.
 
-### 4. Report views khai báo (thay SQL tự do)
+### 4. Báo cáo khai báo (thay SQL tự do)
 
-Báo cáo là view khai báo bên trong block `report` (`params.views`). **Không có chuỗi SQL**:
-`{sql trong view → validator từ chối}`. Định nghĩa view:
+Báo cáo là các view khai báo bên trong block `report` (`params.views`). **Không có chuỗi SQL**:
+nếu view chứa `sql`, validator từ chối. Định nghĩa view:
 
 | Key | Ý nghĩa |
 | --- | --- |
-| `name`, `entity` | bắt buộc; entity phải khai báo |
-| `title` | metadata hiển thị (tiêu đề tab report; do composer tạo) |
-| `fields[]` | danh sách trường cho **list view** (chỉ dùng khi không có `groupBy`/`metrics`) |
-| `groupBy[]` | cột group-by (chỉ field khai báo) |
+| `name`, `entity` | bắt buộc; entity phải được khai báo |
+| `title` | metadata hiển thị (tiêu đề tab report, do composer tạo) |
+| `fields[]` | danh sách field cho **list view** (chỉ dùng khi không có `groupBy`/`metrics`) |
+| `groupBy[]` | cột group-by (chỉ field đã khai báo) |
 | `metrics[]` | `{fn: count\|sum\|avg\|min\|max, field?, as}` — `sum/avg` chỉ nhận field `number`; `count` có thể bỏ `field` |
 | `filters[]` | `{field, op, value? / values? / param?}` — `op`: `eq ne in gt gte lt lte contains isnull` (`contains` chỉ cho field `string`); `param` gắn giá trị runtime |
-| `orderBy[]` | `{by, dir: asc\|desc}`, `by` phải là field khai báo hoặc alias metric/groupBy |
-| `limit` | 1..500 (mặc định 100); SQL luôn `LIMIT` theo cap này |
-| `engine` | `postgres` (JSONB các trường qua `payload->>'field'`; `number` cast `::numeric`) hoặc `lakehouse` (DuckDB, cần cấu hình lakehouse) |
+| `orderBy[]` | `{by, dir: asc\|desc}`, `by` phải là field đã khai báo hoặc alias của metric/groupBy |
+| `limit` | 1..500 (mặc định 100); SQL luôn có `LIMIT` theo mức này |
+| `engine` | `postgres` (JSONB qua `payload->>'field'`; `number` cast `::numeric`) hoặc `lakehouse` (DuckDB, cần cấu hình lakehouse) |
 
-Compiler luôn ép `org_id`,`tenant_id` + (JSONB: `app_kind`,`entity`) + `status='ACTIVE'` và **chỉ bind
-named params** — bảng nguồn do storage layer quyết định, manifest không thể nhắm tới bảng khác. Params runtime
+Compiler luôn áp `org_id`, `tenant_id` + (với JSONB: `app_kind`, `entity`) + `status='ACTIVE'` và **chỉ bind
+named param** — bảng nguồn do storage layer quyết định, manifest không thể nhắm tới bảng khác. Param runtime
 bị chặn `orgId`/`tenantId`/`appKind`/`entityName`.
 
-Quyền: **chỉ workspace admin** chạy report (`POST /bizapps/{kind}/reports/{viewName}`), và tab report chỉ
-hiện với admin. Runtime hiển thị **tối đa 6 cột**; export trả **toàn bộ cột/dòng**. Report view không có
-row/limit view → không export được (file rỗng); Report đó vẫn an toàn.
+Quyền: **chỉ admin workspace** chạy report (`POST /bizapps/{kind}/reports/{viewName}`), và tab report chỉ
+hiện với admin. Runtime hiển thị **tối đa 6 cột**; export trả **toàn bộ cột/dòng**. View không có dòng/limit
+thì không export được (file rỗng), nhưng report vẫn an toàn.
 
-### 5. Runtime views, bản ghi & phê duyệt
+### 5. Các view runtime, bản ghi và phê duyệt
 
 | View | Hành vi |
 | --- | --- |
-| `registry:` | trang 20 bản ghi (`updated_at desc`), refresh, export CSV/XLSX, tạo, sửa, lưu trữ (soft, status `ARCHIVED`), **khôi phục**, toggle **Show archived**, gửi duyệt (chỉ khi app có khối approval) |
-| `form:` | tương tự registry nhưng mở hộp thoại tạo bản ghi mặc định; form sinh từ manifest, field không khai báo không thể nhập (server cũng từ chối 400) |
-| `timeline:` | feed thẻ bản ghi mới nhất, 3 field đầu + badge trạng thái |
-| `report:` | bảng kết quả view (chỉ admin), refresh, export |
-| `assistant:` | khung chat trong app (chat session workspace thường, §7) |
+| `registry:` | phân trang 20 bản ghi (`updated_at desc`), refresh, export CSV/XLSX, tạo, sửa, lưu trữ mềm (status `ARCHIVED`), **khôi phục**, bật/tắt **Show archived**, gửi duyệt (chỉ khi app có khối approval) |
+| `form:` | giống registry nhưng tự mở hộp thoại tạo bản ghi; form sinh từ manifest, field không khai báo thì không nhập được (server cũng trả 400) |
+| `timeline:` | feed thẻ các bản ghi mới nhất, 3 field đầu và badge trạng thái |
+| `report:` | bảng kết quả của view (chỉ admin), refresh, export |
+| `assistant:` | khung chat trong app (dùng chat session workspace bình thường, §7) |
 
 Trạng thái bản ghi:
 
 | Trường | Giá trị |
 | --- | --- |
-| `status` | `ACTIVE` \| `ARCHIVED` (xóa mềm; không có endpoint xoá cứng từ client; retention purge là job server-side) |
-| `archivedAt` / `archivedBy` | thời điểm/người lưu trữ; xoá khi restore |
+| `status` | `ACTIVE` \| `ARCHIVED` (xóa mềm; không có endpoint xóa cứng từ client; purge theo retention là job phía server) |
+| `archivedAt` / `archivedBy` | thời điểm/người lưu trữ; xóa khi restore |
 | `runtime.approvalStatus` | `PENDING` \| `APPROVED` \| `REJECTED`; `runtime.processId` khi đang chạy |
 
-Record đang `PENDING` **không được lưu trữ** (409, phải withdraw trước). Record `ARCHIVED` **không sửa được**
-(400, phải restore). Restore trả status `ACTIVE`, giữ payload/runtime (audit decision còn nguyên), phát
-`record.restored` và chiếu lại tài liệu knowledge (archive đã xoá doc).
+Bản ghi đang `PENDING` **không được lưu trữ** (409, phải withdraw trước). Bản ghi `ARCHIVED` **không sửa được**
+(400, phải restore). Restore trả status `ACTIVE`, giữ nguyên payload/runtime (audit quyết định vẫn còn), phát
+`record.restored` và cập nhật lại tài liệu knowledge (thao tác archive đã xóa tài liệu).
 
-API bản ghi bị fence bởi `rbac` manifest + vai trò manifest suy lại từ request (client không gửi được);
-thực thể không khai báo → 404. Chấp nhận `payload` dạng patch; trường lạ bị từ chối 400. Update khi
-`PENDING` **giữ nguyên runtime** (không phá process); update khi đã có phán quyết thì xoá decision cũ.
+API bản ghi bị chặn bởi `rbac` trong manifest, và vai trò manifest được xác định lại từ request (client không
+gửi được); entity không khai báo → 404. `payload` được chấp nhận dạng patch; field lạ bị từ chối 400. Update khi
+`PENDING` **giữ nguyên runtime** (không phá process); update sau khi đã có quyết định thì xóa quyết định cũ.
 
 ### 6. Composer trực quan
 
-**Route:** `/admin/apps/compose` (app mới; `?template=<platform:<kind>|<uuid>` để bắt đầu từ một template)
+**Route:** `/admin/apps/compose` (app mới; `?template=<platform:<kind>|<uuid>` để bắt đầu từ template)
 và `/admin/apps/compose/{draftId}`.
 
-**Cổng Dashboard:** 3 tab trên header:
+**Dashboard:** 3 tab trên header:
 
 | Tab | Nút/mục |
 | --- | --- |
-| Canvas | **Auto Layout** (Dagre trái→phải); Palette bên trái; canvas trung tâm; Inspector phải |
-| List | thẻ entity/block: chọn (nhảy về inspector), xoá, thêm entity |
-| JSON | chỉnh trực tiếp manifest; Format/Copy; lỗi cú pháp hiện ngay; JSON → canvas tự sync |
+| Canvas | **Auto Layout** (Dagre trái→phải); Palette bên trái; canvas ở giữa; Inspector bên phải |
+| List | thẻ entity/block: chọn (nhảy tới inspector), xóa, thêm entity |
+| JSON | sửa manifest trực tiếp; Format/Copy; lỗi cú pháp hiện ngay; JSON ↔ canvas tự đồng bộ |
 
 **Canvas:**
 
 | Edge | Ý nghĩa |
 | --- | --- |
-| entity → entity (ref field) | derived, chỉ đọc (di chuyển không xoá) |
-| entity → block (`hook`) | kéo từ entity sang block; mỗi lần kéo thêm event kế tiếp (`onCreate` → `onUpdate` → `onDecide`); bấm edge đổi hook hoặc xoá |
-| block `report` → entity | derived từ views; xoá edge/Xoá view cũng xoá view thật (Không chỉ edge) |
-| block `external_call` → entity (`schedule`) | dashed, chỉ đọc; chỉnh schedule trong Inspector |
-| assistant → knowledge_base | derived khi `params.knowledgeBaseBlock` trỏ khối |
+| entity → entity (field ref) | sinh tự động, chỉ đọc (kéo di chuyển không xóa) |
+| entity → block (`hook`) | kéo từ entity sang block; mỗi lần kéo thêm event kế tiếp (`onCreate` → `onUpdate` → `onDecide`); bấm edge để đổi hook hoặc xóa |
+| block `report` → entity | sinh từ views; xóa edge hoặc xóa view đều xóa view thật (không chỉ xóa edge) |
+| block `external_call` → entity (`schedule`) | nét đứt, chỉ đọc; chỉnh schedule trong Inspector |
+| assistant → knowledge_base | sinh ra khi `params.knowledgeBaseBlock` trỏ tới khối |
 
-**Block registry:** `contracts/bizapp/blocks.v1.json` là nguồn duy nhất cho type/hookable/palette/defaults; backend và composer cùng đọc file này. Thêm block type bắt đầu ở registry, không sửa danh sách rời.
+**Block registry:** `contracts/bizapp/blocks.v1.json` là nguồn duy nhất cho type/hookable/palette/defaults; backend và composer cùng đọc tệp này. Muốn thêm block type, bắt đầu từ registry, không sửa các danh sách rời.
 
-**Palette**: New Entity + 7 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu; webhook
+**Palette:** New Entity + 7 khối với mặc định an toàn (report tạo 1 view đánh dấu entity đầu tiên; webhook
 `record.created`/`record.updated`; notify `["creator"]`; approval single + `WORKSPACE_ADMIN`;
 knowledge_base để trống, assistant chọn KB trong Inspector; thêm/sửa assistant tự thêm tab `assistant:<id>` vào `ui.views`).
 
 **Inspector:**
 
-- Entity: name, label EN, field list (name/type/required/PII, thêm/xoá). Các cấu hình field sâu
-  (label vi/en, maxLen, format, options, optionLabels, knowledge) sửa trong **tab JSON**.
-- Approval: quy trình 1/2 cấp (preset BPMN) + vai trò duyệt; giải thích 2 cấp.
-- External Call: URL, credentialRef; các tham số còn lại qua "Additional settings" (editor kiểu
-  scalar/list/object cho key chưa được UI xử lý).
+- Entity: name, label EN, danh sách field (name/type/required/PII, thêm/xóa). Các cấu hình field sâu
+  (label vi/en, `maxLen`, `format`, `options`, `optionLabels`, `knowledge`) sửa trong **tab JSON**.
+- Approval: quy trình 1/2 cấp (preset BPMN) và vai trò duyệt; giải thích 2 cấp.
+- External Call: URL, credentialRef; các tham số còn lại qua **Additional settings** (editor
+  scalar/list/object cho key UI chưa xử lý).
 - Notify: recipients (creator/record.*/config.*/email), Title, Subject.
-- Report: **Report Builder** (title, entity, list vs summary, fields, metrics + alias, filters, sort,
-  limit 1..500; chuẩn hoá tên view slug từ title; đổi entity reset groupBy/metrics).
-- Webhook: checkboxes các event chuẩn.
+- Report: **Report Builder** (title, entity, list hoặc summary, fields, metrics + alias, filters, sort,
+  limit 1..500; chuẩn hóa tên view thành slug từ title; đổi entity sẽ reset groupBy/metrics).
+- Webhook: checkbox các event chuẩn.
 - Knowledge base: ghi chú "tự động".
 
-**Panel kiểm tra hợp lệ:** debounce 400ms gọi `POST /bizapps/validate`; nút Install disable khi không hợp lệ.
-Response trả thêm `issues: [{path, message}]`; composer map `entities.<name>`/`blocks.<id>` lên node tương ứng để
-hiện viền đỏ + tooltip, còn panel vẫn liệt kê toàn bộ lỗi.
-Chuyển đổi palette language/theme ngay trên header.
+**Panel kiểm tra hợp lệ:** debounce 400 ms, gọi `POST /bizapps/validate`; nút Install bị vô hiệu hóa khi không hợp lệ.
+Phản hồi trả thêm `issues: [{path, message}]`; composer gán `entities.<name>`/`blocks.<id>` cho node tương ứng để
+hiện viền đỏ và tooltip, còn panel vẫn liệt kê toàn bộ lỗi.
+Có thể đổi ngôn ngữ palette/theme ngay trên header.
 
-**Hành động:** Save draft (`PUT /drafts/{id}` hoặc `PUT /drafts/new` khi tạo mới), Save as Template (mở dialog
+**Thao tác:** Save draft (`PUT /drafts/{id}` hoặc `PUT /drafts/new` khi tạo mới), Save as Template (mở hộp thoại
 name/summary rồi `POST /marketplace/bizapps`), Install — nếu kind đã cài thì **nâng cấp tại chỗ** (version
-auto-bump, giữ bản ghi) thay vì báo "already installed". Card app đã cài trong `/admin/apps` cũng có
-**Save as template** dùng manifest đóng băng hiện tại.
+tự tăng, giữ bản ghi) thay vì báo "already installed". Thẻ app đã cài trong `/admin/apps` cũng có
+**Save as template** dùng manifest đã chốt hiện tại.
 
-**Phím tắt composer:** `Ctrl/Cmd+S` lưu draft, `Ctrl/Cmd+Z` undo, `Shift+Ctrl/Cmd+Z`/`Ctrl+Y` redo, `Delete`/`Backspace` xoá node/edge đang chọn (kèm dọn view/report/hook liên quan), `Esc` đóng Inspector hoặc dialog edge.
+**Phím tắt composer:** `Ctrl/Cmd+S` lưu bản thảo, `Ctrl/Cmd+Z` hoàn tác, `Shift+Ctrl/Cmd+Z`/`Ctrl+Y` làm lại, `Delete`/`Backspace` xóa node/edge đang chọn (kèm dọn view/report/hook liên quan), `Esc` đóng Inspector hoặc hộp thoại edge.
 
-### 7. Chiếu tri thức & trợ lý AI
+### 7. Đồng bộ tri thức và trợ lý AI
 
-- **Doc bản ghi:** với entity bật `knowledge.project`, mỗi bản ghi chiếu thành một tài liệu Markdown
-  `bizapp__<kind>__<entity>__<recordId>.md` (chỉ những field khai báo trong `knowledge.fields`, không
-  `pii`), source_ref `bizapp:<kind>:<entity>`, `document_kind=BIZAPP_RECORD`.
-- **Digest:** `bizapp__<kind>__digest.md` tổng hợp toàn bộ view khai báo (mỗi view 1 bảng; `No active data
-  recorded.` nếu không có row), rebuild dạng **debounce 30s** (`BIZAPPS_PROJECTION_DEBOUNCE_MS`) sau mỗi
-  record lifecycle event (tạo/sửa/gửi/phán quyết), không chạy khi **cài đặt/gỡ cài đặt** (giữ `search_revision`
+- **Tài liệu bản ghi:** với entity bật `knowledge.project`, mỗi bản ghi được chuyển thành một tài liệu Markdown
+  `bizapp__<kind>__<entity>__<recordId>.md` (chỉ các field trong `knowledge.fields`, bỏ field
+  `pii`), `source_ref` `bizapp:<kind>:<entity>`, `document_kind=BIZAPP_RECORD`.
+- **Digest:** `bizapp__<kind>__digest.md` tổng hợp mọi view đã khai báo (mỗi view một bảng; ghi `No active data
+  recorded.` nếu không có dòng), rebuild với **debounce 30 giây** (`BIZAPPS_PROJECTION_DEBOUNCE_MS`) sau mỗi
+  lifecycle event của bản ghi (tạo/sửa/gửi/quyết định), nhưng không chạy khi cài/gỡ app (giữ `search_revision`
   ổn định, tránh 409 cho chat đang stream). Record event được phát **vô điều kiện** cho mọi write qua API bản
   ghi; việc có block `webhook_out` hay không chỉ ảnh hưởng **giao webhook**, không ảnh hưởng projection/CDC.
-- **KB đích:** mặc định KB riêng `bizapp-<kind>` (tự tạo). Chat chỉ truy hồi KB gắn với chatbot phiên —
-  tức **KB mặc định workspace**. Cài đặt cho app chiếu vào KB chat bằng `config.knowledgeBaseId` (PATCH
-  `/bizapps/{kind}/config`, chỉ ORG_OWNER) rồi **touch một bản ghi** để chiếu lại.
-- **Trợ lý trong app (`assistant:` tab):** khởi tạo chat session workspace thường; khối `instructions`
-  hiển thị như title phụ; router suy app từ nội dung muốn (không tự scope app).
-- **Chế độ: chạy thật, không Text-to-SQL.** Số liệu aggregate "chính tuyệt đối" phải đến từ report view
-  (tab report hoặc export) — chat hiện trả lời theo top-k truy hồi, **không đảm bảo phủ mọi bản ghi**.
+- **KB đích:** mặc định là KB riêng `bizapp-<kind>` (tự tạo). Chat chỉ truy hồi KB gắn với chatbot của phiên —
+  tức **KB mặc định của workspace**. Muốn app đưa dữ liệu vào KB chat, đặt `config.knowledgeBaseId` (PATCH
+  `/bizapps/{kind}/config`, chỉ `ORG_OWNER`) rồi **cập nhật một bản ghi** để đồng bộ lại.
+- **Trợ lý trong app (tab `assistant:`):** tạo chat session workspace bình thường; `instructions`
+  hiển thị như tiêu đề phụ; router suy ra app từ nội dung (không tự giới hạn theo app).
+- **Cách chạy:** thật, không Text-to-SQL. Số liệu tổng hợp cần **chính xác tuyệt đối** phải lấy từ report view
+  (tab report hoặc export) — chat trả lời theo top-k truy hồi nên không đảm bảo phủ mọi bản ghi.
 
-**Giới hạn hiện tại của bản build này** (ghi rõ để tránh ao ước):
+**Giới hạn của bản build này** (nêu rõ để tránh hiểu nhầm):
 
-1. Truy hồi là top-K chunk — không phủ hết bản ghi; digest chỉ là bản sao văn bản của view đã khai báo.
-2. Writes qua **connector** (sink record/field) không phát lifecycle event → projection/digest có thể
-   lag sau khi connector ghi; `PATCH` bản ghi qua API luôn refresh.
-3. `document_kind` chưa được đẩy vào vector index (ingest command bỏ qua) → filter theo loại tài liệu
-   hiện không phân biệt được doc BizApp; chat workspace có thể trích hoặc trả lời dựa trên projected doc.
-4. Chat app chưa tự scope theo app; câu hỏi không nhắc app có thể bị trộn doc của app khác.
+1. Truy hồi là top-K chunk nên không phủ hết bản ghi; digest chỉ là bản sao văn bản của view đã khai báo.
+2. Ghi qua **connector** (sink record/field) không phát sự kiện vòng đời → việc đồng bộ/digest có thể chậm sau khi
+   connector ghi; PATCH bản ghi qua API luôn làm mới.
+3. `document_kind` chưa được đẩy vào vector index (lệnh nạp tài liệu bỏ qua) → lọc theo loại tài liệu
+   hiện không phân biệt được tài liệu BizApp; chat workspace có thể trích dẫn hoặc trả lời dựa trên tài liệu đã đồng bộ.
+4. Chat của app chưa tự giới hạn theo app; câu hỏi không nhắc tên app có thể bị trộn tài liệu của app khác.
 
-### 8. API surface
+### 8. Danh sách API
 
 | Method & đường dẫn | Quyền | Mô tả |
 | --- | --- | --- |
-| `GET /bizapps`, `GET /bizapps/{kind}` | mọi thành viên | app đã cài + manifest đóng băng |
+| `GET /bizapps`, `GET /bizapps/{kind}` | mọi thành viên | app đã cài và manifest đã chốt |
 | `GET /bizapps/installed-summary`, `/installed-anywhere` | mọi thành viên | danh sách app cho chat/catalog |
-| `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | trang bản ghi (`page/size≤100/includeArchived`) |
+| `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | phân trang bản ghi (`page/size≤100/includeArchived`) |
 | `POST|PATCH|DELETE /bizapp-data/{kind}/{entity}[/{id}]` | `write`/`delete` | tạo/sửa/lưu trữ |
 | `POST …/{recordId}/restore` | `delete` | khôi phục bản ghi đã lưu trữ |
 | `POST …/{recordId}/submit` | `submit` | bắt đầu quy trình phê duyệt |
 | `POST /bizapps/{kind}/reports/{view}` | workspace admin | chạy view (body `{"params": {...}}`) |
 | `POST /bizapps/{kind}/reports/{view}/export` | workspace admin | CSV/XLSX đầy đủ cột/dòng |
-| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX bản ghi (ACTIVE; `includeArchived=true` để gồm lưu trữ, cap 10 000) |
-| `PATCH /bizapps/{kind}/config` | ORG_OWNER | thay `config` (vd `allowedHosts`, `knowledgeBaseId`) |
-| `POST /bizapps/validate` | ORG_OWNER | validate không lưu |
-| `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | soạn thảo AI / từ chat (≤20 turn gần nhất) |
-| `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | CRUD bản thảo |
+| `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX bản ghi (`ACTIVE`; `includeArchived=true` để gồm cả lưu trữ, tối đa 10 000) |
+| `PATCH /bizapps/{kind}/config` | ORG_OWNER | thay `config` (ví dụ `allowedHosts`, `knowledgeBaseId`) |
+| `POST /bizapps/validate` | ORG_OWNER | kiểm tra hợp lệ mà không lưu |
+| `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | soạn bằng AI hoặc từ chat (≤20 lượt gần nhất) |
+| `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | tạo/đọc/sửa/xóa bản thảo |
 | `GET /marketplace/bizapps[/{templateRef}]` | mọi thành viên | catalog (built-in + company) |
-| `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | cài / nâng cấp / gỡ (mềm) |
-| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | lưu/xoá template công ty |
-| `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (browse bất kỳ) | trao đổi template |
-| `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | kho xác thực |
+| `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | cài / nâng cấp / gỡ mềm |
+| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | lưu/xóa template của công ty |
+| `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (xem thì vai trò nào cũng được) | trao đổi template |
+| `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | kho credential |
 
-`templateRef` định danh: `platform:<kind>` cho template tích hợp sẵn (crm/booking/signature-request) hoặc
-UUID cho template công ty.
+`templateRef`: `platform:<kind>` cho template tích hợp sẵn (crm/booking/signature-request), hoặc
+UUID cho template của công ty.
 
 ### 9. Cấu hình
 
 | Key (env) | Mặc định | Ý nghĩa |
 | --- | --- | --- |
-| `BIZAPPS_ENABLED` | true | kill-switch: false → mọi route `/bizapp*` 404 |
+| `BIZAPPS_ENABLED` | true | công tắc tắt: `false` → mọi route `/bizapp*` trả 404 |
 | `BIZAPP_ENC_KEY` | — | bắt buộc để lưu credential; `openssl rand -base64 32` |
 | `BIZAPPS_OUTBOUND_ALLOW_HTTP` | false | cho phép `http://` (dev) |
-| `BIZAPPS_OUTBOUND_ALLOW_PRIVATE_HOSTS` | false | dev: cho loopback/private host (mock server) |
-| `BIZAPPS_AI_DRAFTING_ENABLED` | true | tắt → AI drafting 404 |
-| `BIZAPPS_AI_DRAFT_MODEL` / `_FALLBACK_MODEL` | trống | model `CompleteJson` cho drafting; trống = mặc định AI service |
-| `BIZAPPS_PROJECTION_DEBOUNCE_MS` | 30000 |debounce digest |
-| `BIZAPPS_REMOTE_CATALOG_ENABLED` / `_HOSTS` | false / trống | host allowlist cho `GET /marketplace/catalog` và import theo URL |
-| `app.bizapps.connectors.*` (`enabled`, `scan-delay-ms`=15000, `worker-delay-ms`=5000, `batch-size`=20) | | connector scheduler/worker |
-| `app.retention.workspace-days` / `bizapp-record-days` | 0 (tắt) | ngưỡng purge-eligible; workspace chỉ được báo cáo |
-| `app.retention.bizapp-record-purge-enabled` | false | bật xoá cứng record BizApp đã archive quá hạn |
-| `app.retention.max-records-per-run` | 200 | cap purge mỗi lần chạy |
-| `app.retention.scan-delay-ms` / `initial-delay-ms` | 86400000 / 300000 | nhịp quét retention |
-| `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | kill-switch cho chat actions/records |
+| `BIZAPPS_OUTBOUND_ALLOW_PRIVATE_HOSTS` | false | dev: cho phép host loopback/private (mock server) |
+| `BIZAPPS_AI_DRAFTING_ENABLED` | true | tắt → AI drafting trả 404 |
+| `BIZAPPS_AI_DRAFT_MODEL` / `_FALLBACK_MODEL` | trống | model `CompleteJson` cho drafting; trống = mặc định của AI service |
+| `BIZAPPS_PROJECTION_DEBOUNCE_MS` | 30000 | debounce của digest |
+| `BIZAPPS_REMOTE_CATALOG_ENABLED` / `_HOSTS` | false / trống | allowlist host cho `GET /marketplace/catalog` và import theo URL |
+| `app.bizapps.connectors.*` (`enabled`, `scan-delay-ms`=15000, `worker-delay-ms`=5000, `batch-size`=20) | | scheduler/worker của connector |
+| `app.retention.workspace-days` / `bizapp-record-days` | 0 (tắt) | ngưỡng đủ điều kiện purge; workspace chỉ được báo cáo |
+| `app.retention.bizapp-record-purge-enabled` | false | bật xóa cứng bản ghi BizApp đã archive quá hạn |
+| `app.retention.max-records-per-run` | 200 | giới hạn purge mỗi lần chạy |
+| `app.retention.scan-delay-ms` / `initial-delay-ms` | 86400000 / 300000 | chu kỳ quét retention |
+| `CHAT_BIZAPP_ACTIONS_ENABLED` / `CHAT_BIZAPP_RECORDS_ENABLED` | true | công tắc tắt cho chat actions/records |
 | `CHAT_INTENT_CONFIDENCE_THRESHOLD` / `CHAT_INTENT_CLASSIFY_ALL_TURNS` | 0.75 / false | bộ phân loại app |
 
-Chọn model, chạy đánh giá và rollout cho chat/intent/slot/drafting: xem
+Cách chọn model, chạy đánh giá và triển khai dần cho chat/intent/slot/drafting: xem
 [định tuyến model AI](AI_MODEL_ROUTING.md).
 
-### 10. Sự cố & giới hạn báo lỗi thật
+### 10. Sự cố và lỗi thực tế
 
-| Triệu chứng / lỗi | Nguyên nhân & cách sửa |
+| Triệu chứng / lỗi | Nguyên nhân và cách sửa |
 | --- | --- |
 | `unknown manifest key … "maxLength"` | dùng `maxLen` |
-| `unknown key entities[...].storage` / `fields[...].storage` | `storage` chỉ hợp lệ ở root manifest; xoá khỏi entity/field. Draft AI mới được normalize tự động; manifest cũ trong DB được migration V25 sửa tại chỗ |
-| `storage: typed is not available in this build` | đổi `storage` sang `jsonb`; chưa có bảng typed nào được ship |
+| `unknown key entities[...].storage` / `fields[...].storage` | `storage` chỉ hợp lệ ở root manifest; xóa khỏi entity/field. Draft AI mới được normalize tự động; manifest cũ trong DB được migration V25 sửa tại chỗ |
+| `storage: typed is not available in this build` | đổi `storage` sang `jsonb`; bản build này chưa có bảng typed |
 | `entity <name> requires label.vi and label.en` | thêm `label` cho entity (schema bắt buộc) |
 | `filter op contains requires a string field, got …` | `contains` chỉ dùng cho field `string`; dùng `eq`/`in` cho enum/number |
-| `free-form sql in report view is forbidden` | chuyển sang `groupBy/metrics/filters` |
+| `free-form sql in report view is forbidden` | chuyển sang `groupBy`/`metrics`/`filters` |
 | `metric sum requires numeric field` | metric chỉ nhận field `number` |
-| `orderBy target x is neither a declared field nor metric alias` | orderBy phải là field hoặc alias khai báo |
+| `orderBy target x is neither a declared field nor metric alias` | `orderBy` phải là field hoặc alias đã khai báo |
 | `entity knowledge projection requires rbac.read …` | thêm đủ 3 vai trò vào `rbac.read` |
-| `unsupported notify recipient` | chỉ `creator` / `record.<string field trên entity chạy hook>` / `config.<key>` / email |
-| `hook target … cannot run as a lifecycle hook` | chỉ 4 loại khối hook được; `report`/`registry`… không |
+| `unsupported notify recipient` | chỉ `creator` / `record.<field string trên entity chạy hook>` / `config.<key>` / email |
+| `hook target … cannot run as a lifecycle hook` | chỉ 4 loại khối được làm hook; `report`/`registry`... thì không |
 | `approval_workitem cannot run onDecide` | chuyển approval sang `onCreate`/`onUpdate` |
-| `external_call egress.allowedHosts does not include …` | thêm host (hoặc bỏ egress) + đảm bảo installation `config.allowedHosts` chứa host |
-| `inline field … looks like a secret` | di chuyển secret vào vault, dùng `credentialRef` |
-| `App <kind> is already installed` | dùng `POST /apps/{kind}/upgrade` (editor tự làm khi bấm Install) |
-| `Upgrade removes entity/field` / `changes the type` | nâng cấp không được xoá/đổi kiểu phần có bản ghi |
+| `external_call egress.allowedHosts does not include …` | thêm host (hoặc bỏ egress) và đảm bảo `config.allowedHosts` của bản cài có host đó |
+| `inline field … looks like a secret` | đưa secret vào vault, dùng `credentialRef` |
+| `App <kind> is already installed` | dùng `POST /apps/{kind}/upgrade` (editor tự gọi khi bấm Install) |
+| `Upgrade removes entity/field` / `changes the type` | không được xóa/đổi kiểu phần đã có bản ghi khi nâng cấp |
 | `Report views are workspace-admin material` | chuyển vai trò workspace sang admin (tab/API report) |
-| `Export is limited to 10000 records` | registry cap; thu hẹp scope trước khi export |
-| Báo cáo trống | view không có `metrics`/`groupBy` và không row → file trắng (dự kiến) |
-| Chat không thấy dữ liệu app | set `config.knowledgeBaseId` = KB chat, touch 1 bản ghi, verify doc `PROJECTED`; nhớ top-K không phủ hết — dùng report cho số liệu chính |
-| Digest bị cũ | connector ghi không phát event; PATCH một bản ghi để trigger rebuild |
-| Đã set knowledge nhưng chat trộn doc app khác | xem giới hạn §7.4 |
-| `This record is pending approval; withdraw…` | record đang PENDING: withdraw/rút duyệt trước khi lưu trữ |
+| `Export is limited to 10000 records` | giới hạn của registry; thu hẹp phạm vi trước khi export |
+| Báo cáo trống | view không có `metrics`/`groupBy` và không có dòng → file trắng (đúng như thiết kế) |
+| Chat không thấy dữ liệu app | đặt `config.knowledgeBaseId` = KB chat, cập nhật 1 bản ghi, kiểm tra tài liệu ở trạng thái `PROJECTED`; lưu ý top-K không phủ hết — dùng report cho số liệu chính xác |
+| Digest bị cũ | connector ghi không phát sự kiện; PATCH một bản ghi để kích hoạt dựng lại |
+| Đã đặt KB đích nhưng chat trộn tài liệu app khác | xem giới hạn §7.4 |
+| `This record is pending approval; withdraw…` | bản ghi đang `PENDING`: withdraw/rút duyệt trước khi lưu trữ |
 | `Archived records must be restored before editing` | gọi `POST …/{recordId}/restore` trước khi sửa |
 | `storage: typed…` / `requires label` / `contains…` | xem các dòng đầu bảng §10 |
 
-### 11. Ranh giới & pháp lý (Non-Goals)
+### 11. Ranh giới và pháp lý (non-goals)
 
-- Không stringify/exec runtime SQL tự do, không Text-to-SQL, không DDL từ manifest.
-- Không VHMS private key / không ký số trong process; e-signature là recipe qua `external_call` tới nhà
-  cung cấp bên ngoài; giá trị pháp lý do provider + luật sở tại (operator tự tham vấn).
-- Không auto-install từ bản thảo/template/import; luôn có nút xác nhận.
-- Không detached cryptographic verification cho remote template; v1 neo = SHA-256 trong envelope/catalog.
+- Không stringify hay thực thi SQL tự do, không Text-to-SQL, không DDL từ manifest.
+- Không giữ private key VHMS và không ký số trong process; e-signature là recipe gọi `external_call` tới nhà
+  cung cấp bên ngoài; giá trị pháp lý do provider và luật sở tại quyết định (người vận hành tự tham vấn).
+- Không tự cài từ bản thảo/template/import; luôn có nút xác nhận.
+- Không xác minh mật mã tách rời cho template từ xa; v1 chỉ neo bằng SHA-256 trong envelope/catalog.
 
-### 12. Khôi phục & retention
+### 12. Khôi phục và retention
 
-- **Workspace:** archive = soft-delete, không truy cập được nhưng giữ memberships/slug/documents/app data/KB/index.
-  `POST /api/v1/admin/workspaces/{id}/restore` (ORG_OWNER) đưa về `ACTIVE`; không cần provisioning/re-index.
-- **Bản ghi BizApp:** archive = `ARCHIVED`; `POST …/{recordId}/restore` (manifest `delete`) đưa về `ACTIVE`,
-  phát `record.restored`, chiếu lại knowledge doc + digest. Record `PENDING` phải withdraw trước khi archive.
-- **Retention:** `app.retention.workspace-days` / `app.retention.bizapp-record-days` (0 = tắt). Job hằng ngày
-  audit workspace đủ điều kiện purge nhưng **không tự xoá**; record purge chỉ chạy khi
-  `app.retention.bizapp-record-purge-enabled=true` (mặc định false) và xoá kèm connector jobs.
+- **Workspace:** archive là soft-delete, không truy cập được nhưng vẫn giữ membership/slug/tài liệu/app data/KB/index.
+  `POST /api/v1/admin/workspaces/{id}/restore` (`ORG_OWNER`) đưa workspace về `ACTIVE`; không cần provisioning hay đánh chỉ mục lại.
+- **Bản ghi BizApp:** archive → `ARCHIVED`; `POST …/{recordId}/restore` (quyền `delete` trong manifest) đưa về `ACTIVE`,
+  phát `record.restored`, cập nhật lại tài liệu knowledge và digest. Bản ghi `PENDING` phải withdraw trước khi archive.
+- **Retention:** `app.retention.workspace-days` / `app.retention.bizapp-record-days` (0 = tắt). Job hằng ngày chỉ
+  audit các workspace đủ điều kiện purge, **không tự xóa**; purge bản ghi chỉ chạy khi
+  `app.retention.bizapp-record-purge-enabled=true` (mặc định false) và xóa kèm connector job.
 - **Legal hold:** `PATCH /api/v1/admin/workspaces/{id}/legal-hold` đặt cờ chặn purge vĩnh viễn cho workspace.
-  Record purge cũng join `tenants`, nên workspace đang hold (hoặc đã archive) không bao giờ bị purge bản ghi.
-- **Dữ liệu archive trước V24** có `archived_at = NULL`, nên không bao giờ là purge candidate; chỉ restore thủ công/API.
-- `TenantStatus.INACTIVE` được giữ chỗ cho chế độ read-only tương lai; bản build này không expose transition nào.
-- **Hard delete workspace:** chỉ là runbook ops có review; FK trải documents/chat/KB/workflow/audit nên không
-  auto-purge.
+  Purge bản ghi cũng join `tenants`, nên workspace đang bị hold (hoặc đã archive) không bao giờ bị purge bản ghi.
+- Dữ liệu archive trước V24 có `archived_at = NULL`, nên không bao giờ là ứng viên purge; chỉ restore thủ công hoặc qua API.
+- `TenantStatus.INACTIVE` được giữ chỗ cho chế độ read-only tương lai; bản build này không mở transition nào.
+- **Xóa cứng workspace:** chỉ là runbook vận hành có review; FK trải khắp documents/chat/KB/workflow/audit nên không auto-purge.
 
 ---
 

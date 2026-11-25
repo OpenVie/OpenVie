@@ -8,23 +8,23 @@
 
 ## Tích hợp với lõi OpenVie — Tiếng Việt
 
-Lõi OpenVie là headless: mọi năng lực đi qua HTTP JSON tại `/api/v1/**` (và gRPC nội bộ cho tầng AI).
-Ứng dụng web ở `frontend/` chỉ là **một** ứng dụng minh họa trên lõi đó. Doanh nghiệp muốn tự tích hợp
-có thể self-host toàn bộ backend và gọi thẳng API — hoặc dùng luôn app tham chiếu.
+Lõi OpenVie là headless: mọi năng lực đều gọi được qua HTTP JSON tại `/api/v1/**` (và gRPC nội bộ cho tầng AI).
+Ứng dụng web trong `frontend/` chỉ là **một** ứng dụng minh họa trên lõi đó. Doanh nghiệp muốn tự tích hợp
+có thể self-host toàn bộ backend rồi gọi thẳng API, hoặc dùng luôn app tham chiếu.
 
 ### 1. Điểm vào và định danh
 
-- **Base URL:** đặt một reverse proxy/APISIX trước `api/`; mọi route nghiệp vụ nằm dưới `/api/v1/`.
-- **Người dùng (browser):** `POST /api/v1/auth/login` (mật khẩu) hoặc Keycloak OIDC
-  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE) → trả access token JWT (Bearer) + refresh token.
-- **Gọi server-to-server:** dùng `Authorization: Bearer <access_token>` và
-  `POST /api/v1/auth/refresh` để xoay vòng. Token refresh đọc theo thứ tự: cookie `refresh_token`,
-  header `X-Refresh-Token`, body `{"refresh_token": "..."}` — client không có cookie dùng header/body.
-- Không có header tenant: workspace, người dùng và vai trò được server suy ra từ token và
-  membership đang sống trong DB ở **mỗi** request.
-- **Tích hợp browser và timeout:** CORS prod mặc định trống (`CORS_ORIGINS`) — khai báo origin của
-  UI doanh nghiệp hoặc proxy same-origin qua APISIX. Chế độ chat JSON đồng bộ chờ tối đa
-  `app.ai.grpc.answer-deadline-seconds` (mặc định 100 s) — đặt timeout client theo đó, hoặc dùng SSE
+- **Base URL:** đặt reverse proxy/APISIX trước `api/`; mọi route nghiệp vụ nằm dưới `/api/v1/`.
+- **Người dùng (trình duyệt):** `POST /api/v1/auth/login` (mật khẩu) hoặc Keycloak OIDC
+  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE) → trả access token JWT (Bearer) và refresh token.
+- **Gọi server-to-server:** gửi `Authorization: Bearer <access_token>` và xoay vòng bằng
+  `POST /api/v1/auth/refresh`. Refresh token được đọc theo thứ tự: cookie `refresh_token`,
+  header `X-Refresh-Token`, body `{"refresh_token": "..."}`; client không dùng cookie thì gửi qua header hoặc body.
+- Không có header tenant: mỗi request, server suy ra workspace, người dùng và vai trò từ token và
+  membership hiện có trong DB.
+- **Tích hợp trình duyệt và timeout:** CORS production mặc định để trống (`CORS_ORIGINS`) — hãy khai báo
+  origin của UI doanh nghiệp hoặc proxy same-origin qua APISIX. Chế độ chat JSON đồng bộ chờ tối đa
+  `app.ai.grpc.answer-deadline-seconds` (mặc định 100 s); đặt timeout client theo giá trị này, hoặc dùng SSE
   để nhận bản nháp sớm hơn.
 
 ### 2. API key (machine-to-machine)
@@ -38,21 +38,21 @@ curl -X POST "$BASE/api/v1/admin/api-keys" \
 # → 201 {"id":…, "key":"ovk_…", "keyView":{…}}
 ```
 
-- `key` (`ovk_…`) chỉ xuất hiện **một lần**; server chỉ lưu hash SHA-256.
-- Khóa xác thực như một **service member** thật (có user row + membership) nên mọi quy tắc
-  phân quyền, audit, và khóa ngoại hiện có áp dụng y nguyên — không cần đường code riêng.
+- `key` (`ovk_…`) chỉ hiện **một lần**; server chỉ lưu hash SHA-256.
+- Khóa xác thực như một **service member** thật (có user row và membership), nên mọi quy tắc
+  phân quyền, audit và khóa ngoại hiện có vẫn áp dụng nguyên vẹn, không cần đường code riêng.
 - Dùng: `Authorization: Bearer ovk_…`. Thu hồi: `DELETE /api/v1/admin/api-keys/{keyId}` →
   khóa ngừng xác thực và tài khoản service bị tạm ngưng ngay.
 - Danh sách: `GET /api/v1/admin/api-keys` (luôn che secret, chỉ hiện `keyPrefix`).
 
 > Keycloak client-credentials là đường M2M thứ hai ở tầng IdP (confidential client `openvie-backend`);
-> nó cấu hình trong Keycloak, không phải một đường code riêng trong API.
+> đường này cấu hình trong Keycloak, không phải code riêng trong API.
 
 ### 3. Chat đồng bộ (server-to-server)
 
-Tạo phiên trước. Session thuộc **workspace active của token**: với user JWT là workspace đang bật
-(đổi qua `POST /api/v1/auth/workspaces/switch`); với API key là workspace gắn vào key lúc tạo.
-`knowledge_base_id` bắt buộc và phải là KB đang hoạt động của workspace đó:
+Tạo phiên trước. Phiên thuộc **workspace đang active của token**: với JWT người dùng là workspace
+đang chọn (đổi qua `POST /api/v1/auth/workspaces/switch`); với API key là workspace gắn với key lúc tạo.
+`knowledge_base_id` là bắt buộc và phải là KB đang hoạt động của workspace đó:
 
 ```bash
 curl -X POST "$BASE/api/v1/chat/sessions" \
@@ -61,7 +61,7 @@ curl -X POST "$BASE/api/v1/chat/sessions" \
 # → 200 {"id":…, "chatbot_id":…, "knowledge_base_id":…, "tenant_id":…, "locale":"vi"}
 ```
 
-Endpoint chat hỗ trợ hai chế độ trên cùng một pipeline (fingerprint, replay idempotent, kiểm tra scope):
+Endpoint chat hỗ trợ hai chế độ trên cùng pipeline (fingerprint, replay idempotent, kiểm tra phạm vi):
 
 ```bash
 curl -X POST "$BASE/api/v1/chat/sessions/$SESSION_ID/messages" \
@@ -72,10 +72,10 @@ curl -X POST "$BASE/api/v1/chat/sessions/$SESSION_ID/messages" \
 ```
 
 - `Accept: application/json` → chờ và trả câu trả lời cuối cùng dạng JSON (dành cho tích hợp);
-  deadline mô hình mặc định 100 s.
+  deadline model mặc định 100 s.
 - Mọi `Accept` khác → stream SSE (`content`/`reset`/`complete`/`error`) như UI đang dùng.
-- `document_ids` (tối đa 20 tài liệu `COMPLETED` của kho tri thức phiên đó) thu hẹp phạm vi truy hồi;
-  bỏ trống = cả kho. Field dùng **snake_case** — gửi camelCase `documentIds` sẽ bị bỏ qua tường minh
+- `document_ids` (tối đa 20 tài liệu `COMPLETED` của kho tri thức của phiên) thu hẹp phạm vi truy hồi;
+  bỏ trống nghĩa là cả kho. Field dùng **snake_case** — gửi camelCase `documentIds` sẽ bị bỏ qua
   (không trả 400) và phạm vi không được thu hẹp. Gửi `Idempotency-Key` để replay đúng lượt.
 - Lịch sử và kết thúc: `GET /api/v1/chat/sessions/{id}/messages?limit=50&after=0`
   (phân trang theo `sequence_number`) và `DELETE /api/v1/chat/sessions/{id}`.
@@ -89,12 +89,12 @@ curl -X POST "$BASE/api/v1/admin/webhook-endpoints" \
 # → 201 {"id":…, "secret":"whsec_…", "endpoint":{…}}   (secret chỉ hiện một lần)
 ```
 
-- Sự kiện hiện có: `document.status.changed` (tiến độ hấp thụ), `workflow.started`,
+- Sự kiện hiện có: `document.status.changed` (tiến độ nạp tài liệu), `workflow.started`,
   `workflow.approved`, `workflow.rejected`, `workflow.escalated`, `webhook.test`,
   và họ `bizapp.<kind>.record.created|updated|archived|restored|submitted|decided` từ nền tảng
   BizApp (Tier 3 — xem [BIZAPPS.md](BIZAPPS.md)).
 - Body là envelope JSON: `{ "id", "type", "occurred_at", "workspace_id", "data" }`.
-  `id` (`X-OpenVie-Event-Id`) ổn định cho một sự kiện → dùng làm khóa chống trùng phía nhận.
+  `id` (`X-OpenVie-Event-Id`) ổn định cho mỗi sự kiện — dùng làm khóa chống trùng ở phía nhận.
 - Chữ ký: header `X-OpenVie-Signature: t=<unix>,v1=<hex>` với
   `v1 = HMAC_SHA256(secret, "<t>.<raw_body>")`. Xác minh (và từ chối nếu `t` quá cũ):
 
@@ -106,81 +106,84 @@ const ok = Math.abs(Date.now() / 1000 - Number(t)) < 300
   && timingSafeEqual(Buffer.from(v1, "hex"), Buffer.from(expected, "hex"));
 ```
 
-- Giao nhận: ghi outbox trong cùng transaction với thay đổi nghiệp vụ, dispatcher bất đồng bộ retry
-  có giới hạn (30 s → 32 m, 5 lần) rồi chuyển `DEAD`. Xem log:
-  `GET /api/v1/admin/webhook-endpoints/{id}/deliveries`; gửi thử: `POST …/{id}/test`.
-- `DELETE` endpoint ngừng giao ngay (hàng outbox của nó bị xóa theo cascade).
+- Giao nhận: outbox được ghi trong cùng transaction với thay đổi nghiệp vụ; dispatcher bất đồng bộ retry
+  có giới hạn (30 s → 32 phút, 5 lần) rồi chuyển sang `DEAD`. Xem log tại
+  `GET /api/v1/admin/webhook-endpoints/{id}/deliveries`; gửi thử bằng `POST …/{id}/test`.
+- `DELETE` endpoint ngừng giao ngay (các hàng outbox của nó bị xóa theo cascade).
 
 ### 5. Workflow engine (BPMN tổng quát)
 
 Ngoài luồng phê duyệt tài liệu (`/api/v1/workflow/processes*`), engine Flowable còn mở API tổng quát
-dưới `/api/v1/workflow/engine` (phạm vi workspace qua tenancy của engine):
+tại `/api/v1/workflow/engine` (phạm vi workspace theo tenancy của engine):
 
 | Việc | Route |
 | --- | --- |
 | Triển khai định nghĩa BPMN 2.0 (admin) | `POST /api/v1/workflow/engine/definitions` |
 | Liệt kê định nghĩa | `GET /api/v1/workflow/engine/definitions` |
-| Khởi động process + biến | `POST /api/v1/workflow/engine/processes` |
+| Khởi động process kèm biến | `POST /api/v1/workflow/engine/processes` |
 | Liệt kê process đang chạy | `GET /api/v1/workflow/engine/processes` |
 | Lịch sử một process | `GET /api/v1/workflow/engine/history/processes/{processId}` |
-| Inbox tác vụ tổng quát | `GET /api/v1/workflow/engine/tasks` |
-| Nhận / hoàn tất tác vụ | `POST /api/v1/workflow/engine/tasks/{taskId}/claim` · `/complete` |
+| Inbox task chung | `GET /api/v1/workflow/engine/tasks` |
+| Nhận / hoàn tất task | `POST /api/v1/workflow/engine/tasks/{taskId}/claim` · `/complete` |
 
-Tác vụ thuộc luồng phê duyệt tài liệu được **từ chối** claim/complete thô (409) để không vượt qua
-nhật ký tài liệu.
+Task thuộc luồng phê duyệt tài liệu bị **từ chối** claim/complete qua route chung (`409`) để không thể
+bỏ qua nhật ký của quy trình tài liệu.
 
 ### 6. Giới hạn tần suất và kill-switch
 
-- Cổng biên (APISIX) giới hạn theo route; trong API, traffic **đã xác thực** được đếm theo
+- Cổng biên (APISIX) giới hạn theo route; trong API, lưu lượng **đã xác thực** được đếm theo
   `tenant:user` trong Redis — `app.rate-limit.consumer-requests-per-minute` (mặc định 600/phút) —
   trả `X-RateLimit-Limit`/`X-RateLimit-Remaining`, và `429` + `Retry-After` khi vượt. Fail-open khi Redis lỗi.
-- Traffic public giới hạn riêng (`app.rate-limit.public-requests-per-minute`).
-- Kill-switch hành vi: `WEBHOOKS_ENABLED=false` (ngừng giao ra ngoài, outbox vẫn ghi — không mất dữ liệu),
+- Lưu lượng public có giới hạn riêng (`app.rate-limit.public-requests-per-minute`).
+- Công tắc tắt khẩn: `WEBHOOKS_ENABLED=false` (ngừng giao ra ngoài, outbox vẫn ghi nên không mất dữ liệu),
   `WEBHOOKS_DISPATCH_INTERVAL_MS`, `CONSUMER_RATE_LIMIT_PER_MINUTE`.
 
 ### 7. Ghi chú self-host
 
-- Cấu hình, secret và profile prod: xem [DEPLOYMENT.md](DEPLOYMENT.md); prod tắt Swagger UI
+- Cấu hình, secret và profile production: xem [DEPLOYMENT.md](DEPLOYMENT.md); production tắt Swagger UI
   (`/v3/api-docs` → 404) — dùng spec ở dev/test để sinh SDK.
-- gRPC AI (`:50051`) là bề mặt nội bộ (mTLS); ứng dụng khách chỉ nên gọi HTTP `/api/v1/**`.
+- gRPC AI (`:50051`) chỉ dùng nội bộ (mTLS); ứng dụng client chỉ nên gọi HTTP `/api/v1/**`.
 
-### 8. Bộ sưu tập Postman mẫu (Postman Collection)
+### 8. Bộ sưu tập Postman mẫu
 
-Bộ sưu tập Postman mẫu đầy đủ kèm các biến môi trường (`baseUrl`, `token`, `workspaceId`, `sessionId`) được lưu trữ sẵn tại:
+Bộ sưu tập Postman mẫu, kèm biến môi trường (`baseUrl`, `token`, `workspaceId`, `sessionId`), nằm tại:
 [`contracts/postman/openvie_integration.postman_collection.json`](../contracts/postman/openvie_integration.postman_collection.json).
-Bao gồm đầy đủ các kịch bản mẫu: Xác thực, Cấp phát khóa API máy (M2M), Chat (tạo phiên, JSON đồng bộ / stream SSE, lịch sử, đóng phiên), Đăng ký Webhook, và Thao tác động cơ quy trình BPMN Flowable L2.
-Màn hình quản trị [`/admin/organization/api-keys`](../frontend/src/app/[locale]/(admin)/admin/organization/api-keys/page.tsx) (chỉ `ORG_OWNER`) cung cấp list/tạo/thu hồi khóa trong UI; secret vẫn chỉ hiển thị đúng một lần sau khi tạo.
+Bộ sưu tập bao gồm các kịch bản mẫu: xác thực, cấp API key máy (M2M), chat (tạo phiên, JSON đồng bộ/stream SSE,
+lịch sử, đóng phiên), đăng ký webhook và thao tác engine quy trình BPMN Flowable L2.
+Màn hình quản trị [`/admin/organization/api-keys`](../frontend/src/app/[locale]/(admin)/admin/organization/api-keys/page.tsx)
+(chỉ `ORG_OWNER`) cho phép liệt kê, tạo và thu hồi khóa; secret vẫn chỉ hiện đúng một lần sau khi tạo.
 
 
 ### 9. Truy vấn phân tích hồ dữ liệu Lakehouse (DuckDB OLAP)
 
-Hồ dữ liệu Lakehouse tách biệt hoàn toàn dữ liệu giao dịch thời gian thực (PostgreSQL) khỏi dữ liệu phân tích lịch sử:
+Lakehouse tách hẳn dữ liệu giao dịch thời gian thực (PostgreSQL) khỏi dữ liệu phân tích lịch sử:
 - **Dữ liệu phân vùng:** Parquet nén Snappy lưu trên SeaweedFS S3 (`lakehouse/tenants/{tenant_id}/{dataset}/year={YYYY}/month={MM}/`).
-- **Cỗ máy truy vấn:** DuckDB nhúng, thực thi SQL phân tích trực tiếp trên tệp Parquet mà không gây nghẽn database giao dịch.
+- **Engine truy vấn:** DuckDB nhúng, chạy SQL phân tích trực tiếp trên tệp Parquet mà không gây nghẽn database giao dịch.
 - **Điểm vào API:**
 
-| Thao tác | Tuyến đường (Route) |
+| Thao tác | Route |
 |---|---|
 | Kiểm tra trạng thái Lakehouse / DuckDB | `GET /api/v1/analytics/lakehouse/health` |
-| Truy vấn SQL phân tích (chỉ đọc, phân lập tenant) | `POST /api/v1/analytics/lakehouse/query?dataset=chat_analytics` |
-| Báo cáo tổng hợp tương tác Chat & Token LLM | `GET /api/v1/analytics/lakehouse/chat` |
-| Báo cáo dung lượng & định dạng tài liệu Hấp thụ | `GET /api/v1/analytics/lakehouse/documents` |
-| Báo cáo an ninh, nhật ký truy vết & kiểm toán | `GET /api/v1/analytics/lakehouse/audit` |
-| Báo cáo tiến độ & SLA phê duyệt quy trình | `GET /api/v1/analytics/lakehouse/workflows` |
+| Truy vấn SQL phân tích (chỉ đọc, tách theo tenant) | `POST /api/v1/analytics/lakehouse/query?dataset=chat_analytics` |
+| Báo cáo tổng hợp tương tác chat và token LLM | `GET /api/v1/analytics/lakehouse/chat` |
+| Báo cáo dung lượng và định dạng tài liệu nạp vào | `GET /api/v1/analytics/lakehouse/documents` |
+| Báo cáo an ninh, nhật ký truy vết và kiểm toán | `GET /api/v1/analytics/lakehouse/audit` |
+| Báo cáo tiến độ và SLA phê duyệt quy trình | `GET /api/v1/analytics/lakehouse/workflows` |
 
-### 10. Tương tác Ứng dụng qua Chat & Nguồn gốc Tài liệu (v1.0.0)
+### 10. Tương tác ứng dụng qua chat và nguồn gốc tài liệu (v1.0.0)
 
-Phiên bản `v1.0.0` bổ sung các endpoint tương tác ứng dụng và mở rộng wire proto (tuân thủ SemVer 1.0 cộng thêm):
+Phiên bản `v1.0.0` bổ sung các endpoint tương tác ứng dụng và mở rộng wire proto (tuân thủ SemVer 1.0 theo kiểu bổ sung):
 
 | Phương thức | Đường dẫn | Quyền hạn | Mô tả |
 |---|---|---|---|
-| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Thực thi thẻ hành động (`install` / `uninstall`) đề xuất từ chat. Tham số đọc từ DB theo `messageId`+`actionId`; chống replay. |
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Thực thi thẻ hành động (`install`/`uninstall`) do chat đề xuất. Tham số đọc từ DB theo `messageId` + `actionId`; chống replay. |
 | `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Soạn bản thảo ứng dụng `bizapp.v1` từ ngữ cảnh hội thoại của `sessionId`. Không tự cài đặt. |
-| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Dữ liệu tất định tóm tắt ứng dụng đã cài cho UI và báo cáo (không dùng làm prompt RAG). |
-| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Liệt kê tài liệu; `include_system` mặc định `false` ẩn tài liệu hệ thống; `true` chỉ cho `ORG_OWNER`. |
+| `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Dữ liệu tất định tóm tắt các ứng dụng đã cài cho UI và báo cáo (không dùng làm prompt RAG). |
+| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Liệt kê tài liệu; `include_system` mặc định `false` để ẩn tài liệu hệ thống; `true` chỉ dành cho `ORG_OWNER`. |
 
-**Giao thức Wire gRPC:**
-- `GenerateAnswerRequest` thêm trường cộng thêm: `repeated string excluded_document_kinds = 15;`. Danh sách rỗng bảo toàn 100% hành vi hiện hữu; khi điền `["BIZAPP_RECORD", "BIZAPP_DIGEST"]`, hệ thống loại trừ triệt để tài liệu hệ thống khỏi mọi kênh truy hồi.
+**Wire protocol gRPC:**
+- `GenerateAnswerRequest` thêm field `repeated string excluded_document_kinds = 15;`. Danh sách rỗng giữ nguyên 100% hành vi hiện tại; khi truyền `["BIZAPP_RECORD", "BIZAPP_DIGEST"]`, hệ thống loại tài liệu hệ thống khỏi mọi kênh truy hồi.
+
 ---
 
 ## Integrating with the OpenVie core

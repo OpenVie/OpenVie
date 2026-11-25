@@ -1,349 +1,337 @@
-# OpenVie
+<p align="center">
+  <img src="docs/assets/openvie-logo.svg" width="260" alt="OpenVie">
+</p>
 
-> **Ngôn ngữ / Language:** [Tiếng Việt](#openvie--tổng-quan) · [English](#openvie-1)
+<p align="center">
+  Xây dựng ứng dụng nội bộ có AI hỗ trợ trên lõi headless mã nguồn mở.<br>
+  <sub>Build AI-assisted internal business apps on an open-source headless core.</sub>
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/OpenVie/OpenVie/actions/workflows/ci.yml"><img src="https://github.com/OpenVie/OpenVie/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0"></a>
+  <a href="https://discord.gg/zbQbA8GqW"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Discord"></a>
+</p>
 
-## OpenVie — Tổng quan
+<p align="center">
+  <a href="#tiếng-việt">Tiếng Việt</a> ·
+  <a href="#english">English</a> ·
+  <a href="docs/BIZAPPS.md">BizApps</a> ·
+  <a href="docs/README.md">Tài liệu</a> ·
+  <a href="CONTRIBUTING.md">Đóng góp</a> ·
+  <a href="https://discord.gg/zbQbA8GqW">Discord</a>
+</p>
 
-OpenVie là nền tảng ưu tiên tiếng Việt để tự triển khai (self-host) RAG trên tài liệu nội bộ,
-giấy phép [Apache License 2.0](LICENSE). Trước khi xuất bản fork, xem
-[ranh giới nguồn mở và phân phối](docs/OPEN_SOURCE.md).
+<!-- TODO(demo): docs/assets/hero.gif — Marketplace → cài BizApp → tạo bản ghi → gửi duyệt → duyệt → xem báo cáo. -->
 
-Với mã nguồn hiện tại: bắt đầu từ [phát triển cục bộ](docs/DEVELOPMENT.md), sau đó xem
-[kiến trúc](docs/ARCHITECTURE.md), [hướng dẫn triển khai](docs/DEPLOYMENT.md), và
-[ranh giới nguồn mở](docs/OPEN_SOURCE.md). Người đóng góp: [CONTRIBUTING.md](CONTRIBUTING.md).
+## Tiếng Việt
 
-> OpenVie là tên sản phẩm hướng tới người dùng. Tên package/protobuf nội bộ, tài nguyên triển
-> khai, route, tiền tố thông tin đăng nhập và tên miền hiện có cố ý giữ nguyên định danh. Việc
-> đổi thương hiệu trình bày này không thay đổi hợp đồng tích hợp.
+OpenVie là nền tảng mã nguồn mở để xây dựng và vận hành ứng dụng nội bộ. Nền tảng gồm một lõi headless — định danh, API gateway, dữ liệu, quy trình, sự kiện, kiểm toán, phân tích — cùng **BizApps**, lớp khai báo biến manifest JSON thành ứng dụng chạy được, và một lớp tri thức/AI tích hợp sẵn.
 
-## Phạm vi hiện tại
+RAG (retrieval-augmented generation) nằm trong lõi và phục vụ hai việc: hỏi đáp kho tài liệu doanh nghiệp, và cung cấp ngữ cảnh cho trợ lý trong BizApp. Nó đánh chỉ mục tài liệu và bản ghi ứng dụng, trả lời kèm trích dẫn, và giúp AI soạn manifest. Nó có thể tích hợp vào nền tảng, ứng dụng khác thông qua API với bảo mật qua secret key được khởi tạo.
 
-| Lĩnh vực                           | Ranh giới triển khai hiện có                                                                                                                                                                                                                             |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chat trên tài liệu                 | Knowledge base theo workspace, hội thoại, trích dẫn, truy hồi hỗn hợp dense/sparse/graph, streaming SSE qua Spring API; nguồn chỉ hiển thị sau khi kiểm tra và lưu phản hồi cuối                                                                         |
-| Tuyến nhạy cảm có giới hạn         | Từ khóa rủi ro Việt/Anh tường minh bỏ qua bộ đệm câu trả lời ngữ nghĩa và yêu cầu marker nguồn được cấp quyền; chỉ kiểm tra cấu trúc, không phải trình xác minh đã huấn luyện                                                                            |
-| Hấp thụ tài liệu                   | Xử lý bất đồng bộ PDF, DOCX, văn bản, Markdown, HTML, CSV và XLSX có text; nguồn gốc tài liệu, đánh chỉ mục vector, ánh xạ đồ thị. OCR tùy chọn cho PDF scan và ảnh (PNG/JPEG/WebP); phiên âm ASR tùy chọn cho âm thanh và video — đều tắt theo mặc định |
-| Định danh và quản trị              | Thiết lập web một lần, vòng đời tổ chức và workspace, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), lời mời, xác thực chỉ bằng mật khẩu, kênh email tùy chọn, nhật ký kiểm toán                                                          |
-| Hồ dữ liệu & Phân tích (Lakehouse) | Luồng CDC truyền phát sự kiện qua RabbitMQ lưu trữ Parquet nén Snappy trên SeaweedFS S3; cỗ máy OLAP nhúng DuckDB thực thi SQL phân tích độc lập với PostgreSQL; sơ đồ phả hệ dữ liệu DAG và khung kiểm định chất lượng dữ liệu tự động                  |
-| Đánh giá ngoại tuyến               | Chạy lại JSONL cục bộ chấm điểm quyết định, tuyến và trích dẫn trên trace ẩn danh có nhãn; không gọi hay huấn luyện model                                                                                                                                |
-| Bộ đệm tùy chọn                    | Đã cài đặt nhưng tắt theo mặc định; chỉ bật sau các cổng kiểm chứng đúng đắn và hiệu năng                                                                                                                                                                |
-| Kiểm dịch biên mạng & GitOps       | Trạm kiểm dịch ClamAV quét và cách ly mã độc tại biên mạng; APISIX edge gateway phòng thủ lọc URI; tự động hóa GitOps và tự phục hồi tức thì                                                                                                             |
-| Chưa cung cấp                      | Ngữ liệu luật Việt Nam, Dream-RSI hay trình xác minh đã huấn luyện, huấn luyện VLQA/SFT/QLoRA/DPO, thanh toán, quy trình tuyển dụng/phỏng vấn, widget nhúng, client di động, quản trị nền tảng; thích ứng model vẫn là nghiên cứu                        |
+Thay vì dựng thêm backend cho từng quy trình, lập trình viên có thể khai báo form, bản ghi, báo cáo, luồng duyệt và tích hợp trong một BizApp rồi cài lên cùng nền tảng. Lõi giữ nguyên; ứng dụng thay đổi theo nghiệp vụ.
 
-Chỉ có mã nguồn trong repo chưa phải là bằng chứng dịch vụ production: tích hợp provider tùy
-chọn và gia cố triển khai phải được kiểm chứng trong môi trường của riêng bạn.
+[Bắt đầu nhanh](#bắt-đầu-nhanh) · [Tính năng](#tính-năng) · [BizApps](#bizapps) · [Hỏi đáp tài liệu](#hỏi-đáp-tài-liệu-và-dữ-liệu-ứng-dụng) · [Ứng dụng mẫu](#ứng-dụng-mẫu) · [Kiến trúc](#kiến-trúc)
 
-Xem [hướng dẫn hấp thụ và truy hồi](docs/RETRIEVAL.md) cho ranh giới chi tiết.
+### Bắt đầu nhanh
 
-### Mô hình vai trò
+#### Chạy bằng Docker Compose
 
-| Vai trò           | Phạm vi                  | Thẩm quyền                                                                                                                                                                                                                                                                                                 |
-| ----------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ORG_OWNER`       | Tổ chức                  | Đăng ký cài đặt qua `/setup`, quản lý thiết lập tổ chức (bật/tắt tự đăng ký, kênh email), tạo/đổi tên/lưu trữ workspace, xem tài khoản tổ chức, tạo trực tiếp tài khoản tổ chức thường, thêm tài khoản tổ chức hiện có vào workspace đang hoạt động, đặt lại mật khẩu ngoại tuyến qua `make recover-owner` |
-| `WORKSPACE_ADMIN` | Workspace đang hoạt động | Mời và quản lý thành viên workspace, thêm tài khoản tổ chức hiện có vào workspace riêng/tư hoặc công khai đang hoạt động, đặt mật khẩu ban đầu, xóa bất kỳ tài liệu nào trong workspace                                                                                                                    |
-| `MEMBER`          | Workspace đang hoạt động | Trò chuyện, tải tài liệu lên, xóa tài liệu do mình tải lên; có thể thêm tài khoản tổ chức hiện có làm thành viên thường trong workspace công khai                                                                                                                                                          |
-
-Sau khi chủ sở hữu hoàn tất `/setup`, nếu bật **Cho phép tự đăng ký** trong cài đặt
-tổ chức thì trang `/login` hiển thị liên kết **Tạo tài khoản** tới `/register`.
-Tài khoản mới có vai trò `MEMBER`, tham gia workspace mặc định và các workspace
-công khai; khi tắt tùy chọn này, liên kết bị ẩn và API từ chối tự đăng ký.
-
-Kiến trúc bốn mặt phẳng là mục tiêu: hôm nay mặt phẳng điều khiển, dữ liệu bất đồng bộ và truy
-hồi chạy như mô tả; định tuyến câu hỏi nhạy cảm và đánh giá trace ngoại tuyến chỉ thêm kiểm tra
-chính sách có giới hạn, không phải model pháp lý/an toàn đã huấn luyện. Xem
-[trạng thái kiến trúc](docs/ARCHITECTURE.md#2-mô-hình-4-mặt-phẳng-four-plane-boundary).
-
-## Sơ đồ kho mã
-
-| Đường dẫn                                      | Trách nhiệm                                                                           | Bắt đầu đọc                                                |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`api/`](api/)                                 | Java 21 / Spring Boot API nghiệp vụ; PostgreSQL, phân quyền workspace, kênh thông báo | [Module guide](api/GUIDE.md)                               |
-| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Suy luận Python, document worker, truy hồi, graph service                             | [Module guide](rag-chatbot-fastapi/GUIDE.md)               |
-| [`frontend/`](frontend/)                       | Web client Next.js                                                                    | [Phát triển web](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) |
-| [`contracts/`](contracts/)                     | Sự kiện JSON và fixture dùng chung giữa Java và Python                                | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md)             |
-| [`proto/`](proto/)                             | Định nghĩa gRPC nội bộ                                                                | [Kiến trúc và ranh giới](docs/ARCHITECTURE.md)             |
-| [`docs/`](docs/)                               | Tài liệu phát triển, kiến trúc, tính năng                                             | [Mục lục tài liệu](docs/README.md)                         |
-
-## Kiến trúc tổng quan
-
-```mermaid
-flowchart LR
-    Clients[Web client] --> Spring[Spring Boot business API]
-    Spring --> SQL[(PostgreSQL)]
-    Spring -->|gRPC| AI[Python inference]
-    Spring -->|ingestion requests| Queue[(RabbitMQ)]
-    Queue --> Worker[Document worker]
-    Worker -->|status events| Queue
-    Queue --> Spring
-    Spring --> Storage[(Object storage)]
-    Worker --> Storage
-    Worker --> Index[(Qdrant and Kuzu)]
-    AI --> Index
-    AI --> Models[Configured generation and embedding services]
-    Worker --> Models
+```bash
+cp .env.production.example .env.production
+# điền secret và cấu hình model trong .env.production
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
-Spring sở hữu API nghiệp vụ công khai, phân quyền và trạng thái nghiệp vụ bền vững. Python sở
-hữu xử lý AI và chỉ mục phái sinh, không sở hữu database nghiệp vụ. Kết thúc TLS và reverse proxy
-là việc của người vận hành, ngoài phạm vi bản phát hành này; Redis hỗ trợ bộ đếm, checkpoint và
-bộ đệm tùy chọn.
+Mở `http://localhost:8088/setup` để tạo tài khoản chủ sở hữu và workspace đầu tiên. Sau đó vào **Marketplace** (`/admin/apps`) để cài template mẫu, hoặc mở **Compose** (`/admin/apps/compose`) để tạo BizApp đầu tiên.
 
-[Tài liệu kiến trúc](docs/ARCHITECTURE.md) chứa ranh giới triển khai và chuỗi chat/hấp thụ chi
-tiết. Quy tắc module theo ngôn ngữ nằm trong guide của từng service.
+Cần cài Ollama trên host và tải các model như `vylinh`, `bge-m3`. Xem [hướng dẫn triển khai](docs/DEPLOYMENT.md) để biết yêu cầu đầy đủ.
 
-## Chạy cục bộ
+#### Phát triển cục bộ
 
-Yêu cầu: Git, Docker kèm Compose, Make, Java 21, Python 3.11 hoặc 3.12, và Node.js LTS hỗ trợ
-kèm npm (Node 22.13 trở lên trên nhánh 22.x là baseline phổ biến).
+Yêu cầu: Git, Docker kèm Compose, Make, JDK 21, Python 3.11 hoặc 3.12 và Node.js 22 LTS.
 
-1. Làm theo [thiết lập cục bộ](docs/DEVELOPMENT.md#2-các-bước-thiết-lập) để tạo cấu hình mà không ghi đè
-   file có sẵn, cài dependency, khởi hạ tầng, chuẩn bị model, và migrate/seed database phát triển.
-2. Chạy từng ứng dụng trong **terminal riêng**, từ thư mục gốc repo:
+```bash
+# 1. Tạo tệp cấu hình từ mẫu (không ghi đè tệp đã có)
+test -f .env || cp .env.example .env
+test -f api/.env || cp api/.env.example api/.env
+test -f rag-chatbot-fastapi/.env || cp rag-chatbot-fastapi/.env.example rag-chatbot-fastapi/.env
+test -f frontend/.env.local || cp frontend/.env.example frontend/.env.local
 
-   ```bash
-   # Business API: http://localhost:8080
-   make -C api dev
-   ```
+# 2. Cài dependency
+make -C api deps
+make -C rag-chatbot-fastapi setup PYTHON=python3.11
+npm --prefix frontend ci
 
-   ```bash
-   # AI HTTP: http://localhost:18000; gRPC nội bộ: localhost:50051
-   make -C rag-chatbot-fastapi dev PYTHON=python3.11
-   ```
+# 3. Khởi động hạ tầng và chạy migration
+make -C rag-chatbot-fastapi dev-infra
+make -C api migrate
 
-   ```bash
-   # Web client: http://localhost:3000
-   npm --prefix frontend run dev
-   ```
-
-3. Mở web client và làm theo [kiểm tra lần đầu](docs/DEVELOPMENT.md#3-thiết-lập-lần-đầu-và-khôi-phục-tài-khoản).
-
-`make dev` của Python service **không** khởi Docker hạ tầng. Target riêng
-`make -C rag-chatbot-fastapi dev-infra` mới khởi. Dùng `PYTHON=python3.12` nếu đó là interpreter
-hỗ trợ bạn đã cài.
-
-## Triển khai sản xuất (Production / Deployment)
-
-Để triển khai toàn bộ nền tảng dưới dạng container khép kín trên máy chủ production, sử dụng
-file `docker-compose.prod.yml`:
-
-1. Chuẩn bị file cấu hình môi trường sản xuất:
-   ```bash
-   cp .env.production.example .env.production
-   chmod 600 .env.production
-   # Cập nhật các secret (TOKEN_KEY, mật khẩu DB, model endpoints...)
-   ```
-2. Khởi chạy toàn bộ hệ thống bằng Docker Compose:
-   ```bash
-   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-   ```
-3. Truy cập hệ thống qua cổng biên Apache APISIX tại `http://your-domain:8088` để hoàn tất thiết lập ban đầu (`/setup`).
-
-Xem chi tiết tại [hướng dẫn triển khai (DEPLOYMENT.md)](docs/DEPLOYMENT.md).
-
-## Làm việc với mã nguồn
-
-| Lĩnh vực thay đổi       | Quy tắc và kiểm tra                                                                                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Java                    | Đọc [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify`                                                                                        |
-| Python                  | Đọc [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11`                       |
-| Web                     | Script trong [`frontend/package.json`](frontend/package.json); xem [kiểm tra xác minh](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) |
-| Thông điệp liên service | Cập nhật model sở hữu, schema/fixture dùng chung hoặc protobuf, kết quả sinh ra, và cả hai phía tiêu thụ cùng lúc                               |
-
-Test cần Redis, Qdrant hoặc provider thật yêu cầu môi trường được mô tả. Đọc
-[hướng dẫn kiểm chứng](docs/DEVELOPMENT.md#5-kiểm-tra-và-xác-minh-verification) trước khi hiểu check tích hợp bị skip
-là kiểm chứng end-to-end thành công.
-
-## Đọc thêm
-
-- [Keycloak OIDC baseline](docs/KEYCLOAK.md) — cấu hình realm, client ID, redirect URI và chạy kiểm thử.
-
-- [Workflow](docs/WORKFLOW.md) — luồng phê duyệt Flowable nhúng runtime: nộp/duyệt/chuyển tiếp hai cấp, SLA theo tổ chức, ghi kết quả vào tài liệu.
-- [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, dữ liệu demo, worker và hướng dẫn chạy thử.
-
-- [Mục lục tài liệu](docs/README.md) — chọn guide theo việc cần làm.
-- [Hấp thụ, model, truy hồi](docs/RETRIEVAL.md).
-- [Triển khai và self-hosting](docs/DEPLOYMENT.md).
-- [Ranh giới giấy phép và phân phối nguồn mở](docs/OPEN_SOURCE.md).
-- [Đóng góp](CONTRIBUTING.md) và [báo cáo lỗ hổng riêng tư](SECURITY.md).
-
-## Giấy phép
-
-Mã nguồn ứng dụng OpenVie là [Apache License 2.0](LICENSE), bản quyền 2026
-LinkedNodeDigital; xem [NOTICE](NOTICE). Ai cũng có thể tự triển khai, fork hay bán hosting theo
-giấy phép đó. Package bên thứ ba, container image, service, model weights và dataset giữ điều
-khoản riêng. Xuất bản repo công khai mới vẫn yêu cầu
-[review phát hành](docs/OPEN_SOURCE.md#publication-gate).
-
----
-
-# OpenVie
-
-OpenVie is a Vietnamese-first platform for self-hosted internal document-grounded RAG,
-licensed under [Apache License 2.0](LICENSE). Review the
-[open-source and distribution boundary](docs/OPEN_SOURCE.md) before publishing a fork.
-
-For the current code, start with [local development](docs/DEVELOPMENT.md), then review the
-[architecture](docs/ARCHITECTURE.md), [deployment guide](docs/DEPLOYMENT.md), and
-[open-source boundary](docs/OPEN_SOURCE.md). Contributors: [CONTRIBUTING.md](CONTRIBUTING.md).
-
-> OpenVie is the user-facing product name. Internal package/protobuf names, deployment
-> resources, routes, credential prefixes, and existing domains intentionally retain their current
-> identifiers. This presentation rebrand does not change integration contracts.
-
-## Current scope
-
-| Area                        | Current implementation boundary                                                                                                                                                                                                                                                                                                                                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document-grounded chat      | Workspace-scoped knowledge bases, conversations, citations, hybrid dense/sparse/graph retrieval, and SSE streaming through Spring; sources appear only after final validation and persistence                                                                                                                                                                                                   |
-| Bounded sensitive route     | Explicit Vietnamese/English risk keywords bypass semantic answer caches and require authorized source markers; structural check only, not a trained verifier or proof of source entailment                                                                                                                                                                                                      |
-| Ingestion                   | Asynchronous text-bearing PDF, DOCX, text, Markdown, HTML, CSV, and XLSX processing; source provenance, vector indexing, and graph projection. Optional OCR for scanned PDFs and images (PNG/JPEG/WebP); optional ASR transcription for audio and video — both off by default                                                                                                                   |
-| Identity and administration | One-time web setup, organization and workspace lifecycle, three-role access control (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), invitations, password-only authentication, optional email notification channels, and audit records                                                                                                                                                              |
-| Lakehouse & Analytics       | Asynchronous CDC streaming over RabbitMQ archiving partitioned Snappy Parquet to SeaweedFS S3; embedded DuckDB OLAP engine for analytical reporting without loading PostgreSQL                                                                                                                                                                                                                  |
-| Offline evaluation          | Local JSONL replay scores recorded decision, route, and citation outcomes against labeled anonymized traces; it does not call or train a model                                                                                                                                                                                                                                                  |
-| Optional caches             | Implemented but disabled by default; enable only after the applicable correctness and performance gates                                                                                                                                                                                                                                                                                         |
-| Not delivered               | A Vietnamese-law corpus, Dream-RSI or a trained verifier, VLQA/SFT/QLoRA/DPO training, billing/payments, recruitment or interview workflows, an embeddable widget, a mobile client, platform administration, and TLS termination or WAF hardening at the edge (the [APISIX gateway](docs/DEPLOYMENT.md#10-edge-gateway-apache-apisix) routes HTTP only); model adaptation remains research work |
-
-Repository code alone is not evidence of a production-ready service: optional provider
-integrations and deployment hardening must be verified in their own environment.
-
-See the [ingestion and retrieval guide](docs/RETRIEVAL.md) for detailed boundaries.
-
-### Role model
-
-| Role              | Scope            | Authority                                                                                                                                                                                                                                                                                                                             |
-| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ORG_OWNER`       | Organization     | Claims install via `/setup`, manages organization settings (self-registration toggle, email channels), creates/renames/archives workspaces, views organization accounts, creates regular organization accounts directly, adds existing organization accounts to the active workspace, offline password reset via `make recover-owner` |
-| `WORKSPACE_ADMIN` | Active workspace | Invites and manages workspace members, adds existing organization accounts to the active private or public workspace, sets initial passwords, deletes any document in the workspace                                                                                                                                                   |
-| `MEMBER`          | Active workspace | Queries chat, uploads documents, deletes own uploaded documents; may add an existing organization account as a regular member in a public workspace                                                                                                                                                                                   |
-
-After the owner completes `/setup`, enabling **Allow self-registration** in
-organization settings shows a **Create account** link on `/login` to `/register`.
-New accounts are `MEMBER`s in the default workspace and all public workspaces;
-turning the setting off hides the link and makes the API reject self-registration.
-
-The supplied four-plane architecture is a target: today's control, async data, and retrieval
-planes run as described below; sensitive-question routing and offline trace evaluation add
-bounded policy checks, not a trained legal or safety model. See [architecture status](docs/ARCHITECTURE.md#2-four-plane-target-and-delivered-boundary).
-
-## Repository map
-
-| Path                                           | Responsibility                                                                                     | Start reading                                               |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| [`api/`](api/)                                 | Java 21 / Spring Boot business API; PostgreSQL, workspace authorization, and notification channels | [Module guide](api/GUIDE.md)                                |
-| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | Python inference, document workers, retrieval, and graph service                                   | [Module guide](rag-chatbot-fastapi/GUIDE.md)                |
-| [`frontend/`](frontend/)                       | Next.js web client                                                                                 | [Web development](docs/DEVELOPMENT.md#2-step-by-step-setup) |
-| [`contracts/`](contracts/)                     | Shared JSON event schemas and fixtures used across Java and Python                                 | [Architecture and boundaries](docs/ARCHITECTURE.md)         |
-| [`proto/`](proto/)                             | Internal gRPC interface and message definitions                                                    | [Architecture and boundaries](docs/ARCHITECTURE.md)         |
-| [`docs/`](docs/)                               | Development, architecture, and feature references                                                  | [Documentation index](docs/README.md)                       |
-
-## Architecture at a glance
-
-```mermaid
-flowchart LR
-    Clients[Web client] --> Spring[Spring Boot business API]
-    Spring --> SQL[(PostgreSQL)]
-    Spring -->|gRPC| AI[Python inference]
-    Spring -->|ingestion requests| Queue[(RabbitMQ)]
-    Queue --> Worker[Document worker]
-    Worker -->|status events| Queue
-    Queue --> Spring
-    Spring --> Storage[(Object storage)]
-    Worker --> Storage
-    Worker --> Index[(Qdrant and Kuzu)]
-    AI --> Index
-    AI --> Models[Configured generation and embedding services]
-    Worker --> Models
+# 4. Chạy ba ứng dụng trong ba terminal riêng
+make -C api dev
+make -C rag-chatbot-fastapi dev PYTHON=python3.11
+npm --prefix frontend run dev
 ```
 
-Spring owns public business APIs, authorization, and persistent business state. Python owns
-AI processing and derived indexes, not the business database. TLS termination and reverse
-proxying are operator-owned and out of scope for this release; Redis supports counters,
-checkpoints, and optional caches.
+Mở `http://localhost:3000`. Hướng dẫn đầy đủ, gồm yêu cầu hệ thống và cách cài Ollama: [phát triển cục bộ](docs/DEVELOPMENT.md).
 
-The [architecture reference](docs/ARCHITECTURE.md) contains deployment boundaries and detailed
-chat and ingestion sequences. Language-specific module rules remain in the service guides.
+### Tính năng
 
-## Run locally
+- **Một lõi headless dùng chung** — định danh, API, dữ liệu, quy trình, sự kiện, kiểm toán và phân tích cho mọi ứng dụng; không phải dựng lại backend cho từng app.
+- **BizApps** — cài ứng dụng nghiệp vụ dưới dạng manifest `bizapp.v1`; form, registry, timeline, report và quy trình duyệt sinh từ cấu hình, không cần backend riêng.
+- **Hỏi đáp tài liệu doanh nghiệp** — knowledge base theo workspace; nạp PDF, DOCX, bảng tính, Markdown, HTML; trả lời kèm trích dẫn; quyền xem tài liệu được kiểm tra trước khi trả lời.
+- **RAG cho dữ liệu ứng dụng** — bản ghi và digest của BizApp được đánh chỉ mục; trợ lý trong app trả lời trên dữ liệu đó.
+- **Composer và AI drafting** — dựng app trên canvas, sửa JSON hoặc để AI soạn manifest từ lịch sử chat.
+- **Quy trình và phê duyệt** — Flowable BPMN một hoặc hai cấp, SLA nhắc nhở/chuyển tiếp, inbox tác vụ chung.
+- **Tích hợp** — email, webhook ký HMAC, connector HTTP/MQTT có credential vault, allowlist và chống SSRF.
+- **Dữ liệu và phân tích** — PostgreSQL, SeaweedFS, Qdrant/Kuzu, Parquet và DuckDB; dữ liệu giao dịch tách khỏi phân tích.
+- **Tự triển khai** — Docker Compose, Apache APISIX, Keycloak và Ollama cục bộ.
 
-Prerequisites: Git, Docker with Compose, Make, Java 21, Python 3.11 or 3.12, and a supported
-Node.js LTS release with npm (Node 22.13 or newer on the 22.x line is a common baseline).
+### BizApps
 
-1. Follow [local setup](docs/DEVELOPMENT.md#2-step-by-step-setup) to create local configuration without
-   overwriting existing files, install dependencies, start infrastructure, prepare models, and
-   migrate/seed the development database.
-2. Start each application in a **separate terminal**, from the repository root:
+Một **BizApp** là một manifest JSON theo hợp đồng `bizapp.v1`. Manifest khai báo entity/field, view, RBAC, hook và các khối thực thi. Khi cài đặt, OpenVie kiểm tra manifest, chốt phiên bản, sinh giao diện và triển khai BPMN nếu app có bước duyệt. Bản ghi nằm trong bảng JSONB dùng chung, được kiểm tra schema và phân quyền lại mỗi request.
 
-   ```bash
-   # Business API: http://localhost:8080
-   make -C api dev
-   ```
+1. **Khai báo** — dùng composer trực quan hoặc nhờ AI soạn manifest từ chat.
+2. **Kiểm tra** — validator trả lỗi theo đường dẫn cụ thể trong manifest.
+3. **Cài đặt** — chốt manifest, deploy quy trình và mở app tại `/apps/{kind}`.
+4. **Vận hành** — người dùng tạo bản ghi, gửi duyệt, xem báo cáo; hook gửi email, webhook hoặc gọi connector.
 
-   ```bash
-   # AI HTTP: http://localhost:18000; internal gRPC: localhost:50051
-   make -C rag-chatbot-fastapi dev PYTHON=python3.11
-   ```
+App dùng RBAC riêng, báo cáo khai báo (groupBy, metrics, filters, orderBy; export CSV/XLSX) và trợ lý AI trong app; app có bước duyệt sẽ có thêm lịch sử phê duyệt. Template có thể export/import/remix.
 
-   ```bash
-   # Web client: http://localhost:3000
-   npm --prefix frontend run dev
-   ```
+Thêm một quy trình, biểu mẫu hay báo cáo mới không cần thêm service, migration hay API mới. Lõi giữ nguyên; BizApp chỉ là dữ liệu khai báo và cấu hình.
 
-3. Open the web client and follow the [first-run checks](docs/DEVELOPMENT.md#3-first-run-setup-and-owner-recovery).
+<!-- TODO(demo): docs/assets/composer.gif — tạo entity/field → thêm approval → kiểm tra → cài đặt. -->
 
-`make dev` in the Python service does **not** start Docker infrastructure. The separate
-`make -C rag-chatbot-fastapi dev-infra` target does. Use `PYTHON=python3.12` instead if that
-is your installed supported interpreter.
+### Hỏi đáp tài liệu và dữ liệu ứng dụng
 
-## Production deployment
+RAG trong OpenVie có hai bề mặt:
 
-To deploy the entire platform as a self-contained containerized stack on a production host,
-use `docker-compose.prod.yml`:
+- **Hỏi đáp tài liệu doanh nghiệp** — người dùng tải PDF, DOCX, văn bản, Markdown, HTML, CSV/XLSX vào knowledge base của workspace, đặt câu hỏi và nhận câu trả lời kèm trích dẫn. OCR cho PDF scan/ảnh và ASR cho audio/video là tùy chọn. Truy hồi kết hợp dense/sparse/graph, có thể rerank; quyền xem tài liệu được kiểm tra trước khi trả lời.
+- **Dữ liệu ứng dụng** — bản ghi và digest của BizApp được đồng bộ vào knowledge base khi entity bật `knowledge.project`; trợ lý trong app trả lời trên dữ liệu đó. AI cũng soạn và sửa manifest khi tạo app mới.
 
-1. Prepare the production environment configuration:
-   ```bash
-   cp .env.production.example .env.production
-   chmod 600 .env.production
-   # Update secrets (TOKEN_KEY, DB passwords, model endpoints...)
-   ```
-2. Start all services with Docker Compose:
-   ```bash
-   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-   ```
-3. Access the web console via Apache APISIX at `http://your-domain:8088` to complete initial setup (`/setup`).
+Phần lõi của BizApp (form, record, report, approval, connector) chạy độc lập với AI. Trong bản cài tiêu chuẩn, lớp AI/RAG được bật sẵn; có thể tắt từng phần bằng cấu hình nếu chỉ cần CRUD.
 
-For details on operations, backups, and security hardening, see the [deployment guide](docs/DEPLOYMENT.md).
+Xem [nạp tài liệu và truy hồi](docs/RETRIEVAL.md) để biết chi tiết pipeline, định dạng hỗ trợ và giới hạn.
 
-## Working on the code
+<!-- TODO(demo): docs/assets/document-qa.gif — tải PDF/DOCX → hỏi → trả lời kèm trích dẫn. -->
+<!-- TODO(demo): docs/assets/assistant.gif — hỏi trợ lý về dữ liệu app và chỉ ra trích dẫn. -->
 
-| Change area            | Rules and checks                                                                                                           |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Java                   | Read [`api/GUIDE.md`](api/GUIDE.md); `make -C api verify`                                                                  |
-| Python                 | Read [`rag-chatbot-fastapi/GUIDE.md`](rag-chatbot-fastapi/GUIDE.md); `make -C rag-chatbot-fastapi check PYTHON=python3.11` |
-| Web                    | Scripts are in [`frontend/package.json`](frontend/package.json); see [verification](docs/DEVELOPMENT.md#5-verification)    |
-| Cross-service messages | Update the owning models, shared schemas/fixtures or protobuf source, generated outputs, and both consumers together       |
+### Ứng dụng mẫu
 
-Tests with real Redis, Qdrant, or external providers require their documented environments.
-Read the [verification guide](docs/DEVELOPMENT.md#5-verification) before interpreting skipped
-integration checks as successful end-to-end verification.
+| BizApp | Nghiệp vụ | Thành phần chính |
+| --- | --- | --- |
+| CRM-lite | Quản lý lead và pipeline bán hàng | registry, form, báo cáo, email thông báo |
+| Đặt lịch hẹn | Tiếp nhận, duyệt và nhắc lịch hẹn | form, phê duyệt, email, webhook, báo cáo |
+| Yêu cầu ký số | Trình ký nội bộ và chuyển sang nhà cung cấp ký | phê duyệt, connector HTTP |
 
-## Further reading
+### Kiến trúc
 
-- [Keycloak OIDC baseline](docs/KEYCLOAK.md) — realm/client setup and verification.
-- [Workflow](docs/WORKFLOW.md) — embedded Flowable approval flow: two-level submit/approve/escalate, per-organization SLA, decision write-back.
-- [e-Office approval PoC](spikes/eoffice-approval/README.md) — BPMN, demo data, worker, and run instructions.
+```mermaid
+flowchart TB
+    Apps["BizApps: CRM · Đặt lịch · Ký số · App tự tạo"] --> APISIX["Apache APISIX"]
+    Web["Next.js console"] --> APISIX
+    APISIX --> API["Spring Boot API"]
+    API --> Runtime["BizApp runtime"]
+    API --> IAM["Keycloak · RBAC"]
+    API --> Data[("PostgreSQL · SeaweedFS · Qdrant · Kuzu")]
+    API --> WF["Flowable BPMN"]
+    API --> Events["RabbitMQ · webhooks"]
+    API --> AI["AI · RAG"]
+    API --> Lakehouse["DuckDB Lakehouse"]
+```
 
-- [Documentation index](docs/README.md) — choose a guide by task.
-- [Ingestion, models, and retrieval](docs/RETRIEVAL.md).
-- [Deployment and self-hosting](docs/DEPLOYMENT.md).
-- [Open-source licensing and distribution boundary](docs/OPEN_SOURCE.md).
-- [Contributing](CONTRIBUTING.md) and [private vulnerability reporting](SECURITY.md).
+Spring Boot giữ API nghiệp vụ, phân quyền và dữ liệu PostgreSQL. Python FastAPI xử lý suy luận, nạp tài liệu và chỉ mục tìm kiếm. Next.js là giao diện web; APISIX làm cổng biên.
 
-## License
+| Thư mục | Nội dung |
+| --- | --- |
+| [`api/`](api/) | Lõi nghiệp vụ Spring Boot: identity, RBAC, dữ liệu, workflow, BizApp runtime |
+| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | AI service, nạp tài liệu, truy hồi, graph service |
+| [`frontend/`](frontend/) | Next.js console và BizApp runtime UI |
+| [`contracts/`](contracts/), [`proto/`](proto/) | Schema, fixture và gRPC contract dùng chung |
 
-OpenVie application source is [Apache License 2.0](LICENSE), copyright 2026
-LinkedNodeDigital; see [NOTICE](NOTICE). Anyone may self-host, fork, or sell hosting under
-that license. Third-party packages, container images, services, model weights, and datasets
-retain their own terms. Publishing a new public repository still requires the
-[release review](docs/OPEN_SOURCE.md#publication-gate).
+### Tài liệu
+
+- [BizApps](docs/BIZAPPS.md)
+- [Kiến trúc](docs/ARCHITECTURE.md)
+- [Tích hợp](docs/INTEGRATION.md)
+- [Phê duyệt tài liệu](docs/WORKFLOW.md)
+- [Keycloak OIDC](docs/KEYCLOAK.md)
+- [Triển khai](docs/DEPLOYMENT.md)
+- [Bắt đầu phát triển](docs/DEVELOPMENT.md)
+- [Nạp tài liệu và truy hồi](docs/RETRIEVAL.md)
+- [Hướng dẫn module Java](api/GUIDE.md) và [Python](rag-chatbot-fastapi/GUIDE.md)
+- [Mục lục tài liệu](docs/README.md)
+
+### Tự triển khai
+
+OpenVie chạy được trên hạ tầng của bạn bằng Docker Compose. Hướng dẫn production gồm TLS, sao lưu/phục hồi, giám sát, nâng cấp và các lưu ý vận hành khác: [triển khai](docs/DEPLOYMENT.md).
+
+### Cộng đồng và đóng góp
+
+- **Discord:** [discord.gg/zbQbA8GqW](https://discord.gg/zbQbA8GqW)
+- **Báo lỗi và đề xuất:** [GitHub Issues](https://github.com/OpenVie/OpenVie/issues)
+- **Đóng góp mã nguồn:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Báo cáo lỗ hổng:** [SECURITY.md](SECURITY.md)
+
+### Giấy phép
+
+Mã nguồn OpenVie theo [Apache License 2.0](LICENSE), bản quyền 2026 LinkedNodeDigital. Xem [NOTICE](NOTICE) và [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+Package, container image, model weights và dataset của bên thứ ba vẫn theo điều khoản riêng.
+
+## English
+
+OpenVie is an open-source platform for building and running internal business applications. It combines a headless core — identity, API gateway, data, workflow, events, audit, analytics — with **BizApps**, a declarative layer that turns a JSON manifest into a working app, and a built-in knowledge/AI layer.
+
+RAG is part of the core and serves two jobs: document Q&A over enterprise knowledge bases, and context for in-app assistants in BizApp. It indexes documents and app records, answers with citations, and helps AI draft manifests.
+
+Instead of adding a new backend for every business process, teams define forms, records, reports, approval flows, and integrations in a BizApp and install it on the same platform. The core stays stable; apps change with the business.
+
+[Quick start](#quick-start) · [Features](#features) · [BizApps](#bizapps-1) · [Document Q&A](#document-qa-and-app-data) · [Example apps](#example-apps) · [Architecture](#architecture)
+
+### Quick start
+
+#### Run with Docker Compose
+
+```bash
+cp .env.production.example .env.production
+# fill in secrets and model settings in .env.production
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Open `http://localhost:8088/setup` to create the owner account and the first workspace. Then open **Marketplace** (`/admin/apps`) to install a template, or **Compose** (`/admin/apps/compose`) to build your first BizApp.
+
+Install Ollama on the host and pull the `vylinh` and `bge-m3` models. See the [deployment guide](docs/DEPLOYMENT.md) for the full requirements.
+
+#### Local development
+
+Prerequisites: Git, Docker with Compose, Make, JDK 21, Python 3.11 or 3.12, and Node.js 22 LTS.
+
+```bash
+# 1. Create local configuration without overwriting existing files
+test -f .env || cp .env.example .env
+test -f api/.env || cp api/.env.example api/.env
+test -f rag-chatbot-fastapi/.env || cp rag-chatbot-fastapi/.env.example rag-chatbot-fastapi/.env
+test -f frontend/.env.local || cp frontend/.env.example frontend/.env.local
+
+# 2. Install dependencies
+make -C api deps
+make -C rag-chatbot-fastapi setup PYTHON=python3.11
+npm --prefix frontend ci
+
+# 3. Start infrastructure and run migrations
+make -C rag-chatbot-fastapi dev-infra
+make -C api migrate
+
+# 4. Run the three applications in separate terminals
+make -C api dev
+make -C rag-chatbot-fastapi dev PYTHON=python3.11
+npm --prefix frontend run dev
+```
+
+Open `http://localhost:3000`. For prerequisites and Ollama setup, see [local development](docs/DEVELOPMENT.md).
+
+### Features
+
+- **One shared headless core** — identity, API, data, workflow, events, audit, and analytics for every app; no backend rebuild per app.
+- **BizApps** — install business apps as `bizapp.v1` manifests; forms, registries, timelines, reports, and approval flows are generated from configuration, with no separate backend.
+- **Document Q&A for teams** — workspace-scoped knowledge bases; ingest PDF, DOCX, spreadsheets, Markdown, and HTML; answers include citations; document permissions are checked before answering.
+- **RAG for app data** — BizApp records and digests are indexed; the in-app assistant answers over that data.
+- **Composer and AI drafting** — build on a canvas, edit JSON, or let AI draft a manifest from chat history.
+- **Workflow and approvals** — one- or two-level Flowable BPMN, SLA reminders/escalation, shared task inbox.
+- **Integration** — email, HMAC-signed webhooks, HTTP/MQTT connectors with credential vault, allowlists, and SSRF protection.
+- **Data and analytics** — PostgreSQL, SeaweedFS, Qdrant/Kuzu, Parquet, and DuckDB; transactional data stays separate from analytics.
+- **Self-hosted** — Docker Compose, Apache APISIX, Keycloak, and local Ollama.
+
+### BizApps
+
+A **BizApp** is a JSON manifest using the `bizapp.v1` contract. The manifest declares entities and fields, views, RBAC, hooks, and executable blocks. On install, OpenVie validates the manifest, freezes the version, generates the UI, and deploys BPMN when the app has an approval step. Records live in a shared JSONB table, validated against the schema with authorization re-resolved on every request.
+
+1. **Author** — use the visual composer or ask AI to draft a manifest from chat.
+2. **Validate** — the validator reports errors by path in the manifest.
+3. **Install** — freeze the manifest, deploy workflows, and open the app at `/apps/{kind}`.
+4. **Run** — users create records, submit for approval, and view reports; hooks send email, webhooks, or call connectors.
+
+Apps use their own RBAC, declarative reports (groupBy, metrics, filters, orderBy; CSV/XLSX export), and an in-app AI assistant; apps with an approval step also keep approval history. Templates can be exported, imported, and remixed.
+
+Adding a new process, form, or report requires no new service, migration, or API. The core stays the same; the BizApp is just declarative data and configuration.
+
+<!-- TODO(demo): docs/assets/composer.gif — create entity/field → add approval → validate → install. -->
+
+### Document Q&A and app data
+
+RAG in OpenVie has two surfaces:
+
+- **Enterprise document Q&A** — users upload PDF, DOCX, text, Markdown, HTML, CSV/XLSX files into a workspace knowledge base, ask questions, and get answers with citations. OCR for scanned PDFs/images and ASR for audio/video are optional. Retrieval combines dense, sparse, and graph signals with optional reranking; document permissions are checked before answering.
+- **App data** — BizApp records and digests are projected into the knowledge base when an entity enables `knowledge.project`; the in-app assistant answers over that data. AI also drafts and repairs manifests when creating a new app.
+
+The BizApp core (forms, records, reports, approvals, connectors) runs independently of AI. In the standard installation, the AI/RAG layer is enabled by default; individual features can be disabled when only CRUD is needed.
+
+See [ingestion and retrieval](docs/RETRIEVAL.md) for the pipeline, supported formats, and limits.
+
+<!-- TODO(demo): docs/assets/document-qa.gif — upload PDF/DOCX → ask → answer with citations. -->
+<!-- TODO(demo): docs/assets/assistant.gif — ask about app data and show citations. -->
+
+### Example apps
+
+| BizApp | Business use | Main components |
+| --- | --- | --- |
+| CRM Lite | Lead and sales pipeline management | registry, form, report, email notification |
+| Booking | Appointment intake, approval, and reminders | form, approval, email, webhook, report |
+| Signature request | Internal review and hand-off to a signing provider | approval, HTTP connector |
+
+### Architecture
+
+```mermaid
+flowchart TB
+    Apps["BizApps: CRM · Booking · Signature · Custom"] --> APISIX["Apache APISIX"]
+    Web["Next.js console"] --> APISIX
+    APISIX --> API["Spring Boot API"]
+    API --> Runtime["BizApp runtime"]
+    API --> IAM["Keycloak · RBAC"]
+    API --> Data[("PostgreSQL · SeaweedFS · Qdrant · Kuzu")]
+    API --> WF["Flowable BPMN"]
+    API --> Events["RabbitMQ · webhooks"]
+    API --> AI["AI · RAG"]
+    API --> Lakehouse["DuckDB Lakehouse"]
+```
+
+Spring Boot owns the business API, authorization, and PostgreSQL state. Python FastAPI handles inference, document ingestion, and retrieval indexes. Next.js provides the web client, and APISIX is the edge gateway.
+
+| Directory | Contents |
+| --- | --- |
+| [`api/`](api/) | Spring Boot core: identity, RBAC, data, workflow, BizApp runtime |
+| [`rag-chatbot-fastapi/`](rag-chatbot-fastapi/) | AI service, document ingestion, retrieval, graph service |
+| [`frontend/`](frontend/) | Next.js console and BizApp runtime UI |
+| [`contracts/`](contracts/), [`proto/`](proto/) | Shared schemas, fixtures, and gRPC contracts |
+
+### Documentation
+
+- [BizApps](docs/BIZAPPS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Integration](docs/INTEGRATION.md)
+- [Document approval](docs/WORKFLOW.md)
+- [Keycloak OIDC](docs/KEYCLOAK.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Local development](docs/DEVELOPMENT.md)
+- [Ingestion and retrieval](docs/RETRIEVAL.md)
+- [Java module guide](api/GUIDE.md) and [Python module guide](rag-chatbot-fastapi/GUIDE.md)
+- [Documentation index](docs/README.md)
+
+### Self-hosting
+
+OpenVie runs on your own infrastructure with Docker Compose. The production guide covers TLS, backups and restore, monitoring, upgrades, and operational notes: [deployment](docs/DEPLOYMENT.md).
+
+### Community and contributing
+
+- **Discord:** [discord.gg/zbQbA8GqW](https://discord.gg/zbQbA8GqW)
+- **Issues and feature requests:** [GitHub Issues](https://github.com/OpenVie/OpenVie/issues)
+- **Code contributions:** [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Vulnerability reports:** [SECURITY.md](SECURITY.md)
+
+### License
+
+OpenVie source is licensed under the [Apache License 2.0](LICENSE), copyright 2026 LinkedNodeDigital. See [NOTICE](NOTICE) and [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+Third-party packages, container images, model weights, and datasets retain their own terms.
