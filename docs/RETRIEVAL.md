@@ -78,7 +78,7 @@ flowchart TD
     Neighbors --> Generate[Sinh câu trả lời có căn cứ]
 ```
 
-**Bộ lọc ý định:** Các quy tắc tiếng Việt/tiếng Anh bảo thủ chỉ chặn lời chào, câu xã giao hoặc nhiễu rõ ràng; những câu này bỏ qua cả cache câu trả lời, embedding, query planning, truy hồi và LLM. Khi phù hợp, phản hồi nhắc lại chủ đề gần nhất và không kèm trích dẫn. Câu hỏi nhạy cảm, mã/định danh và câu nối tiếp có nội dung vẫn đi qua RAG; khi chưa chắc, mặc định vẫn truy hồi. Đây không phải bộ phân loại ngữ nghĩa đã huấn luyện.
+**Bộ lọc ý định:** Các quy tắc viết tay cho tiếng Việt/tiếng Anh chỉ áp dụng cho những trường hợp thật rõ ràng như lời chào, câu xã giao, chuỗi vô nghĩa hay câu gõ nhầm. Những câu này được trả lời ngay, không đi qua cache câu trả lời, embedding, query planning, truy hồi hay LLM. Câu trả lời có thể nhắc lại chủ đề gần nhất nhưng không kèm trích dẫn. Câu hỏi nhạy cảm, mã/định danh và câu nối tiếp có nội dung vẫn đi qua RAG; khi chưa chắc, mặc định vẫn truy hồi. Đây không phải bộ phân loại ngữ nghĩa đã huấn luyện.
 
 1. **Query planning theo ngữ cảnh:** câu hỏi nối tiếp được viết lại thành truy vấn độc lập dựa trên lịch sử hội thoại gần nhất trước khi tìm kiếm.
 2. **Định tuyến:** `calculation` → `relational` → `exact` → `semantic`, với trọng số kênh tương ứng.
@@ -195,7 +195,7 @@ flowchart TD
     Neighbors --> Generate[Grounded generation]
 ```
 
-**Intent gate:** Conservative Vietnamese/English rules short-circuit clear greetings, social-only messages, and nonsense before answer caches, embeddings, planning, retrieval, or LLM calls. Replies reference the recent topic when appropriate and carry no citations. Sensitive questions, codes/identifiers, and substantive follow-ups retain RAG; uncertainty defaults to retrieval. This is not a trained semantic classifier.
+**Intent gate:** Hand-written Vietnamese/English rules intercept only high-confidence greetings, social-only messages, and obvious nonsense; these replies skip answer caches, embeddings, planning, retrieval, and LLM calls. Replies reference the recent topic when appropriate and carry no citations. Sensitive questions, codes/identifiers, and substantive follow-ups retain RAG; uncertainty defaults to retrieval. This is not a trained semantic classifier.
 
 1. **Contextual Query Planning:** Follow-up questions are reformulated into standalone search queries based on recent conversation turns.
 2. **Routing:** Order: `calculation` → `relational` → `exact` → `semantic` with profile-specific weights.

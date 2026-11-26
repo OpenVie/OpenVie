@@ -8,7 +8,7 @@
 
 Tài liệu này giải thích cấu trúc dịch vụ Python AI trong `app` và quy tắc phát triển tính năng mới mà không làm vỡ ranh giới module.
 
-Dịch vụ là một **Modular Monolith**: một cây mã nguồn chứa sáu module năng lực, được kết hợp thành ba vai trò runtime. Ranh giới module được kiểm tra tự động qua bộ test kiến trúc trên mỗi lượt test.
+Dịch vụ là một **Modular Monolith**: một cây mã nguồn chứa sáu module cho sáu tính năng khác nhau, được kết hợp thành ba vai trò runtime. Ranh giới module được kiểm tra tự động qua bộ test kiến trúc trên mỗi lượt test.
 
 ### Bốn nguyên tắc bất khả xâm phạm
 
@@ -43,12 +43,12 @@ maintenance-> module API và common
 
 ### Quy trình hấp thụ tài liệu bền vững
 
-Checkpoint quản lý trạng thái qua Redis AOF (`ccn:v1:ingestion:...`) bằng các script Lua nguyên tử:
+Checkpoint của job được lưu trong Redis (bật AOF để bền vững, khóa thuộc `ccn:v1:ingestion:*`); mỗi lần chuyển pha là một script Lua nguyên tử:
 ```text
 CLAIMED -> PROCESSING_PUBLISHED -> INDEX_REPLACED -> GRAPH_REPLACED
         -> COMPLETED_PUBLISHED -> COMPLETE
 ```
-Nếu có sự cố giữa chừng, lệnh phục hồi có giới hạn sẽ phát lại yêu cầu chưa hoàn tất:
+Khi có sự cố, lệnh phục hồi sẽ phát lại các job chưa hoàn tất, tối đa 100 job mỗi lần:
 ```bash
 make -C rag-chatbot-fastapi recover-ingestion-checkpoints
 ```
@@ -114,12 +114,12 @@ maintenance-> module APIs and common
 
 ## Durable document ingestion
 
-Redis checkpoints track atomic phase transitions:
+Job checkpoints live in Redis (AOF enabled for durability, keys under `ccn:v1:ingestion:*`); each phase transition is an atomic Lua script:
 ```text
 CLAIMED -> PROCESSING_PUBLISHED -> INDEX_REPLACED -> GRAPH_REPLACED
         -> COMPLETED_PUBLISHED -> COMPLETE
 ```
-Republish incomplete jobs during recovery:
+After a failure, the recovery command republishes incomplete jobs, up to 100 per run:
 ```bash
 make -C rag-chatbot-fastapi recover-ingestion-checkpoints
 ```

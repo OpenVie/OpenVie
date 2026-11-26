@@ -10,9 +10,10 @@
 
 [Project overview](../README.md) · [Kiến trúc](ARCHITECTURE.md) · [Phát triển cục bộ](DEVELOPMENT.md)
 
-**Trạng thái xuất bản:** bản chốt cho commit đầu tiên (chốt hợp đồng, loại bỏ phần ngoài phạm vi,
-mốc cài mới, cùng các bước kiểm tra end-to-end, bảo mật, alignment và an toàn xuất bản) đã hoàn tất và
-được ghi trong lịch sử commit ban đầu. Phần dưới mô tả cách cấp phép và cách tách repo dự kiến.
+**Trạng thái phát hành:** mã nguồn OpenVie được phát hành công khai tại
+[github.com/OpenVie/OpenVie](https://github.com/OpenVie/OpenVie) theo Apache-2.0. Tài liệu này mô tả
+ranh giới cấp phép và phân phối của repo; cách báo cáo bảo mật và đóng góp nằm ở
+[SECURITY.md](../SECURITY.md) và [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Ranh giới repo
 
@@ -48,26 +49,11 @@ retention, procurement, threat model và cơ sở pháp lý.
 | --- | --- | --- | --- |
 | `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Giữ nguyên header của Mozilla Foundation; dùng để render tài liệu PDF ngay trên trình duyệt. |
 
-## Điều kiện xuất bản
+## Báo cáo bảo mật và đóng góp
 
-Bản xuất nguồn cục bộ này không có lịch sử Git riêng tư hay remote. Trước khi xuất bản, người
-giữ quyền và người phụ trách bảo mật phải:
-
-1. Duyệt quyền phân phối cho từng thành phần, đóng góp, bản dịch, logo, artifact sinh ra, tài
-   sản vendored, model và dataset; giữ nguyên third-party notices.
-2. Rà soát toàn bộ cây xuất bản cùng mọi tài liệu, fixture, ảnh, ví dụ cấu hình và tệp sinh ra để
-   tìm thông tin khách hàng, credential, địa chỉ nội bộ, thỏa thuận riêng tư. Xoay mọi secret
-   bị lộ; không bao giờ sao chép lịch sử repo riêng tư, Actions secrets hay tệp `.env`
-   production.
-3. Cấu hình kênh báo cáo lỗ hổng riêng tư có người theo dõi, chính sách maintainer/review và quyền
-   sở hữu repo; xem [SECURITY.md](../SECURITY.md).
-4. Kiểm chứng từ một bản clone mới: stack mẫu cài được, nạp được một tài liệu có quyền, thực
-   thi cách ly tenant, hiển thị trích dẫn và từ chối trả lời khi thiếu bằng chứng. Cấu hình
-   phát triển có các giá trị mặc định đã biết và không bao giờ dùng cho production. Hãy kiểm chứng
-   riêng phần lộ diện của production, egress tới provider và backup.
-
-Chưa có GitHub repository nào được xuất bản bởi các thay đổi tệp này; checklist này không khẳng
-định các review pháp lý, bảo mật hay vận hành đã thông qua.
+Báo lỗ hổng qua nút **Report a vulnerability** trên tab Security của repository (báo cáo riêng tư);
+không mở issue công khai. Xem [SECURITY.md](../SECURITY.md) để biết thông tin cần gửi kèm. Quy trình
+gửi patch, header giấy phép, pin image và chính sách dependency nằm ở [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ---
 
@@ -75,10 +61,10 @@ Chưa có GitHub repository nào được xuất bản bởi các thay đổi t�
 
 [Project overview](../README.md) · [Architecture](ARCHITECTURE.md) · [Local development](DEVELOPMENT.md)
 
-**Publication status:** the first-commit cut (contract freeze, out-of-scope removal,
-fresh-install baseline, and the end-to-end, security, alignment, and publication-safety gates)
-is complete and recorded in the initial commit history. The boundary below describes the
-intended licensing and repository split.
+**Release status:** OpenVie source is publicly released at
+[github.com/OpenVie/OpenVie](https://github.com/OpenVie/OpenVie) under Apache-2.0. This document
+describes the repository's licensing and distribution boundary; security reporting and
+contribution guidance live in [SECURITY.md](../SECURITY.md) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Repository boundary
 
@@ -116,23 +102,9 @@ retention, procurement, threat models, and legal basis.
 | --- | --- | --- | --- |
 | `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Original banner preserved; vendored for client-side PDF document rendering. |
 
-## Publication gate
+## Security reports and contributions
 
-This local source export has no private Git history or remote. Before publishing it, a rights
-holder and security owner must:
-
-1. Approve distribution rights for each authored component, contribution, translation, logo,
-   generated artifact, vendored asset, model, and dataset; preserve third-party notices.
-2. Review the entire exported tree and all documentation, fixtures, images, config examples,
-   and generated files for customer information, credentials, internal addresses, and private
-   agreements. Rotate any exposed secret; never copy the private repository's history, Actions
-   secrets, or production `.env` files.
-3. Configure a monitored private vulnerability-reporting channel, maintainers/review policy,
-   and repository ownership; see [SECURITY.md](../SECURITY.md).
-4. Verify from a fresh clone that the sample stack installs, ingests an authorized document,
-   enforces tenant isolation, shows citations, and abstains without evidence. The development
-   configuration has known defaults and must never be applied to production. Validate production
-   exposure, provider egress, and backups separately.
-
-No GitHub repository has been published by these file changes; this checklist does not assert
-that legal, security, or operational reviews have passed.
+Report vulnerabilities through the **Report a vulnerability** button on the repository's Security
+tab (private report); do not open a public issue. See [SECURITY.md](../SECURITY.md) for what to
+include. Patch workflow, license headers, image pins, and the dependency policy live in
+[CONTRIBUTING.md](../CONTRIBUTING.md).

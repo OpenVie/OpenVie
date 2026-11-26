@@ -6,7 +6,7 @@
 
 ## OpenVie — Bảo mật
 
-Đừng đăng lỗ hổng, dữ liệu khách hàng, credential production, hay exploit đang hoạt động lên issue công khai. Dùng liên kết **Report a vulnerability** trên tab Security của repository này (báo cáo lỗ hổng riêng tư) khi chủ repository đã bật. Nếu chưa có, hãy liên hệ maintainer qua kênh riêng do chủ repository công bố trước khi tiết lộ chi tiết. Maintainer phải bật kênh báo cáo riêng trước khi xuất bản repository; file này không tự đặt địa chỉ email bảo mật không có người giám sát.
+Đừng đăng lỗ hổng, dữ liệu khách hàng, credential production, hay exploit đang hoạt động lên issue công khai. Dùng nút **Report a vulnerability** trên tab Security của repository này để gửi báo cáo riêng tư.
 
 Ghi rõ revision bị ảnh hưởng, ranh giới tin cậy bị vượt qua, các bước tái hiện bằng dữ liệu tổng hợp, hành vi mong đợi và thực tế, cùng khả năng credential hay dữ liệu tenant bị lộ. Không đính kèm tài liệu tenant thật hay key đang hoạt động. Chưa có cam kết thời gian phản hồi hay danh sách phiên bản được hỗ trợ.
 
@@ -19,11 +19,8 @@ Khi triển khai, chặn truy cập công cộng vào PostgreSQL, Redis, RabbitM
 ## Security policy
 
 Do not post a vulnerability, customer data, production credentials, or a working exploit in a
-public issue. Use GitHub's **Report a vulnerability** link on this repository's Security tab
-(private vulnerability reporting) when the repository owner has enabled it. If it is not
-available, contact the maintainers privately through a channel published by the repository
-owner before disclosing details. Maintainers must enable a private reporting channel before
-publishing the repository; this file does not invent an unmonitored security email address.
+public issue. Use the **Report a vulnerability** button on this repository's Security tab to
+submit a private report.
 
 Include the affected revision, the trust boundary crossed, steps to reproduce with synthetic
 data, expected and actual behavior, and whether credentials or tenant data might be exposed.

@@ -57,7 +57,7 @@ flowchart TB
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Điều khiển (Control)** | Spring Boot quản lý tổ chức, workspace, tài khoản, phân quyền ba cấp (`ORG_OWNER`, `WORKSPACE_ADMIN`, `MEMBER`), kênh thông báo, phiên chat; dữ liệu lưu trong PostgreSQL.      |
 | **Dữ liệu bất đồng bộ**  | RabbitMQ điều phối hàng đợi; worker xử lý song song; SeaweedFS lưu tệp gốc; Qdrant lưu vector; Kuzu lưu đồ thị. OCR cho PDF scan/ảnh là tùy chọn, mặc định tắt.                |
-| **Suy luận (Inference)** | FastAPI trả lời qua gRPC server-streaming; lọc chào hỏi/nhiễu bằng quy tắc bảo thủ; RAG tách theo tenant; định tuyến câu hỏi nhạy cảm theo từ khóa; LLM sinh câu trả lời có trích dẫn nguồn. |
+| **Suy luận (Inference)** | FastAPI trả lời qua gRPC server-streaming; lọc chào hỏi/nhiễu bằng quy tắc chỉ bắt trường hợp rõ ràng; RAG tách theo tenant; định tuyến câu hỏi nhạy cảm theo từ khóa; LLM sinh câu trả lời có trích dẫn nguồn. |
 | **Đánh giá ngoại tuyến** | Công cụ phát lại trace JSONL để đo nhãn nhạy cảm và độ chính xác của trích dẫn mà không gọi API model.                                                                          |
 
 ### 3. Phân định trách nhiệm dữ liệu
@@ -146,7 +146,7 @@ See the shared topology diagram above. Key boundaries:
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Control**           | Spring Boot workspace/auth/chat API, PostgreSQL persistence (orgs, workspaces, memberships, notification channels), Redis runtime state.                                  |
 | **Async data**        | RabbitMQ ingestion, document workers, SeaweedFS storage, Qdrant vectors, Kuzu graph. Optional OCR for scanned PDFs/images (off by default).                               |
-| **Inference**         | FastAPI server-streaming answer gRPC, conservative greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. |
+| **Inference**         | FastAPI server-streaming answer gRPC, high-confidence greeting/nonsense gate, tenant-scoped hybrid RAG, lexical sensitive query routing, grounded generation with citations. |
 | **Offline alignment** | Local trace replay evaluating sensitive routes and citation markers without remote API calls.                                                                             |
 
 ## 3. Data ownership

@@ -22,7 +22,7 @@ Chọn hướng dẫn phù hợp với việc bạn cần làm.
    - [Hướng dẫn module Python](../rag-chatbot-fastapi/GUIDE.md): các module năng lực, transport và vai trò runtime.
    - [Phát triển web và kiểm tra](DEVELOPMENT.md#2-các-bước-thiết-lập).
 5. Chỉ tra tài liệu tính năng khi thay đổi của bạn thực sự cần.
-6. Xem lại [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) trước khi đóng góp.
+6. Đọc [hướng dẫn đóng góp](../CONTRIBUTING.md) và [ranh giới cấp phép, phân phối](OPEN_SOURCE.md).
 
 ## Hướng dẫn theo việc
 
@@ -34,7 +34,7 @@ Chọn hướng dẫn phù hợp với việc bạn cần làm.
 | Sửa phần parse tài liệu, đánh chỉ mục, model hoặc truy hồi | [Nạp và truy hồi](RETRIEVAL.md) |
 | Cấu hình bản tự triển khai hoặc lập kế hoạch kiểm chứng, phục hồi | [Triển khai](DEPLOYMENT.md) |
 | Gom về một điểm vào HTTP hoặc giới hạn lưu lượng ở biên | [Triển khai §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
-| Tự triển khai, đánh giá giấy phép hoặc xuất bản mã nguồn có review | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
+| Tự triển khai, đánh giá giấy phép hoặc fork | [Ranh giới nguồn mở và phân phối](OPEN_SOURCE.md) |
 | Cấu hình IdP Keycloak, OIDC client và ranh giới SSO | [Cấu hình Keycloak](KEYCLOAK.md) |
 | Chọn hoặc đánh giá model cho chat, phân loại ý định, trích slot và soạn thảo BizApp | [Định tuyến model AI](AI_MODEL_ROUTING.md) |
 | Tích hợp ứng dụng của bạn vào lõi headless (API key, webhook, chat đồng bộ, engine BPMN) | [Tích hợp](INTEGRATION.md) |
@@ -47,25 +47,13 @@ Chọn hướng dẫn phù hợp với việc bạn cần làm.
 - **Hướng dẫn phát triển:** thiết lập, nguồn cấu hình, các lệnh chính và xử lý sự cố cục bộ.
 - **Tài liệu chuyên đề:** hành vi hiện tại, ví dụ, ranh giới và liên kết tới phần triển khai.
 
-## Trạng thái triển khai và bằng chứng
-
-"Đã triển khai" chỉ có nghĩa là trong repo đã có đường mã; không có nghĩa tính năng đã được bật,
-đã cấu hình, đã đo tải hay đã được duyệt cho production. Cụ thể:
-
-- Bộ đệm tùy chọn cần được bật rõ ràng và có bằng chứng rollout.
-- OCR (ảnh/PDF scan) và ASR (âm thanh/video) là các bước tùy chọn, mặc định tắt.
-- Một health response, fixture hay artifact smoke cũ không chứng minh toàn bộ workflow chạy đúng.
-
-Xem [RETRIEVAL.md](RETRIEVAL.md) để biết chi tiết hành vi nạp tài liệu, và
-[DEPLOYMENT.md](DEPLOYMENT.md) để biết yêu cầu kiểm chứng khi tự triển khai.
-
 ## Đặt tên và thương hiệu
 
 OpenVie là tên sản phẩm và định danh thống nhất của toàn bộ hệ thống. Các package (`com.openvie.api`),
 hợp đồng protobuf (`openvie.ai.v1`), tài nguyên triển khai, hàng đợi RabbitMQ và cấu hình hệ thống
 đều dùng định danh `openvie`.
 Mã nguồn ứng dụng OpenVie theo giấy phép Apache-2.0, bản quyền thuộc LinkedNodeDigital; xem
-[LICENSE](../LICENSE), [NOTICE](../NOTICE) và [publication gate](OPEN_SOURCE.md#publication-gate).
+[LICENSE](../LICENSE), [NOTICE](../NOTICE) và [ranh giới nguồn mở và phân phối](OPEN_SOURCE.md).
 
 ## Cách bảo trì tài liệu
 
@@ -98,7 +86,7 @@ Start with the guide for your task.
    - [Python module guide](../rag-chatbot-fastapi/GUIDE.md): capability modules, transports, and runtime roles.
    - [Web development and checks](DEVELOPMENT.md#2-step-by-step-setup).
 5. Consult the feature reference only when your change needs it.
-6. Review the [open-source and distribution boundary](OPEN_SOURCE.md) before contributing to this repository.
+6. Read the [contributing guide](../CONTRIBUTING.md) and the [licensing and distribution boundary](OPEN_SOURCE.md).
 
 ## Guides by task
 
@@ -110,7 +98,7 @@ Start with the guide for your task.
 | Change document parsing, indexing, models, or retrieval | [Ingestion and retrieval](RETRIEVAL.md) |
 | Configure a self-hosted release or plan verification and recovery | [Deployment](DEPLOYMENT.md) |
 | Expose one HTTP entry point or rate-limit traffic at the edge | [Deployment §10 — Edge gateway](DEPLOYMENT.md#10-edge-gateway-apache-apisix) |
-| Self-host, assess licensing, or publish a reviewed source export | [Open-source and distribution boundary](OPEN_SOURCE.md) |
+| Self-host, assess licensing, or fork | [Open-source and distribution boundary](OPEN_SOURCE.md) |
 | Configure Keycloak IdP, OIDC clients, and SSO boundaries | [Keycloak configuration](KEYCLOAK.md) |
 | Select or evaluate models for chat, intent, slots, and BizApp drafting | [AI model routing](AI_MODEL_ROUTING.md) |
 | Integrate your own app with the headless core (API keys, webhooks, synchronous chat, BPMN engine) | [Integration](INTEGRATION.md) |
@@ -123,25 +111,13 @@ Start with the guide for your task.
 - **Development guide:** setup, configuration sources, command entry points, and local troubleshooting.
 - **Topic references:** detailed current behavior, examples, boundaries, and implementation links.
 
-## Implementation status and evidence
-
-“Implemented” means the repository contains a code path, not that the feature is enabled,
-configured, load-tested, or approved for production. In particular:
-
-- Optional caches require explicit configuration and rollout evidence.
-- OCR (images/scanned PDFs) and ASR (audio/video) are optional stages, disabled by default.
-- A health response, fixture, or historical smoke artifact is not proof of full workflow correctness.
-
-Use [RETRIEVAL.md](RETRIEVAL.md) for detailed ingestion behavior, and
-[DEPLOYMENT.md](DEPLOYMENT.md) for verification requirements on a self-hosted install.
-
 ## Naming and branding
 
 OpenVie is the unified product and technical identifier across the platform. Internal packages (`com.openvie.api`),
 protobuf contracts (`openvie.ai.v1`), deployment resources, message queues, and service configurations
 standardize on `openvie`.
 OpenVie application source is Apache-2.0 under LinkedNodeDigital copyright; see
-[LICENSE](../LICENSE), [NOTICE](../NOTICE), and the [publication gate](OPEN_SOURCE.md#publication-gate).
+[LICENSE](../LICENSE), [NOTICE](../NOTICE), and the [open-source and distribution boundary](OPEN_SOURCE.md).
 
 ## Maintaining these docs
 
