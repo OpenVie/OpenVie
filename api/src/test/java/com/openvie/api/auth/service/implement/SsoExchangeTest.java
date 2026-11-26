@@ -20,7 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -111,7 +113,7 @@ class SsoExchangeTest {
 
     @Test
     void unknownRealmRoleIsRejectedWith403() {
-        when(tokenClient.exchange(anyString(), anyString(), anyString())).thenReturn(
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new SsoIdentity("sub-1", "person@example.com", true, List.of("default-roles-openvie"), List.of()));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
@@ -122,7 +124,7 @@ class SsoExchangeTest {
 
     @Test
     void unknownEmailIsRejectedWith404() {
-        when(tokenClient.exchange(anyString(), anyString(), anyString())).thenReturn(
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new SsoIdentity("sub-1", "ghost@example.com", true, List.of("MEMBER"), List.of()));
         when(identity.findOrgIdByEmail("ghost@example.com")).thenReturn(Optional.empty());
 
@@ -133,7 +135,7 @@ class SsoExchangeTest {
 
     @Test
     void unverifiedEmailPropagatesConflictFromLink() {
-        when(tokenClient.exchange(anyString(), anyString(), anyString())).thenReturn(
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new SsoIdentity("sub-1", "person@example.com", false, List.of("MEMBER"), List.of()));
         when(identity.findOrgIdByEmail("person@example.com")).thenReturn(Optional.of(orgId));
         when(identity.linkSsoIdentity(orgId, "sub-1", "person@example.com", false))
@@ -145,7 +147,7 @@ class SsoExchangeTest {
 
     @Test
     void successIssuesInternalCredentialsLikePasswordLogin() {
-        when(tokenClient.exchange(anyString(), anyString(), anyString())).thenReturn(
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new SsoIdentity("sub-1", "person@example.com", true, List.of("MEMBER"), List.of()));
         when(identity.findOrgIdByEmail("person@example.com")).thenReturn(Optional.of(orgId));
         when(identity.linkSsoIdentity(orgId, "sub-1", "person@example.com", true))
@@ -172,7 +174,7 @@ class SsoExchangeTest {
 
     @Test
     void localRoleWinsOverIdpMismatch() {
-        when(tokenClient.exchange(anyString(), anyString(), anyString())).thenReturn(
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), anyString())).thenReturn(
                 new SsoIdentity("sub-1", "person@example.com", true, List.of("ORG_OWNER"), List.of("pwd")));
         when(identity.findOrgIdByEmail("person@example.com")).thenReturn(Optional.of(orgId));
         when(identity.linkSsoIdentity(orgId, "sub-1", "person@example.com", true))
@@ -192,11 +194,27 @@ class SsoExchangeTest {
         assertEquals("MEMBER", response.getUser().getWorkspaceRole());
     }
 
+    @Test
+    void adminClientIdIsForwardedToTheTokenExchange() {
+        SsoExchangeRequest request = exchange();
+        request.setClientId("openvie-admin");
+        when(tokenClient.exchange(anyString(), anyString(), anyString(), eq("openvie-admin")))
+                .thenReturn(new SsoIdentity(
+                        "sub-1", "person@example.com", true, List.of("MEMBER"), List.of()));
+        when(identity.findOrgIdByEmail("person@example.com")).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> service.ssoExchange(request, new MockHttpServletResponse()));
+        verify(tokenClient).exchange("auth-code", "verifier",
+                "http://localhost:3000/api/auth/callback", "openvie-admin");
+    }
+
     private SsoExchangeRequest exchange() {
         SsoExchangeRequest request = new SsoExchangeRequest();
         request.setCode("auth-code");
         request.setCodeVerifier("verifier");
         request.setRedirectUri("http://localhost:3000/api/auth/callback");
+        request.setClientId("openvie-frontend");
         return request;
     }
 }

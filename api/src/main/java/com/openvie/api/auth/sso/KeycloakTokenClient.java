@@ -27,6 +27,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
+import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.UnauthorizedException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -61,16 +62,16 @@ public class KeycloakTokenClient implements SsoTokenClient {
 
     @Override
     @SuppressWarnings("unchecked")
-    public SsoIdentity exchange(String code, String codeVerifier, String redirectUri) {
-        // The code was issued to the public frontend client, so the redemption
-        // must present the same client_id with PKCE only (no secret). Mixing
-        // in the confidential backend client is rejected by Keycloak with
+    public SsoIdentity exchange(String code, String codeVerifier, String redirectUri, String clientId) {
+        // The code was issued to one of the public browser clients, so the
+        // redemption must present that same client_id with PKCE only (no
+        // secret). Mixing in another client is rejected by Keycloak with
         // "Found different client_id in clientSession".
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "authorization_code");
         form.add("code", code);
         form.add("redirect_uri", redirectUri);
-        form.add("client_id", properties.getFrontendClientId());
+        form.add("client_id", resolveClientId(clientId));
         form.add("code_verifier", codeVerifier);
         Map<?, ?> tokenResponse;
         try {
@@ -124,6 +125,19 @@ public class KeycloakTokenClient implements SsoTokenClient {
         }
         List<String> amr = jwt.getClaimAsStringList("amr");
         return new SsoIdentity(subject, email, verified, roles, amr);
+    }
+
+    /** Only the two public browser clients configured for this deployment may redeem codes. */
+    private String resolveClientId(String requestedClientId) {
+        if (requestedClientId == null || requestedClientId.isBlank()) {
+            return properties.getFrontendClientId();
+        }
+        String clientId = requestedClientId.trim();
+        if (clientId.equals(properties.getFrontendClientId())
+                || clientId.equals(properties.getAdminFrontendClientId())) {
+            return clientId;
+        }
+        throw new BadRequestException("Unsupported SSO client id");
     }
 
     @SuppressWarnings("unchecked")

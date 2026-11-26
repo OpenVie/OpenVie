@@ -14,6 +14,7 @@
 
 package com.openvie.api.tenant.api;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TenantWorkspaceApi {
@@ -22,6 +23,9 @@ public interface TenantWorkspaceApi {
     WorkspaceContext requireActiveKnowledgeBase(UUID tenantId, UUID knowledgeBaseId);
 
     void incrementSearchRevision(UUID tenantId, UUID knowledgeBaseId);
+
+    /** Organization owning a workspace, including archived workspaces. */
+    Optional<UUID> findOrgIdByWorkspaceId(UUID workspaceId);
 
     record WorkspaceContext(
             UUID tenantId,

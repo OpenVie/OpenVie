@@ -23,6 +23,7 @@ type OidcTransaction = {
   state: string
   codeVerifier: string
   redirectUri: string
+  clientId: string
 }
 
 function base64Url(bytes: Uint8Array): string {
@@ -84,7 +85,7 @@ export async function beginOidcAuthorization(redirectUri: string): Promise<strin
 
   window.sessionStorage.setItem(
     OIDC_TRANSACTION_KEY,
-    JSON.stringify({ state, codeVerifier, redirectUri } satisfies OidcTransaction),
+    JSON.stringify({ state, codeVerifier, redirectUri, clientId } satisfies OidcTransaction),
   )
 
   return `${issuer}/protocol/openid-connect/auth?${params.toString()}`
@@ -107,7 +108,8 @@ export function consumeOidcTransaction(receivedState: string | null): OidcTransa
     if (
       transaction.state !== receivedState ||
       typeof transaction.codeVerifier !== "string" ||
-      typeof transaction.redirectUri !== "string"
+      typeof transaction.redirectUri !== "string" ||
+      typeof transaction.clientId !== "string"
     ) {
       return null
     }
@@ -115,6 +117,7 @@ export function consumeOidcTransaction(receivedState: string | null): OidcTransa
       state: transaction.state,
       codeVerifier: transaction.codeVerifier,
       redirectUri: transaction.redirectUri,
+      clientId: transaction.clientId,
     }
   } catch {
     return null

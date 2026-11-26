@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.bizapp.dto.BizAppManifest.Block;
 import com.openvie.api.common.net.SafeOutboundHttp;
-import com.openvie.api.integration.webhook.WebhookEventPublisher;
+import com.openvie.api.integration.api.IntegrationSignature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -118,7 +118,7 @@ class HttpConnectorAdapterTest {
         SafeOutboundHttp.Request request = captor.getValue();
         String timestamp = request.headers().get("X-OpenVie-Timestamp");
         assertTrue(timestamp.matches("\\d+"));
-        assertEquals(WebhookEventPublisher.signatureHeader("shared-secret", timestamp, request.body()),
+        assertEquals(IntegrationSignature.signatureHeader("shared-secret", timestamp, request.body()),
                 request.headers().get("X-OpenVie-Signature"));
     }
 

@@ -73,6 +73,7 @@ function SsoCallbackContent() {
           code,
           codeVerifier: transaction.codeVerifier,
           redirectUri: transaction.redirectUri,
+          clientId: transaction.clientId,
         });
         const response = await exchangePromiseRef.current;
         if (!active) return;

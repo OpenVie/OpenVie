@@ -21,10 +21,13 @@ Tài liệu này giải thích cách tổ chức API Spring Boot (`com.openvie.a
 
 ```text
 tenant       -> ai.api
-auth         -> tenant.api, auth.api.event
-chat         -> ai.api, document.api, tenant.api
-document     -> ai.api, tenant.api
-notification -> auth.api.event, tenant.api.event
+auth         -> integration.api, tenant.api
+chat         -> ai.api, bizapp.api, document.api, tenant.api
+document     -> ai.api, integration.api, tenant.api
+notification -> tenant.api, tenant.api.event, workflow.api.event
+workflow     -> document.api, tenant.api
+bizapp       -> ai.api, document.api, integration.api, tenant.api, workflow.api
+integration  -> tenant.api
 common       -> không phụ thuộc module nghiệp vụ nào
 bootstrap    -> kết nối (wiring) tất cả các module
 ```
@@ -34,11 +37,15 @@ bootstrap    -> kết nối (wiring) tất cả các module
 | Module | Trách nhiệm | Ranh giới API đồng bộ | Bảng sở hữu độc quyền |
 | --- | --- | --- | --- |
 | `ai` | Cấu hình mô hình và giao tiếp gRPC với inference service | `AiInferenceApi`, `ModelConfigurationApi` | `model_config_versions` |
-| `auth` | Đăng ký, đăng nhập JWT, đổi workspace, quản lý mật khẩu | Controller REST (gọi `tenant.api`) | `refresh_tokens` |
-| `chat` | Hội thoại, tin nhắn, turns, idempotency | Nội bộ chat (tiêu thụ `ai`, `document`, `tenant`) | `chat_sessions`, `chat_messages`, `chat_turns` |
-| `document` | Quản lý tài liệu, upload S3, vận chuyển ingestion RabbitMQ | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
+| `auth` | Đăng ký, đăng nhập JWT, đổi workspace, quản lý mật khẩu | Controller REST; tiêu thụ `tenant.api`, `integration.api` | `refresh_tokens` |
+| `chat` | Hội thoại, tin nhắn, turns, idempotency | `ChatRuntimeApi`; nội bộ tiêu thụ `ai`, `document`, `tenant` | `chat_sessions`, `chat_messages`, `chat_turns` |
+| `document` | Quản lý tài liệu, upload S3, vận chuyển ingestion RabbitMQ | `DocumentApi` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
 | `notification` | Thông báo in-app, kênh thông báo, gửi email giao dịch | `DeliveryAvailability` | `notifications`, `notification_channels` |
-| `tenant` | Tổ chức, workspace, tài khoản, phân quyền, KB, chatbot | `TenantIdentityApi`, `TenantWorkspaceApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `tenant` | Tổ chức, workspace, tài khoản, phân quyền, KB, chatbot | `TenantIdentityApi`, `TenantWorkspaceApi`, `TenantKnowledgeApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `workflow` | Phê duyệt tài liệu, engine BPMN tổng quát, SLA | `WorkflowRuntimeApi`, `WorkflowTaskContextApi`, `WorkflowDecisionEvent` | `workflow_sla_configs`; bảng `ACT_*`/`FLW_*` do Flowable quản lý |
+| `bizapp` | Tier-3 runtime, marketplace, connector, projection | `BizAppRuntimeApi` | `bizapp_installations`, `bizapp_records`, `bizapp_drafts`, `bizapp_marketplace_templates`, `bizapp_credentials`, `bizapp_connector_jobs` |
+| `integration` | API key M2M, webhook outbox/dispatcher | `ApiKeyAuthenticator`, `WebhookPublisherApi`, `IntegrationSignature` | `api_keys`, `webhook_endpoints`, `webhook_deliveries` |
+| `common` | Audit log, module event outbox/inbox, hạ tầng kỹ thuật | Không phụ thuộc module nghiệp vụ | `audit_logs`, `module_event_outbox`, `module_event_inbox` |
 | `bootstrap` | Cấu hình bảo mật, kết nối ứng dụng, khởi động | Wiring | Không sở hữu bảng |
 
 ### Quy trình sự kiện Module bền vững
@@ -85,10 +92,13 @@ The API is a **Modular Monolith**: one repository, one JVM, one deployable appli
 
 ```text
 tenant       -> ai.api
-auth         -> tenant.api, auth.api.event
-chat         -> ai.api, document.api, tenant.api
-document     -> ai.api, tenant.api
-notification -> auth.api.event, tenant.api.event
+auth         -> integration.api, tenant.api
+chat         -> ai.api, bizapp.api, document.api, tenant.api
+document     -> ai.api, integration.api, tenant.api
+notification -> tenant.api, tenant.api.event, workflow.api.event
+workflow     -> document.api, tenant.api
+bizapp       -> ai.api, document.api, integration.api, tenant.api, workflow.api
+integration  -> tenant.api
 common       -> no business module dependencies
 bootstrap    -> wires all modules together
 ```
@@ -98,11 +108,15 @@ bootstrap    -> wires all modules together
 | Module | Responsibility | Synchronous boundaries | Owned tables |
 | --- | --- | --- | --- |
 | `ai` | Model configuration and gRPC inference | `AiInferenceApi`, `ModelConfigurationApi` | `model_config_versions` |
-| `auth` | Auth flows, JWTs, workspace switching | REST controllers (calls `tenant.api`) | `refresh_tokens` |
-| `chat` | Playground chat, turns, idempotency | Internal orchestration | `chat_sessions`, `chat_messages`, `chat_turns` |
-| `document` | Document lifecycle, S3, RabbitMQ ingestion | `DocumentApi.validateCitations` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
+| `auth` | Auth flows, JWTs, workspace switching | REST controllers; consumes `tenant.api`, `integration.api` | `refresh_tokens` |
+| `chat` | Playground chat, turns, idempotency | `ChatRuntimeApi`; internally consumes `ai`, `document`, `tenant` | `chat_sessions`, `chat_messages`, `chat_turns` |
+| `document` | Document lifecycle, S3, RabbitMQ ingestion | `DocumentApi` | `documents`, `internal_event_outbox`, `internal_event_inbox` |
 | `notification` | Notifications, channels, transactional mail | `DeliveryAvailability` | `notifications`, `notification_channels` |
-| `tenant` | Orgs, workspaces, users, memberships, KBs | `TenantIdentityApi`, `TenantWorkspaceApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `tenant` | Orgs, workspaces, users, memberships, KBs | `TenantIdentityApi`, `TenantWorkspaceApi`, `TenantKnowledgeApi` | `organizations`, `tenants`, `users`, `workspace_members`, `invitations`, `knowledge_bases`, `chatbots` |
+| `workflow` | Document approval, generic BPMN engine, SLA | `WorkflowRuntimeApi`, `WorkflowTaskContextApi`, `WorkflowDecisionEvent` | `workflow_sla_configs`; Flowable owns `ACT_*`/`FLW_*` |
+| `bizapp` | Tier-3 runtime, marketplace, connectors, projection | `BizAppRuntimeApi` | `bizapp_installations`, `bizapp_records`, `bizapp_drafts`, `bizapp_marketplace_templates`, `bizapp_credentials`, `bizapp_connector_jobs` |
+| `integration` | M2M API keys, webhook outbox/dispatcher | `ApiKeyAuthenticator`, `WebhookPublisherApi`, `IntegrationSignature` | `api_keys`, `webhook_endpoints`, `webhook_deliveries` |
+| `common` | Audit log, module event outbox/inbox, technical infrastructure | No business module dependencies | `audit_logs`, `module_event_outbox`, `module_event_inbox` |
 | `bootstrap` | Security, wiring, readiness | None | None |
 
 ## Durable module events
@@ -128,4 +142,4 @@ Run ArchUnit tests locally before committing:
 ```bash
 make -C api test
 ```
-`ModularMonolithArchitectureTest` and `TableOwnershipTest` enforce package boundaries and table ownership strictly with zero allowlist exceptions.
+`ModularMonolithArchitectureTest` and `TableOwnershipTest` enforce package boundaries and table ownership strictly; violations fail the build.

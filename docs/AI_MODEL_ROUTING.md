@@ -6,7 +6,7 @@ This page describes the model-selection boundary that is shipped with OpenVie.
 Configuration defaults and environment-variable descriptions live in the
 [BizApps configuration reference](BIZAPPS.md#9-configuration).
 
-## Shipped routing
+### Shipped routing
 
 | Workload | Model selection | Notes |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ the selected model, attempt count, fallback use, and validation result in their
 metadata and audit entry. Deterministic manifest validation and normalization
 remain in the path for every model.
 
-## Evaluation protocol
+### Evaluation protocol
 
 Run [`scripts/ai/model_eval.py`](../scripts/ai/model_eval.py) against the
 current model and candidate models before changing routing. It measures:
@@ -42,7 +42,7 @@ python scripts/ai/model_eval.py --models current-model,candidate-model \
 The harness reads the current draft system prompt from the application source,
 so evaluation uses the same prompt as the running service.
 
-## Rollout, canary, and rollback
+### Rollout, canary, and rollback
 
 1. Evaluate the current model and each candidate; record validity, semantic
    checks, repair attempts, and latency.
@@ -55,7 +55,6 @@ so evaluation uses the same prompt as the running service.
    rollout.
 5. Roll back by restoring the prior drafting-model environment variables.
 
-## Evidence (2026-11)
 
 The following results are a November 2026 snapshot, not a routing guarantee.
 

@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { beginOidcAuthorization, consumeOidcTransaction } from "@/lib/oidc"
 
 beforeEach(() => {
   window.sessionStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe("OIDC browser transaction", () => {
@@ -34,9 +38,24 @@ describe("OIDC browser transaction", () => {
 
     const state = authorizationUrl.searchParams.get("state")
     const transaction = consumeOidcTransaction(state)
-    expect(transaction).toMatchObject({ redirectUri: "http://localhost:3000/sso/callback" })
+    expect(transaction).toMatchObject({
+      redirectUri: "http://localhost:3000/sso/callback",
+      clientId: "openvie-frontend",
+    })
     expect(transaction?.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(consumeOidcTransaction(state)).toBeNull()
+  })
+
+  it("persists the admin client id for the exchange", async () => {
+    vi.stubEnv("NEXT_PUBLIC_OIDC_CLIENT_ID", "openvie-admin")
+
+    const authorizationUrl = new URL(
+      await beginOidcAuthorization("http://localhost:3001/sso/callback"),
+    )
+    const transaction = consumeOidcTransaction(authorizationUrl.searchParams.get("state"))
+
+    expect(authorizationUrl.searchParams.get("client_id")).toBe("openvie-admin")
+    expect(transaction?.clientId).toBe("openvie-admin")
   })
 
   it("rejects a callback state that did not initiate the login", async () => {

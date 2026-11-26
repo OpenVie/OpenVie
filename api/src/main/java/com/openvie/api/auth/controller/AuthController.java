@@ -24,6 +24,7 @@ import com.openvie.api.auth.dto.response.InvitationValidationResponse;
 import com.openvie.api.auth.dto.response.WorkspaceSummaryResponse;
 import com.openvie.api.auth.service.AuthService;
 import com.openvie.api.common.controller.BaseController;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.openvie.api.common.exception.custom.UnauthorizedException;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.RegistrationStatus;
@@ -91,13 +92,17 @@ public class AuthController extends BaseController {
         return ResponseEntity.ok(authService.ssoExchange(request, response));
     }
 
-    public record RefreshRequest(String refreshToken) {
+    public record RefreshRequest(
+            @JsonAlias("refresh_token")
+            @Schema(description = "Refresh token; `refresh_token` is accepted as a legacy alias.")
+            String refreshToken) {
     }
 
     @Operation(summary = "Rotate credentials",
             description = "Re-issues the credential pair (roles re-resolved). The refresh token is read from the "
                     + "HttpOnly `refresh_token` cookie (browser), the `X-Refresh-Token` header, or a JSON body "
-                    + "`{\"refresh_token\": ...}` — in that order. The header and body forms are the server-to-server "
+                    + "`{\"refreshToken\": ...}` (`refresh_token` is accepted as a legacy alias) — in that order. "
+                    + "The header and body forms are the server-to-server "
                     + "path: no cookie handling required. Public endpoint; requires no bearer token.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "New credential pair issued"),

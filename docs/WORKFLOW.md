@@ -23,7 +23,7 @@ external task, có exclusive gateway và timer nhắc nhở/chuyển tiếp.
 | Nộp tài liệu vào luồng phê duyệt                  | `POST /api/v1/workflow/processes`                                                     |
 | Danh sách process (phân trang) + log từng process | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log`          |
 | Inbox task; nhận / hoàn tất                       | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
-| Cấu hình SLA của tổ chức                          | `GET /api/v1/workflow/sla-config`                                                     |
+| Đọc / cập nhật SLA của tổ chức                    | `GET /api/v1/workflow/sla-config` · `PUT /api/v1/workflow/sla-config`                 |
 
 Kết quả quyết định (APPROVE/REJECT/ESCALATE ở cấp 1; APPROVE/REJECT ở cấp 2) được ghi thẳng
 vào trạng thái tài liệu: cột `approval_status` (`PENDING → APPROVED | REJECTED`, Flyway V8)
@@ -73,7 +73,7 @@ external task per level, an exclusive gateway, and reminder/escalation timers.
 | Submit a document for approval       | `POST /api/v1/workflow/processes`                                                     |
 | Paged process list + per-process log | `GET /api/v1/workflow/processes` · `GET /api/v1/workflow/processes/{id}/log`          |
 | Task inbox; claim / complete         | `GET /api/v1/workflow/tasks` · `POST /api/v1/workflow/tasks/{id}/claim` · `/complete` |
-| Organization SLA configuration       | `GET /api/v1/workflow/sla-config`                                                     |
+| Read / update organization SLA       | `GET /api/v1/workflow/sla-config` · `PUT /api/v1/workflow/sla-config`                 |
 
 Decision outcomes (APPROVE/REJECT/ESCALATE at level 1; APPROVE/REJECT at level 2) are written
 directly onto document state: the `approval_status` column (`PENDING → APPROVED | REJECTED`,

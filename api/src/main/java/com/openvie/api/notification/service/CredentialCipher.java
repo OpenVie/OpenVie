@@ -14,6 +14,7 @@
 
 package com.openvie.api.notification.service;
 
+import com.openvie.api.common.security.CredentialCipherApi;
 import com.openvie.api.common.security.GeneralCredentialsCipher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,7 @@ import org.springframework.stereotype.Component;
  * The envelope itself lives in the shared {@link GeneralCredentialsCipher}.
  */
 @Component
-public class CredentialCipher {
+public class CredentialCipher implements CredentialCipherApi {
 
     private final GeneralCredentialsCipher cipher;
 

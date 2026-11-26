@@ -46,6 +46,9 @@ public class SsoProperties {
     /** Public browser client from the realm export (PKCE flow). */
     private String frontendClientId = "openvie-frontend";
 
+    /** Public admin browser client from the realm export (PKCE flow). */
+    private String adminFrontendClientId = "openvie-admin";
+
     /** Confidential server-side client from the realm export. */
     private String backendClientId = "openvie-backend";
 

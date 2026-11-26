@@ -10,7 +10,7 @@
 
 Ghi rõ revision bị ảnh hưởng, ranh giới tin cậy bị vượt qua, các bước tái hiện bằng dữ liệu tổng hợp, hành vi mong đợi và thực tế, cùng khả năng credential hay dữ liệu tenant bị lộ. Không đính kèm tài liệu tenant thật hay key đang hoạt động. Chưa có cam kết thời gian phản hồi hay danh sách phiên bản được hỗ trợ.
 
-Khi triển khai, chặn truy cập công cộng vào PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu và các service suy luận: file Compose đi kèm mở port phát triển ra host, và bản phát hành này không kèm reverse proxy, TLS termination hay lọc ở biên — hãy đặt ingress của riêng bạn trước console và API. Rà soát provider sinh nội dung đang cấu hình trước khi dùng với nguồn tin mật: provider bên ngoài có thể nhận trích đoạn tài liệu. Repository không chứng nhận triển khai cho dữ liệu chịu điều tiết hay dữ liệu chính phủ. Xem [deployment](docs/DEPLOYMENT.md) và [architecture](docs/ARCHITECTURE.md).
+Khi triển khai, chặn truy cập công cộng vào PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu và các service suy luận. File Compose development mở port ra host; bản production bind service nội bộ vào loopback và để APISIX làm entry point công khai — hãy đặt TLS/ingress trước APISIX và không expose console/API trực tiếp. Rà soát provider sinh nội dung đang cấu hình trước khi dùng với nguồn tin mật: provider bên ngoài có thể nhận trích đoạn tài liệu. Repository không chứng nhận triển khai cho dữ liệu chịu điều tiết hay dữ liệu chính phủ. Xem [deployment](docs/DEPLOYMENT.md) và [architecture](docs/ARCHITECTURE.md).
 
 ---
 
@@ -28,9 +28,9 @@ Do not attach real tenant documents or live keys. There is no guaranteed respons
 supported-version list yet.
 
 For deployments, protect PostgreSQL, Redis, RabbitMQ, Qdrant, SeaweedFS, Kuzu, and inference
-services from public access: the delivered Compose file publishes development ports on the host,
-and no reverse proxy, TLS termination, or edge filtering is delivered with this release — put
-your own ingress in front of the console and API. Review the configured generation provider
-before using confidential sources: an external provider may receive document excerpts. The
-repository does not certify a deployment for regulated or government data. See
+services from public access. The development Compose file publishes ports on the host; production
+binds internal services to loopback and exposes APISIX as the public entry point — put TLS/ingress
+in front of APISIX and do not expose the console/API directly. Review the configured generation
+provider before using confidential sources: an external provider may receive document excerpts.
+The repository does not certify a deployment for regulated or government data. See
 [deployment](docs/DEPLOYMENT.md) and [architecture](docs/ARCHITECTURE.md).

@@ -94,6 +94,13 @@ public class TenantWorkspaceApiImpl implements TenantWorkspaceApi, TenantKnowled
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<UUID> findOrgIdByWorkspaceId(UUID workspaceId) {
+        return tenantRepository.findById(workspaceId)
+                .map(tenant -> tenant.getOrganization().getId());
+    }
+
+    @Override
     @Transactional
     public UUID getOrCreateAppKnowledgeBase(UUID tenantId, String appKind, boolean graphExtraction) {
         var tenant = activeTenant(tenantId);

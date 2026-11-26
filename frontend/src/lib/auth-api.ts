@@ -128,6 +128,7 @@ export async function ssoExchangeApi(payload: {
   code: string;
   codeVerifier: string;
   redirectUri: string;
+  clientId: string;
 }): Promise<AuthResponse> {
   const res = await fetch(`${getApiBase()}/auth/sso/exchange`, {
     method: "POST",

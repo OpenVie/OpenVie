@@ -137,10 +137,9 @@ public class SecurityConfig {
 
         if (!corsProperties.getAllowedOriginPatterns().isEmpty()) {
             config.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
-        } else if (!corsProperties.getAllowedOrigins().isEmpty()) {
-            config.setAllowedOrigins(corsProperties.getAllowedOrigins());
         } else {
-            config.setAllowedOrigins(List.of("http://localhost:3000"));
+            // Empty means no browser origin is allowed: same-origin/APISIX only.
+            config.setAllowedOrigins(corsProperties.getAllowedOrigins());
         }
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

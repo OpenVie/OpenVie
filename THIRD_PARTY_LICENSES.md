@@ -28,6 +28,8 @@
 | --- | --- | --- | --- |
 | Tesseract OCR + vie/eng traineddata | `rag-chatbot-fastapi/Dockerfile` | Apache-2.0 | Được cài trong image để OCR PDF scan/ảnh; `INGESTION_OCR_ENABLED=false` mặc định. |
 | faster-whisper | `rag-chatbot-fastapi/pyproject.toml` (`asr` optional extra) | MIT | Chỉ được cài khi người vận hành chọn extra ASR; ASR tắt mặc định. |
+| PyAV | phụ thuộc của `faster-whisper` (`asr` extra) | BSD-3-Clause | Bindings FFmpeg dùng để giải mã media khi bật ASR. |
+| ffmpeg | `rag-chatbot-fastapi/Dockerfile` (apt) | LGPL/GPL tùy bản build của distro | Dùng cho ASR/video/keyframe; xem metadata package của image. |
 
 ## Thư viện sử dụng
 
@@ -399,7 +401,7 @@
 | protobuf>=5.29,<6 | Permissive (validated at install) | — |
 | pypdf==6.4.0 | Permissive (validated at install) | — |
 | pypdfium2>=4.30,<5 | Permissive (validated at install) | — |
-| pillow>=11,<12 | Permissive (validated at install) | — |
+| pillow>=11,<12 | MIT-CMU (HPND) | — |
 | python-docx>=1.1,<2 | Permissive (validated at install) | — |
 | openpyxl>=3.1,<4 | Permissive (validated at install) | — |
 | polars>=1.30,<2 | Permissive (validated at install) | — |
@@ -466,8 +468,10 @@
 
 | Component | Repository source | License | Notes |
 | --- | --- | --- | --- |
-| Tesseract OCR + vie/eng traineddata | `rag-chatbot-fastapi/Dockerfile` | Apache-2.0 | Installed in the image for scanned-PDF and image OCR; `INGESTION_OCR_ENABLED=false` by default. |
+| Tesseract OCR + vie/eng traineddata | `rag-chatbot-fastapi/Dockerfile` | Apache-2.0 | Installed in the image for scanned PDF/image OCR; `INGESTION_OCR_ENABLED=false` by default. |
 | faster-whisper | `rag-chatbot-fastapi/pyproject.toml` (`asr` optional extra) | MIT | Installed only when an operator selects the ASR extra; ASR is disabled by default. |
+| PyAV | `faster-whisper` dependency (`asr` extra) | BSD-3-Clause | FFmpeg bindings used to decode media when ASR is enabled. |
+| ffmpeg | `rag-chatbot-fastapi/Dockerfile` (apt) | LGPL/GPL depending on the distro build | Used for ASR/video/keyframe processing; inspect the image package metadata. |
 
 ## Libraries we use
 
@@ -839,7 +843,7 @@
 | protobuf>=5.29,<6 | Permissive (validated at install) | — |
 | pypdf==6.4.0 | Permissive (validated at install) | — |
 | pypdfium2>=4.30,<5 | Permissive (validated at install) | — |
-| pillow>=11,<12 | Permissive (validated at install) | — |
+| pillow>=11,<12 | MIT-CMU (HPND) | — |
 | python-docx>=1.1,<2 | Permissive (validated at install) | — |
 | openpyxl>=3.1,<4 | Permissive (validated at install) | — |
 | polars>=1.30,<2 | Permissive (validated at install) | — |

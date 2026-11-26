@@ -43,11 +43,11 @@ endpoint tương thích OpenAI bên ngoài là lựa chọn của người vận
 dung tenant sẽ đi qua ranh giới của provider đó. Với workload bị quản lý chặt, hãy xem xét residency,
 retention, procurement, threat model và cơ sở pháp lý.
 
-## Tệp vendored và tệp dẫn xuất
+## Tệp sinh ra khi build
 
 | Đường dẫn file | Nguồn gốc | Giấy phép | Ghi chú thay đổi |
 | --- | --- | --- | --- |
-| `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Giữ nguyên header của Mozilla Foundation; dùng để render tài liệu PDF ngay trên trình duyệt. |
+| `frontend/public/pdf.worker.min.mjs` | `pdfjs-dist` 6.4.299 (Mozilla PDF.js) | Apache-2.0 | Sinh ra lúc build bởi `frontend/scripts/prepare-pdf-worker.mjs`; không commit và đã ignore trong `frontend/.gitignore`. |
 
 ## Báo cáo bảo mật và đóng góp
 
@@ -96,11 +96,11 @@ model adapter at an external OpenAI-compatible endpoint is an operator choice, a
 excerpts would then cross that provider boundary. For regulated workloads review residency,
 retention, procurement, threat models, and legal basis.
 
-## Vendored and derived files
+## Generated build artifacts
 
 | File path | Upstream origin | License | Modification note |
 | --- | --- | --- | --- |
-| `frontend/public/pdf.worker.min.mjs` | Mozilla PDF.js v4.x | Apache-2.0 | Original banner preserved; vendored for client-side PDF document rendering. |
+| `frontend/public/pdf.worker.min.mjs` | `pdfjs-dist` 6.4.299 (Mozilla PDF.js) | Apache-2.0 | Generated at build time by `frontend/scripts/prepare-pdf-worker.mjs`; not committed and ignored by `frontend/.gitignore`. |
 
 ## Security reports and contributions
 

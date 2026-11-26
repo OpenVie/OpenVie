@@ -19,9 +19,9 @@ import com.openvie.api.common.event.AuditLogEvent;
 import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.integration.IntegrationCredentials;
+import com.openvie.api.integration.api.ApiKeyAuthenticator;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
-import com.openvie.api.tenant.service.TenantUserManagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,13 +43,12 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "API-KEY")
-public class ApiKeyService {
+public class ApiKeyService implements ApiKeyAuthenticator {
 
     private static final String KEY_PREFIX_MARKER = "ovk_";
     private static final String SERVICE_EMAIL_DOMAIN = "keys.openvie.invalid";
 
     private final ApiKeyRepository keyRepository;
-    private final TenantUserManagementService userManagementService;
     private final TenantIdentityApi identityApi;
     private final ApplicationEventPublisher eventPublisher;
     private final ApiKeyUsageStamper usageStamper;
@@ -61,7 +60,7 @@ public class ApiKeyService {
         }
         // Provisioning path owned by the org-account administration rules; it
         // validates that the workspace belongs to this same organization.
-        TenantIdentityApi.IdentitySnapshot serviceUser = userManagementService.provisionServiceAccount(
+        TenantIdentityApi.IdentitySnapshot serviceUser = identityApi.provisionServiceAccount(
                 orgId, creatorId, request.workspaceId(), request.role(), request.name().trim());
         ApiKey key = new ApiKey();
         key.setOrgId(orgId);
@@ -120,7 +119,7 @@ public class ApiKeyService {
                 .orElseThrow(() -> new ResourceNotFoundException("Api key not found"));
         if (!"REVOKED".equals(key.getStatus())) {
             key.setStatus("REVOKED");
-            userManagementService.deactivateServiceAccount(orgId, key.getUserId(), actorId);
+            identityApi.deactivateServiceAccount(orgId, key.getUserId(), actorId);
             eventPublisher.publishEvent(AuditLogEvent.builder(this)
                     .tenantId(key.getTenantId())
                     .userId(actorId)

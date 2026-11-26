@@ -16,14 +16,15 @@ có thể self-host toàn bộ backend rồi gọi thẳng API, hoặc dùng lu�
 
 - **Base URL:** đặt reverse proxy/APISIX trước `api/`; mọi route nghiệp vụ nằm dưới `/api/v1/`.
 - **Người dùng (trình duyệt):** `POST /api/v1/auth/login` (mật khẩu) hoặc Keycloak OIDC
-  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE) → trả access token JWT (Bearer) và refresh token.
+  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE kèm `clientId` của public client) → trả access token JWT (Bearer) và refresh token.
 - **Gọi server-to-server:** gửi `Authorization: Bearer <access_token>` và xoay vòng bằng
   `POST /api/v1/auth/refresh`. Refresh token được đọc theo thứ tự: cookie `refresh_token`,
-  header `X-Refresh-Token`, body `{"refresh_token": "..."}`; client không dùng cookie thì gửi qua header hoặc body.
+  header `X-Refresh-Token`, hoặc body `{"refreshToken": "..."}` (`refresh_token` vẫn được chấp nhận để tương thích);
+  client không dùng cookie thì gửi qua header hoặc body.
 - Không có header tenant: mỗi request, server suy ra workspace, người dùng và vai trò từ token và
   membership hiện có trong DB.
-- **Tích hợp trình duyệt và timeout:** CORS production mặc định để trống (`CORS_ORIGINS`) — hãy khai báo
-  origin của UI doanh nghiệp hoặc proxy same-origin qua APISIX. Chế độ chat JSON đồng bộ chờ tối đa
+- **Tích hợp trình duyệt và timeout:** mặc định production không cho phép origin nào (`CORS_ORIGINS` trống) —
+  hãy khai báo origin của UI doanh nghiệp hoặc proxy same-origin qua APISIX. Chế độ chat JSON đồng bộ chờ tối đa
   `app.ai.grpc.answer-deadline-seconds` (mặc định 100 s); đặt timeout client theo giá trị này, hoặc dùng SSE
   để nhận bản nháp sớm hơn.
 
@@ -45,14 +46,15 @@ curl -X POST "$BASE/api/v1/admin/api-keys" \
   khóa ngừng xác thực và tài khoản service bị tạm ngưng ngay.
 - Danh sách: `GET /api/v1/admin/api-keys` (luôn che secret, chỉ hiện `keyPrefix`).
 
-> Keycloak client-credentials là đường M2M thứ hai ở tầng IdP (confidential client `openvie-backend`);
-> đường này cấu hình trong Keycloak, không phải code riêng trong API.
+> Thông tin xác thực client-credentials của Keycloak không thể dùng trực tiếp với API OpenVie: realm export
+> đang tắt service account của `openvie-backend`, và API chỉ chấp nhận JWT nội bộ hoặc API key `ovk_`. Với M2M, hãy dùng API key.
 
 ### 3. Chat đồng bộ (server-to-server)
 
-Tạo phiên trước. Phiên thuộc **workspace đang active của token**: với JWT người dùng là workspace
-đang chọn (đổi qua `POST /api/v1/auth/workspaces/switch`); với API key là workspace gắn với key lúc tạo.
-`knowledge_base_id` là bắt buộc và phải là KB đang hoạt động của workspace đó:
+Tạo phiên trước. Phiên thuộc workspace đang được chọn trong token: với JWT người dùng, đó là workspace
+hiện tại (đổi qua `POST /api/v1/auth/workspaces/switch`); với API key, đó là workspace gắn với key lúc tạo.
+`knowledge_base_id` không bắt buộc; nếu bỏ trống, phiên sẽ dùng trợ lý và kho tri thức mặc định của workspace.
+Nếu có truyền, giá trị này phải trỏ tới một chatbot và kho tri thức đang hoạt động:
 
 ```bash
 curl -X POST "$BASE/api/v1/chat/sessions" \
@@ -106,8 +108,9 @@ const ok = Math.abs(Date.now() / 1000 - Number(t)) < 300
   && timingSafeEqual(Buffer.from(v1, "hex"), Buffer.from(expected, "hex"));
 ```
 
-- Giao nhận: outbox được ghi trong cùng transaction với thay đổi nghiệp vụ; dispatcher bất đồng bộ retry
-  có giới hạn (30 s → 32 phút, 5 lần) rồi chuyển sang `DEAD`. Xem log tại
+- Giao nhận: với `document.status.changed`, bản ghi outbox được tạo trong cùng transaction với thay đổi nghiệp vụ.
+  Với sự kiện workflow/BizApp, cầu nối tương ứng ghi outbox sau khi transaction nghiệp vụ được commit. Tiến trình
+  gửi bất đồng bộ sẽ thử tối đa 5 lần (30 s → 32 phút), sau đó chuyển bản ghi sang `DEAD`. Xem log tại
   `GET /api/v1/admin/webhook-endpoints/{id}/deliveries`; gửi thử bằng `POST …/{id}/test`.
 - `DELETE` endpoint ngừng giao ngay (các hàng outbox của nó bị xóa theo cascade).
 
@@ -142,7 +145,8 @@ bỏ qua nhật ký của quy trình tài liệu.
 
 - Cấu hình, secret và profile production: xem [DEPLOYMENT.md](DEPLOYMENT.md); production tắt Swagger UI
   (`/v3/api-docs` → 404) — dùng spec ở dev/test để sinh SDK.
-- gRPC AI (`:50051`) chỉ dùng nội bộ (mTLS); ứng dụng client chỉ nên gọi HTTP `/api/v1/**`.
+- gRPC AI (`:50051`) chỉ dùng nội bộ; production bắt buộc mTLS, còn dev mặc định dùng plaintext. Ứng dụng tích hợp
+  chỉ nên gọi HTTP `/api/v1/**`.
 
 ### 8. Bộ sưu tập Postman mẫu
 
@@ -176,10 +180,10 @@ Phiên bản `v1.0.0` bổ sung các endpoint tương tác ứng dụng và mở
 
 | Phương thức | Đường dẫn | Quyền hạn | Mô tả |
 |---|---|---|---|
-| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Thực thi thẻ hành động (`install`/`uninstall`) do chat đề xuất. Tham số đọc từ DB theo `messageId` + `actionId`; chống replay. |
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` (install/uninstall) | Thực thi thẻ hành động (`install`/`uninstall`) do chat đề xuất. Hệ thống kiểm tra lại tham số trong DB theo `messageId` và `actionId` để chống replay. Các thao tác record tuân theo RBAC của manifest. |
 | `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Soạn bản thảo ứng dụng `bizapp.v1` từ ngữ cảnh hội thoại của `sessionId`. Không tự cài đặt. |
 | `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Dữ liệu tất định tóm tắt các ứng dụng đã cài cho UI và báo cáo (không dùng làm prompt RAG). |
-| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Liệt kê tài liệu; `include_system` mặc định `false` để ẩn tài liệu hệ thống; `true` chỉ dành cho `ORG_OWNER`. |
+| `GET` | `/api/v1/documents?knowledgeBaseId=<kb-uuid>&include_system=false` | `MEMBER+` | Liệt kê tài liệu trong một kho tri thức; `knowledgeBaseId` là bắt buộc. `include_system` mặc định là `false` để ẩn tài liệu hệ thống; chỉ `ORG_OWNER` được đặt `true`. |
 
 **Wire protocol gRPC:**
 - `GenerateAnswerRequest` thêm field `repeated string excluded_document_kinds = 15;`. Danh sách rỗng giữ nguyên 100% hành vi hiện tại; khi truyền `["BIZAPP_RECORD", "BIZAPP_DIGEST"]`, hệ thống loại tài liệu hệ thống khỏi mọi kênh truy hồi.
@@ -197,17 +201,17 @@ directly — or reuse the reference app as-is.
 
 - **Base URL:** put a reverse proxy/APISIX in front of `api/`; business routes live under `/api/v1/`.
 - **Human (browser):** `POST /api/v1/auth/login` (password) or Keycloak OIDC
-  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE) → JWT access token (Bearer) + refresh token.
+  (`/api/v1/auth/sso/exchange`, Authorization Code + PKCE with `clientId`) → JWT access token (Bearer) + refresh token.
 - **Server-to-server:** send `Authorization: Bearer <access_token>` and rotate with
   `POST /api/v1/auth/refresh`. The refresh token is read from the `refresh_token` cookie, the
-  `X-Refresh-Token` header, or a `{"refresh_token": "..."}` body — in that order — so a cookie-less
-  client uses the header or body form.
+  `X-Refresh-Token` header, or a `{"refreshToken": "..."}` body (`refresh_token` is accepted as a legacy
+  alias) — in that order — so a cookie-less client uses the header or body form.
 - There is no tenant header: workspace, user, and role are derived server-side from the token and the
   live membership on **every** request.
-- **Browser integrations and timeouts:** production CORS is empty by default (`CORS_ORIGINS`) — declare
-  the custom UI's origin or proxy same-origin through APISIX. The synchronous JSON chat mode waits up to
-  `app.ai.grpc.answer-deadline-seconds` (default 100 s); size the client timeout to it, or use SSE to
-  receive drafts earlier.
+- **Browser integrations and timeouts:** production CORS allows no browser origin by default (empty
+  `CORS_ORIGINS`) — declare the custom UI's origin or proxy same-origin through APISIX. The synchronous
+  JSON chat mode waits up to `app.ai.grpc.answer-deadline-seconds` (default 100 s); size the client timeout
+  to it, or use SSE to receive drafts earlier.
 
 ### 2. API keys (machine-to-machine)
 
@@ -228,15 +232,15 @@ curl -X POST "$BASE/api/v1/admin/api-keys" \
   the key stops authenticating and its service account is suspended immediately.
 - List with `GET /api/v1/admin/api-keys` (secrets are always masked; only `keyPrefix` is shown).
 
-> Keycloak client-credentials is the second M2M path at the IdP tier (confidential client
-> `openvie-backend`); it is Keycloak configuration, not a separate API code path.
+> Keycloak client-credentials is not an OpenVie API credential: the realm export leaves service accounts
+> disabled for `openvie-backend`, and the API accepts only internal JWTs or `ovk_` API keys. Use an API key for M2M.
 
 ### 3. Synchronous chat (server-to-server)
 
 Create a session first. The session belongs to the **token's active workspace**: for a user JWT that is
 the selected workspace (switch via `POST /api/v1/auth/workspaces/switch`); for an API key it is the
-workspace bound to the key at creation time. `knowledge_base_id` is required and must be an active
-knowledge base in that workspace:
+workspace bound to the key at creation time. `knowledge_base_id` is optional; when omitted, the session
+uses the workspace's default assistant/KB. When supplied, it must resolve to an active chatbot/KB:
 
 ```bash
 curl -X POST "$BASE/api/v1/chat/sessions" \
@@ -292,8 +296,9 @@ const ok = Math.abs(Date.now() / 1000 - Number(t)) < 300
   && timingSafeEqual(Buffer.from(v1, "hex"), Buffer.from(expected, "hex"));
 ```
 
-- Delivery: the outbox row is written in the same transaction as the domain change; an asynchronous
-  dispatcher retries with bounded backoff (30 s → 32 m, 5 attempts) and then moves the row to `DEAD`.
+- Delivery: for `document.status.changed`, the outbox row is written in the same transaction as the domain
+  change; workflow/BizApp events are journaled after commit by their bridges. An asynchronous dispatcher
+  retries with bounded backoff (30 s → 32 m, 5 attempts) and then moves the row to `DEAD`.
   Inspect with `GET /api/v1/admin/webhook-endpoints/{id}/deliveries`; send a test with
   `POST …/{id}/test`.
 - `DELETE` on an endpoint stops delivery immediately (its outbox rows are discarded by cascade).
@@ -330,7 +335,8 @@ integrator cannot bypass the document journal.
 
 - Configuration, secrets, and the prod profile: see [DEPLOYMENT.md](DEPLOYMENT.md); production disables
   Swagger UI (`/v3/api-docs` → 404) — use the dev/test spec to generate SDKs.
-- AI gRPC (`:50051`) is an internal surface (mTLS); client applications should call HTTP `/api/v1/**`.
+- AI gRPC (`:50051`) is an internal surface; production uses mTLS, dev defaults to plaintext. Client
+  applications should call HTTP `/api/v1/**`.
 
 ### 8. Postman Collection
 
@@ -361,10 +367,10 @@ Version `v1.0.0` introduces conversational app endpoints and additive proto fiel
 
 | Method | Path | Required Role | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` | Executes interactive install/uninstall action cards proposed in chat. Authoritative DB lookup; replay-safe. |
+| `POST` | `/api/v1/chat/actions/execute` | `ORG_OWNER` (install/uninstall) | Executes interactive install/uninstall action cards proposed in chat. Authoritative DB lookup; replay-safe. Record actions follow manifest RBAC. |
 | `POST` | `/api/v1/bizapps/drafts/from-chat` | `ORG_OWNER` | Drafts a new `bizapp.v1` application manifest from recent session turns. Never auto-installed. |
 | `GET` | `/api/v1/bizapps/installed-summary` | `MEMBER+` | Deterministic installed app summary for UI/metrics (never injected into raw RAG prompts). |
-| `GET` | `/api/v1/documents?include_system=false` | `MEMBER+` | Lists documents; `include_system` defaults to `false` (hiding system docs); `true` is owner-only. |
+| `GET` | `/api/v1/documents?knowledgeBaseId=<kb-uuid>&include_system=false` | `MEMBER+` | Lists documents in one KB; `knowledgeBaseId` is required. `include_system` defaults to `false` (hiding system docs); `true` is owner-only. |
 
 **gRPC Wire Protocol:**
 - `GenerateAnswerRequest` adds field: `repeated string excluded_document_kinds = 15;`. An empty list preserves 100% byte-neutral behavior; passing `["BIZAPP_RECORD", "BIZAPP_DIGEST"]` ensures system documents never contaminate document answers.

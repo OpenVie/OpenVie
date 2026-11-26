@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import tools.jackson.databind.json.JsonMapper;
+
 import com.openvie.api.auth.dto.response.AuthResponse;
 import com.openvie.api.auth.service.AuthService;
 import com.openvie.api.tenant.api.TenantIdentityApi;
@@ -67,6 +69,14 @@ class AuthControllerTest {
 
         assertEquals(authResponse, result.getBody());
         verify(authService).switchWorkspace(workspaceId, "cookie-token", userId, response);
+    }
+
+    @Test
+    void refreshBodyAcceptsLegacySnakeCaseAlias() throws Exception {
+        AuthController.RefreshRequest body = JsonMapper.builder().build().readValue(
+                "{\"refresh_token\":\"refresh-1\"}", AuthController.RefreshRequest.class);
+
+        assertEquals("refresh-1", body.refreshToken());
     }
 
     @Test

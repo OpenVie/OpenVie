@@ -387,6 +387,8 @@ tự tăng, giữ bản ghi) thay vì báo "already installed". Thẻ app đã c
 - **KB đích:** mặc định là KB riêng `bizapp-<kind>` (tự tạo). Chat chỉ truy hồi KB gắn với chatbot của phiên —
   tức **KB mặc định của workspace**. Muốn app đưa dữ liệu vào KB chat, đặt `config.knowledgeBaseId` (PATCH
   `/bizapps/{kind}/config`, chỉ `ORG_OWNER`) rồi **cập nhật một bản ghi** để đồng bộ lại.
+- **Lọc tài liệu hệ thống:** `document_kind` được đẩy vào Qdrant payload/index; chat thường mặc định loại
+  `BIZAPP_RECORD`/`BIZAPP_DIGEST`, còn chat theo app có thể truy hồi record nếu được cấu hình.
 - **Trợ lý trong app (tab `assistant:`):** tạo chat session workspace bình thường; `instructions`
   hiển thị như tiêu đề phụ; router suy ra app từ nội dung (không tự giới hạn theo app).
 - **Cách chạy:** thật, không Text-to-SQL. Số liệu tổng hợp cần **chính xác tuyệt đối** phải lấy từ report view
@@ -397,18 +399,28 @@ tự tăng, giữ bản ghi) thay vì báo "already installed". Thẻ app đã c
 1. Truy hồi là top-K chunk nên không phủ hết bản ghi; digest chỉ là bản sao văn bản của view đã khai báo.
 2. Ghi qua **connector** (sink record/field) không phát sự kiện vòng đời → việc đồng bộ/digest có thể chậm sau khi
    connector ghi; PATCH bản ghi qua API luôn làm mới.
-3. `document_kind` chưa được đẩy vào vector index (lệnh nạp tài liệu bỏ qua) → lọc theo loại tài liệu
-   hiện không phân biệt được tài liệu BizApp; chat workspace có thể trích dẫn hoặc trả lời dựa trên tài liệu đã đồng bộ.
-4. Chat của app chưa tự giới hạn theo app; câu hỏi không nhắc tên app có thể bị trộn tài liệu của app khác.
+3. Chat của app chưa tự giới hạn theo app; câu hỏi không nhắc tên app có thể bị trộn tài liệu của app khác.
+
+**Cách ly theo workspace:** nếu cần tách dữ liệu giữa các app, tạo workspace riêng, chỉ cài một app,
+bật `knowledge.project` cho entity cần đồng bộ (và `rbac.read` chứa đủ ba vai trò), trỏ
+`config.knowledgeBaseId` về KB mặc định của workspace đó,
+rồi tạo API key gắn với workspace đó (`POST /api/v1/admin/api-keys`). Chat và API key chỉ thấy KB của
+workspace; đây là cách ly theo tenant/workspace, không phải app-scope — mọi tài liệu trong KB đó vẫn có
+thể được truy hồi.
 
 ### 8. Danh sách API
+
+Mọi đường dẫn dưới đây đều có tiền tố `/api/v1`.
 
 | Method & đường dẫn | Quyền | Mô tả |
 | --- | --- | --- |
 | `GET /bizapps`, `GET /bizapps/{kind}` | mọi thành viên | app đã cài và manifest đã chốt |
-| `GET /bizapps/installed-summary`, `/installed-anywhere` | mọi thành viên | danh sách app cho chat/catalog |
-| `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | phân trang bản ghi (`page/size≤100/includeArchived`) |
-| `POST|PATCH|DELETE /bizapp-data/{kind}/{entity}[/{id}]` | `write`/`delete` | tạo/sửa/lưu trữ |
+| `GET /bizapps/installed-summary`, `GET /bizapps/installed-anywhere` | mọi thành viên | bản tóm tắt cho chat/catalog; cờ cho biết app đã cài ở bất kỳ workspace nào |
+| `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | phân trang bản ghi (`page`, `size≤100`, `includeArchived`) |
+| `POST /bizapp-data/{kind}/{entity}` | `write` | tạo bản ghi |
+| `GET /bizapp-data/{kind}/{entity}/{recordId}` | `rbac.read` | xem một bản ghi |
+| `PATCH /bizapp-data/{kind}/{entity}/{recordId}` | `write` | sửa bản ghi |
+| `DELETE /bizapp-data/{kind}/{entity}/{recordId}` | `delete` | lưu trữ bản ghi |
 | `POST …/{recordId}/restore` | `delete` | khôi phục bản ghi đã lưu trữ |
 | `POST …/{recordId}/submit` | `submit` | bắt đầu quy trình phê duyệt |
 | `POST /bizapps/{kind}/reports/{view}` | workspace admin | chạy view (body `{"params": {...}}`) |
@@ -416,13 +428,14 @@ tự tăng, giữ bản ghi) thay vì báo "already installed". Thẻ app đã c
 | `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX bản ghi (`ACTIVE`; `includeArchived=true` để gồm cả lưu trữ, tối đa 10 000) |
 | `PATCH /bizapps/{kind}/config` | ORG_OWNER | thay `config` (ví dụ `allowedHosts`, `knowledgeBaseId`) |
 | `POST /bizapps/validate` | ORG_OWNER | kiểm tra hợp lệ mà không lưu |
-| `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | soạn bằng AI hoặc từ chat (≤20 lượt gần nhất) |
-| `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | tạo/đọc/sửa/xóa bản thảo |
-| `GET /marketplace/bizapps[/{templateRef}]` | mọi thành viên | catalog (built-in + company) |
+| `POST /bizapps/drafts/generate`, `POST /bizapps/drafts/from-chat` | ORG_OWNER | soạn bằng AI hoặc từ chat (≤20 lượt gần nhất) |
+| `GET /bizapps/drafts`, `GET/PUT/DELETE /bizapps/drafts/{id}`, `PUT /bizapps/drafts/new` | ORG_OWNER | đọc/tạo/sửa/xóa bản thảo |
+| `GET /marketplace/bizapps`, `GET /marketplace/bizapps/{templateRef}` | mọi thành viên | catalog (built-in + company) |
 | `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | cài / nâng cấp / gỡ mềm |
-| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | lưu/xóa template của công ty |
-| `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (xem thì vai trò nào cũng được) | trao đổi template |
-| `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | kho credential |
+| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{templateId}` | ORG_OWNER | lưu/xóa template của công ty |
+| `GET /marketplace/bizapps/{templateRef}/export`, `GET /marketplace/catalog` | mọi thành viên | xem/xuất template và catalog |
+| `POST /marketplace/bizapps/import`, `POST /marketplace/bizapps/{templateRef}/remix` | ORG_OWNER | nhập/remix template |
+| `GET/POST /bizapp-credentials`, `DELETE /bizapp-credentials/{credentialId}` | ORG_OWNER | kho credential |
 
 `templateRef`: `platform:<kind>` cho template tích hợp sẵn (crm/booking/signature-request), hoặc
 UUID cho template của công ty.
@@ -872,6 +885,9 @@ using the frozen manifest.
 - **Target KB:** the default is a dedicated `bizapp-<kind>` KB, but chat retrieves only the session chatbot's
   KB (normally the workspace default). Point the installation `config.knowledgeBaseId` at the workspace
   default (`PATCH /bizapps/{kind}/config`) and touch a record to re-project.
+- **System-document filtering:** `document_kind` is carried into the Qdrant payload/index; normal chat
+  excludes `BIZAPP_RECORD`/`BIZAPP_DIGEST` by default, while app-scoped chat can retrieve records when
+  configured.
 - **Assistant tab (`assistant:`):** opens a normal workspace chat session; the block's `instructions` show as
   guidance. App scoping depends on the router resolving the app from the message content.
 - **Grounding reality:** aggregate answers that must be exact should come from report views (report tab or
@@ -882,19 +898,28 @@ Known limitations of the current build:
 1. Retrieval is top-K; coverage is not guaranteed; the digest is a text copy of declared views.
 2. Writes made through **connectors** do not emit lifecycle events, so the digest/projection can lag until a
    record is updated through the record API.
-3. `document_kind` is not yet carried into the vector index, so the kind-based exclusion filters cannot
-   distinguish BizApp documents; the workspace chat can surface projected docs.
-4. The app assistant tab is not automatically scoped to its app; questions that do not name the app can mix
+3. The app assistant tab is not automatically scoped to its app; questions that do not name the app can mix
    documents from other apps.
 
+**Workspace-level isolation:** to keep apps from sharing data, create a dedicated workspace, install only one
+app, enable `knowledge.project` on the entities to sync (with `rbac.read` covering all three roles), point
+`config.knowledgeBaseId` at that workspace's default KB, and create an API key bound to that workspace
+(`POST /api/v1/admin/api-keys`). Chat and API-key traffic then see only that workspace's KB; this is
+tenant/workspace isolation, not app scoping — every document in that KB remains retrievable.
+
 ### 8. API surface
+
+All paths below are relative to `/api/v1`.
 
 | Method & path | Permission | Description |
 | --- | --- | --- |
 | `GET /bizapps`, `GET /bizapps/{kind}` | members | installed apps + frozen manifest |
-| `GET /bizapps/installed-summary`, `/installed-anywhere` | members | chat/catalog summaries |
+| `GET /bizapps/installed-summary`, `GET /bizapps/installed-anywhere` | members | chat/catalog summary; whether any workspace has an app installed |
 | `GET /bizapp-data/{kind}/{entity}` | `rbac.read` | paged records (`page`, `size≤100`, `includeArchived`) |
-| `POST|PATCH|DELETE /bizapp-data/{kind}/{entity}[/{id}]` | `write`/`delete` | create/patch/archive |
+| `POST /bizapp-data/{kind}/{entity}` | `write` | create a record |
+| `GET /bizapp-data/{kind}/{entity}/{recordId}` | `rbac.read` | read one record |
+| `PATCH /bizapp-data/{kind}/{entity}/{recordId}` | `write` | patch a record |
+| `DELETE /bizapp-data/{kind}/{entity}/{recordId}` | `delete` | archive a record |
 | `POST …/{recordId}/restore` | `delete` | restore an archived record |
 | `POST …/{recordId}/submit` | `submit` | start approval |
 | `POST /bizapps/{kind}/reports/{view}` | workspace admin | run the view (body `{"params": {…}}`) |
@@ -902,13 +927,14 @@ Known limitations of the current build:
 | `GET /bizapps/{kind}/entities/{entity}/export` | `rbac.read` | CSV/XLSX records (ACTIVE; `includeArchived=true` adds archived rows, 10 000 cap) |
 | `PATCH /bizapps/{kind}/config` | ORG_OWNER | replace install config (`allowedHosts`, `knowledgeBaseId`, …) |
 | `POST /bizapps/validate` | ORG_OWNER | stateless manifest validation |
-| `POST /bizapps/drafts/generate`, `/drafts/from-chat` | ORG_OWNER | AI drafting / draft from last 20 chat turns |
-| `GET/PUT/DELETE /bizapps/drafts[/new|/{id}]` | ORG_OWNER | draft CRUD |
-| `GET /marketplace/bizapps[/{templateRef}]` | members | built-in + company catalog |
+| `POST /bizapps/drafts/generate`, `POST /bizapps/drafts/from-chat` | ORG_OWNER | AI drafting / draft from last 20 chat turns |
+| `GET /bizapps/drafts`, `GET/PUT/DELETE /bizapps/drafts/{id}`, `PUT /bizapps/drafts/new` | ORG_OWNER | draft CRUD |
+| `GET /marketplace/bizapps`, `GET /marketplace/bizapps/{templateRef}` | members | built-in + company catalog |
 | `POST /apps/install`, `POST /apps/{kind}/upgrade`, `DELETE /apps/{kind}` | ORG_OWNER | install / upgrade / soft uninstall |
-| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{id}` | ORG_OWNER | save / delete company template |
-| `GET /marketplace/bizapps/{ref}/export`, `POST /marketplace/bizapps/import`, `POST …/{ref}/remix`, `GET /marketplace/catalog` | ORG_OWNER (browsing open) | template exchange |
-| `GET/POST/DELETE /bizapp-credentials` | ORG_OWNER | credential vault |
+| `POST /marketplace/bizapps`, `DELETE /marketplace/bizapps/{templateId}` | ORG_OWNER | save / delete company template |
+| `GET /marketplace/bizapps/{templateRef}/export`, `GET /marketplace/catalog` | members | read/export templates and catalog |
+| `POST /marketplace/bizapps/import`, `POST /marketplace/bizapps/{templateRef}/remix` | ORG_OWNER | import/remix templates |
+| `GET/POST /bizapp-credentials`, `DELETE /bizapp-credentials/{credentialId}` | ORG_OWNER | credential vault |
 
 `templateRef` is `platform:<kind>` (crm, booking, signature-request) or a company template UUID.
 

@@ -146,11 +146,10 @@ Giao diện quản trị (`/admin/*`: organization, workspaces, settings; yêu c
 một instance cho mỗi thư mục (lockfile `.next/dev`), nên không thể chạy song song
 `:3000` và `:3001` từ cùng source.
 
-Muốn kiểm thử đúng OIDC client `openvie-admin` trên dev server duy nhất, hãy restart
-với env khác (rồi đổi lại khi xong):
-```bash
-NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run dev
-```
+Muốn kiểm thử OIDC client `openvie-admin`, dùng production build ở `:3001` (lệnh bên dưới).
+Client này không có redirect URI `:3000` trong realm; nếu muốn dùng `:3000`, phải thêm
+`http://localhost:3000/*` vào client admin trong realm và cập nhật thủ công realm đã import.
+
 Việc tách `:3001` và client riêng chỉ có hiệu lực ở production
 (service `frontend-admin` trong compose) và qua gateway `:8088/admin/*`.
 Ở APISIX dev (`:8088`), route `edge-admin-web` trỏ tới `:3001` — muốn thử
@@ -507,11 +506,10 @@ requiring `ORG_OWNER`) runs on the same `:3000` dev server — e.g.
 instance per directory (`.next/dev` lockfile), so `:3000` + `:3001` cannot run
 in parallel from one source tree.
 
-To test the `openvie-admin` OIDC client on the single dev server, restart with
-a different env (and switch back afterwards):
-```bash
-NEXT_PUBLIC_OIDC_CLIENT_ID=openvie-admin npm --prefix frontend run dev
-```
+To test the `openvie-admin` OIDC client, use the production build on `:3001` (commands
+below). This client has no `:3000` redirect URI in the realm; to use `:3000`, add
+`http://localhost:3000/*` to the admin client and update the already-imported realm manually.
+
 The `:3001` separation only takes effect in production (the `frontend-admin`
 service in compose) and through the `:8088/admin/*` gateway route. To test the
 gateway locally, serve the admin surface from a production build:

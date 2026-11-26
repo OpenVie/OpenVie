@@ -24,8 +24,12 @@ public interface SsoTokenClient {
      * Exchanges the authorization code and validates the returned ID token
      * (issuer, expiry, JWKS signature).
      *
+     * @param clientId public OIDC client that received the code; may be
+     *                 {@code null} to use the configured frontend client
+     * @throws com.openvie.api.common.exception.custom.BadRequestException
+     *             when {@code clientId} is not one of the configured public clients
      * @throws com.openvie.api.common.exception.custom.UnauthorizedException
      *             when the provider is unreachable or the token is invalid
      */
-    SsoIdentity exchange(String code, String codeVerifier, String redirectUri);
+    SsoIdentity exchange(String code, String codeVerifier, String redirectUri, String clientId);
 }

@@ -113,7 +113,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("SSO is not enabled");
         }
         SsoIdentity sso = ssoTokenClient.exchange(
-                request.getCode(), request.getCodeVerifier(), request.getRedirectUri());
+                request.getCode(), request.getCodeVerifier(), request.getRedirectUri(), request.getClientId());
         requireKnownRealmRole(sso.realmRoles());
         UUID orgId = identityApi.findOrgIdByEmail(sso.email())
                 .orElseThrow(() -> new ResourceNotFoundException(

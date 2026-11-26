@@ -30,7 +30,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.openvie.api.auth.service.JwtService;
 import com.openvie.api.common.security.AppUserDetailsService;
-import com.openvie.api.integration.apikey.ApiKeyService;
+import com.openvie.api.integration.api.ApiKeyAuthenticator;
 import com.openvie.api.tenant.api.TenantIdentityApi;
 import com.openvie.api.tenant.api.TenantIdentityApi.MembershipSnapshot;
 import com.openvie.api.tenant.api.WorkspaceRole;
@@ -67,7 +67,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
   private final JwtService jwtService;
   private final AppUserDetailsService userDetailsService;
   private final TenantIdentityApi identityApi;
-  private final ApiKeyService apiKeyService;
+  private final ApiKeyAuthenticator apiKeyService;
 
   @Override
   protected void doFilterInternal(

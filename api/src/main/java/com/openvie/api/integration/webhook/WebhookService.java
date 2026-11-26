@@ -20,7 +20,7 @@ import com.openvie.api.common.exception.custom.BadRequestException;
 import com.openvie.api.common.exception.custom.ConflictException;
 import com.openvie.api.common.exception.custom.ResourceNotFoundException;
 import com.openvie.api.integration.IntegrationCredentials;
-import com.openvie.api.notification.service.CredentialCipher;
+import com.openvie.api.common.security.CredentialCipherApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,7 +43,7 @@ public class WebhookService {
 
     private final WebhookEndpointRepository endpointRepository;
     private final WebhookDeliveryRepository deliveryRepository;
-    private final CredentialCipher cipher;
+    private final CredentialCipherApi cipher;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional

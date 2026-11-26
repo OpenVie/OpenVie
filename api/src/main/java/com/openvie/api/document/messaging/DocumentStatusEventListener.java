@@ -19,7 +19,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import com.openvie.api.document.service.DocumentService;
-import com.openvie.api.integration.webhook.WebhookEventPublisher;
+import com.openvie.api.integration.api.WebhookPublisherApi;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.extern.slf4j.Slf4j;
@@ -36,14 +36,14 @@ public class DocumentStatusEventListener {
     private final ObjectMapper objectMapper;
     private final DocumentService documentService;
     private final InternalEventInboxRepository inboxRepository;
-    private final WebhookEventPublisher webhookEventPublisher;
+    private final WebhookPublisherApi webhookEventPublisher;
 
     @Autowired
     public DocumentStatusEventListener(
             ObjectMapper objectMapper,
             DocumentService documentService,
             InternalEventInboxRepository inboxRepository,
-            WebhookEventPublisher webhookEventPublisher
+            WebhookPublisherApi webhookEventPublisher
     ) {
         this.objectMapper = objectMapper;
         this.documentService = documentService;

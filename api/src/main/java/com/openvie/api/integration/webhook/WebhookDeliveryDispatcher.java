@@ -14,7 +14,7 @@
 
 package com.openvie.api.integration.webhook;
 
-import com.openvie.api.notification.service.CredentialCipher;
+import com.openvie.api.common.security.CredentialCipherApi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,7 +51,7 @@ public class WebhookDeliveryDispatcher {
     private final WebhookDeliveryRepository deliveryRepository;
     private final WebhookEndpointRepository endpointRepository;
     private final WebhookEventPublisher eventPublisher;
-    private final CredentialCipher cipher;
+    private final CredentialCipherApi cipher;
     private final PlatformTransactionManager transactionManager;
 
     @Value("${app.webhooks.enabled:true}")

@@ -34,6 +34,7 @@ class TableOwnershipTest {
         own(owners, "chat", "chat_sessions", "chat_messages", "chat_turns");
         own(owners, "common", "audit_logs", "module_event_outbox", "module_event_inbox");
         own(owners, "document", "documents", "internal_event_outbox", "internal_event_inbox");
+        own(owners, "integration", "api_keys", "webhook_endpoints", "webhook_deliveries");
         own(owners, "notification", "notifications", "notification_channels");
         own(owners, "tenant", "organizations", "tenants", "users", "workspace_members",
                 "invitations", "knowledge_bases", "chatbots");

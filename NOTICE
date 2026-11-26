@@ -15,6 +15,9 @@ their terms before redistributing them. Components with noteworthy conditions:
 - pypdfium2 (Apache-2.0 OR BSD-3-Clause) bundles Google PDFium.
 - The optional document OCR path invokes Tesseract OCR with vie/eng
   traineddata (Apache-2.0); it is disabled by default.
+- The optional ASR/video path uses ffmpeg from the image's distribution
+  (LGPL/GPL depending on the build) and PyAV (BSD-3-Clause); it is disabled
+  by default.
 - fastembed (Apache-2.0) embeds ONNX Runtime (MIT) and is used with the
   MIT-licensed bge-m3 embedding weights.
 - Qdrant (Apache-2.0) serves dense, sparse (bm25), and hybrid retrieval.

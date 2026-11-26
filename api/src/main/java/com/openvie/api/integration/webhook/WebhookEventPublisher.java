@@ -14,9 +14,9 @@
 
 package com.openvie.api.integration.webhook;
 
-import com.openvie.api.integration.IntegrationCredentials;
-import com.openvie.api.tenant.model.Tenant;
-import com.openvie.api.tenant.repository.TenantRepository;
+import com.openvie.api.integration.api.IntegrationSignature;
+import com.openvie.api.integration.api.WebhookPublisherApi;
+import com.openvie.api.tenant.api.TenantWorkspaceApi;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,11 +39,11 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j(topic = "WEBHOOK-EVENT")
-public class WebhookEventPublisher {
+public class WebhookEventPublisher implements WebhookPublisherApi {
 
     private final WebhookEndpointRepository endpointRepository;
     private final WebhookDeliveryRepository deliveryRepository;
-    private final TenantRepository workspaceRepository;
+    private final TenantWorkspaceApi workspaceApi;
     private final ObjectMapper objectMapper;
 
     /**
@@ -61,10 +61,8 @@ public class WebhookEventPublisher {
     }
 
     private void publishStrict(UUID workspaceId, String eventType, UUID sourceEventId, Map<String, Object> data) {
-        UUID orgId = workspaceId == null ? null : workspaceRepository.findById(workspaceId)
-                .map(Tenant::getOrganization)
-                .map(org -> org.getId())
-                .orElse(null);
+        UUID orgId = workspaceId == null ? null
+                : workspaceApi.findOrgIdByWorkspaceId(workspaceId).orElse(null);
         if (orgId == null) {
             return;
         }
@@ -116,6 +114,6 @@ public class WebhookEventPublisher {
 
     /** Signature header value: `t=<unix seconds>,v1=<hex hmac>.` */
     public static String signatureHeader(String secret, String unixTimestamp, String body) {
-        return "t=" + unixTimestamp + ",v1=" + IntegrationCredentials.hmacSha256Hex(secret, unixTimestamp + "." + body);
+        return IntegrationSignature.signatureHeader(secret, unixTimestamp, body);
     }
 }

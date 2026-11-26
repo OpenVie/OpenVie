@@ -125,6 +125,7 @@ sso:
   enabled: ${SSO_ENABLED:false}
   issuer-uri: ${SSO_ISSUER_URI:http://localhost:18080/realms/openvie}
   frontend-client-id: ${SSO_FRONTEND_CLIENT_ID:openvie-frontend}
+  admin-frontend-client-id: ${SSO_ADMIN_CLIENT_ID:openvie-admin}
   backend-client-id: ${SSO_BACKEND_CLIENT_ID:openvie-backend}
   backend-client-secret: ${SSO_BACKEND_CLIENT_SECRET:}
 jwt:

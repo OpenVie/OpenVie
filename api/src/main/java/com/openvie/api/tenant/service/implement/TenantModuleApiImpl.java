@@ -180,6 +180,20 @@ public class TenantModuleApiImpl implements TenantIdentityApi {
         return userManagementService.linkSsoIdentity(orgId, keycloakSubject, email, emailVerified);
     }
 
+    @Override
+    @Transactional
+    public IdentitySnapshot provisionServiceAccount(
+            UUID orgId, UUID creatorId, UUID workspaceId, String workspaceRole, String displayName) {
+        return userManagementService.provisionServiceAccount(
+                orgId, creatorId, workspaceId, workspaceRole, displayName);
+    }
+
+    @Override
+    @Transactional
+    public void deactivateServiceAccount(UUID orgId, UUID serviceUserId, UUID actorId) {
+        userManagementService.deactivateServiceAccount(orgId, serviceUserId, actorId);
+    }
+
     private IdentitySnapshot identity(User user) {
         return new IdentitySnapshot(
                 user.getId(),

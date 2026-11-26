@@ -38,4 +38,8 @@ public class SsoExchangeRequest {
 
     @NotBlank(message = "Redirect URI must not be blank")
     private String redirectUri;
+
+    @Schema(description = "Public OIDC client that received the code. Optional: when omitted, the configured "
+            + "frontend client is used. The backend only accepts the configured frontend or admin client id.")
+    private String clientId;
 }

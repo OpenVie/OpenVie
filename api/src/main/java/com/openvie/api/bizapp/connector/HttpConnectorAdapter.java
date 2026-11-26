@@ -16,7 +16,7 @@ package com.openvie.api.bizapp.connector;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openvie.api.common.net.SafeOutboundHttp;
-import com.openvie.api.integration.webhook.WebhookEventPublisher;
+import com.openvie.api.integration.api.IntegrationSignature;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -110,7 +110,7 @@ public class HttpConnectorAdapter implements ConnectorAdapter {
                 String timestamp = String.valueOf(java.time.Instant.now().getEpochSecond());
                 headers.put(auth.timestampHeader(), timestamp);
                 headers.put(auth.header(),
-                        WebhookEventPublisher.signatureHeader(resolved.plaintext(), timestamp, body));
+                        IntegrationSignature.signatureHeader(resolved.plaintext(), timestamp, body));
             }
             case "oauth2" -> {
                 ConnectorCredentials.Resolved resolved = credentials.resolve(

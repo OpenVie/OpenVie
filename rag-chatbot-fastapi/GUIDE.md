@@ -8,7 +8,7 @@
 
 Tài liệu này giải thích cấu trúc dịch vụ Python AI trong `app` và quy tắc phát triển tính năng mới mà không làm vỡ ranh giới module.
 
-Dịch vụ là một **Modular Monolith**: một cây mã nguồn chứa sáu module cho sáu tính năng khác nhau, được kết hợp thành ba vai trò runtime. Ranh giới module được kiểm tra tự động qua bộ test kiến trúc trên mỗi lượt test.
+Dịch vụ là một **Modular Monolith**: một cây mã nguồn chứa bảy module cho bảy tính năng khác nhau, được kết hợp thành ba vai trò runtime. Ranh giới module được kiểm tra tự động qua bộ test kiến trúc trên mỗi lượt test.
 
 ### Bốn nguyên tắc bất khả xâm phạm
 
@@ -26,6 +26,7 @@ ingestion  -> index.api, graph.api, model.api, common.storage
 index      -> common
 graph      -> common
 model      -> common
+lakehouse  -> common
 bootstrap  -> tất cả các module (chỉ wiring)
 maintenance-> module API và common
 ```
@@ -40,6 +41,7 @@ maintenance-> module API và common
 | `index` | Thay thế/xóa chỉ mục, tìm kiếm dense/sparse, tra cứu dòng bảng | `KnowledgeIndexCommandApi`, `KnowledgeIndexQueryApi` | Collection Qdrant `knowledge_units_v2` |
 | `graph` | Quản lý đồ thị tri thức, duyệt đường đi quan hệ | `GraphProjectionApi`, `GraphQueryApi` | Cơ sở dữ liệu Kuzu, HTTP graph-service |
 | `model` | Adapter mô hình ngôn ngữ (Ollama), embedding dense/sparse | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
+| `lakehouse` | DuckDB/Parquet analytics, CDC ingest, quality/lineage | HTTP transport + `Lakehouse*` models | Parquet trên SeaweedFS/S3, DuckDB |
 
 ### Quy trình hấp thụ tài liệu bền vững
 
@@ -79,7 +81,7 @@ make -C rag-chatbot-fastapi check PYTHON=python3.11
 
 This guide covers how the Python AI service in `app` is organized and how to add capabilities without breaking module isolation.
 
-The service is a **Modular Monolith**: one codebase containing six capability modules composed into three runtime roles. Boundaries are enforced on every test run.
+The service is a **Modular Monolith**: one codebase containing seven capability modules composed into three runtime roles. Boundaries are enforced on every test run.
 
 ## The four non-negotiable rules
 
@@ -97,6 +99,7 @@ ingestion  -> index.api, graph.api, model.api, common.storage
 index      -> common
 graph      -> common
 model      -> common
+lakehouse  -> common
 bootstrap  -> wires all modules together
 maintenance-> module APIs and common
 ```
@@ -111,6 +114,7 @@ maintenance-> module APIs and common
 | `index` | Dense/sparse vector indexing, document unit listing, table row queries | `KnowledgeIndexCommandApi`, `KnowledgeIndexQueryApi` | Qdrant `knowledge_units_v2` |
 | `graph` | Kuzu schema, graph entity projection, relationship traversal | `GraphProjectionApi`, `GraphQueryApi` | Kuzu database, graph-service HTTP |
 | `model` | Ollama chat adapter, BGE-M3 and BM25 embeddings, token limit handling | `ChatModelApi`, `TextEmbeddingApi`, `SparseEmbeddingApi` | Redis namespace `model` |
+| `lakehouse` | DuckDB/Parquet analytics, CDC ingest, quality/lineage | HTTP transport + `Lakehouse*` models | Parquet in SeaweedFS/S3, DuckDB |
 
 ## Durable document ingestion
 

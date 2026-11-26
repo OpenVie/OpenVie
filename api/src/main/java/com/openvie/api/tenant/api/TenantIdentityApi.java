@@ -100,6 +100,16 @@ public interface TenantIdentityApi {
     /** Outcome of {@link #linkSsoIdentity}: who was linked and whether it just happened. */
     record SsoLinkResult(UUID userId, boolean newlyLinked) {}
 
+    /**
+     * Provisions the service-member identity backing a machine credential.
+     * The account has an unusable password and one workspace membership.
+     */
+    IdentitySnapshot provisionServiceAccount(
+            UUID orgId, UUID creatorId, UUID workspaceId, String workspaceRole, String displayName);
+
+    /** Suspends the service-member identity behind a revoked machine credential. */
+    void deactivateServiceAccount(UUID orgId, UUID serviceUserId, UUID actorId);
+
     record IdentitySnapshot(
             UUID userId,
             UUID orgId,
